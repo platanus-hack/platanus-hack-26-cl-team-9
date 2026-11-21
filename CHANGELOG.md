@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(infra): add ACM certificate for sub50.cl (not applied)
+- **Changed:** `infrastructure/acm.tf` adds `aws_acm_certificate` (`sub50.cl` + `*.sub50.cl`, DNS), the validation records in the Route 53 zone and `aws_acm_certificate_validation`. Output `acm_certificate_arn`. Docs updated.
+- **Why:** A certificate is needed for CloudFront and the ALB HTTPS listener before the domain goes live.
+- **Agents:** Plan: 4 to add. Not applied; needs user approval. Apply only works once the registrar delegates `sub50.cl` to the zone's name servers, else validation waits and times out. The stack is deployed: CloudFront `https://d2bc0ohphbh56u.cloudfront.net`, image tag `aade205`, task definition `cascadasen:2`. Not attached to CloudFront yet.
+- **Files:** `infrastructure/acm.tf`, `infrastructure/outputs.tf`, `docs/infrastructure.md`.
 ## 2026-11-21 · fix(infra): build images with buildx as Docker-format gzip layers
 - **Changed:** `push_image` in `deploy.sh` uses `docker buildx build --provenance=false --sbom=false --output type=image,push=true,compression=gzip,force-compression=true,oci-mediatypes=false`.
 - **Why:** Fargate failed with `CannotPullContainerError: wrong diff id` on images pushed with plain `docker build` + `docker push` from Colima (containerd image store, OCI manifest).

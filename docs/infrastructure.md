@@ -55,6 +55,8 @@ The Terraform stack creates the Route 53 hosted zone `sub50.cl` (`infrastructure
 
 NS delegation: after `apply`, read `terraform -chdir=infrastructure output route53_name_servers` and set those four name servers for `sub50.cl` at the .cl registrar. Until then the zone does not resolve publicly.
 
+`infrastructure/acm.tf` defines an ACM certificate for `sub50.cl` and `*.sub50.cl` (us-east-1, DNS validation in the zone) and the output `acm_certificate_arn`. It is not attached to CloudFront or the ALB. `aws_acm_certificate_validation` only completes after the registrar delegates `sub50.cl` to the zone's name servers.
+
 To use the domain, create the certificates and set variables in `infrastructure/terraform.tfvars` (git-ignored, example in `terraform.tfvars.example`):
 - `domain_name` and `cloudfront_certificate_arn` (ACM certificate in `us-east-1`) add the alias and certificate to CloudFront.
 - `origin_https = true` and `alb_certificate_arn` make the ALB production listener HTTPS :443 and CloudFront use `https-only`.
