@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 MAX_BODY_BYTES = 65536
-BODY_LIMIT_PREFIXES = ("/api/v1/sessions", "/api/v1/sim/runs")
+BODY_LIMIT_PREFIXES = ("/api/v1/sessions", "/api/v1/sim/runs", "/api/v1/assistant")
 MAX_BUCKETS = 10000
 
 

@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(api): assistant chat routes with rate limit and body cap
+
+- **Changed:** `api/assistant_routes.py` adds `POST /api/v1/assistant/chat` (`{message 1-2000, conversation_id?, session_id?}` → `{conversation_id, session_id, run_id, reply, tool_calls, steps, truncated, notice}`), `GET` and `DELETE /api/v1/assistant/conversations/{cid}`. Each request builds its tools over `in_process_client(app, client_ip)` with `X-Sub50-Agent: asistente`. Limits: `rate_assistant_per_minute` (10) per client IP, and `BODY_LIMIT_PREFIXES` covers `/api/v1/assistant`. Errors: 503 when `CASCADASEN_LLM_ENABLED` is off or the provider is not `bedrock-converse`, 502 on a model failure (fixed Spanish text), 404, 409, 422, 429.
+- **Why:** The in-app assistant: natural-language simulations through the same session routes an external agent uses, with no MCP client.
+- **Agents:** The routes carry no `x-sub50-agent` mark, so `docs/openapi/agents.openapi.json` is unchanged. Internal tool calls pass through the real rate limits keyed on the caller's IP, so a chat message that makes many writes can hit 429 inside a tool (the model sees it and tells the user). `Settings` reads `backend/.env`: tests pass `llm_enabled=False` to stay hermetic. Verification: `uv run --extra mcp pytest -q` 284 passed, 2 skipped, 1 failed (only the Bedrock test); not tried against real Bedrock.
+- **Files:** `backend/src/cascadasen/api/{assistant_routes,app,limits}.py`, `backend/tests/integration/test_assistant_api.py`.
+
 ## 2026-11-21 · feat(assistant): chat use case with step and deadline caps
 
 - **Changed:** `application/assistant.py`: `Assistant.chat(message, conversation_id, session_id, toolbox_for)` runs a tool-use loop (max `assistant_max_steps`, deadline `assistant_deadline_s`), trims big tool results to 8 KB, keeps the history trimmed at a user turn, and stores each conversation as `assistant/<cid>.json` in the `DocumentStore` (conditional writes; a lost race raises `ConversationConflictError`). `domain/ports.py` adds the `ToolBox` port; `mcp/toolbox.py` (`SessionTools`) implements it over `Sub50Tools`: it drops `end_session`, caps `step` at 24 cycles, and turns every failure into `(False, {"error"})` for the model.
