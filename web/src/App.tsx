@@ -12,7 +12,7 @@ export function App({ mount }: { mount: MountMap }) {
     <div className="layout">
       <div className="map" ref={mapRef} />
       <div className="panels">
-        <h1>CascadaSEN</h1>
+        <h1>Sub50</h1>
         <p className="muted">Red eléctrica nacional (SEN). Paneles de simulación pendientes: contador, cadena de eventos, frecuencia y validación.</p>
         <Legend />
       </div>

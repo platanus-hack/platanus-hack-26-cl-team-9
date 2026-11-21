@@ -1,6 +1,21 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · fix(web): rename the site title from CascadaSEN to Sub50
+- **Changed:** The browser tab `<title>` in `web/index.html` and the panel `<h1>` in `web/src/App.tsx` now read "Sub50".
+- **Why:** The project is called Sub50; the site still showed the old name.
+- **Agents:** The backend package is still `cascadasen` (`backend/src/cascadasen/`); it was not renamed because users never see it and renaming it touches every import.
+- **Files:** `web/index.html`, `web/src/App.tsx`.
+## 2026-11-21 · fix(backend): make ruff check and format pass in CI
+- **Changed:** `zip(..., strict=True)` for flows and lines in `engine.py` (B905), unquoted type annotation in `scenario.py` (UP037), sorted imports in `test_cascade.py` (I001), and `ruff format` on 7 cascade files (`cache_builder.py`, `engine.py`, `flow.py`, `frequency.py`, `network.py`, `scenario.py`, `test_cascade.py`). No behaviour change; 41 tests pass.
+- **Why:** The lint workflow failed on 4 ruff errors and the format check on 7 files.
+- **Agents:** CI runs `ruff check .` and `ruff format --check .` (ruff 0.17.6). Run `scripts/lint.sh --fix <files>` on every Python file you touch. The cache in `web/public/cache/` needs no regeneration.
+- **Files:** `backend/src/cascadasen/application/cache_builder.py`, `backend/src/cascadasen/domain/cascade/*.py`, `backend/tests/unit/test_cascade.py`.
+## 2026-11-21 · perf(web): limit the mapa 3 camera to Chile and lighten the Mapbox style
+- **Changed:** `baseMap.ts` sets `maxBounds` (lon -85 to -55, lat -60 to -10), `minZoom` 4 and `maxZoom` 13 on the Mapbox map and the same zoom limits on the offline deck.gl map. The Standard style config turns off `show3dObjects`, `showPointOfInterestLabels`, `showTransitLabels` and `showPedestrianRoads`.
+- **Why:** The whole world was reachable although the data covers only Chile; the team wants to cut rendering cost. Effect not measured yet.
+- **Agents:** `?limite=0` disables all of it for A/B comparison. The offline map only gets the zoom limits, not a pan limit. 3D buildings are gone from the 3D view; revert `LITE_BASEMAP` if the team wants them back. Mapbox billing (per map load) does not change.
+- **Files:** `web/src/map/baseMap.ts`, `web/README.md`.
 
 ## 2026-11-21 · docs(agents): operation view pending outside this backend PR
 
@@ -299,6 +314,16 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Ricardo reframed CascadaSEN: it simulates whether a utility keeps its mission when it loses the capacity to understand its own state, not attacks. The task is backend only; another teammate builds the frontend against this API.
 - **Agents:** Read `strategy.md` after `cyber.md`. The adversary acts only through abstract events at area or function level, and no output ranks elements or areas. The LLM never decides or plays the adversary. Primary user: utility operations and continuity teams, with Mode II (adaptive adversary) first. The framing, item 7 and the node list are pending team confirmation. The implementation lands on branch `feat/strategic-sim-api`.
 - **Files:** `docs/strategy.md`, `docs/cyber.md`, `docs/stack.md`, `docs/plan.md`.
+## 2026-11-21 · feat(infra): CLI-only deploy workflow with CloudFront invalidation
+- **Changed:** `.github/workflows/deploy.yml` no longer runs Terraform: it builds and pushes both images, registers a new task definition revision, updates the ECS service, waits for stable, and invalidates CloudFront. The role ARN is hardcoded (`IAM-Role-ECS-Deploy`). New `infrastructure/deploy-role-policy.json` (minimal permissions for that role). `aws_ecs_service.app` gets `ignore_changes = [task_definition]`.
+- **Why:** The deploy only needs a new image tag; Terraform needed broad IAM permissions and a state bucket. Repository variables cannot be edited, so the ARN cannot come from `AWS_DEPLOY_ROLE_ARN`.
+- **Agents:** The previous entry's `AWS_DEPLOY_ROLE_ARN` requirement is obsolete. The workflow does not apply infrastructure changes: run `infrastructure/deploy.sh` by hand for those. Apply the `ecs.tf` lifecycle change once with `deploy.sh`. The role trust `sub` uses owner and repository IDs; fall back to the classic `sub` if the role cannot be assumed. Pushing the workflow file needs the `workflow` token scope.
+- **Files:** `.github/workflows/deploy.yml`, `infrastructure/deploy-role-policy.json`, `infrastructure/ecs.tf`, `docs/infrastructure.md`.
+## 2026-11-21 · fix(web): commit the mapa 3 cache so the deployed site loads
+- **Changed:** `web/public/cache/` (23 MB, 1103 files, 4 points x 273 cuts) is now versioned; removed it from `web/.gitignore`. nginx answers a missing `/cache/*` file with 404 instead of the SPA `index.html`. `cascade/api.ts` shows "Falta la caché (...)" when the response is not JSON.
+- **Why:** sub50.cl showed `Unexpected token '<', "<!doctype "...`: the cache was git-ignored, so the web image had none and nginx returned `index.html` with 200.
+- **Agents:** Regenerate (`cd backend && uv run cascadasen-cache`) and commit the cache whenever the engine or `data/processed` change, or the deployed site serves stale results. Older docs that say the cache is git-ignored are fixed in `web/README.md` and `docs/mapa3.md`.
+- **Files:** `web/public/cache/`, `web/.gitignore`, `infrastructure/docker/nginx.conf`, `web/src/cascade/api.ts`, `web/README.md`, `docs/mapa3.md`.
 ## 2026-11-21 · feat(infra): Mapbox token in the web image and deploy-on-main workflow
 - **Changed:** `web.Dockerfile` takes the build argument `VITE_MAPBOX_TOKEN`; `deploy.sh` passes it (public `pk.*` default, overridable). New `deploy.sh deploy` command (no plan step). New `.github/workflows/deploy.yml` runs it on every push to `main` through GitHub OIDC.
 - **Why:** The deployed map showed the offline fallback because Vite inlines the token at build time. The team wants every commit on main deployed.
@@ -359,6 +384,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The team chose mapa 3 as the product map. It is the only one with the engine, the legend and the cascade replay.
 - **Agents:** Build new UI on `web/src/cascade/`, not on `web/src/map/chileMap.ts` or `mapboxMap.ts`. `docs/mapa3.md` and `docs/minimum-dataset.md` (merged in #12 without a changelog entry) describe the engine, the actors and the minimum dataset. The cache in `web/public/cache/` must be generated (`cascadasen-cache`) or the root page shows an error. Older docs that call `/` "the offline map" (`stack.md`, `docker.md`, `datasets.md`) are out of date on that point.
 - **Files:** `web/src/main.tsx`, `web/README.md`, `docs/mapa3.md`, `CHANGELOG.md`.
+
+## 2026-11-21 · docs(design): add Design v4 page and simulation color rules
+
+- **Changed:** `docs/design.md` section 1 lists the new Paper page "Design v4" (V1 Red, V2 Simulación en curso, V3 Después del corte) as the current reference for the map and the simulation; Design v3 stays the reference for zoom levels. New section 3.1 records the v4 rules.
+- **Why:** Felipe's review of Design v3: the load legend reused the voltage hues, the event history was disconnected from the map and the timeline, and "Supuestos" took a nav rail slot.
+- **Agents:** In the Simulación tab, line color is load on a gray-to-red ramp and stroke width is voltage; never reuse voltage hues for load. Events are numbered once and shown in the panel history, on the timeline and as map pins. Assumptions sit next to their numbers and in a panel row, not in the nav rail. Section 3 still says 500 kV is magenta while v3 and v4 draw it near-white; that row is not fixed yet.
+- **Files:** `docs/design.md`, `CHANGELOG.md`.
 
 ## 2026-11-21 · chore(project): enlarge Sub50 logo wordmark
 

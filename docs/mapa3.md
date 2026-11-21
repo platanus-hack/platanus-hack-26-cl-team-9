@@ -111,7 +111,7 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder   # 
 cd ../web && npm install && npm run dev
 ```
 
-The cache (about 23 MB, 4 hours x 273 cuts) is git-ignored and must be generated first. Without it the page shows "No se pudo cargar ... Genera el caché con cascadasen-cache."
+The cache (about 23 MB, 4 hours x 273 cuts) is committed, because the deployed web image has no Python. Regenerate it with `cascadasen-cache` and commit it whenever the engine or `data/processed` change. If a file is missing the page shows "Falta la caché (...)".
 
 | URL | Opens |
 |---|---|
@@ -186,7 +186,7 @@ The same cut at `feb2025-0300` loses only 631 MW. Solar is off at night and coal
 
 ```
 data/scripts/*  ->  data/processed/{operating_points,baseline_opf}.json
-backend cascade engine  ->  cache_builder  ->  web/public/cache/   (git-ignored)
+backend cascade engine  ->  cache_builder  ->  web/public/cache/   (committed)
 web/src/cascade/*  reads cache/*.json and draws it
 ```
 
@@ -216,7 +216,7 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 
 | Symptom | Cause and fix |
 |---|---|
-| Red note "No se pudo cargar ..." | The cache is missing. Run `cascadasen-cache`. |
+| Red note "Falta la caché ..." | The cache is missing. Run `cascadasen-cache`. |
 | Offline outline instead of Mapbox | No `VITE_MAPBOX_TOKEN` in `web/.env.local`, or the token is invalid. Restart `npm run dev` after editing. |
 | Blank map, console shows `deck: ... Assertion failed` | A `ColumnLayer` with custom `vertices` needs `diskResolution` equal to the vertex count (4). Fixed in `layers.ts`. |
 | Click does nothing | You clicked off a line. Zoom in. Lines are thin. |

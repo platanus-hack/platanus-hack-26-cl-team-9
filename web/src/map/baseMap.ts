@@ -6,6 +6,12 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import chileUrl from "../../../data/processed/chile.geojson?url";
 
 const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
+// Experiment: keep the camera near Chile and drop heavy Standard-style features. `?limite=0` turns it all off to compare.
+const LIMITED = new URLSearchParams(location.search).get("limite") !== "0";
+const MAX_BOUNDS: [[number, number], [number, number]] = [[-85, -60], [-55, -10]];
+const MIN_ZOOM = 4;
+const MAX_ZOOM = 13;
+const LITE_BASEMAP = { show3dObjects: false, showPointOfInterestLabels: false, showTransitLabels: false, showPedestrianRoads: false };
 const PITCH_DEGREES = 45;
 const STYLE = "mapbox://styles/mapbox/standard";
 const PANEL_CLEARANCE_PX = 640; // rail + floating panel on the left (see .shell in styles.css)
@@ -25,7 +31,8 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   mapboxgl.accessToken = token;
   const map = new mapboxgl.Map({
     container, style: STYLE, logoPosition: "bottom-right", // the panel covers the bottom-left corner
-     projection: "mercator", config: { basemap: { lightPreset: "night" } },
+     projection: "mercator", config: { basemap: { lightPreset: "night", ...(LIMITED ? LITE_BASEMAP : {}) } },
+    ...(LIMITED ? { maxBounds: MAX_BOUNDS, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM } : {}),
     bounds: SEN_BOUNDS, fitBoundsOptions: { padding: { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 }, pitch: PITCH_DEGREES }, pitch: PITCH_DEGREES,
   });
   const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: handlers.onClick, getTooltip: handlers.getTooltip, pickingRadius: 8 });
@@ -45,7 +52,7 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers): BaseMap {
   container.appendChild(canvas);
   const outline = new GeoJsonLayer({ id: "chile-outline", data: chileUrl, stroked: true, filled: true, getFillColor: [16, 24, 40], getLineColor: [60, 80, 115], lineWidthMinPixels: 1 });
   let viewState: MapViewState = _viewState(container);
-  const deck = new Deck({ canvas, views: new MapView({ repeat: false }), controller: true, initialViewState: viewState,
+  const deck = new Deck({ canvas, views: new MapView({ repeat: false, ...(LIMITED ? { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM } : {}) }), controller: true, initialViewState: viewState,
     onViewStateChange: ({ viewState: next }) => { viewState = next as MapViewState; }, // the controller owns the camera; keep a copy to change only the pitch
     layers: [outline], getTooltip: handlers.getTooltip, onClick: handlers.onClick, pickingRadius: 8 });
   return {

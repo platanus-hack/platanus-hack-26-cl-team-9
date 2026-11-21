@@ -61,32 +61,14 @@ NS delegation is a manual step. Read `terraform -chdir=infrastructure output rou
 Optional, in `infrastructure/terraform.tfvars` (git-ignored, example in `terraform.tfvars.example`): `origin_https = true` and `alb_certificate_arn` make the ALB production listener HTTPS :443 and CloudFront use `https-only`. That needs a certificate whose name matches the origin host, so it also needs a record such as `alb.sub50.cl` pointing to the ALB; it is not set up.
 
 ## Automatic deploy from GitHub
-`.github/workflows/deploy.yml` runs `infrastructure/deploy.sh deploy` on every push to `main` (and by hand with "Run workflow"). `deploy` is `apply` without the plan step: it creates ECR, builds and pushes both images tagged with the commit, and runs `terraform apply -auto-approve`. Runs are serialized (`concurrency: deploy`) and Terraform's state lock protects the state.
-
-Setup in AWS (account 402909940511), done once by hand:
+`.github/workflows/deploy.yml` runs on every push to `main` (and by hand with "Run workflow") and uses only the AWS CLI, no Terraform. Steps: assume the role `arn:aws:iam::402909940511:role/IAM-Role-ECS-Deploy` through GitHub OIDC; build and push the `backend` and `web` images to ECR tagged with the short commit; register a new revision of the `cascadasen` task definition with those images; `aws ecs update-service` and wait for the blue/green deploy to be stable; invalidate CloudFront (`/*`, distribution found by the alias `sub50.cl`). Runs are serialized (`concurrency: deploy`).
+The role ARN, registry, cluster, service, and domain are hardcoded in the workflow: the repository variables cannot be edited, and none of them is a secret. The public Mapbox token is read from the default in `deploy.sh` (GitHub push protection rejects the token when it is written in the workflow file).
+Infrastructure changes (new resources, sizing, the ECR repositories) are not deployed by the workflow. Apply them by hand with `infrastructure/deploy.sh`. The ECS service has `ignore_changes = [task_definition]`, so a manual `terraform apply` does not roll the service back to an older revision.
+Setup in AWS (account 402909940511), done once by hand (already done):
 1. IAM OIDC identity provider: URL `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com`.
-2. An IAM role with this trust policy, limited to this repository and the `main` branch:
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Federated": "arn:aws:iam::402909940511:oidc-provider/token.actions.githubusercontent.com"},
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": {
-        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:platanus-hack/platanus-hack-26-cl-team-9:ref:refs/heads/main"
-      }
-    }
-  }]
-}
-```
-3. Permissions on the role for everything this stack manages: the state bucket (S3 read/write on `cascadasen-tfstate-402909940511`), ECR, ECS, EC2/VPC, ELB, CloudFront, Route 53, ACM, CloudWatch Logs, and IAM (create roles and `iam:PassRole` for the ECS roles).
-4. In the GitHub repository, set the variable (not a secret) `AWS_DEPLOY_ROLE_ARN` to the role ARN (Settings, Secrets and variables, Actions, Variables).
-
-Until the variable is set, the workflow fails at the credentials step.
-
+2. The role `IAM-Role-ECS-Deploy`, trusted for this repository. The `sub` uses the immutable ID format: `repo:platanus-hack@189188603/platanus-hack-26-cl-team-9@1466159115:*` (organization ID 189188603, repository ID 1466159115). If AssumeRoleWithWebIdentity is denied, GitHub still emits the classic claim: use `repo:platanus-hack/platanus-hack-26-cl-team-9:*` (or `...:ref:refs/heads/main`).
+3. The permissions policy in `infrastructure/deploy-role-policy.json`: ECR push on `cascadasen/*`, four ECS actions (describe service and task definition, register task definition, update service), `iam:PassRole` for the two `cascadasen-*` ECS roles, and CloudFront list and invalidate. Attach it to the role.
+Pushing `.github/workflows/*` needs a GitHub token with the `workflow` scope (`gh auth refresh -h github.com -s workflow`).
 ## Mapbox token
 The web image needs `VITE_MAPBOX_TOKEN` at build time (Vite inlines it). `deploy.sh` passes it as a build argument. The value is a public `pk.*` token with a default in `deploy.sh`; export `VITE_MAPBOX_TOKEN` to override it.
 

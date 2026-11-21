@@ -90,6 +90,11 @@ resource "aws_ecs_service" "app" {
     }
   }
 
+  # The GitHub Action registers new task definition revisions and points the service at them.
+  # Without this, the next terraform apply would roll the service back to the revision in state.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
   depends_on = [
     aws_iam_role_policy_attachment.ecs_infrastructure,
     aws_iam_role_policy_attachment.task_execution,
