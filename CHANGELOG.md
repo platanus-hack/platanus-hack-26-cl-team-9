@@ -1,6 +1,11 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · perf(web): limit the mapa 3 camera to Chile and lighten the Mapbox style
+- **Changed:** `baseMap.ts` sets `maxBounds` (lon -85 to -55, lat -60 to -10), `minZoom` 4 and `maxZoom` 13 on the Mapbox map and the same zoom limits on the offline deck.gl map. The Standard style config turns off `show3dObjects`, `showPointOfInterestLabels`, `showTransitLabels` and `showPedestrianRoads`.
+- **Why:** The whole world was reachable although the data covers only Chile; the team wants to cut rendering cost. Effect not measured yet.
+- **Agents:** `?limite=0` disables all of it for A/B comparison. The offline map only gets the zoom limits, not a pan limit. 3D buildings are gone from the 3D view; revert `LITE_BASEMAP` if the team wants them back. Mapbox billing (per map load) does not change.
+- **Files:** `web/src/map/baseMap.ts`, `web/README.md`.
 
 ## 2026-11-21 · feat(infra): CLI-only deploy workflow with CloudFront invalidation
 - **Changed:** `.github/workflows/deploy.yml` no longer runs Terraform: it builds and pushes both images, registers a new task definition revision, updates the ECS service, waits for stable, and invalidates CloudFront. The role ARN is hardcoded (`IAM-Role-ECS-Deploy`). New `infrastructure/deploy-role-policy.json` (minimal permissions for that role). `aws_ecs_service.app` gets `ignore_changes = [task_definition]`.

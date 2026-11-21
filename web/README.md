@@ -55,6 +55,8 @@ cd backend && uv run cascadasen-cache      # about 23 MB, 4 hours x 273 cuts, ta
 
 Deep links: `?mapa=3&point=feb2025-1500&cut=R239` opens the 25F corridor cut. It uses Mapbox when `VITE_MAPBOX_TOKEN` is set and the offline outline otherwise.
 
+Mapa 3 keeps the camera near Chile (`maxBounds` about lon -85 to -55, lat -60 to -10; zoom 4 to 13, constants in `src/map/baseMap.ts`) and turns off 3D buildings, points of interest, transit and pedestrian roads in the Mapbox Standard style. Add `?limite=0` to remove all of it and compare performance.
+
 ## How it is built
 
 | File | Role |
