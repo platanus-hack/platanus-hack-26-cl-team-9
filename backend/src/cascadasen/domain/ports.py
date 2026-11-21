@@ -85,6 +85,17 @@ class ToolChatModel(Protocol):
     def turn(self, system: str, messages: list[dict[str, Any]], tools: list[ToolSpec]) -> AssistantTurn: ...
 
 
+class ToolBox(Protocol):
+    """The tools one conversation may use (docs/assistant.md). `run` never raises: a failed call is
+    `(False, {"error": text})` and goes back to the model. `context` is the active session and run."""
+
+    def specs(self) -> list[ToolSpec]: ...
+
+    def run(self, call: ToolCall) -> tuple[bool, dict[str, Any]]: ...
+
+    def context(self) -> dict[str, str | None]: ...
+
+
 class ConflictError(RuntimeError):
     """A conditional write lost: the document changed (or already exists) since it was read."""
 

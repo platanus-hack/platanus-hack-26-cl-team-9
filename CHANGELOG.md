@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(assistant): chat use case with step and deadline caps
+
+- **Changed:** `application/assistant.py`: `Assistant.chat(message, conversation_id, session_id, toolbox_for)` runs a tool-use loop (max `assistant_max_steps`, deadline `assistant_deadline_s`), trims big tool results to 8 KB, keeps the history trimmed at a user turn, and stores each conversation as `assistant/<cid>.json` in the `DocumentStore` (conditional writes; a lost race raises `ConversationConflictError`). `domain/ports.py` adds the `ToolBox` port; `mcp/toolbox.py` (`SessionTools`) implements it over `Sub50Tools`: it drops `end_session`, caps `step` at 24 cycles, and turns every failure into `(False, {"error"})` for the model.
+- **Why:** The use case depends only on ports, so the provider and the tool wiring stay in adapters. A model failure keeps the user's turn and a placeholder assistant turn, so roles keep alternating on retry. `truncated` is `"steps"` or `"deadline"`; the next message ("continúa") resumes from the stored history.
+- **Agents:** `session_id` and `run_id` live in the conversation document, so any instance continues a conversation. The conversation id is a capability like the session id. Not wired to HTTP yet.
+- **Files:** `backend/src/cascadasen/{application/assistant.py,mcp/toolbox.py,domain/ports.py}`, `backend/tests/unit/test_assistant.py`.
+
 ## 2026-11-21 · feat(assistant): tool schemas and in-process transport over the MCP tools
 
 - **Changed:** `mcp/specs.py` builds JSON Schemas from the signatures of `Sub50Tools` (no `title`, `T | None` collapsed, defaults dropped) for an LLM that calls tools directly. `infrastructure/inprocess.py` adds `InProcessTransport` and `in_process_client(app, client_ip)`: an httpx client that enters the same FastAPI app through ASGI from a worker thread, presenting the caller's IP as the peer. `INSTRUCTIONS` moved from `mcp/server.py` to `mcp/tools.py` (the assistant imports it without the optional `mcp` SDK; `server.py` still exposes it).
