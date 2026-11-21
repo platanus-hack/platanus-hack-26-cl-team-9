@@ -52,6 +52,18 @@ def to_converse(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def describe(exc: Exception) -> str:
+    """For the server log only (never sent to the client): the exception name and, for an AWS error,
+    its code and message. They carry no credentials."""
+    error = (
+        getattr(exc, "response", {}).get("Error", {})
+        if isinstance(getattr(exc, "response", None), dict)
+        else {}
+    )
+    detail = f"{error.get('Code', '')} {error.get('Message', '')}".strip() or str(exc)
+    return f"{type(exc).__name__}: {detail[:300]}"
+
+
 class ConverseToolChat:
     def __init__(self, model: str, client: Any) -> None:
         self.model, self.client = model, client
@@ -71,7 +83,7 @@ class ConverseToolChat:
             )
         except Exception as exc:
             name = type(exc).__name__
-            log.warning("assistant LLM call failed (%s)", name)
+            log.warning("assistant LLM call failed for %s: %s", self.model, describe(exc))
             if name == "ValidationException":
                 raise ToolChatError("El modelo configurado no acepta herramientas o la solicitud.") from exc
             raise ToolChatError("El modelo de lenguaje no está disponible ahora; reintenta.") from exc

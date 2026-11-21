@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(assistant): log the AWS error behind a model failure
+
+- **Changed:** `ConverseToolChat.turn` logs the model id and, for an AWS error, its code and message (`describe`), instead of only the exception name. The client still gets the fixed Spanish text.
+- **Why:** A user got "El modelo de lenguaje no está disponible ahora" with Qwen on Bedrock and the log could not say whether it was credentials, access to the model, throttling or a timeout.
+- **Agents:** To diagnose a 502 from `/api/v1/assistant/chat`, read the server log line `assistant LLM call failed for <model>: <Type>: <code> <message>`.
+- **Files:** `backend/src/cascadasen/infrastructure/llm_tools.py`, `backend/tests/unit/test_llm_tools.py`.
+
 ## 2026-11-21 · docs(assistant): document the in-app assistant and the third LLM role
 
 - **Changed:** New `docs/assistant.md` (turn it on, routes, how the loop and the in-process transport work, guardrails, what is not done). `docs/strategy.md` section 10 gets the assistant as a third LLM role; `docs/stack.md` gets section 7.3; `docs/mcp.md`, `backend/README.md` and `AGENTS.md` (read order) point to it.

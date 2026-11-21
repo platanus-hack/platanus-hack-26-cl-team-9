@@ -82,3 +82,15 @@ def test_tool_chat_needs_the_llm_enabled_with_bedrock_converse():
     assert tool_chat(Settings(llm_enabled=True, llm_provider="bedrock"), client) is None
     chat = tool_chat(Settings(llm_enabled=True, llm_provider="bedrock-converse", llm_model="m"), client)
     assert isinstance(chat, ConverseToolChat) and chat.model == "m"
+
+
+def test_the_log_detail_names_the_aws_error_code_but_the_client_text_stays_generic(caplog):
+    class ClientError(Exception):
+        def __init__(self, message):
+            super().__init__(message)
+            self.response = {"Error": {"Code": "AccessDeniedException", "Message": "no access to the model"}}
+
+    with caplog.at_level("WARNING"), pytest.raises(ToolChatError) as caught:
+        ConverseToolChat("qwen.x", FakeConverse(error=ClientError("boom"))).turn("s", [], [SPEC])
+    assert "AccessDeniedException no access to the model" in caplog.text and "qwen.x" in caplog.text
+    assert "AccessDenied" not in str(caught.value)
