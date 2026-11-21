@@ -91,7 +91,7 @@ This is the reference list for future work. Each actor has: what it is in our da
 - Any line, one at a time in the UI. The engine accepts several ids (`run_cascade_workflow`).
 - Real-world meaning: a physical attack, a fault, or a maintenance outage. The engine does not distinguish.
 
-**A10 to A15. Not actors in this version.** See section 6. These are the first candidates to add, in this order of value: voltage collapse in the north (A14), ride-through trips (A4), storage (A12), HVDC (A11), N-1 base case, operator actions (A13).
+**A10 to A15. Not actors in this version.** See section 7. These are the first candidates to add, in this order of value: voltage collapse in the north (A14), ride-through trips (A4), storage (A12), HVDC (A11), N-1 base case, operator actions (A13).
 
 ### 1.3 Who acts at each moment of a cut
 
@@ -121,19 +121,24 @@ The cache (about 23 MB, 4 hours x 273 cuts) is git-ignored and must be generated
 
 With `VITE_MAPBOX_TOKEN` in `web/.env.local` (git-ignored) the basemap is Mapbox. Without it, the offline Chile outline is used.
 
-## 3. How to use it (right panel)
+## 3. 2D and 3D views
 
-1. **Hora del caso base**: choose the operating point. Changing it resets the cut.
-2. **Click a line** on the map to cut it. The results block appears.
-3. **Numbers**: people without power, MW shed and share of demand, number of cascade stages.
-4. **Reproducir** and the slider: move through the stages. Stage 0 is the instant after the cut. The map redraws lines, dots and bars for that stage.
-5. **Event list**: each event with its time in seconds (cut, island formed, line opens, EDAC step, island stable or blackout).
-6. **Frequency chart**: one curve per island, 47 to 51 Hz. The red dashed line is 47.5 Hz, the blackout limit.
-7. **Volver al caso base**: remove the cut.
-8. **Qué muestra el mapa**: the legend (section 4).
-9. **Supuestos del modelo**: the assumptions the engine returned with this timeline.
+The 2D | 3D button sits at the top of the map. Both views use the same Mapbox Standard (night) map. 3D: camera tilted 45 degrees, demand as rectangular bars. 2D: the camera looks straight down and cannot be tilted or rotated, and the bars become flat discs whose size grows with MW. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`). Open directly in 2D with `?vista=2d`.
 
-## 4. Legend (what the map draws)
+## 4. How to use it
+
+Layout: a collapsible rail on the left (button at its bottom), a floating panel with four tabs, and the controls on the map.
+
+1. **Case pill** (top center of the map): choose the operating point. Changing it resets the cut.
+2. **Tab Red**: size of the grid (km of lines, substations, installed MW, km by voltage band) and the detail of the substation you clicked (kV, zone, generation, demand, people, connected lines with their loading; a click on one of those lines cuts it).
+3. **Click a line** on the map to cut it. The panel switches to **Simulación**.
+4. **Tab Simulación**: people without power, MW shed and share of demand, cascade stages, the event list (each with its time in seconds) and the frequency chart (one curve per island, red dashed line at 47.5 Hz, the blackout limit). **Volver al caso base** removes the cut.
+5. **Timeline card** (bottom of the panel): play or pause, the stage slider and the time. Stage 0 is the instant after the cut.
+6. **Tab Leyenda**: what the map draws (section 5).
+7. **Tab Supuestos**: the assumptions the engine returned with this timeline.
+8. **Top right**: 2D | 3D and zoom buttons.
+
+## 5. Legend (what the map draws)
 
 | Element | Meaning |
 |---|---|
@@ -149,7 +154,7 @@ The panel legend is built from the same constants as the layers (`LOADING_BANDS`
 
 Not drawn: generation per plant, transformers, voltage and reactive power, networks below 66 kV, and the 1,930 original map lines of mapas 1 and 2.
 
-## 5. Worked example: the 25F corridor
+## 6. Worked example: the 25F corridor
 
 ![25F cut](images/mapa3-25f.jpg)
 
@@ -165,7 +170,7 @@ The same cut at `feb2025-0300` loses only 631 MW. Solar is off at night and coal
 
 ![Right panel](images/mapa3-panel.jpg)
 
-## 6. Limits and assumptions
+## 7. Limits and assumptions
 
 - DC flow: no voltage, no reactive power.
 - Base case is secure for N-0 only. 10 to 21 lines start at their limit (N-1 is not imposed).
@@ -177,7 +182,7 @@ The same cut at `feb2025-0300` loses only 631 MW. Solar is off at night and coal
 - Not calibrated against the 25F numbers beyond the one comparison above.
 - The reduction (188 buses) contradicts the 10 to 14 aggregated nodes in `docs/stack.md`. The engine follows the reduction.
 
-## 7. Data flow and files
+## 8. Data flow and files
 
 ```
 data/scripts/*  ->  data/processed/{operating_points,baseline_opf}.json
@@ -207,7 +212,7 @@ python data/scripts/build_baseline_opf.py
 cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 ```
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
@@ -217,7 +222,7 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 | Click does nothing | You clicked off a line. Zoom in. Lines are thin. |
 | Never commit | `web/public/cache`, `.env*`, `data/raw` |
 
-## 9. Glossary
+## 10. Glossary
 
 - **SEN**: Sistema Eléctrico Nacional, Chile's main grid.
 - **CEN**: Coordinador Eléctrico Nacional, the system operator.

@@ -7,10 +7,11 @@ import chileUrl from "../../../data/processed/chile.geojson?url";
 
 const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
 const PITCH_DEGREES = 45;
-const PANEL_CLEARANCE_PX = 460;
+const STYLE = "mapbox://styles/mapbox/standard";
+const PANEL_CLEARANCE_PX = 640; // rail + floating panel on the left (see .shell in styles.css)
 
 export type ViewMode = "2d" | "3d";
-export interface BaseMap { setLayers(layers: Layer[]): void; setMode(mode: ViewMode): void; dispose(): void }
+export interface BaseMap { setLayers(layers: Layer[]): void; setMode(mode: ViewMode): void; zoomBy(delta: number): void; dispose(): void }
 const pitchOf = (mode: ViewMode) => (mode === "2d" ? 0 : PITCH_DEGREES);
 export interface Handlers { onClick(info: PickingInfo): void; getTooltip(info: PickingInfo): string | null }
 
@@ -23,12 +24,19 @@ export function createBaseMap(container: HTMLDivElement, handlers: Handlers): Ba
 function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers): BaseMap {
   mapboxgl.accessToken = token;
   const map = new mapboxgl.Map({
-    container, style: "mapbox://styles/mapbox/standard", projection: "mercator", config: { basemap: { lightPreset: "night" } },
-    bounds: SEN_BOUNDS, fitBoundsOptions: { padding: { top: 20, bottom: 20, left: 20, right: PANEL_CLEARANCE_PX }, pitch: PITCH_DEGREES }, pitch: PITCH_DEGREES,
+    container, style: STYLE, logoPosition: "bottom-right", // the panel covers the bottom-left corner
+     projection: "mercator", config: { basemap: { lightPreset: "night" } },
+    bounds: SEN_BOUNDS, fitBoundsOptions: { padding: { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 }, pitch: PITCH_DEGREES }, pitch: PITCH_DEGREES,
   });
   const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: handlers.onClick, getTooltip: handlers.getTooltip, pickingRadius: 8 });
   map.addControl(overlay);
-  return { setLayers: (layers) => overlay.setProps({ layers }), setMode: (mode) => map.easeTo({ pitch: pitchOf(mode), bearing: 0, duration: 600 }), dispose: () => map.remove() };
+  const setMode = (mode: ViewMode) => {
+    // 2D is the same map seen from straight above: it cannot be tilted or rotated.
+    const flat = mode === "2d"; // a true 2D map cannot be tilted or rotated
+    flat ? (map.dragRotate.disable(), map.touchZoomRotate.disableRotation()) : (map.dragRotate.enable(), map.touchZoomRotate.enableRotation());
+    map.easeTo({ pitch: pitchOf(mode), bearing: 0, duration: 600 });
+  };
+  return { setLayers: (layers) => overlay.setProps({ layers }), setMode, zoomBy: (d) => map.easeTo({ zoom: map.getZoom() + d, duration: 300 }), dispose: () => map.remove() };
 }
 
 function _offlineMap(container: HTMLDivElement, handlers: Handlers): BaseMap {
@@ -42,7 +50,8 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers): BaseMap {
     layers: [outline], getTooltip: handlers.getTooltip, onClick: handlers.onClick, pickingRadius: 8 });
   return {
     setLayers: (layers) => deck.setProps({ layers: [outline, ...layers] }),
-    setMode: (mode) => deck.setProps({ initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: 600 } }),
+    setMode: (mode) => deck.setProps({ controller: { dragRotate: mode === "3d", touchRotate: mode === "3d" }, initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: 600 } }),
+    zoomBy: (d) => deck.setProps({ initialViewState: { ...viewState, zoom: viewState.zoom + d, transitionDuration: 300 } }),
     dispose: () => { deck.finalize(); canvas.remove(); },
   };
 }
@@ -51,6 +60,6 @@ function _viewState(container: HTMLDivElement) {
   const { clientWidth: width, clientHeight: height } = container;
   const clearance = Math.min(PANEL_CLEARANCE_PX, width / 2);
   const fitted = new WebMercatorViewport({ width: width - clearance, height }).fitBounds(SEN_BOUNDS, { padding: 20 });
-  const [longitude] = new WebMercatorViewport({ ...fitted, width, height }).unproject([width / 2 + clearance / 2, height / 2]);
+  const [longitude] = new WebMercatorViewport({ ...fitted, width, height }).unproject([width / 2 - clearance / 2, height / 2]);
   return { longitude, latitude: fitted.latitude - 1, zoom: fitted.zoom + 0.2, pitch: PITCH_DEGREES, bearing: 0 };
 }

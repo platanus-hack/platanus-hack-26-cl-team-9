@@ -1,0 +1,10 @@
+*
+!web
+!data/processed
+!infrastructure
+infrastructure/*
+!infrastructure/docker
+infrastructure/docker/*
+!infrastructure/docker/nginx.conf
+web/node_modules
+web/dist

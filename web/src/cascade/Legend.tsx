@@ -1,14 +1,14 @@
 import { COLUMN_COLOR, LOADING_BANDS, NO_FLOW_COLOR, OPEN_COLOR, SELECTED_COLOR, WIDTH_BY_KV, MIN_FLOW_MW, MW_TO_METERS } from "./layers";
+import type { ViewMode } from "../map/baseMap";
 import type { BusState, Network } from "./types";
 
 const css = (c: number[]) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${(c[3] ?? 255) / 255})`;
 
 /** Why: every colour, size and moving element of mapa 3 is explained next to the map, with the counts of what is drawn. */
-export function CascadeLegend({ network, buses }: { network: Network; buses: Record<string, BusState> }) {
+export function CascadeLegend({ network, buses, mode }: { network: Network; buses: Record<string, BusState>; mode: ViewMode }) {
   const columns = network.nodes.filter((n) => (buses[n.id]?.load_mw ?? 0) > 20).length;
   return (
-    <details className="legend">
-      <summary>Qué muestra el mapa</summary>
+    <section className="legend">
       <p className="muted">
         Red reducida del SEN: {network.nodes.length} subestaciones y {network.lines.length} líneas. Cada línea une dos subestaciones en línea recta
         y agrupa los circuitos en paralelo y los transformadores.
@@ -31,11 +31,13 @@ export function CascadeLegend({ network, buses }: { network: Network; buses: Rec
       <Row swatch={<span className="dot big" style={{ background: "#ef4444", border: "1px solid #000" }} />} label="Sin energía: su isla se apagó" />
 
       <h3>Demanda</h3>
-      <Row swatch={<span className="col" style={{ background: css(COLUMN_COLOR) }} />} label={`Barra rectangular azul: demanda de la subestación (${MW_TO_METERS} m por MW, exagerada). ${columns} subestaciones con más de 20 MW. Desaparece al apagarse.`} />
+      {mode === "3d"
+        ? <Row swatch={<span className="col" style={{ background: css(COLUMN_COLOR) }} />} label={`Barra rectangular azul: demanda de la subestación (${MW_TO_METERS} m por MW, exagerada). ${columns} subestaciones con más de 20 MW. Desaparece al apagarse.`} />
+        : <Row swatch={<span className="dot big" style={{ background: css([COLUMN_COLOR[0], COLUMN_COLOR[1], COLUMN_COLOR[2], 150]) }} />} label={`Círculo azul visto desde arriba: demanda de la subestación. Su tamaño crece con los MW. ${columns} subestaciones con más de 20 MW. Desaparece al apagarse.`} />}
 
       <h3>Lo que no se dibuja</h3>
       <p className="muted">Generación por central, transformadores, tensión y potencia reactiva, y las redes bajo 66 kV. Las líneas del mapa 1 y 2 (1.930) se agrupan aquí en {network.lines.length}.</p>
-    </details>
+    </section>
   );
 }
 
