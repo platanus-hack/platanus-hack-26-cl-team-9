@@ -62,6 +62,7 @@ Adding a data source means writing one adapter and registering it in `container.
 | `model.py`, `unify.py`, `topology_inference.py`, `naming.py`, `geo.py` | Grid model; joins the sources into one snapshot (substations by CEN id, line ends from geometry, PyPSA-CL parameters, population) as pure functions |
 | `validation.py` | Checks run on every build (coverage, connectivity, agreement between sources, reactance per km) |
 | `cascade/` | **188-bus cascade engine** (`engine.md`): network reduction, DC flow per island, island frequency (reserve with droop, batteries, EDAC, extreme EDAC), overload cascade, voltage-limited verdict. Parameters in `cascade/params/cascade.yaml`. Drives the map cuts and the theatre |
+| `cascade/overlay.py` | **Session overlay** (`stack.md` 6.2): validated edits of the 188-bus network and per-bus arrays (added buses, lines, loads and datacenters, generators, overrides, out-of-service), rebalanced per island by proportional synchronous redispatch (an assumption). Pure, no wall clock |
 | `simulation/` | **13-area engine** for `POST /api/v1/simulate` and validation cases V1-V10. Parameters in `simulation/params/*.yaml`; its `params.py` loader is shared by the other modules |
 | `theater/` | **Strategic theatre** (`strategy.md`): real state on the mapa 3 network (`grid.py`), digital engine (`digital.py`), events and actions (`catalog.py`, `execution.py`), validator, resources, crews, chance (`rng.py`, `stochastic.py`), evaluator, hash-chained audit log, the cycle (`cycle.py`). Parameters in `theater/params/*.yaml` |
 | `agents/` | C2, ISR, Operations, Stabilisation, Logistics, Auditor and the adaptive adversary (`strategy.md` section 5, `agents.md`). They receive views (`base.py`) and never the real state |
@@ -75,7 +76,8 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 | Build the unified snapshot | `build_grid.py` | `cascadasen-build` (`cli.py`) |
 | Query the grid | `grid_queries.py` | `/api/v1/nodes`, `/edges`, `/graph/*`, ... |
 | Simulate a scenario (13 areas) | `simulate.py` | `POST /api/v1/simulate` |
-| Theatre world (network + operating points, cached) | `theater_world.py` | used by runs and campaigns |
+| Theatre world (network + operating points, cached); `SessionWorld` = one pinned point with a session overlay applied | `theater_world.py` | used by runs, campaigns and session runs |
+| Sessions: document CRUD with revisions and conditional writes, overlay edits, network view with baseline, sandbox cut/repair, nested runs on `RunManager` pinned to their overlay, revision/head for SSE | `sessions.py` | `/api/v1/sessions*` (API in a later change) |
 | Runs: create, step, inject, external actions, replay; every command persists a run record in the `DocumentStore`, a bounded `RunCache` (LRU) keeps live simulations and rebuilds evicted ones | `run_experiment.py` | `/api/v1/sim/runs*` |
 | Campaigns with fragility and adaptation indices | `run_campaign.py` | `/api/v1/sim/campaigns*` |
 | Facade over simulation and theatre | `simulation_service.py` | `api/simulation_routes.py` |
