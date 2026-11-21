@@ -45,6 +45,13 @@ class Settings(BaseSettings):
         "'/personal/mparedes_minenergia_cl/Documents/PyPSA-CL/1.%20Datos%20de%20entrada%20a%20modelo/Topology.xlsx')/$value"
     )
 
+    epe_webmap_url: str = "https://gisepeprd2.epe.gov.br/arcgis/rest/services/WMS_Webmap_EPE_Data/MapServer"
+    osinergmin_url: str = (
+        "https://gisem.osinergmin.gob.pe/serverosih/rest/services/Electricidad/MapaSEIN_Operacion/MapServer"
+    )
+    energia_ar_url: str = "http://datos.energia.gob.ar/dataset"
+    overpass_url: str = "https://overpass-api.de/api/interpreter"
+
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"
@@ -52,6 +59,10 @@ class Settings(BaseSettings):
     @property
     def processed_dir(self) -> Path:
         return self.data_dir / "processed"
+
+    @property
+    def regional_dir(self) -> Path:
+        return self.processed_dir / "latam"
 
     @property
     def snapshot_path(self) -> Path:

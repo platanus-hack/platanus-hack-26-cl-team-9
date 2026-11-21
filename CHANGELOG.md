@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(regional): add the regional grid model, adapters and command
+
+- **Changed:** New pure `domain/regional.py` (common schema, voltage and technology normalisers, `normalise`, GeoJSON and manifest builders) and port `RegionalGridSource`. Four adapters in `infrastructure/sources/regional/` (EPE Brazil, Osinergmin Peru, Secretaría de Energía Argentina, OpenStreetMap through Overpass) and the command `cascadasen-regional --countries BRA,PER,ARG,BOL [--osm ARG] [--refresh]`.
+- **Why:** Ricardo asked for other Latin American grids on the map in one common pattern. Decided with him: drawn only, no simulation; Brazil, Peru, Argentina, Bolivia.
+- **Agents:** EPE gives power in kW and Osinergmin in MW (four records in kW, read above 3,000 as kW). The Argentina adapter was never run against the real files (server unreachable); it is tested only on a synthetic CSV, so fix its column candidates when the server answers. A failing country does not stop the others. Run tests with `uv run pytest`.
+- **Files:** `backend/src/cascadasen/domain/regional.py`, `domain/ports.py`, `application/build_regional.py`, `infrastructure/sources/regional/`, `infrastructure/container.py`, `infrastructure/settings.py`, `backend/pyproject.toml`, `backend/tests/unit/test_regional.py`.
+
 ## 2026-11-21 · docs(health): document the health index and flag stale 25F figures
 
 - **Changed:** New `docs/health.md` (rule, metrics with limits and sources, 25F against `feb2025-0300`, cautions). `architecture.md` lists the command and `health.yaml`. `engine.md`, `mapa3.md` and `minimum-dataset.md` carry a note that cutting R239 at `feb2025-1500` now gives 1,972 MW lost and 3.8 M people with `voltage_limited`, not 7,872 MW and 15.2 M.
