@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(cascade): provenance params, droop, batteries, extreme EDAC and voltage verdict
+
+- **Changed:** The cascade engine (188 buses, drives the theatre and the map cuts) reads every number from `domain/cascade/params/cascade.yaml` (source or `is_assumption`, same loader as `domain/simulation/params.py`). Frequency model: reserve with 5% droop capped at 4% of synchronous MW; batteries as a separate fast term (`IslandInput.battery_mw`, trigger 49.8 Hz, 200 ms delay, 300 ms ramp); extreme-contingency EDAC of the centro-sur (671.55 MW, three df/dt stages). Each island reports `final_hz`, `rocof_hz_s`, `inertia_mws`, `shed_mw` and `battery_mw`; `CascadeState.islands` adds the bus indices. Opening the 25F boundary with a pre-fault flow above 1,600 MW N→S / 1,000 MW S→N gives `result: "voltage_limited"` and `summary.uncertain: true`. Fix: deployed reserve now also counts as synchronous (the theatre classed it as renewable).
+- **Why:** Power-system review (2026-11-21): inertia that falls, EDAC from the CEN tables, batteries as fast injection, honest about voltage, every parameter traceable. First step before the agents read frequency.
+- **Agents:** Do not hardcode physics constants in `domain/cascade/`; add them to `cascade.yaml` with provenance. `run_cascade_state(..., battery_by_bus=...)` is new. Timeline `summary` gains `uncertain` and `prefault_boundary_mw`; island entries gain fields (additive, `web/src/cascade/types.ts` still reads). The V1 split holds on this network without tuning (1,905 / 287 MW, test `test_25f_prefault_split_matches_the_cen_report`). `web/public/cache/` is stale until `uv run cascadasen-cache` runs again.
+- **Files:** `backend/src/cascadasen/domain/cascade/{params/cascade.yaml,frequency.py,engine.py}`, `backend/tests/unit/test_cascade.py`, `docs/engine.md`.
+
 ## 2026-11-21 · feat(llm): any Bedrock model through the Converse API
 
 - **Changed:** New provider `CASCADASEN_LLM_PROVIDER=bedrock-converse`: `infrastructure/llm.py` calls `bedrock-runtime` `converse` (boto3) with the model or inference-profile id as is (`CASCADASEN_LLM_MODEL`, e.g. `amazon.nova-pro-v1:0`). The JSON answer is a forced tool call with the schema; on `ValidationException` (model without forced tools) it retries with the schema in the prompt and parses the text. Same AWS credential chain (environment variables or profile). README: provider docs and a script that lists the Bedrock models the account can actually call.
