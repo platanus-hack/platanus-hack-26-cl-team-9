@@ -1,7 +1,7 @@
 """HTTP routes of shared sessions (docs/sessions-api.md): session documents, edits of the 188-bus
 network, the sandbox cut, runs nested in a session and a Server-Sent Events stream of revisions.
-Agent-facing routes follow .agents/tasks/openapi-agent-conventions.md (x-sub50-agent marker,
-explicit operation ids, English OpenAPI text, ErrorResponse). Error details stay in Spanish."""
+Agent-facing routes follow docs/openapi.md (x-sub50-agent marker, explicit operation ids,
+English OpenAPI text, ErrorResponse). Error details stay in Spanish."""
 
 # no `from __future__ import annotations`: the element routes are built in a factory and FastAPI
 # must resolve their body models from the closure
@@ -16,8 +16,9 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from cascadasen.api import agent_openapi
+from cascadasen.api.agent_openapi import AGENT
 from cascadasen.api.limits import SseSlots, client_ip
-from cascadasen.api.schemas import ErrorResponse
 from cascadasen.api.session_schemas import (
     ActionIn,
     BusIn,
@@ -48,7 +49,6 @@ from cascadasen.infrastructure.settings import Settings
 
 router = APIRouter(prefix="/api/v1/sessions")
 
-AGENT = {"x-sub50-agent": True}
 ERRORS = {
     404: "The session, run or element does not exist, or the id is malformed.",
     409: "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
@@ -59,7 +59,7 @@ ERRORS = {
 
 
 def errors(*codes: int) -> dict[int | str, dict[str, Any]]:
-    return {code: {"model": ErrorResponse, "description": ERRORS[code]} for code in codes}
+    return agent_openapi.errors({code: ERRORS[code] for code in codes})
 
 
 WRITE_ERRORS = errors(404, 409, 412, 422, 429)

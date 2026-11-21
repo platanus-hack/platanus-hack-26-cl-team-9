@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Sub50 agent API",
-    "description": "Endpoints an external agent needs to run strategic experiments on Sub50, a simulator of\nblackouts in the Chilean national grid (SEN). Public base URL: `https://sub50.cl`.\n\n**Ids.** The network has buses `B###` and lines `R###` (`GET /api/v1/sim/network`). Event targets\nalso accept an area (`A06`), a zone (`NG`), a corridor (`A06-A07/500`), a defence function\n(`pdce_zn`) or a real substation id (`SE...`). Event types, policies, objectives and templates come\nfrom `GET /api/v1/sim/catalog`. A run is identified by the `run_id` returned on creation.\n\n**Runs.** Runs in `global-runs` work on the default dataset and live in server memory: the most\nrecent 100 are kept and any run can be rebuilt from its recipe (`GET .../trace`). Session\nendpoints (tags `sessions`, `session-network`, `session-sandbox`, `session-runs`) carry the\nsession id in the path and work on that session's private copy of the dataset; create a session\nfirst and pass its id to every session call.\n\n**Notice.** Every scenario is hypothetical and simulated: Sub50 models the consequence of an\nevent on the grid, never the attack technique. The catalog and every run summary carry a\n`notice` field saying so.\n\nErrors return `{\"detail\": ...}`; messages inside `detail` are in Spanish.\n",
+    "description": "Endpoints an external agent needs to run strategic experiments on Sub50, a simulator of\nblackouts in the Chilean national grid (SEN). Public base URL: `https://sub50.cl`.\n\n**Ids.** The network has buses `B###` and lines `R###` (`GET /api/v1/sim/network`). Event targets\nalso accept an area (`A06`), a zone (`NG`), a corridor (`A06-A07/500`), a defence function\n(`pdce_zn`) or a real substation id (`SE...`). Event types, policies, objectives and templates come\nfrom `GET /api/v1/sim/catalog`. A run is identified by the `run_id` returned on creation.\n\n**Runs.** Runs in `global-runs` work on the default dataset. Every run is persisted for 24 hours\nafter its last command and rebuilt from its recipe when the server no longer holds it. Session\nendpoints (tags `sessions`, `session-network`, `session-sandbox`, `session-runs`) carry the\nsession id in the path and work on that session's private copy of the dataset; create a session\nfirst and pass its id to every session call.\n\n**Notice.** Every scenario is hypothetical and simulated: Sub50 models the consequence of an\nevent on the grid, never the attack technique. The catalog and every run summary carry a\n`notice` field saying so.\n\nErrors return `{\"detail\": ...}`; messages inside `detail` are in Spanish.\n",
     "version": "1.0.0"
   },
   "paths": {
@@ -105,7 +105,7 @@
           "global-runs"
         ],
         "summary": "Create a strategic run over the default dataset",
-        "description": "Creates a run of the strategic theatre from a template (`GET /api/v1/sim/catalog` → `templates`) with a policy, an optional adversary, uncertainty, seed and initial events. Returns the run summary with its `run_id`, used by every other run call. With `auto_run` the run is played to the end before returning. The run lives in server memory.",
+        "description": "Creates a run of the strategic theatre from a template (`GET /api/v1/sim/catalog` → `templates`) with a policy, an optional adversary, uncertainty, seed and initial events. Returns the run summary with its `run_id`, used by every other run call. With `auto_run` the run is played to the end before returning. The run is persisted for 24 hours after its last command and rebuilt from its recipe when the server no longer holds it.",
         "operationId": "global_create_run",
         "requestBody": {
           "content": {
@@ -692,10 +692,3522 @@
         },
         "x-sub50-agent": true
       }
+    },
+    "/api/v1/sessions": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Create a shared session",
+        "description": "Creates a session: an editable copy of the 188-bus network pinned to one operating point (default nov2026-1300). Call it first; every other session call takes the returned session_id in the path. The session expires 24 h after its last change. Anyone with the id can read and edit it (share_path is the browser link). Rate limited per client IP.",
+        "operationId": "create_session",
+        "parameters": [
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SessionCreate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Session"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Read a session document",
+        "description": "Returns the session document: point, revision, overlay (the edits), open_lines (sandbox cut), runs (id -> created_at, dataset_revision, cycle, status), last_op, share_path and expires_at. The ETag header is the revision; send it as If-None-Match to get 304 when nothing changed (polling fallback when SSE is not available). No side effects.",
+        "operationId": "get_session",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last ETag seen, e.g. \"3\".",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-None-Match"
+            },
+            "description": "Last ETag seen, e.g. \"3\"."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Session"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: If-None-Match equals the current revision."
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      },
+      "delete": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Delete a session and its runs",
+        "description": "Deletes the session document and the records of its runs. Every client of the session loses it (their SSE stream ends). Irreversible.",
+        "operationId": "delete_session",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/reset": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Drop every network edit of a session",
+        "description": "Replaces the overlay with an empty one, so the network is the base dataset again. Runs keep the dataset they were created with; the sandbox cut keeps the lines that still exist. Bumps the revision.",
+        "operationId": "reset_session",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Reset Session"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/network": {
+      "get": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Read the session's 188-bus network",
+        "description": "Returns the edited network: nodes and lines (origin base|session, is_assumption, overridden), buses with load and generation, loads[] and generators[] added by the session, areas, corridors, out_of_service, warnings, balance (the redispatch assumption) and baseline (loading and load shed with no cut). With no edits it is the base dataset. Use it to get bus (B###) and line (R###, U###) ids before editing or cutting.",
+        "operationId": "get_session_network",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Session Network"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/buses": {
+      "post": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Add a bus to the session network",
+        "description": "Adds a substation bus (B### after the base buses) at lat/lon with a base voltage. Connect it with add_line; a bus with no line gives an isolated_bus warning. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "add_bus",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Add Bus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/buses/{element_id}": {
+      "patch": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Change a bus",
+        "description": "Changes a base bus (stored as an override) or a session bus: name, kv, position, load, generation, synchronous MW, inertia or in_service. Only the fields sent change; null clears a session value. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "update_bus",
+        "parameters": [
+          {
+            "name": "element_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Id of the bus, from GET /sessions/{sid}/network.",
+              "examples": [
+                "B188"
+              ],
+              "title": "Element Id"
+            },
+            "description": "Id of the bus, from GET /sessions/{sid}/network."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Bus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      },
+      "delete": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Delete a session bus",
+        "description": "Deletes a bus the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "delete_bus",
+        "parameters": [
+          {
+            "name": "element_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Id of the bus, from GET /sessions/{sid}/network.",
+              "examples": [
+                "B188"
+              ],
+              "title": "Element Id"
+            },
+            "description": "Id of the bus, from GET /sessions/{sid}/network."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Bus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/lines": {
+      "post": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Add a line to the session network",
+        "description": "Adds a transmission line (U###) between two in-service buses with a base voltage. x_pu defaults from the length and voltage. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "add_line",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Add Line"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/lines/{element_id}": {
+      "patch": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Change a line",
+        "description": "Changes capacity_mw, x_pu or in_service of a base line (R###) or a session line (U###). Only the fields sent change; null clears a session value. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "update_line",
+        "parameters": [
+          {
+            "name": "element_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Id of the line, from GET /sessions/{sid}/network.",
+              "examples": [
+                "U001"
+              ],
+              "title": "Element Id"
+            },
+            "description": "Id of the line, from GET /sessions/{sid}/network."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Line"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      },
+      "delete": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Delete a session line",
+        "description": "Deletes a line the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "delete_line",
+        "parameters": [
+          {
+            "name": "element_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Id of the line, from GET /sessions/{sid}/network.",
+              "examples": [
+                "U001"
+              ],
+              "title": "Element Id"
+            },
+            "description": "Id of the line, from GET /sessions/{sid}/network."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Line"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/loads": {
+      "post": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Add a load or datacenter to the session network",
+        "description": "Adds a demand (D###) on a bus: kind datacenter or consumo. Pick the bus from the network, for example the nearest 220 kV or higher substation. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "add_load",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoadIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Add Load"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/loads/{element_id}": {
+      "patch": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Change a load or datacenter",
+        "description": "Changes mw, kind, name or in_service of a session load (D###). Only the fields sent change; null clears a session value. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "update_load",
+        "parameters": [
+          {
+            "name": "element_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Id of the load or datacenter, from GET /sessions/{sid}/network.",
+              "examples": [
+                "D001"
+              ],
+              "title": "Element Id"
+            },
+            "description": "Id of the load or datacenter, from GET /sessions/{sid}/network."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoadPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Load"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      },
+      "delete": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Delete a session load or datacenter",
+        "description": "Deletes a load or datacenter the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "delete_load",
+        "parameters": [
+          {
+            "name": "element_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Id of the load or datacenter, from GET /sessions/{sid}/network.",
+              "examples": [
+                "D001"
+              ],
+              "title": "Element Id"
+            },
+            "description": "Id of the load or datacenter, from GET /sessions/{sid}/network."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Load"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/generators": {
+      "post": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Add a generator to the session network",
+        "description": "Adds a generator (G###) on a bus. hidro, termica, bioenergia and geotermica units are synchronous and add inertia (H default 4 s, an assumption). Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "add_generator",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratorIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Add Generator"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/generators/{element_id}": {
+      "patch": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Change a generator",
+        "description": "Changes mw, tech, synchronous, inertia_h, name or in_service of a session generator (G###). Only the fields sent change; null clears a session value. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "update_generator",
+        "parameters": [
+          {
+            "name": "element_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Id of the generator, from GET /sessions/{sid}/network.",
+              "examples": [
+                "G001"
+              ],
+              "title": "Element Id"
+            },
+            "description": "Id of the generator, from GET /sessions/{sid}/network."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratorPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Generator"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      },
+      "delete": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Delete a session generator",
+        "description": "Deletes a generator the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "operationId": "delete_generator",
+        "parameters": [
+          {
+            "name": "element_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Id of the generator, from GET /sessions/{sid}/network.",
+              "examples": [
+                "G001"
+              ],
+              "title": "Element Id"
+            },
+            "description": "Id of the generator, from GET /sessions/{sid}/network."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Generator"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/cut": {
+      "post": {
+        "tags": [
+          "session-sandbox"
+        ],
+        "summary": "Open 1 to 3 lines in the session sandbox",
+        "description": "Adds 1 to 3 line ids (R### or U###, from get_session_network) to the open lines. This shows the physical consequence of losing those lines; it does not search for the worst cut. Re-runs the cascade from the base case with every open line and returns {revision, open_lines, timeline, notice}; all clients of the session see the same cut. Bumps the revision.",
+        "operationId": "cut_lines",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CutIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Cut Lines"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/repair": {
+      "post": {
+        "tags": [
+          "session-sandbox"
+        ],
+        "summary": "Close open lines in the session sandbox",
+        "description": "Closes the given open lines, or all of them with all=true. Re-runs the cascade from the base case with every open line and returns {revision, open_lines, timeline, notice}; all clients of the session see the same cut. Bumps the revision.",
+        "operationId": "repair_lines",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Repair Lines"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/state": {
+      "get": {
+        "tags": [
+          "session-sandbox"
+        ],
+        "summary": "Read the session sandbox state",
+        "description": "Returns {revision, open_lines, timeline, notice}: the cascade timeline with the current open lines (the baseline when none). No side effects.",
+        "operationId": "get_cut_state",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Cut State"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs": {
+      "post": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Create a strategic run on the session network",
+        "description": "Creates a run of the strategic theatre on the session's current network and point. The run keeps that dataset even if the session is edited later. point/operating_point must be empty or equal to the session point. Templates, policies and events come from GET /api/v1/sim/catalog. At most 20 runs per session. Returns the run summary and session_revision.",
+        "operationId": "create_run",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Run"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}": {
+      "get": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Read a session run",
+        "description": "Returns {run, latest, resources, series}: the run summary (cycle, status, rebuilt, trace_matches), the latest snapshot (real, observed and estimated state, decisions, executed), resources and the metric series. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "get_run",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}/events": {
+      "post": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Inject an event into a session run",
+        "description": "Queues an event (type from the catalog events) on a target area, corridor or bus; it applies on the next cycle. Returns the resolved target and the run summary. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "inject_run_event",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Inject Run Event"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}/step": {
+      "post": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Advance a session run",
+        "description": "Runs 1 to 72 cycles of 5 minutes and returns their snapshots. A finished run gives 409. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "step_run",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Step Run"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}/actions": {
+      "post": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Submit an external agent's action to a session run",
+        "description": "Queues a course of action (action id from the catalog, a target area or corridor, a role among the action's proposers) for the next cycle. It runs through the same validation and resource checks as the commander's own actions and is recorded in the audit log. Returns {accepted, applies_at_cycle, action, target, role, notice}. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "submit_run_action",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Submit Run Action"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}/replay": {
+      "post": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Replay a session run with changes",
+        "description": "Creates a new run in the session with the original seed, events and actions and the given overrides (policy, uncertainty, seed, adversary, capabilities), on the original run's dataset. Returns the new run summary with replay_of. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "replay_run",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Replay Run"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}/snapshots": {
+      "get": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Read the snapshots of a session run",
+        "description": "Returns {run, snapshots} with the snapshots already computed from cycle start. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "get_run_snapshots",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "First cycle to return.",
+              "examples": [
+                0
+              ],
+              "default": 0,
+              "title": "Start"
+            },
+            "description": "First cycle to return."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run Snapshots"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}/trace": {
+      "get": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Read the audit log of a session run",
+        "description": "Returns the hash-chained audit log, its head, verified and the recipe (config, injected events, actions) that rebuilds the run. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "get_run_trace",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run Trace"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}/report": {
+      "get": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Read the report of a session run",
+        "description": "Returns indicators, indices and the physical consequence of the run so far. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "get_run_report",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run Report"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/runs/{rid}/after_action": {
+      "get": {
+        "tags": [
+          "session-runs"
+        ],
+        "summary": "Read the after-action report of a session run",
+        "description": "Returns the deterministic after-action report in Spanish, built from templates. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "operationId": "get_run_after_action",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs.",
+              "examples": [
+                "3f9a0c2b7d1e"
+              ],
+              "title": "Rid"
+            },
+            "description": "Run id (12 hex characters) returned by create_run; GET /sessions/{sid} lists them under runs."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run After Action"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
     }
   },
   "components": {
     "schemas": {
+      "ActionIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Action id from GET /api/v1/sim/catalog (actions).",
+            "examples": [
+              "restore_element"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "Area (A06) or corridor (A06-A07) id the action applies to.",
+            "examples": [
+              "A06-A07"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Proposing role; must be one of the action's proposers in the catalog.",
+            "examples": [
+              "operations"
+            ]
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params",
+            "description": "Action parameters, if any.",
+            "examples": [
+              {}
+            ]
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent",
+            "description": "Name of the external agent, recorded in the audit log.",
+            "examples": [
+              "bot-1"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "target",
+          "role"
+        ],
+        "title": "ActionIn"
+      },
       "AdversaryIn": {
         "properties": {
           "enabled": {
@@ -737,6 +4249,234 @@
         },
         "type": "object",
         "title": "AdversaryIn"
+      },
+      "BusIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Name",
+            "description": "Display name of the new bus.",
+            "examples": [
+              "SE Datacenter Norte"
+            ]
+          },
+          "lat": {
+            "type": "number",
+            "maximum": -17.0,
+            "minimum": -56.0,
+            "title": "Lat",
+            "description": "Latitude in degrees (continental Chile).",
+            "examples": [
+              -33.45
+            ]
+          },
+          "lon": {
+            "type": "number",
+            "maximum": -66.0,
+            "minimum": -76.0,
+            "title": "Lon",
+            "description": "Longitude in degrees (continental Chile).",
+            "examples": [
+              -70.66
+            ]
+          },
+          "kv": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Kv",
+            "description": "Voltage in kV; must be one of the base network's voltages.",
+            "examples": [
+              220
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "lat",
+          "lon",
+          "kv"
+        ],
+        "title": "BusIn"
+      },
+      "BusPatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "New display name.",
+            "examples": [
+              "SE Renombrada"
+            ]
+          },
+          "kv": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kv",
+            "description": "New voltage in kV (a base voltage).",
+            "examples": [
+              500
+            ]
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": -17.0,
+                "minimum": -56.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat",
+            "description": "New latitude in degrees.",
+            "examples": [
+              -33.4
+            ]
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": -66.0,
+                "minimum": -76.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon",
+            "description": "New longitude in degrees.",
+            "examples": [
+              -70.6
+            ]
+          },
+          "load_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Mw",
+            "description": "Bus demand in MW (replaces the base value).",
+            "examples": [
+              150
+            ]
+          },
+          "gen_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gen Mw",
+            "description": "Bus generation in MW (replaces the base value).",
+            "examples": [
+              300
+            ]
+          },
+          "sync_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Mw",
+            "description": "Synchronous part of gen_mw in MW (at most gen_mw).",
+            "examples": [
+              200
+            ]
+          },
+          "inertia_mws": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inertia Mws",
+            "description": "Inertia at the bus in MW·s.",
+            "examples": [
+              800
+            ]
+          },
+          "in_service": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Service",
+            "description": "false takes the bus out of service (its lines drop out).",
+            "examples": [
+              false
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BusPatch"
+      },
+      "CutIn": {
+        "properties": {
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Lines",
+            "description": "1 to 3 line ids (R### base or U### session) to open in the sandbox.",
+            "examples": [
+              [
+                "R012"
+              ]
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lines"
+        ],
+        "title": "CutIn"
       },
       "ErrorResponse": {
         "properties": {
@@ -836,6 +4576,503 @@
           "target"
         ],
         "title": "EventIn"
+      },
+      "GeneratorIn": {
+        "properties": {
+          "bus": {
+            "type": "string",
+            "title": "Bus",
+            "description": "Bus id (B###) the generator connects to.",
+            "examples": [
+              "B020"
+            ]
+          },
+          "mw": {
+            "type": "number",
+            "maximum": 3000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Mw",
+            "description": "Dispatched generation in MW (0 < mw ≤ 3000).",
+            "examples": [
+              250
+            ]
+          },
+          "tech": {
+            "type": "string",
+            "enum": [
+              "hidro",
+              "termica",
+              "bioenergia",
+              "geotermica",
+              "solar",
+              "eolica"
+            ],
+            "title": "Tech",
+            "description": "Technology; hidro, termica, bioenergia and geotermica are synchronous.",
+            "examples": [
+              "solar"
+            ]
+          },
+          "synchronous": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synchronous",
+            "description": "Override whether the unit adds synchronous MW and inertia.",
+            "examples": [
+              false
+            ]
+          },
+          "inertia_h": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inertia H",
+            "description": "Inertia constant H in s (default 4 s, an assumption).",
+            "examples": [
+              4.0
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Display name.",
+            "examples": [
+              "Parque solar nuevo"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bus",
+          "mw",
+          "tech"
+        ],
+        "title": "GeneratorIn"
+      },
+      "GeneratorPatch": {
+        "properties": {
+          "mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 3000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mw",
+            "description": "New generation in MW.",
+            "examples": [
+              300
+            ]
+          },
+          "tech": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "hidro",
+                  "termica",
+                  "bioenergia",
+                  "geotermica",
+                  "solar",
+                  "eolica"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tech",
+            "description": "New technology.",
+            "examples": [
+              "eolica"
+            ]
+          },
+          "synchronous": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synchronous",
+            "description": "Synchronous override.",
+            "examples": [
+              true
+            ]
+          },
+          "inertia_h": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inertia H",
+            "description": "New inertia constant H in s.",
+            "examples": [
+              5.0
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "New display name.",
+            "examples": [
+              "Central renombrada"
+            ]
+          },
+          "in_service": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Service",
+            "description": "false disconnects the generator.",
+            "examples": [
+              false
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GeneratorPatch"
+      },
+      "LineIn": {
+        "properties": {
+          "a": {
+            "type": "string",
+            "title": "A",
+            "description": "From bus id (B###), from GET /network nodes.",
+            "examples": [
+              "B010"
+            ]
+          },
+          "b": {
+            "type": "string",
+            "title": "B",
+            "description": "To bus id (B###), different from a.",
+            "examples": [
+              "B188"
+            ]
+          },
+          "kv": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Kv",
+            "description": "Voltage in kV; a base network voltage.",
+            "examples": [
+              220
+            ]
+          },
+          "capacity_mw": {
+            "type": "number",
+            "maximum": 5000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Capacity Mw",
+            "description": "Thermal capacity in MW.",
+            "examples": [
+              500
+            ]
+          },
+          "x_pu": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Pu",
+            "description": "Reactance in p.u. (100 MVA base). Default: line length × typical x/km for kv.",
+            "examples": [
+              0.02
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Display name.",
+            "examples": [
+              "Línea nueva"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "a",
+          "b",
+          "kv",
+          "capacity_mw"
+        ],
+        "title": "LineIn"
+      },
+      "LinePatch": {
+        "properties": {
+          "capacity_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Mw",
+            "description": "New capacity in MW.",
+            "examples": [
+              800
+            ]
+          },
+          "x_pu": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Pu",
+            "description": "New reactance in p.u.",
+            "examples": [
+              0.015
+            ]
+          },
+          "in_service": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Service",
+            "description": "false takes the line out of the network (not a sandbox cut).",
+            "examples": [
+              false
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LinePatch"
+      },
+      "LoadIn": {
+        "properties": {
+          "bus": {
+            "type": "string",
+            "title": "Bus",
+            "description": "Bus id (B###) the load connects to.",
+            "examples": [
+              "B010"
+            ]
+          },
+          "mw": {
+            "type": "number",
+            "maximum": 3000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Mw",
+            "description": "Demand in MW (0 < mw ≤ 3000).",
+            "examples": [
+              120
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "datacenter",
+              "consumo"
+            ],
+            "title": "Kind",
+            "description": "datacenter or consumo (other consumption).",
+            "examples": [
+              "datacenter"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Name",
+            "description": "Display name.",
+            "examples": [
+              "Datacenter Quilicura"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bus",
+          "mw",
+          "kind",
+          "name"
+        ],
+        "title": "LoadIn"
+      },
+      "LoadPatch": {
+        "properties": {
+          "mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 3000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mw",
+            "description": "New demand in MW.",
+            "examples": [
+              200
+            ]
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "datacenter",
+                  "consumo"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind",
+            "description": "datacenter or consumo.",
+            "examples": [
+              "consumo"
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "New display name.",
+            "examples": [
+              "DC ampliado"
+            ]
+          },
+          "in_service": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Service",
+            "description": "false disconnects the load.",
+            "examples": [
+              false
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LoadPatch"
+      },
+      "RepairIn": {
+        "properties": {
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Lines",
+            "description": "Open line ids to close again.",
+            "examples": [
+              [
+                "R012"
+              ]
+            ]
+          },
+          "all": {
+            "type": "boolean",
+            "title": "All",
+            "description": "true closes every open line.",
+            "default": false,
+            "examples": [
+              true
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RepairIn"
       },
       "ReplayIn": {
         "properties": {
@@ -1150,6 +5387,24 @@
             "type": "object",
             "title": "Adversary"
           },
+          "rebuilt": {
+            "type": "boolean",
+            "title": "Rebuilt",
+            "description": "La corrida se reconstruyó desde su registro persistido",
+            "default": false
+          },
+          "trace_matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Matches",
+            "description": "Tras reconstruirla, si el hash del log coincide con el registrado"
+          },
           "notice": {
             "type": "string",
             "title": "Notice"
@@ -1196,6 +5451,44 @@
         ],
         "title": "RunSummary"
       },
+      "SessionCreate": {
+        "properties": {
+          "point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point",
+            "description": "Operating point the session pins for its whole life. Default nov2026-1300. Valid ids are listed by GET /api/v1/sim/catalog (operating_points).",
+            "examples": [
+              "nov2026-1300"
+            ]
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Free text shown to the people who join.",
+            "examples": [
+              "Equipo 9"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SessionCreate"
+      },
       "StepIn": {
         "properties": {
           "cycles": {
@@ -1216,6 +5509,22 @@
     }
   },
   "tags": [
+    {
+      "name": "sessions",
+      "description": "Create, read and delete a session: a private, editable copy of the default dataset."
+    },
+    {
+      "name": "session-network",
+      "description": "Read and edit a session's network: buses, lines, loads and generators."
+    },
+    {
+      "name": "session-sandbox",
+      "description": "Cut and repair lines in a session and read the resulting state."
+    },
+    {
+      "name": "session-runs",
+      "description": "Strategic runs over a session's network."
+    },
     {
       "name": "catalog",
       "description": "What an agent can choose from: events, actions, policies, objectives, templates."

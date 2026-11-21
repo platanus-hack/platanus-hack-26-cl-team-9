@@ -60,10 +60,13 @@ def test_every_operation_is_documented(app):
 
 def test_request_bodies_describe_every_field(app):
     schemas = agent_openapi(app)["components"]["schemas"]
-    refs = [
-        op["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+    refs = [  # optional bodies (POST /sessions) are anyOf [$ref, null]
+        ref
         for _, _, op in operations(agent_openapi(app))
         if "requestBody" in op
+        for ref in re.findall(
+            r'"\$ref": "([^"]+)"', json.dumps(op["requestBody"]["content"]["application/json"]["schema"])
+        )
     ]
     seen = set()
     while refs:

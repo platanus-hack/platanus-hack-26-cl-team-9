@@ -1,6 +1,6 @@
 # Sessions API: guide for agents and other clients
 
-This guide is for an external agent, script or second browser that works on a shared session. The live schema is at `/docs` (FastAPI). Every route here, except the SSE stream, carries `x-sub50-agent: true` in the OpenAPI spec and follows `.agents/tasks/openapi-agent-conventions.md`. Code: `backend/src/cascadasen/api/session_routes.py`. Data contract of the session document: `docs/stack.md` section 6.2.
+This guide is for an external agent, script or second browser that works on a shared session. The live schema is at `/docs` (FastAPI); the agent-only spec is at `/api/v1/agents/openapi.json` (versioned in `docs/openapi/agents.openapi.json`). Every route here, except the SSE stream, carries `x-sub50-agent: true` in the OpenAPI spec and follows `docs/openapi.md`. Code: `backend/src/cascadasen/api/session_routes.py`. Data contract of the session document: `docs/stack.md` section 6.2.
 
 ## 1. What a session is
 

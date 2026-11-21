@@ -33,8 +33,8 @@ also accept an area (`A06`), a zone (`NG`), a corridor (`A06-A07/500`), a defenc
 (`pdce_zn`) or a real substation id (`SE...`). Event types, policies, objectives and templates come
 from `GET /api/v1/sim/catalog`. A run is identified by the `run_id` returned on creation.
 
-**Runs.** Runs in `global-runs` work on the default dataset and live in server memory: the most
-recent 100 are kept and any run can be rebuilt from its recipe (`GET .../trace`). Session
+**Runs.** Runs in `global-runs` work on the default dataset. Every run is persisted for 24 hours
+after its last command and rebuilt from its recipe when the server no longer holds it. Session
 endpoints (tags `sessions`, `session-network`, `session-sandbox`, `session-runs`) carry the
 session id in the path and work on that session's private copy of the dataset; create a session
 first and pass its id to every session call.

@@ -186,7 +186,8 @@ def sim_catalog(sim: Sim) -> dict[str, Any]:
         "Creates a run of the strategic theatre from a template (`GET /api/v1/sim/catalog` → "
         "`templates`) with a policy, an optional adversary, uncertainty, seed and initial events. "
         "Returns the run summary with its `run_id`, used by every other run call. With `auto_run` "
-        "the run is played to the end before returning. The run lives in server memory."
+        "the run is played to the end before returning. The run is persisted for 24 hours after its "
+        "last command and rebuilt from its recipe when the server no longer holds it."
     ),
     responses=errors(
         {

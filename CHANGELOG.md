@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · chore(api): regenerate the agent OpenAPI spec with session routes
+
+- **Changed:** After merging `main` (`92256c6`), `session_routes.py` imports `AGENT` and `errors()` from `api/agent_openapi.py`; the duplicate `ErrorResponse` in `api/schemas.py` is gone. `docs/openapi/agents.openapi.json` regenerated: it now holds every session route except the SSE stream. The spec description and the `global_create_run` description say runs are persisted 24 h and rebuilt from the recipe (was "live in server memory, the most recent 100"). `test_request_bodies_describe_every_field` follows `$ref`s inside `anyOf`, because `POST /sessions` takes an optional body.
+- **Why:** Plan "Final rebase" step and review finding 8: one `ErrorResponse`, a spec in sync with the app, and references to the committed conventions instead of the untracked `.agents/tasks/openapi-agent-conventions.md`.
+- **Agents:** The conventions are in `docs/openapi.md`; `session_routes.py`, `docs/sessions-api.md` and `docs/stack.md` 7.2 point there. Regenerate the spec with `cd backend && uv run python -m cascadasen.api.agent_openapi` whenever a session route or its models change. Global `/sim/runs*` stay marked; unmarking them is an open decision. Verification: `uv run pytest -q` 230 passed, 2 skipped, 1 failed (only the known Bedrock test).
+- **Files:** `backend/src/cascadasen/api/{session_routes,schemas,agent_openapi,simulation_routes}.py`, `backend/tests/integration/test_agent_openapi.py`, `docs/openapi/agents.openapi.json`, `docs/{sessions-api,stack}.md`.
+
 ## 2026-11-21 · docs(sessions): correct the production /api note in mapa3
 
 - **Changed:** `docs/mapa3.md` section 11 no longer says the deployed site has no backend behind `/api`. CloudFront and the ALB already route `/api/*` to the backend; until the sessions bucket and task role are applied, the deployed backend keeps sessions in memory (`CASCADASEN_SESSION_STORE` defaults to `memory`) and loses them on restart or deploy.
