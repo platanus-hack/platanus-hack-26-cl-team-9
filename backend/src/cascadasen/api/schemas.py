@@ -102,3 +102,13 @@ class Health(BaseModel):
     snapshot_built_at: str | None
     nodes: int
     edges: int
+
+
+class ErrorResponse(BaseModel):
+    """Error body of the agent-facing routes (.agents OpenAPI conventions, item 5)."""
+
+    detail: str | dict[str, Any] | list[Any] = Field(
+        description="Spanish message. Input errors give {field, message, valid?}; request validation "
+        "errors give FastAPI's list of {loc, msg, type}.",
+        examples=["No existe la sesión: AbCdEfGhIjKlMnOpQrStUv"],
+    )

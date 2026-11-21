@@ -14,9 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
+from cascadasen.api.limits import BodyLimitMiddleware, SseSlots, TokenBucket
 from cascadasen.api.schemas import EdgePage, Health, IslandsRequest, IslandsResponse, NodePage, Page
+from cascadasen.api.session_routes import router as session_router
 from cascadasen.api.simulation_routes import router as simulation_router
 from cascadasen.application.grid_queries import GridQueryService, NotFoundError
+from cascadasen.application.sessions import SessionService
 from cascadasen.application.simulation_service import SimulationService
 from cascadasen.domain.ports import DocumentStore
 from cascadasen.infrastructure.container import document_store, repository
@@ -41,6 +44,7 @@ def create_app(
     settings: Settings | None = None,
     simulation: SimulationService | None = None,
     store: DocumentStore | None = None,
+    sessions: SessionService | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="CascadaSEN · Red eléctrica de Chile",
@@ -51,8 +55,13 @@ def create_app(
             "Cada registro trae su procedencia; los valores inferidos llevan `is_assumption`."
         ),
     )
+    app.add_middleware(BodyLimitMiddleware)  # innermost: its 413 still gets CORS headers
     app.add_middleware(
-        CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"]
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["*"],
+        expose_headers=["ETag"],
     )
     app.add_middleware(GZipMiddleware, minimum_size=2048)
 
@@ -66,7 +75,10 @@ def create_app(
         service = GridQueryService(snap) if snap else None
     app.state.service = service
     app.state.simulation = simulation  # built lazily from the snapshot on the first /sim request
+    app.state.sessions = sessions  # built lazily from the simulation on the first /sessions request
+    app.state.limiter, app.state.sse_slots = TokenBucket(), SseSlots()
     app.include_router(simulation_router)
+    app.include_router(session_router)
 
     def found(fn, *args, **kwargs):
         try:
@@ -104,6 +116,7 @@ def create_app(
         snap = repository(request.app.state.settings).load()
         request.app.state.service = GridQueryService(snap) if snap else None
         request.app.state.simulation = None
+        request.app.state.sessions = None
         return health(request)
 
     @app.get(
