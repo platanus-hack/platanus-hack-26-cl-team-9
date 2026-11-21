@@ -2,7 +2,7 @@
 
 Last updated: 2026-11-21. Requested by Ricardo on 2026-11-21; the rest of the team still has to confirm it (`plan.md` section 9, item 10). Read after `idea.md`. Numbers in brackets refer to `datasets.md` section 7.
 
-**Context.** CascadaSEN is a hackathon project for the simulation track. It is an educational, preventive tool: a power-flow and frequency simulator that shows how the Chilean grid (SEN) responds when some elements go out of service, and which defences keep a local event from becoming a blackout. This document covers one family of scenarios: disturbances motivated by public cyber incidents. The simulator only takes grid-level effects as input (an element out of service, a defence not acting). It contains no information about how anyone could cause those effects, and it is not meant to find real weak points. Section 8 lists the guardrails that keep it that way.
+**Context.** Sub50 (formerly CascadaSEN) is a hackathon project for the simulation track. It is an educational, preventive tool: a power-flow and frequency simulator that shows how the Chilean grid (SEN) responds when some elements go out of service, and which defences keep a local event from becoming a blackout. This document covers one family of scenarios: disturbances motivated by public cyber incidents. The simulator only takes grid-level effects as input (an element out of service, a defence not acting). It contains no information about how anyone could cause those effects, and it is not meant to find real weak points. Section 8 lists the guardrails that keep it that way.
 
 The strategic experimentation layer built on top of this engine (agents, observed vs real state, adaptive adversary, campaigns) is described in `strategy.md`; read it after this document.
 

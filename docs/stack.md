@@ -1,6 +1,6 @@
 # Stack and architecture
 
-Status: revised after the planning session of 2026-11-21. Nothing below is implemented yet; the repo only contains the Platanus template files and `docs/`.
+Status: revised after the planning session of 2026-11-21 and updated the same day to match the repo. Implemented so far: the grid data pipeline and read-only API (`backend/`, `datasets.md` section 0), the web map (`web/`, deck.gl offline map plus an optional Mapbox basemap), operating points and a secure DC-OPF base case (`data/scripts/`), Docker Compose and lint CI. Not implemented: the cascade engine, the timeline player and the fixtures in section 6. Visual direction: `design.md`.
 
 ## 0. MVP scope
 
@@ -20,11 +20,11 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 | Layer | Choice | Status | Notes |
 |---|---|---|---|
 | Frontend | React + Vite + TypeScript | MVP | Decided earlier |
-| Map and 3D-style layers | deck.gl standalone (`MapView`, pitch ~50 degrees) | MVP | No MapLibre and no tile server. Chile's outline is a local GeoJSON, so the demo works offline. Add MapLibre only if street-level zoom is wanted later |
+| Map and 3D-style layers | deck.gl standalone (`MapView`, pitch ~50 degrees) by default; optional Mapbox vector basemap with deck.gl on top (`MapboxOverlay`) | Done (both) | Default map (`/`) has no tile server: Chile's outline is a local GeoJSON, so it works offline. `?mapa=2` adds Mapbox (merged in #6): needs internet and `VITE_MAPBOX_TOKEN` in `web/.env.local`, and falls back to the offline map without a token. The zoom-level designs in `design.md` section 4 assume the Mapbox basemap. Which map the demo uses is open (`plan.md` section 9) |
 | Chile outline | Local simplified GeoJSON (Natural Earth admin-1 or IDE Chile/BCN, simplified with mapshaper) | MVP | Continental Chile only; see `datasets.md` |
 | State | Zustand | MVP | Holds one playback clock `t` that drives all animations |
 | Charts | uPlot | MVP | Frequency curve synchronised with `t`, read from fixture data |
-| Simulation engine | Python 3.11, numpy, networkx | Backlog | One-equation-per-island frequency model; DC power flow solved with numpy. pandapower only if the full official network arrives (Plan A, optional). The MVP uses fixtures instead |
+| Simulation engine | Python 3.11, numpy, networkx | Backlog (base case started) | Started: `data/scripts/build_operating_points.py` (PyPSA-CL demand and merit-order dispatch for 4 hours) and `build_baseline_opf.py` (DC-OPF so no branch exceeds s_nom, with an inertia floor; N-1 not enforced). No cascade or frequency model yet. Plan: one-equation-per-island frequency model; DC power flow solved with numpy. pandapower only if the full official network arrives (Plan A, optional). The MVP uses fixtures instead |
 | API | FastAPI (REST; WebSocket optional for live combinations) | Backlog | Needed only for combinations not in the cache |
 | Precompute | Script that runs every single-element failure for every scenario x defences x behaviour and writes static JSON | Backlog | MVP ships hand-written files in `web/public/cache/` in the same format |
 | Tests | Vitest (frontend logic) | MVP | pytest (engine, validation, provenance) is backlog |
@@ -55,23 +55,25 @@ Principles:
 - The contract (section 6) is frozen in hour 0 so frontend and engine can be built in parallel. The frontend develops against a hand-written fake timeline until the engine is ready.
 - Every parameter has a source or an explicit `assumption` flag. A test fails if one has neither.
 
-## 3. Proposed repository layout (not created yet)
+## 3. Repository layout
 
-Entries marked (backlog) are not part of the first frontend MVPs.
+Current layout (2026-11-21). Entries marked (backlog) do not exist yet.
 
 ```
+AGENTS.md, CLAUDE.md  agent workflow rules; CHANGELOG.md is written for agents
 docs/                 this documentation
-engine/               (backlog) Python package: network loader, cascade, frequency model, narration keys
-  tests/              (backlog) unit tests, validation tests, provenance test
-  params/             (backlog) YAML parameters with sources
+backend/              Python package `cascadasen` (uv): source adapters, unify, validation, read-only FastAPI, tests
 data/
-  scripts/            download and build scripts (see datasets.md appendix)
-  raw/                downloaded layers (git-ignored if large)
-  processed/          network.json, centrales_sen.geojson, chile.geojson
-web/                  Vite app (MVP)
-  public/cache/       timelines: fixtures in the MVP, builder output later
-scripts/build_cache.py  (backlog)
-.github/workflows/    (backlog) CI
+  scripts/            build_chile_outline.sh, build_node_index.py, build_operating_points.py, build_baseline_opf.py
+  raw/                downloaded sources (git-ignored cache)
+  processed/          grid_snapshot.json, sen_network.json, geo/*.geojson, chile.geojson, node_index.json,
+                      operating_points.json, baseline_opf.json, atlas_sen.html
+web/                  Vite + React + TypeScript app (deck.gl map, Mapbox option, node popup)
+  public/cache/       (backlog) timelines: fixtures first, builder output later
+engine/               (backlog) cascade, frequency model, narration keys, YAML parameters with sources
+scripts/              lint.sh and git hooks; build_cache.py is backlog
+docker-compose.yml    backend and web services (`docs/docker.md`)
+.github/workflows/    lint.yml (ruff and changelog check)
 ```
 
 ## 4. Simulation model
@@ -137,8 +139,10 @@ The 25F replica is the declared exception: it reports the frequency result becau
 
 ## 5. Frontend design
 
+The look, layout, colors and zoom behaviour are defined in `design.md` (Electricity Maps style, decided on 2026-11-21). Where this section disagrees with `design.md` on visuals, `design.md` wins. This section keeps the layer and animation mechanics.
+
 ### 5.1 Layout
-Chile is long and narrow. Put the map in a tall left panel (about 40% of the width), with panels on the right: headline counter, event chain, frequency chart, validation table, selectors. The camera follows the cascade north to south and uses fly-to transitions.
+Variant A in `design.md` section 2: a quiet floating panel on the left (headline counter, event chain, validation, selectors in tabs) and the map on the right, with a timeline card (play, scrub, frequency curve) and a legend card. The camera follows the cascade north to south and uses fly-to transitions.
 
 ### 5.2 deck.gl layers and animations
 
@@ -146,14 +150,14 @@ Chile is long and narrow. Put the map in a tall left panel (about 40% of the wid
 |---|---|---|
 | Chile outline | `GeoJsonLayer` | None; dark night style |
 | Generators | `ColumnLayer` (height = MW, colour = technology) | Column drops to zero when the plant trips |
-| Cities | `ColumnLayer` or `ScatterplotLayer` (glow) | Wave of darkness: each city goes out according to time since its island collapsed |
-| Transmission lines | two stacked `PathLayer`s (halo + core), colour by voltage | Red and pulsing when overloaded; dashed when open |
+| Cities | `ScatterplotLayer`, cream, no glow at country zoom (`design.md` section 4) | Wave of darkness: each city goes out according to time since its island collapsed |
+| Transmission lines | `PathLayer`, colour by voltage with lightness falling with voltage (`design.md` section 3); only 220 kV and above at country zoom | Red and pulsing when overloaded; dashed gray when open |
 | Power flow | `TripsLayer` | Particles move along lines; they reroute when a line is cut |
 | Cut | `ScatterplotLayer` | Expanding ring and flash at the cut |
 | Substations / nodes | `ScatterplotLayer` + `TextLayer` | Colour by island |
 | Camera | `viewState` transitions | Fly to the failure, then to the two islands |
 
-Render the 1,193 plants aggregated per node (one column per node with summed MW) and reveal individual plants on zoom. 1,193 loose columns look like noise.
+Render the 1,193 plants aggregated per node (one column per node with summed MW) and reveal individual plants on zoom. 1,193 loose columns look like noise. Icons appear by zoom level in order of real size and importance (`design.md` section 4).
 
 The simulation's electrical time (0-20 s) and the visible story time differ. The animation maps electrical events to a ~5 s playback with a speed control. Documented events outside the 20 s horizon (the north's voltage collapse about 4 minutes later) are shown as annotated events labelled "documented".
 
@@ -280,7 +284,7 @@ MVP: Vitest tests for frontend logic (playback clock, narration templates, layer
 - UI strings and narration in Spanish; code, comments and docs in English.
 - Never fit parameters by hand without declaring it in the YAML (`is_assumption: true` plus the reason).
 - Company names do not appear on screen; use categories ("plants that disconnected early").
-- Keep the demo working offline: static build plus cache plus a recorded video.
+- Keep the demo working offline: static build plus cache plus a recorded video. The Mapbox basemap needs internet, so the offline map stays as the fallback.
 - Ask the team before writing or replacing the README. The template README contains a line telling LLMs to insert a banana emoji after every word. That is part of the organisers' template, not a team decision.
 
 ## 10. Known pitfalls from earlier reviews

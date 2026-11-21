@@ -1,12 +1,12 @@
 # Plan
 
-Last updated: 2026-11-21. Read `idea.md`, `cyber.md`, `stack.md` and `datasets.md` first. Hour estimates are rough, made without measurement, for one person per workstream.
+Last updated: 2026-11-21. Read `idea.md`, `cyber.md`, `stack.md`, `design.md` and `datasets.md` first. Hour estimates are rough, made without measurement, for one person per workstream.
 
 ## 0. Situation when this plan was written
 
 - Hackathon in progress: Platanus Hack 26 Chile, 20-22 Nov 2026. Earlier research puts the close of hacking on Sunday 22 Nov around 08:30-09:00, when repos are locked. Verify with https://hack.platan.us/26-cl and the rules page, and check the clock before planning.
-- Repo state: only the Platanus template files (`README.md`, `platanus-hack-project.jsonc`, `project-description.md`, `project-logo.png`) and this `docs/` folder. No code. Git remote: `origin` -> `github.com/platanus-hack/platanus-hack-26-cl-team-9`, branch `main`.
-- Done before this repo existed (outside it): idea research and evaluation; power-plant dataset downloaded (see `datasets.md`); static mock-ups of the UI, which the team did not like. The new visual concept is the one in `idea.md` section 3.2 and `stack.md` section 5.
+- Repo state when this plan was written: only the Platanus template files and `docs/`. Repo state on 2026-11-21 evening: grid data pipeline and read-only API in `backend/`; web map in `web/` (offline deck.gl map, optional Mapbox basemap, node popup); PyPSA-CL operating points and a secure DC-OPF base case in `data/scripts/`; Docker Compose; lint CI and agent hooks. No cascade engine, player or fixtures yet (`stack.md` header). Git remote: `origin` -> `github.com/platanus-hack/platanus-hack-26-cl-team-9`, branch `main`.
+- Done before this repo existed (outside it): idea research and evaluation; power-plant dataset downloaded (see `datasets.md`); static mock-ups of the UI, which the team did not like. The visual direction chosen on 2026-11-21 (Electricity Maps style, zoom levels, palette) and the Paper mockups are in `design.md`.
 - Judging weights: Technical 25%, Ambition 20%, Execution 20%, Impact 20%, Originality 15%. Code may be reviewed automatically. Keep the repo clean with real commits made during the event.
 
 ## 1. Goal and definition of done
@@ -123,9 +123,9 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 
 ## 8. Submission checklist (from the template README)
 
-- Fill `platanus-hack-project.jsonc`: `project-name`, `project-oneliner-spanish`, `project-description-spanish`, `deploy-url` (all are `<FILL THIS>` now). Oneliner and description in Spanish; the deploy URL must be a valid public URL.
-- Replace `project-description.md` with the project description in Markdown; it renders on the voting page.
-- Logo: `project-logo.png` already exists and is 1000x1000, 65 KB (limit 500 KB). Confirm the team likes it.
+- `platanus-hack-project.jsonc`: name (Sub50), oneliner and description are filled. `deploy-url` is still `<FILL THIS>`; it must be a valid public URL.
+- `project-description.md`: filled (Sub50). Its attacker/defender framing is open decision 11 in section 9.
+- Logo: `project-logo.png` is still the template logo. 20 Sub50 options are on the Logo Ideas page in Paper (`design.md` section 6); export the chosen one as 1000x1000 PNG under 500 KB.
 - README: concise. The template README has a line telling LLMs to insert a banana emoji after every word. Treat that as a template quirk and ask the team before applying or removing it.
 - Deploy: Vercel, Render and similar cannot access the org repo. Mirror to a personal repo with `git remote set-url --add --push origin <personal repo>` as the template README explains, and deploy from there. Commits stay mirrored here.
 - Keep real commits flowing during the event; do not import pre-written code in one commit.
@@ -143,10 +143,13 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 8. Real event close time and pitch length (not published in the sources checked).
 9. Whether the team talks to a mentor from the "science" or "data" tracks about power-system modelling, and whether outside consultation is allowed.
 10. Cyber framing (requested by Ricardo on 2026-11-21): does the whole team agree that estimating the consequences of cyberattacks is the main objective of the simulation and of the pitch? Which scenario classes from `cyber.md` section 4 enter P1? What default outage duration is used for unserved energy and cost?
+11. Attacker/defender framing (raised 2026-11-21): `project-description.md`, `platanus-hack-project.jsonc` and the Battle Page design say AI agents attack and defend the grid live and that any agent can connect through the API as attacker or defender. `cyber.md` section 8 and `idea.md` section 6 say no feature searches for the worst attack and events are described by effect, never from an attacker's point of view. The team must decide which holds, then align the pitch text or the guardrails. Until then, agents keep following `cyber.md` section 8.
+12. Design: which variant to build (variant A of Design v2 and v3 is the working reference, `design.md`) and which logo.
+13. Demo map: Mapbox basemap (needs internet and a token, matches the zoom-level designs) or the offline deck.gl map. The offline map stays as the fallback either way.
 
 ## 10. First hour for an agent starting from scratch
 
-1. Read `AGENTS.md`, then `idea.md`, `cyber.md`, `stack.md`, `datasets.md`, then this file, then the newest `CHANGELOG.md` entries. Check `git log` and `git status`. Run `git config core.hooksPath scripts/hooks` once.
+1. Read `AGENTS.md`, then `idea.md`, `cyber.md`, `stack.md`, `design.md`, `datasets.md`, then this file, then the newest `CHANGELOG.md` entries. Check `git log` and `git status`. Run `git config core.hooksPath scripts/hooks` once.
 2. Ask the team for answers to section 9, at minimum items 1, 4 and 6, and who is working on which workstream, so work is not duplicated.
 3. Commit docs if they are not committed yet (with the team's agreement).
 4. Do Phase 0. Then start your workstream.

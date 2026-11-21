@@ -8,7 +8,7 @@ export type LonLat = [number, number];
 export interface Line { name: string; kv: number | null; path: LonLat[] }
 export interface Substation { id: string; name: string; kv: number | null; position: LonLat }
 export interface Plant { node: string; tech: string; mw: number | null }
-export interface GenerationNode { name: string; position: LonLat; mw: number; tech: string }
+export interface GenerationNode { id: string; name: string; position: LonLat; mw: number; tech: string }
 
 export interface GridData {
   outlineUrl: string;
@@ -52,7 +52,7 @@ export function aggregatePlantsByNode(plants: Plant[], substations: Substation[]
   return [...totals].map(([node, techs]) => {
     const [tech] = [...techs].reduce((best, entry) => (entry[1] > best[1] ? entry : best));
     const { name, position } = byId.get(node)!;
-    return { name, position, tech, mw: [...techs.values()].reduce((a, b) => a + b, 0) };
+    return { id: node, name, position, tech, mw: [...techs.values()].reduce((a, b) => a + b, 0) };
   });
 }
 
