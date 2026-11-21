@@ -197,3 +197,24 @@ def test_run_input_errors(toy_network):
     sim.run_to_end()
     with pytest.raises(RunFinishedError):
         sim.inject("D1_telemetry_loss", "T1")
+
+
+def test_adversary_with_defence_events_runs_and_stays_abstract(toy_network):
+    """complicate_recovery includes C4 (defence not acting): its arms target defence functions,
+    never an area id, and the run completes for every seed."""
+    for seed in range(10):
+        sim = _sim(
+            toy_network,
+            seed=seed,
+            horizon=16,
+            adversary=AdversaryConfig(True, "complicate_recovery", 12, True),
+        )
+        sim.run_to_end()
+        kinds = {t for ev, t in sim.adversary.arms if ev == "C4_defense_not_acting"}
+        assert kinds and kinds <= set(sim.defense_areas)
+        for e in (e for e in sim.real.effects if e.source == "adversary"):
+            assert (
+                e.target in toy_network.areas
+                or e.target in sim.defense_areas
+                or e.target in toy_network.zones
+            )

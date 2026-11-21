@@ -158,7 +158,11 @@ class Simulation:
         self.adversary: AdversaryAgent | None = None
         if adv.enabled:
             self.adversary = AdversaryAgent(
-                areas=list(net.order),
+                targets={
+                    "area": list(net.order),
+                    "zone": list(net.zones),
+                    "defense": sorted(self.defense_areas),
+                },
                 objective=adv.objective,
                 budget=adv.budget,
                 adaptive=adv.adaptive,
@@ -337,6 +341,38 @@ class Simulation:
             if g.load_mw[a] > 0
         )
 
+    def _admissible(self, reqs: list[EventRequest]) -> list[EventRequest]:
+        """Adversary events that resolve to an area, zone or defence function. Anything else is
+        dropped and logged, so a bad request never stops the run (cyber.md 8 item 7)."""
+        out = []
+        for r in reqs:
+            try:
+                resolved, _ = self.executor.resolve(r)
+            except EventError as exc:
+                self.log.append(
+                    self.cycle,
+                    "events",
+                    "engine",
+                    "adversary_event_rejected",
+                    {**r.as_dict(), "reason": str(exc)},
+                )
+                continue
+            if (
+                resolved in self.network.areas
+                or resolved in self.network.zones
+                or resolved in self.defense_areas
+            ):
+                out.append(r)
+            else:
+                self.log.append(
+                    self.cycle,
+                    "events",
+                    "engine",
+                    "adversary_event_rejected",
+                    {**r.as_dict(), "reason": "not_abstract"},
+                )
+        return out
+
     # ---------------------------------------------------------------- cycle
 
     def _cycle(self) -> dict[str, Any]:
@@ -352,7 +388,7 @@ class Simulation:
         reqs = [*self.scheduled.get(k, []), *self.queue]
         self.queue = []
         if self.adversary:
-            reqs += self.adversary.act(self._adversary_view())
+            reqs += self._admissible(self.adversary.act(self._adversary_view()))
         applied = []
         if reqs:
             pairs = []

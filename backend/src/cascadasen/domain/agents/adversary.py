@@ -1,7 +1,7 @@
 """Adaptive adversary (docs/strategy.md 5.1, cyber.md section 8 item 7).
 
 It pursues one abstract objective with a limited budget, using only the abstract event catalog at
-operating-area level. It sees only what the defence exposes. The adaptive variant learns with EXP3
+operating-area, zone or defence-function level (never a substation, corridor or line). It sees only what the defence exposes. The adaptive variant learns with EXP3
 (seeded multiplicative weights) and shifts strategy when the defence changes; the static variant
 plays the template's plan. Its weights stay internal: no output ranks areas or elements.
 """
@@ -17,6 +17,16 @@ from cascadasen.domain.theater.catalog import EVENTS, Role
 from cascadasen.domain.theater.execution import EventRequest
 
 NON_PHYSICAL = {"D3_unreliable_data", "D5_false_alarms"}
+TARGET_KINDS = ("area", "zone", "defense")  # the only target kinds the adversary may use
+
+
+def arms_for(events: list[str], targets: dict[str, list[str]]) -> list[tuple[str, str]]:
+    """(event, target) arms: each event over the first abstract target kind it accepts."""
+    arms = []
+    for ev in events:
+        kind = next((k for k in TARGET_KINDS if k in EVENTS[ev].targets and targets.get(k)), None)
+        arms += [(ev, t) for t in targets.get(kind, [])] if kind else []
+    return arms
 
 
 @dataclass
@@ -24,12 +34,12 @@ class Pending:
     arm: int
     cycle: int
     event: str
-    area: str
+    target: str
 
 
 @dataclass
 class AdversaryAgent:
-    areas: list[str]
+    targets: dict[str, list[str]]  # target kind -> ids (areas, zones, defence functions)
     objective: str
     budget: float
     adaptive: bool
@@ -46,7 +56,7 @@ class AdversaryAgent:
 
     def __post_init__(self) -> None:
         events = self.catalog["objectives"][self.objective]
-        self.arms = [(ev, a) for ev in events for a in self.areas]
+        self.arms = arms_for(list(events), self.targets)
         planned = {(p["type"], p["target"]) for p in self.plan}
         self.weights = [2.0 if arm in planned else 1.0 for arm in self.arms]
 
@@ -86,17 +96,17 @@ class AdversaryAgent:
             if r <= acc:
                 arm = i
                 break
-        event, area = self.arms[arm]
+        event, target = self.arms[arm]
         if self.spent + self._cost(event) > self.budget:
             return []
         self.spent += self._cost(event)
         self.next_opportunity = view.cycle + int(self.catalog["cooldown"])
-        self.pending.append(Pending(arm, view.cycle, event, area))
+        self.pending.append(Pending(arm, view.cycle, event, target))
         self.chosen.append((view.cycle, event))
-        return [EventRequest(event, area, (), "adversary", "intentional")]
+        return [EventRequest(event, target, (), "adversary", "intentional")]
 
     def _reward(self, p: Pending, view: AdversaryView) -> float | None:
-        mine = [e for e in view.my_effects if e[1] == p.event and e[2] == p.area and e[4] == p.cycle]
+        mine = [e for e in view.my_effects if e[1] == p.event and e[2] == p.target and e[4] == p.cycle]
         if not mine or view.cycle - p.cycle < 2:
             return None
         _, _, area, established, start, cleared = mine[0]
@@ -110,10 +120,9 @@ class AdversaryAgent:
             return 1.0 if posture != "normal" else 0.3
         if self.objective == "provoke_unnecessary_actions":
             return 1.0 if posture != "normal" and p.event in NON_PHYSICAL else 0.2
-        dark = area in view.public_dark_areas
-        return min(
-            1.0, (1.0 - view.public_served_share) * 5 + (0.5 if dark else 0.0) + (0.3 if persisted else 0.0)
-        )
+        # complicate_recovery: rewarded by delayed recovery (the effect outlived the defence's
+        # response, or the area is still dark), never by megawatts or people (cyber.md 8 item 7)
+        return 1.0 if persisted or area in view.public_dark_areas else 0.3
 
     def learn(self, view: AdversaryView) -> None:
         if not self.adaptive:
