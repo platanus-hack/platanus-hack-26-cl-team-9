@@ -1,9 +1,13 @@
 import type { ViewMode } from "../map/baseMap";
 import { DEAD_LINE, DEMAND_COLOR, LOAD_BANDS, MIN_FLOW_MW, MW_TO_METERS, NODE_COLOR, OPEN_LINE, VOLTAGE_TIERS } from "./layers";
 import type { BusState, Index, Network } from "./types";
+import { TECH_COLORS } from "../map/layers";
+import type { RegionalGrid } from "../map/regional";
+
+const css = (c: number[]) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${(c[3] ?? 255) / 255})`;
 
 /** "Ayuda" view: every colour, size and moving element of the map, with the counts of what is drawn. */
-export function HelpPanel({ network, buses, mode }: { network: Network; buses: Record<string, BusState>; mode: ViewMode }) {
+export function HelpPanel({ network, buses, mode, regional }: { network: Network; buses: Record<string, BusState>; mode: ViewMode; regional?: RegionalGrid | null }) {
   const columns = network.nodes.filter((n) => (buses[n.id]?.load_mw ?? 0) > 20).length;
   return (
     <div className="prose">
@@ -28,6 +32,7 @@ export function HelpPanel({ network, buses, mode }: { network: Network; buses: R
           : `Círculo: demanda de la subestación, su área crece con los MW. ${columns} subestaciones con más de 20 MW. Se activa en el botón de capas.`} />
       <h3>Eventos</h3>
       <p>Cada evento tiene un número, el mismo en el historial, la línea de tiempo y el mapa. El evento actual es rojo; los eventos a pocas décimas de segundo comparten un marcador (1·2).</p>
+      {regional && <RegionalLegend regional={regional} />}
       <h3>Lo que no se dibuja</h3>
       <p className="meta">Generación por central, transformadores, tensión y potencia reactiva, y las redes bajo 66 kV.</p>
     </div>
@@ -59,4 +64,18 @@ function Row({ swatch, label }: { swatch: React.ReactNode; label: string }) {
 function Bar({ color, height = 3, outline = false, dashed = false }: { color: string; height?: number; outline?: boolean; dashed?: boolean }) {
   if (dashed) return <svg width="26" height="4" viewBox="0 0 26 4" aria-hidden><path d="M0 2H26" stroke={color} strokeWidth="2" strokeDasharray="3 2.5" /></svg>;
   return <span className="bar" style={{ background: color, height, outline: outline ? "1px solid #FFFFFF40" : undefined }} />;
+}
+
+/** The other countries are drawn from public sources with their own licences; the help says what and from where. */
+function RegionalLegend({ regional }: { regional: RegionalGrid }) {
+  const sources = new Map(regional.countries.flatMap((c) => c.sources.map((s) => [s.id, s] as const)));
+  return (
+    <>
+      <h3>Otras redes de Latinoamérica</h3>
+      <p>Red de contexto, atenuada: solo se dibuja, no se simula. Reducida como la de Chile: una barra por subestación, las líneas en paralelo se funden en una y se dibujan rectas entre dos subestaciones. Desde 66 kV; los puntos grandes son la generación de cada subestación (color por tecnología).</p>
+      {regional.countries.map((c) => <Row key={c.country} swatch={<span className="dot big" style={{ background: "#94a3b8" }} />} label={`${c.name}: ${c.counts.lines} líneas y ${c.counts.substations} subestaciones (de ${c.raw_counts.lines} y ${c.raw_counts.substations} en la fuente); ${c.plant_count} centrales en ${c.counts.plants} puntos`} />)}
+      {Object.entries(TECH_COLORS).map(([tech, c]) => <Row key={tech} swatch={<span className="dot big" style={{ background: css([c[0], c[1], c[2], 160]) }} />} label={tech} />)}
+      <p className="meta">Fuentes: {[...sources.values()].map((s) => `${s.attribution} (${s.license})`).join("; ")}.</p>
+    </>
+  );
 }

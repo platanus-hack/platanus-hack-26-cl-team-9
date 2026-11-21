@@ -1,6 +1,7 @@
-import type { PickingInfo } from "@deck.gl/core";
+import type { Layer, PickingInfo } from "@deck.gl/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
+import { buildRegionalLayers, loadRegionalGrid, regionalTooltip, type RegionalGrid } from "../map/regional";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { HelpPanel, SourcesPanel } from "./Legend";
@@ -70,10 +71,14 @@ export function CascadeApp() {
     return out;
   }, [located, states]);
 
-  const live = useRef({ network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t });
-  live.current = { network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t };
+  const [regional, setRegional] = useState<RegionalGrid | null>(null);
+  const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional) : []), [regional]);
+
+  const live = useRef({ network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers });
+  live.current = { network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers };
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
+  useEffect(() => { loadRegionalGrid().then(setRegional).catch((e) => console.error("No se pudo cargar la red regional", e)); }, []);
   useEffect(() => { _loadPoint(); }, [pointId, index]);
   useEffect(() => { _loadTimeline(); }, [pointId, cut, network]);
   useEffect(() => _mountMap(), []);
@@ -123,6 +128,7 @@ export function CascadeApp() {
     if (!info.object || !net) return null;
     const style = { background: "#1E1F21F7", color: "#E6E6E8", border: "1px solid #FFFFFF1A", borderRadius: "0", padding: "8px 10px", font: "12px/16px var(--font-sans)", whiteSpace: "pre-line", fontVariantNumeric: "tabular-nums" };
     const layer = info.layer?.id ?? "";
+    if (layer.startsWith("regional-")) return { text: regionalTooltip(layer, info.object) ?? "", style };
     if (layer.startsWith("lines")) {
       const obj = info.object as { id?: string; line?: { id: string } };
       const id = obj.line?.id ?? obj.id!;
@@ -154,7 +160,7 @@ export function CascadeApp() {
       if (map && v.network && v.frame) {
         const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
         const zoom = map.camera().zoom;
-        map.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame: v.frame, time, colorMode: v.colorMode, selectedNode: v.node, mode: v.mode, zoom, toggles: v.toggles }));
+        map.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame: v.frame, time, colorMode: v.colorMode, selectedNode: v.node, mode: v.mode, zoom, toggles: v.toggles, regional: v.regionalLayers }));
         _placeOverlays(map);
       }
       raf = requestAnimationFrame(tick);
@@ -279,7 +285,7 @@ export function CascadeApp() {
         <div className="panel-body">
           {error && <p className="note">{error}</p>}
           {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
-          {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} />}
+          {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={regional} />}
           {view === "tabs" && tab === "red" && network && (
             <NetworkPanel network={network} buses={buses} frame={frame} node={node} clearNode={() => setNode(null)} cutLine={cutLine} source={sourceNote} />
           )}

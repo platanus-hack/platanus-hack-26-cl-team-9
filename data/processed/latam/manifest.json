@@ -1,0 +1,244 @@
+{
+ "version": 1,
+ "countries": {
+  "ARG": {
+   "country": "ARG",
+   "name": "Argentina",
+   "counts": {
+    "lines": 390,
+    "substations": 300,
+    "plants": 81
+   },
+   "raw_counts": {
+    "lines": 3056,
+    "substations": 308,
+    "plants": 208
+   },
+   "plant_count": 138,
+   "line_km_by_kv": {
+    "500": 10934.9,
+    "330": 555.9,
+    "220": 1899.4,
+    "132": 12731.3,
+    "66": 25.2
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 55.0,
+    "eolica": 1114.5,
+    "hidro": 9720.0,
+    "nuclear": 1700.0,
+    "solar": 592.9,
+    "termica": 20905.9
+   },
+   "bbox": [
+    -72.2326925,
+    -51.6559008,
+    -54.4609604,
+    -23.9181649
+   ],
+   "sources": [
+    {
+     "id": "osm_power",
+     "name": "OpenStreetMap, etiquetas power=*",
+     "publisher": "Colaboradores de OpenStreetMap",
+     "url": "https://www.openstreetmap.org/",
+     "license": "ODbL 1.0",
+     "attribution": "© OpenStreetMap contributors",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:55:16+00:00"
+    }
+   ],
+   "warnings": [
+    "223 líneas de menos de 66 kV descartadas",
+    "1377 subestaciones sin tensión o bajo 66 kV descartadas",
+    "1567 líneas con los dos extremos en la misma subestación descartadas",
+    "4 buses en piezas de menos de 3 descartados",
+    "21 subestaciones sin ninguna línea resuelta descartadas",
+    "70 centrales (5,475 MW) a más de 40 km de una subestación descartadas"
+   ]
+  },
+  "BOL": {
+   "country": "BOL",
+   "name": "Bolivia",
+   "counts": {
+    "lines": 58,
+    "substations": 54,
+    "plants": 15
+   },
+   "raw_counts": {
+    "lines": 244,
+    "substations": 71,
+    "plants": 31
+   },
+   "plant_count": 22,
+   "line_km_by_kv": {
+    "500": 225.0,
+    "230": 2254.0,
+    "115": 1199.1,
+    "69": 103.3
+   },
+   "plant_mw_by_tech": {
+    "eolica": 135.9,
+    "hidro": 1348.5,
+    "solar": 160.3,
+    "termica": 888.8
+   },
+   "bbox": [
+    -68.3601468,
+    -22.7076244,
+    -62.5194746,
+    -14.8357465
+   ],
+   "sources": [
+    {
+     "id": "osm_power",
+     "name": "OpenStreetMap, etiquetas power=*",
+     "publisher": "Colaboradores de OpenStreetMap",
+     "url": "https://www.openstreetmap.org/",
+     "license": "ODbL 1.0",
+     "attribution": "© OpenStreetMap contributors",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:55:15+00:00"
+    }
+   ],
+   "warnings": [
+    "1 líneas de menos de 66 kV descartadas",
+    "193 subestaciones sin tensión o bajo 66 kV descartadas",
+    "85 líneas con los dos extremos en la misma subestación descartadas",
+    "2 buses en piezas de menos de 3 descartados",
+    "7 subestaciones sin ninguna línea resuelta descartadas",
+    "9 centrales (655 MW) a más de 40 km de una subestación descartadas"
+   ]
+  },
+  "BRA": {
+   "country": "BRA",
+   "name": "Brasil",
+   "counts": {
+    "lines": 1286,
+    "substations": 839,
+    "plants": 519
+   },
+   "raw_counts": {
+    "lines": 2264,
+    "substations": 927,
+    "plants": 2953
+   },
+   "plant_count": 2422,
+   "line_km_by_kv": {
+    "800": 4617.9,
+    "765": 915.5,
+    "600": 3199.8,
+    "525": 7487.5,
+    "500": 48711.2,
+    "440": 5853.0,
+    "345": 8865.8,
+    "230": 53273.6
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 9672.5,
+    "eolica": 32256.8,
+    "hidro": 105528.8,
+    "nuclear": 1990.0,
+    "solar": 14379.2,
+    "termica": 24437.1
+   },
+   "bbox": [
+    -72.63880086699999,
+    -33.47438860313146,
+    -34.89127585699998,
+    2.9630301689024887
+   ],
+   "sources": [
+    {
+     "id": "epe_webmap",
+     "name": "EPE WebMap, sistema eléctrico existente",
+     "publisher": "Empresa de Pesquisa Energética (EPE), Brasil",
+     "url": "https://gisepeprd2.epe.gov.br/arcgis/rest/services/WMS_Webmap_EPE_Data/MapServer",
+     "license": "No declarada; datos públicos del gobierno de Brasil",
+     "attribution": "EPE WebMap",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:55:11+00:00"
+    }
+   ],
+   "warnings": [
+    "5 líneas sin tensión descartadas",
+    "433 líneas con los dos extremos en la misma subestación descartadas",
+    "1 subestaciones sin ninguna línea resuelta descartadas",
+    "531 centrales (15,581 MW) a más de 40 km de una subestación descartadas"
+   ]
+  },
+  "PER": {
+   "country": "PER",
+   "name": "Perú",
+   "counts": {
+    "lines": 246,
+    "substations": 198,
+    "plants": 102
+   },
+   "raw_counts": {
+    "lines": 575,
+    "substations": 269,
+    "plants": 246
+   },
+   "plant_count": 195,
+   "line_km_by_kv": {
+    "500": 2889.0,
+    "220": 7816.3,
+    "145": 69.4,
+    "138": 4640.1,
+    "69": 37.8,
+    "66": 189.8
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 148.5,
+    "eolica": 1021.4,
+    "hidro": 3869.4,
+    "solar": 1134.0,
+    "termica": 5796.6
+   },
+   "bbox": [
+    -81.27597943,
+    -18.08208018800002,
+    -69.22217124600002,
+    -3.5450846300000194
+   ],
+   "sources": [
+    {
+     "id": "osinergmin_gisem",
+     "name": "Osinergmin GISEM, mapa del SEIN en operación",
+     "publisher": "Osinergmin, Perú",
+     "url": "https://gisem.osinergmin.gob.pe/serverosih/rest/services/Electricidad/MapaSEIN_Operacion/MapServer",
+     "license": "No declarada; datos públicos del gobierno de Perú",
+     "attribution": "Osinergmin GISEM",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:55:14+00:00"
+    }
+   ],
+   "warnings": [
+    "642 líneas de menos de 66 kV descartadas",
+    "456 subestaciones sin tensión o bajo 66 kV descartadas",
+    "198 líneas con los dos extremos en la misma subestación descartadas",
+    "2 buses en piezas de menos de 3 descartados",
+    "11 subestaciones sin ninguna línea resuelta descartadas",
+    "51 centrales (878 MW) a más de 40 km de una subestación descartadas"
+   ]
+  }
+ },
+ "built_at": "2026-11-21T21:55:18+00:00"
+}

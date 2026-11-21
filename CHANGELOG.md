@@ -1,6 +1,41 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(regional): reduce the other countries' networks like Chile's
+
+- **Changed:** New `domain/regional_reduction.py`: substations within 3 km become one bus, line ends are snapped to the nearest bus (12 km), OSM ways are chained, parallel lines are folded, small pieces dropped, and plants are added up per bus (40 km). `cascadasen-regional` now writes the reduced layer: lines `<ISO3>-R<n>` with `a`/`b` bus ids drawn straight, buses `<ISO3>-B<n>`, generation `<ISO3>-G<n>` per bus. Lines before to after: BRA 2,264 to 1,286, PER 575 to 246, BOL 244 to 58, ARG 3,056 to 390. The web reads the new fields; tooltips show circuits and plant counts.
+- **Why:** Ricardo asked for the same reduction Chile has (`cascade/network.py`): one bus per substation, parallel lines folded, straight segments.
+- **Agents:** The thresholds (3, 12, 40 km, 3 buses) are assumptions, constants at the top of `regional_reduction.py`. Plants far from every substation are dropped (BRA 15,581 MW, ARG 5,475 MW). The schema changed to v2: `source_record` is now `source_records`, plants carry `bus`, `mw_by_tech` and `count`. Regenerate with `uv run cascadasen-regional` (Argentina: `--countries ARG --osm ARG`). The reduced lines are not a simulable topology.
+- **Files:** `backend/src/cascadasen/domain/regional_reduction.py`, `domain/regional.py`, `application/build_regional.py`, `backend/tests/unit/test_regional.py`, `backend/tests/validation/test_regional_data.py`, `data/processed/latam/`, `web/src/map/regional.ts`, `web/src/cascade/Legend.tsx`, `docs/regional.md`, `docs/stack.md`.
+
+## 2026-11-21 · docs(regional): document the sources and the common schema
+
+- **Changed:** New `docs/regional.md`: what is built, the common schema v1, the sources used with their status, and everything found and not used (region-wide datasets, Brazil ONS electrical parameters, Colombia XM API, Dominican Republic and Costa Rica ArcGIS services, Mexico CENACE, and the countries with nothing open). `datasets.md`, `architecture.md`, `stack.md` section 6.2, `idea.md` section 4 and `plan.md` section 9.14 point to it.
+- **Why:** The research was exhaustive by request; the next agent should not repeat it.
+- **Agents:** Status labels are verified / not verified / failed; only what was opened in this project is marked verified. Argentina's official source failed on 2026-11-21. Next candidates with verified sources: Dominican Republic, Costa Rica, Colombia (API only), Mexico (market data only).
+- **Files:** `docs/regional.md`, `docs/datasets.md`, `docs/architecture.md`, `docs/stack.md`, `docs/idea.md`, `docs/plan.md`.
+
+## 2026-11-21 · feat(web): draw the regional grid as a context layer
+
+- **Changed:** New `web/src/map/regional.ts` loads `data/processed/latam/` (a glob, so the app builds without it) and draws dimmed lines by kV, substations and plants by technology under Chile's layers (`regional-*` ids). Tooltips show the source and "Red de contexto: no se simula". The legend lists countries, counts, licences and attribution. The offline map draws the neighbours' outlines and the camera limits reach Brazil.
+- **Why:** Show the other Latin American grids in the same map without touching the Chile simulation.
+- **Agents:** Regional layers are never clickable as a cut: click handlers only react to the ids `lines*`, `nodes`, `load`. After merging the Design v5 interface the regional legend block lives in `HelpPanel` (Ayuda) and the tooltip branch in `CascadeApp._tooltip`. The first view still frames Chile. `npx vitest run` covers the layers and tooltips.
+- **Files:** `web/src/map/regional.ts`, `web/src/map/regional.test.ts`, `web/src/map/baseMap.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/layers.ts`, `web/src/cascade/Legend.tsx`.
+
+## 2026-11-21 · feat(data): add regional grid exports and country outlines
+
+- **Changed:** `data/processed/latam/` with lines, substations and plants for BRA (2,264 / 927 / 2,953), PER (575 / 269 / 246), BOL (244 / 71 / 31) and ARG from OpenStreetMap (3,056 / 308 / 208), a manifest, and `outlines.geojson` (geoBoundaries) built by `data/scripts/build_latam_outlines.sh`. New validation test `backend/tests/validation/test_regional_data.py`.
+- **Why:** The web map reads these files; they are versioned like the rest of `data/processed/` so the demo needs no download.
+- **Agents:** Argentina is the OSM fallback, not the official source; its 132 kV total looks high (duplicated circuits). Regenerate with `uv run cascadasen-regional` (add `--refresh` to download again). The validation test skips when the folder is missing.
+- **Files:** `data/processed/latam/`, `data/scripts/build_latam_outlines.sh`, `backend/tests/validation/test_regional_data.py`.
+
+## 2026-11-21 · feat(regional): add the regional grid model, adapters and command
+
+- **Changed:** New pure `domain/regional.py` (common schema, voltage and technology normalisers, `normalise`, GeoJSON and manifest builders) and port `RegionalGridSource`. Four adapters in `infrastructure/sources/regional/` (EPE Brazil, Osinergmin Peru, Secretaría de Energía Argentina, OpenStreetMap through Overpass) and the command `cascadasen-regional --countries BRA,PER,ARG,BOL [--osm ARG] [--refresh]`.
+- **Why:** Ricardo asked for other Latin American grids on the map in one common pattern. Decided with him: drawn only, no simulation; Brazil, Peru, Argentina, Bolivia.
+- **Agents:** EPE gives power in kW and Osinergmin in MW (four records in kW, read above 3,000 as kW). The Argentina adapter was never run against the real files (server unreachable); it is tested only on a synthetic CSV, so fix its column candidates when the server answers. A failing country does not stop the others. Run tests with `uv run pytest`.
+- **Files:** `backend/src/cascadasen/domain/regional.py`, `domain/ports.py`, `application/build_regional.py`, `infrastructure/sources/regional/`, `infrastructure/container.py`, `infrastructure/settings.py`, `backend/pyproject.toml`, `backend/tests/unit/test_regional.py`.
+
 ## 2026-11-21 · fix(web): a substation without supply is drawn red
 
 - **Changed:** In mapa 3 a substation that loses supply (its island blacks out) is drawn as a red dot (`FAULT`, #FF5A48), a little bigger than a normal node and with a dark ring so it stands out on the gray lines. Before it was near-black (`DEAD_LINE`), which disappeared against the dark map. Lines between two dark substations keep the near-black "sin tensión" color. Code: the `nodes` layer in `web/src/cascade/layers.ts`.
