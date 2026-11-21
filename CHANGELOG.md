@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(infra): CLI-only deploy workflow with CloudFront invalidation
+- **Changed:** `.github/workflows/deploy.yml` no longer runs Terraform: it builds and pushes both images, registers a new task definition revision, updates the ECS service, waits for stable, and invalidates CloudFront. The role ARN is hardcoded (`IAM-Role-ECS-Deploy`). New `infrastructure/deploy-role-policy.json` (minimal permissions for that role). `aws_ecs_service.app` gets `ignore_changes = [task_definition]`.
+- **Why:** The deploy only needs a new image tag; Terraform needed broad IAM permissions and a state bucket. Repository variables cannot be edited, so the ARN cannot come from `AWS_DEPLOY_ROLE_ARN`.
+- **Agents:** The previous entry's `AWS_DEPLOY_ROLE_ARN` requirement is obsolete. The workflow does not apply infrastructure changes: run `infrastructure/deploy.sh` by hand for those. Apply the `ecs.tf` lifecycle change once with `deploy.sh`. The role trust `sub` uses owner and repository IDs; fall back to the classic `sub` if the role cannot be assumed. Pushing the workflow file needs the `workflow` token scope.
+- **Files:** `.github/workflows/deploy.yml`, `infrastructure/deploy-role-policy.json`, `infrastructure/ecs.tf`, `docs/infrastructure.md`.
 ## 2026-11-21 · fix(web): commit the mapa 3 cache so the deployed site loads
 - **Changed:** `web/public/cache/` (23 MB, 1103 files, 4 points x 273 cuts) is now versioned; removed it from `web/.gitignore`. nginx answers a missing `/cache/*` file with 404 instead of the SPA `index.html`. `cascade/api.ts` shows "Falta la caché (...)" when the response is not JSON.
 - **Why:** sub50.cl showed `Unexpected token '<', "<!doctype "...`: the cache was git-ignored, so the web image had none and nginx returned `index.html` with 200.

@@ -1,0 +1,66 @@
+# Deploys every commit on main with the AWS CLI only (no Terraform): build and push both images to ECR,
+# register a new task definition revision with the new image tag, update the ECS service, invalidate CloudFront.
+# Assumes the IAM role IAM-Role-ECS-Deploy via GitHub OIDC (permissions: infrastructure/deploy-role-policy.json).
+# Infrastructure changes (Terraform) are still applied by hand with infrastructure/deploy.sh.
+name: deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+env:
+  AWS_REGION: us-east-1
+  REGISTRY: 402909940511.dkr.ecr.us-east-1.amazonaws.com
+  CLUSTER: cascadasen
+  SERVICE: cascadasen
+  DOMAIN: sub50.cl
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::402909940511:role/IAM-Role-ECS-Deploy
+          aws-region: us-east-1
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push images
+        run: |
+          tag="$(git rev-parse --short HEAD)"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          # Public Mapbox token (pk.*): reuse the default from deploy.sh instead of repeating it here.
+          VITE_MAPBOX_TOKEN="$(grep -oE 'pk\.[A-Za-z0-9._-]+' infrastructure/deploy.sh | head -1)"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+          for name in backend web; do
+            if aws ecr describe-images --repository-name "cascadasen/$name" --image-ids "imageTag=$tag" >/dev/null 2>&1; then
+              echo "cascadasen/$name:$tag already in ECR, skipping build"
+              continue
+            fi
+            args=()
+            [[ "$name" == "web" ]] && args=(--build-arg "VITE_MAPBOX_TOKEN=$VITE_MAPBOX_TOKEN")
+            # Gzip layers, Docker media types, no provenance/SBOM: Fargate failed to extract the default layers.
+            docker buildx build --platform linux/amd64 --provenance=false --sbom=false "${args[@]}" \
+              --output "type=image,name=$REGISTRY/cascadasen/$name:$tag,push=true,compression=gzip,force-compression=true,oci-mediatypes=false" \
+              -f "infrastructure/docker/$name.Dockerfile" .
+          done
+      - name: Register task definition and redeploy ECS
+        run: |
+          current="$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].taskDefinition' --output text)"
+          aws ecs describe-task-definition --task-definition "$current" --query taskDefinition |
+            jq --arg reg "$REGISTRY" --arg tag "$TAG" '
+              .containerDefinitions |= map(.image = "\($reg)/cascadasen/\(.name):\($tag)")
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            > taskdef.json
+          new="$(aws ecs register-task-definition --cli-input-json file://taskdef.json --query taskDefinition.taskDefinitionArn --output text)"
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$new" >/dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+      - name: Invalidate CloudFront cache
+        run: |
+          id="$(aws cloudfront list-distributions --query "DistributionList.Items[?contains(Aliases.Items, '$DOMAIN')].Id | [0]" --output text)"
+          aws cloudfront create-invalidation --distribution-id "$id" --paths '/*'
