@@ -1,23 +1,36 @@
 # Stack and architecture
 
-Status: decided in the planning session of 2026-11-21. Nothing below is implemented yet; the repo only contains the Platanus template files and `docs/`.
+Status: revised after the planning session of 2026-11-21. Nothing below is implemented yet; the repo only contains the Platanus template files and `docs/`.
+
+## 0. MVP scope
+
+The first MVPs are frontend only. The browser app reads a hand-written `network.json` and `timeline.json` fixture (the data contract in section 6). The app contains no physics and no server.
+
+Backend work (simulation engine, API, cache builder, CI) is backlog. Each backlog item gets a GitHub issue. The first MVPs do not depend on any backend item.
+
+Consequences for the first MVPs:
+- Every result on screen comes from fixtures, not from a computed simulation. Fixture numbers are placeholders and must carry an "assumption" or "fixture" label. The validation table stays empty or marked "not computed" until the engine exists.
+- When the engine arrives, it writes files in the same format as the fixtures. The frontend code should not change.
+- Frontend tests cover the logic the app owns: the playback clock, narration templates, layer mapping and fixture validation against the JSON schema.
 
 ## 1. Decisions
 
-| Layer | Choice | Notes |
-|---|---|---|
-| Frontend | React + Vite + TypeScript | Decided earlier |
-| Map and 3D-style layers | deck.gl standalone (`MapView`, pitch ~50 degrees) | No MapLibre and no tile server. Chile's outline is a local GeoJSON, so the demo works offline. Add MapLibre only if street-level zoom is wanted later |
-| Chile outline | Local simplified GeoJSON (Natural Earth admin-1 or IDE Chile/BCN, simplified with mapshaper) | Continental Chile only; see `datasets.md` |
-| State | Zustand | Holds one playback clock `t` that drives all animations |
-| Charts | uPlot | Frequency curve synchronised with `t` |
-| Simulation engine | Python 3.11, numpy, networkx | One-equation-per-island frequency model; DC power flow solved with numpy. pandapower only if the full official network arrives (Plan A, optional) |
-| API | FastAPI (REST; WebSocket optional for live combinations) | Needed only for combinations not in the cache |
-| Precompute | Script that runs every single-element failure for every scenario x defences x behaviour and writes static JSON | Frontend answers single clicks from this cache, so the demo works without the API |
-| Tests | pytest (engine, validation, provenance), Vitest (critical frontend logic) | |
-| CI | GitHub Actions | Generates the validation table from the tests |
-| Hosting | Static frontend plus cache; deploy from a personal mirror (see README of the template) | Platforms like Vercel cannot access the org repo |
-| LLM | Not in the core | Narration uses fixed templates so every sentence is reproducible. An optional chat that calls the simulator is P2 |
+Status column: **MVP** means needed for the first frontend MVPs. **Backlog** means tracked as a GitHub issue and not started.
+
+| Layer | Choice | Status | Notes |
+|---|---|---|---|
+| Frontend | React + Vite + TypeScript | MVP | Decided earlier |
+| Map and 3D-style layers | deck.gl standalone (`MapView`, pitch ~50 degrees) | MVP | No MapLibre and no tile server. Chile's outline is a local GeoJSON, so the demo works offline. Add MapLibre only if street-level zoom is wanted later |
+| Chile outline | Local simplified GeoJSON (Natural Earth admin-1 or IDE Chile/BCN, simplified with mapshaper) | MVP | Continental Chile only; see `datasets.md` |
+| State | Zustand | MVP | Holds one playback clock `t` that drives all animations |
+| Charts | uPlot | MVP | Frequency curve synchronised with `t`, read from fixture data |
+| Simulation engine | Python 3.11, numpy, networkx | Backlog | One-equation-per-island frequency model; DC power flow solved with numpy. pandapower only if the full official network arrives (Plan A, optional). The MVP uses fixtures instead |
+| API | FastAPI (REST; WebSocket optional for live combinations) | Backlog | Needed only for combinations not in the cache |
+| Precompute | Script that runs every single-element failure for every scenario x defences x behaviour and writes static JSON | Backlog | MVP ships hand-written files in `web/public/cache/` in the same format |
+| Tests | Vitest (frontend logic) | MVP | pytest (engine, validation, provenance) is backlog |
+| CI | GitHub Actions | Backlog | Would generate the validation table from the tests |
+| Hosting | Static frontend plus fixtures; deploy from a personal mirror (see README of the template) | MVP | Platforms like Vercel cannot access the org repo |
+| LLM | Not in the core | Backlog (P2) | Narration uses fixed templates so every sentence is reproducible. An optional chat that calls the simulator is P2 |
 
 ## 2. Architecture
 
@@ -32,6 +45,8 @@ datasets (public APIs) --scripts--> data/processed/network.json
         web/public/cache/*.json  ------>  frontend player (reads timeline, renders from clock t)
 ```
 
+The diagram is the target architecture. In the frontend MVPs, fixture files in `web/public/` take the place of the engine output and the API, and the engine and API are backlog.
+
 Principles:
 - The engine is the only place with physics. The frontend never computes physics, so there are no two implementations to diverge.
 - The frontend is a pure function of (`network.json`, `timeline.json`, clock `t`). Play, pause, scrub and speed come for free.
@@ -40,19 +55,21 @@ Principles:
 
 ## 3. Proposed repository layout (not created yet)
 
+Entries marked (backlog) are not part of the first frontend MVPs.
+
 ```
 docs/                 this documentation
-engine/               Python package: network loader, cascade, frequency model, narration keys
-  tests/              unit tests, validation tests, provenance test
-  params/             YAML parameters with sources
+engine/               (backlog) Python package: network loader, cascade, frequency model, narration keys
+  tests/              (backlog) unit tests, validation tests, provenance test
+  params/             (backlog) YAML parameters with sources
 data/
   scripts/            download and build scripts (see datasets.md appendix)
   raw/                downloaded layers (git-ignored if large)
   processed/          network.json, centrales_sen.geojson, chile.geojson
-web/                  Vite app
-  public/cache/       precomputed timelines
-scripts/build_cache.py
-.github/workflows/    CI
+web/                  Vite app (MVP)
+  public/cache/       timelines: fixtures in the MVP, builder output later
+scripts/build_cache.py  (backlog)
+.github/workflows/    (backlog) CI
 ```
 
 ## 4. Simulation model
@@ -174,7 +191,9 @@ Values above are placeholders; the node list and ids are decided in phase 0.
 ```
 Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
 
-## 7. API
+## 7. API (backlog)
+
+Not needed for the frontend MVPs. The frontend reads fixtures only, which also gives the offline behaviour in section 9.
 
 `POST /simulate`
 
@@ -193,6 +212,8 @@ Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `l
 - Frontend without API: works from the cache only; combinations disabled with a discreet notice.
 
 ## 8. Testing and CI
+
+MVP: Vitest tests for frontend logic (playback clock, narration templates, layer mapping, fixture validation against the JSON schema). Everything below is backlog.
 
 - Unit: initial frequency vs analytic formula, each EDAC step firing, power balance per island, island detection on a toy graph, unit check of D, provenance of every parameter.
 - Regression: validation cases in `plan.md` section 5.
