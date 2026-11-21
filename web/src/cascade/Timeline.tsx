@@ -12,7 +12,9 @@ const faultCurve = (c: [number, number][]) => Math.min(...c.map((p) => p[1])) < 
 
 interface Props {
   timeline: TimelineData | null; markers: Marker[]; t: number; clock: string; islands: IslandFrequency[]; playing: boolean; speed: number;
-  setPlaying(b: boolean): void; seek(t: number): void; setSpeed(s: number): void;
+  setPlaying(b: boolean): void; togglePlay(): void; seek(t: number): void; setSpeed(s: number): void;
+  /** A cut is chosen and its timeline is still loading: the empty hint would be wrong. */
+  loading?: boolean;
 }
 
 /** Bottom card (Design v5): clock, frequency of each island, play, and the rail with numbered event markers. */
@@ -44,9 +46,12 @@ export function TimelineCard(p: Props) {
           </label>
         </div>
       </div>
+      {!p.timeline ? (
+        <p className="timeline-empty">{p.loading ? "Cargando la simulación" : "Sin corte activo. Haz doble clic en una línea del mapa para simular su salida de servicio segundo a segundo."}</p>
+      ) : (
       <div className="timeline-row">
         <button className="play" disabled={!hasCascade} aria-label={p.playing ? "Pausa" : atEnd ? "Repetir" : "Reproducir"}
-          onClick={() => (atEnd ? (p.seek(0), p.setPlaying(true)) : p.setPlaying(!p.playing))}>
+          onClick={p.togglePlay}>
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
             {p.playing ? <path d="M3 2v6M7 2v6" fill="none" stroke="#1E1F21" strokeWidth="1.8" strokeLinecap="round" />
               : atEnd ? <path d="M7.8 3.6A3.2 3.2 0 1 0 8 6M8 1.6v2.2H5.8" fill="none" stroke="#1E1F21" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -82,9 +87,10 @@ export function TimelineCard(p: Props) {
         </div>
         <div className="timeline-right">
           <span className="ref">50 Hz</span>
-          <span className="pos">{hasCascade ? `${atEnd ? Math.round(duration) : secs(p.t)} / ${Math.round(duration)} s` : "0 / 0 s"}</span>
+          <span className="pos">{`${atEnd ? Math.round(duration) : secs(p.t)} / ${Math.round(duration)} s`}</span>
         </div>
       </div>
+      )}
     </section>
   );
 }
