@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): draw the event pins and callout above the grid
+
+- **Changed:** `.shell .map` gets `z-index: 0`, so the map is its own stacking context and the HTML overlays (event pins, callout, first-event label, city names) sit above everything the map draws.
+- **Why:** On the Mapbox basemap the grid lines and the regional generation symbols were painted across the callout text and the numbered pins. Mapbox's control container has `z-index: 2` and holds the deck.gl canvas, `.map-overlays` has `z-index: 1`, and `.map` had no z-index, so both competed in the same stacking context. Found by the browser test of PR #60; it was already there before that PR.
+- **Agents:** The offline map was not affected (its canvas has no z-index). The deck.gl hover tooltip lives inside the map, so it now draws below the pins and the callout. Not seen in a browser yet after the fix. Still open from the same test: a selected out-of-service line is hard to read at country zoom next to its event pin; and against the Design v6 frame the play button sits 14 px lower and the legend is 5 to 6 px taller.
+- **Files:** `web/src/cascade/cascade.css`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(web): click selects a line, double click cuts it
 
 - **Changed:** A single click on a line or substation now selects it (white halo, card at the top of the panel in both tabs, no tab or colour switch); a double click on a line, or the card's "Sacar de servicio" button, cuts it; "Reponer línea" (line card and impact card) returns to the base case. A cut clears the selection so the impact card stays at the top. The line card shows voltage, model branches, capacity, flow with direction, loading bar and status at the current second, with info icons. Built on the Design v6 rail and colours (entry below): the conditions tree already keeps the cut across hours; if a cut's timeline is missing at the chosen condition the app now falls back to the base case with a note. The event history scrolls inside its own card (it used to scroll the whole panel), a new selection scrolls the panel back to the top, and the map tooltip sits beside the pointer and flips near the right and bottom edges. Plain-language result when a cut leaves nobody without supply, a hint in the timeline with no cut, loading cards, pointer cursor over clickable map elements, Space play/pause, Escape (closes the layers panel, else clears the selection), outside click closes the layers panel, "Ver todo Chile" control, focus-visible outlines.

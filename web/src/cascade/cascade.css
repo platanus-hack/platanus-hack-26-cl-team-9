@@ -12,7 +12,9 @@
 }
 .shell *, .shell *::before, .shell *::after { box-sizing: border-box; }
 .shell button, .shell select { font-family: inherit; }
-.shell .map { position: absolute; inset: 0; background: var(--bg); }
+/* z-index 0 makes the map its own stacking context. Without it Mapbox's control container (z-index 2), which holds the
+   deck.gl canvas, competed with .map-overlays (z-index 1) and the grid was painted over the event pins and callout. */
+.shell .map { position: absolute; z-index: 0; inset: 0; background: var(--bg); }
 .shell .fault { color: var(--fault); }
 .shell .cream { color: var(--place); }
 
