@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · chore(project): enlarge Sub50 logo wordmark
+
+- **Changed:** `project-logo.png` is replaced with a version of the same logo (option 01) where the wordmark fills more of the 1000 x 1000 square. 40 KB PNG. `docs/design.md` section 6 updated.
+- **Why:** The previous file had a lot of empty margin, so the logo looked small at the README's 200 px.
+- **Agents:** Same design as before, only the scale changed. A small-size version is still open.
+- **Files:** `project-logo.png`, `docs/design.md`.
+
 ## 2026-11-21 · chore(project): align oneliner and project page with the description
 
 - **Changed:** `project-oneliner-spanish` in `platanus-hack-project.jsonc` now condenses `project-description-spanish` into one line: the agent first simulation plus its purpose (finding the most fragile points). `project-description.md` reuses the description's wording ("agent first", "en vivo la infraestructura crítica", "con datos públicos", "conectarse a nuestra API") and keeps its headings and bullets.
