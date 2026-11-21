@@ -10,3 +10,8 @@ __pycache__/
 
 # personal Claude Code overrides
 .claude/settings.local.json
+node_modules/
+dist/
+.env.local
+.DS_Store
+.playwright-mcp/

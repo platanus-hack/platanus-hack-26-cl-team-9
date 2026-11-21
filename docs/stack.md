@@ -30,6 +30,7 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 | Tests | Vitest (frontend logic) | MVP | pytest (engine, validation, provenance) is backlog |
 | CI | GitHub Actions | Lint: done. Rest: backlog | `.github/workflows/lint.yml` runs ruff and requires a `CHANGELOG.md` change in each pull request. Generating the validation table from the tests is still backlog |
 | Lint and agent tooling | ruff (Python), eslint/prettier (frontend, once installed), git and Claude Code hooks | Done | Single entry point `scripts/lint.sh`; rules and hooks in `AGENTS.md` |
+| Local run | Docker Compose (`web` Vite dev server, `backend` data API) | MVP | `docker compose up --build`, only Docker needed. See `docs/docker.md` |
 | Hosting | Static frontend plus fixtures; deploy from a personal mirror (see README of the template) | MVP | Platforms like Vercel cannot access the org repo |
 | LLM | Not in the core | Backlog (P2) | Narration uses fixed templates so every sentence is reproducible. An optional chat that calls the simulator is P2 |
 
