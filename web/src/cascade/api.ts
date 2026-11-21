@@ -4,8 +4,11 @@ const cache = new Map<string, Promise<unknown>>();
 
 function load<T>(path: string): Promise<T> {
   if (!cache.has(path)) {
-    cache.set(path, fetch(`/cache/${path}`).then((r) => {
-      if (!r.ok) throw new Error(`No se pudo cargar ${path}: ${r.status}. Genera el caché con cascadasen-cache.`);
+    cache.set(path, fetch(`/cache/${path}`).then(async (r) => {
+      const missing = `Falta la caché (${path}). Genera el caché con cascadasen-cache.`;
+      if (!r.ok) throw new Error(`${missing} Respuesta ${r.status}.`);
+      // Some hosts answer a missing file with the SPA index.html and a 200
+      if (!(r.headers.get("content-type") ?? "").includes("json")) throw new Error(missing);
       return r.json();
     }));
   }

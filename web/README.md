@@ -47,7 +47,7 @@ Mapa 3 is the main map and opens at `/` (also `?mapa=3`). Mapas 1 and 2 are **de
 
 Full guide, actors and legend: [`docs/mapa3.md`](../docs/mapa3.md). Minimum dataset: [`docs/minimum-dataset.md`](../docs/minimum-dataset.md).
 
-Click a line to cut it and replay the cascade computed by the engine (`docs/engine.md`). It reads precomputed files from `web/public/cache/`, which git ignores, so generate them first:
+Click a line to cut it and replay the cascade computed by the engine (`docs/engine.md`). It reads precomputed files from `web/public/cache/`, which is committed (the deployed image has no Python). After changing the engine or the data, regenerate and commit it:
 
 ```bash
 cd backend && uv run cascadasen-cache      # about 23 MB, 4 hours x 273 cuts, takes a few seconds

@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): commit the mapa 3 cache so the deployed site loads
+- **Changed:** `web/public/cache/` (23 MB, 1103 files, 4 points x 273 cuts) is now versioned; removed it from `web/.gitignore`. nginx answers a missing `/cache/*` file with 404 instead of the SPA `index.html`. `cascade/api.ts` shows "Falta la caché (...)" when the response is not JSON.
+- **Why:** sub50.cl showed `Unexpected token '<', "<!doctype "...`: the cache was git-ignored, so the web image had none and nginx returned `index.html` with 200.
+- **Agents:** Regenerate (`cd backend && uv run cascadasen-cache`) and commit the cache whenever the engine or `data/processed` change, or the deployed site serves stale results. Older docs that say the cache is git-ignored are fixed in `web/README.md` and `docs/mapa3.md`.
+- **Files:** `web/public/cache/`, `web/.gitignore`, `infrastructure/docker/nginx.conf`, `web/src/cascade/api.ts`, `web/README.md`, `docs/mapa3.md`.
 ## 2026-11-21 · feat(infra): Mapbox token in the web image and deploy-on-main workflow
 - **Changed:** `web.Dockerfile` takes the build argument `VITE_MAPBOX_TOKEN`; `deploy.sh` passes it (public `pk.*` default, overridable). New `deploy.sh deploy` command (no plan step). New `.github/workflows/deploy.yml` runs it on every push to `main` through GitHub OIDC.
 - **Why:** The deployed map showed the offline fallback because Vite inlines the token at build time. The team wants every commit on main deployed.
