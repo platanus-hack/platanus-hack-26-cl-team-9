@@ -310,7 +310,7 @@ F0_HZ = 50.0
 def _island_input(
     s: _State, island: list[int], inertia: float, sync: float, gen: float, load: float
 ) -> IslandInput:
-    system_zone = _zone_load(s.net, s.point.load, list(range(s.net.size)))
+    system_zone = zone_load(s.net, s.point.load, list(range(s.net.size)))
     edac = {
         z: steps
         for z, steps in edac_tables(system_zone, float(s.point.load.sum())).items()
@@ -324,14 +324,14 @@ def _island_input(
         gen,
         load,
         float(s.gen[island].sum() - s.sync[island].sum()),
-        _zone_load(s.net, s.load, island),
+        zone_load(s.net, s.load, island),
         edac,
         extra,
         battery,
     )
 
 
-def _zone_load(net: ReducedNetwork, load: np.ndarray, buses: list[int]) -> dict[str, float]:
+def zone_load(net: ReducedNetwork, load: np.ndarray, buses: list[int]) -> dict[str, float]:
     out = {"norte_grande": 0.0, "centro_sur": 0.0}
     for b in buses:
         out[net.zone(b)] += float(load[b])

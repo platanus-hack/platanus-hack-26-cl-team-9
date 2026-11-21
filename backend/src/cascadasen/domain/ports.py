@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from cascadasen.domain.model import GridSnapshot, SourceBundle, SourceInfo
+from cascadasen.domain.regional import RegionalBundle
 
 
 @runtime_checkable
@@ -18,6 +19,15 @@ class GridDataSource(Protocol):
     source_id: str
 
     def contribute(self, bundle: SourceBundle, refresh: bool = False) -> SourceInfo: ...
+
+
+@runtime_checkable
+class RegionalGridSource(Protocol):
+    """One country of the regional context layer (docs/regional.md). Returns raw-unit records."""
+
+    country: str  # ISO 3166-1 alpha-3
+
+    def fetch(self, refresh: bool = False) -> RegionalBundle: ...
 
 
 class SnapshotRepository(Protocol):

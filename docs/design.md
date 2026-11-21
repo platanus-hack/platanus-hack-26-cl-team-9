@@ -1,6 +1,6 @@
 # Design
 
-Last updated: 2026-11-21. Visual direction for the Sub50 web app, collected from the design sessions of 2026-11-21. Read after `stack.md` section 5, which this file overrides on look and layout. Nothing here is implemented in `web/` yet: the current app (`web/README.md`) predates these designs.
+Last updated: 2026-11-21. Visual direction for the Sub50 web app, collected from the design sessions of 2026-11-21. Read after `stack.md` section 5, which this file overrides on look and layout. Mapa 3 (`/`) is built from the Design v5 frames since 2026-11-21 (`docs/mapa3.md` section 4); the older pages are not implemented.
 
 ## 1. Where the designs live
 
@@ -13,7 +13,8 @@ All mockups are in the team's Paper file "Platanus Hack": https://app.paper.desi
 | Design v2 (Claude) | Same 6 screens x 3 variations in the Electricity Maps style, plus tower-level views Z1-Z3 (Nueva Pan de Azucar, a selected tower, a tower fault) | Current reference for screens. Frame 6C was blocked by a Paper sync error; check it exists |
 | Design v1 / v2 (Gemini) | Gemini's variations; v2 has 5 "control center" options on charcoal grays | Alternatives, not chosen |
 | Design v3 | The 5 zoom levels from all of Chile down to S/E Calama (section 4), in the variant A interface | Reference for the zoom levels |
-| Design v4 | Felipe's review of v3 applied to 3 frames: V1 Red, V2 Simulación en curso, V3 Después del corte (section 3.1) | Current reference for the map and the simulation |
+| Design v4 | Felipe's review of v3 applied to 3 frames: V1 Red, V2 Simulación en curso, V3 Después del corte (section 3.1) | Superseded by Design v5 |
+| Design v5 | Copies of the 3 v4 frames with the council polish pass applied (section 3.2) | Current reference for the map and the simulation |
 | Logo Ideas | 20 black and white logo options, 1000 x 1000 (section 6) | Option 01 (Subscript) chosen, in `project-logo.png` |
 | Battle Page | Ideas for a "Batalla" tab that shows the attacker vs defender agent game | In progress; see the open decision in `plan.md` section 9 |
 | Vacía (borrar) | Empty page created by mistake | Delete by hand (Paper's API cannot delete pages) |
@@ -24,12 +25,18 @@ The six screens in Design v1 and v2: (1) resting state, (2) element selected, (3
 
 Copy the visual language of Electricity Maps (app.electricitymaps.com) closely. The team rejected two other directions: a glowing "night lights" map with glass cards, and an editorial or cartographic restyle of the same layout.
 
-- **Layout (variant A):** dark nav rail, one rounded floating panel on the left with a header, underline tabs and soft inner cards, map on the right. A time pill at the top center, square icon buttons on the right, a legend card at the bottom right and a timeline card with play, scrub and a small frequency curve.
+- **Layout (variant A):** dark nav rail, one square-cornered floating panel on the left with a header, underline tabs and soft inner cards, map on the right. A time pill at the top center, square icon buttons on the right, a legend card at the bottom right and a timeline card with play, scrub and a small frequency curve.
 - **Map:** flat neutral gray land, neighbouring countries drawn, thin borders, solid fills. The map is the focus; the sidebar stays quiet.
 - **Background:** dark neutral gray, not pure black.
 - **Text:** sentence case. No all-caps eyebrow labels. No filler or hint text that does not carry information.
 - **Numbers:** tabular figures, and an info icon next to each number that opens its source (`stack.md` section 5.3).
 - **UI language:** Spanish. Do not show "SEN" as a product name; the product is Sub50.
+- **Type (Ignacio, 2026-11-21, replaces the Geist pair):** the Roboto superfamily, three faces drawn to work together. Roboto is the main face for all UI text and every figure, with tabular figures (`font-variant-numeric: tabular-nums`); headings are set apart by weight (Roboto 600). Roboto Condensed is the secondary face for compact labels only: the rail section label, card and popup subheads, stat captions and legend subtitles. Roboto Mono is only for running clocks (the time pill's "15:16:00", the timeline clock) and code. Do not set display numbers or values with units ("6,4 M", "0,0 s") in Mono: it read poorly and overflowed the timeline in Design v5. No face outside the Roboto family in the app UI. The logo and favicon keep their outlined Geist glyphs (section 6) because they are artwork, not live text. The web app loads the fonts from the `@fontsource-variable/roboto`, `@fontsource-variable/roboto-condensed` and `@fontsource-variable/roboto-mono` npm packages, so no font comes from the internet; the CSS tokens are `--font-sans`, `--font-condensed` and `--font-mono` in `web/src/styles.css`. The Design v5 frames in Paper still use Geist and need a type pass to match; older pages still mix Inter, Barlow, IBM Plex Mono and Space Grotesk and are not references for type.
+- **Corners (team decision, 2026-11-21):** square, radius 0, on every container, card, button, tag, input and the time pill in the whole app; no pills or rounded panels. Only map symbols that stand for round things (the substation dots in the legend) stay round. This extends Valentina's 0 to 2px Battle Page rule to the whole app. Applied to the three Design v5 frames, where the event markers (20 px circles on the map, timeline and history) also stay round. The Paper file's `--radius-*` tokens (3 to 16px) are unchanged because older pages still use them; do not use them on new work.
+- **Docked modules (Valentina's review, 2026-11-21):** panels over the map dock to the nav rail and the artboard edges instead of floating, share one 20px inner margin, and separate sections with 1px dividers, like a mission console. No tilted or offset elements: cards in a hand sit on one horizontal line. Applied to B1 (HUD and event log) and B5 (cards); B11 has the same floating HUD and log and is not changed yet.
+- **Event panel as an incident sheet (same review):** the last-move panel reads as a contingency report with three labeled rows: element out of service, effect on the system, critical variables. Applied to B1.
+- **Two sides, two colors (same review):** the battle uses only red `#EF6A5A` (attacker, failure, lost load) and blue `#5AB0FF` (defender, recovery) plus neutrals. No green deltas, no light-blue labels, no tinted badges. Context and cost figures (MWh, US$) stay white. Code blocks are one neutral color with no syntax highlighting. Move notation marks ("!!", "!", "?!") are bold white, not colored. Applied to B4, B7 and B10.
+- **Wording (same review):** people are never "a favor del atacante". The battle simulates agents and the consequences of their moves, so figures describe effects, for example "personas en riesgo de quedar sin luz" (`cyber.md` section 8).
 
 ## 3. Color
 
@@ -55,6 +62,19 @@ The colorimetry was checked in OKLCH on 2026-11-21. Problems it fixed: 66 kV out
 - **The timeline** shows the frequency of each island as a small curve above the track, the played part of the track in white, and the event markers on it.
 - **Assumptions live in context**: a "N supuestos en esta simulación" row in the panel and the info icon next to each number. The nav rail no longer has "Referencia / Metodología / Supuestos"; it has one "Fuentes y supuestos" item, and under "Escenarios" it lists the active and recent scenarios.
 - The simulation map images were made by recoloring the v3 N1 SVG with a throwaway script (not in the repo). The event times and numbers are invented for the mockup, as in section 5.
+
+### 3.2 Design v5 polish rules (council review of 2026-11-21)
+
+- **Grid:** nav rail 200 px; panel and timeline card at x 212, both 440 px wide; panel at y 12 and as tall as its content (max 742 px); timeline 122 px tall at bottom 12 in every frame. Panel content starts 24 px from the panel edge (header, tabs, cards, rows, source line).
+- **Type:** "Chile" 16/20 600; card titles 14/20 600; values 16/20 600 tabular; 12 px secondary text on cards uses muted #A1A2A6, never faint #8A8B90 (4.3:1 fails AA there). Info icons are 14 px with stroke #8A8B90.
+- **Red:** token `--color-fault` #FF5A48. Digits on a filled red badge or pin are #18191B, because white on #FF5A48 is 3.09:1.
+- **Event markers:** one style on the panel, timeline and map: 20 px circles with 11 px 600 digits; the current event is 24 px with a 2 px white ring and no halo.
+- **Timeline:** 24 px side padding (same edge as the panel content); one 4 px, 290 px rail (gray base, white played part) with markers at their true times (x = t x 36.25 px for 8 s) and a 2 px ring in the card color so close markers stay apart; play button and "x / 8 s" centered on the rail. A dashed 50 Hz reference runs the full width, labeled "50 Hz" in the right column. Frequency curves share one vertical scale in every frame (y = 11 - 4 x (Hz - 50) in a 22 px band) and end above the current marker. The readout names each island with units ("Norte 51,18 Hz · Centro-sur 48,21 Hz"). The date lives only in the time pill, which shows seconds.
+- **Legends:** the load legend always lists the same six items in a 3 x 2 grid; absent items keep a 40 % swatch and a #A1A2A6 label at full opacity. "sin tensión" is a near-black line with a #FFFFFF40 outline. The voltage legend lists only the tiers drawn at the current zoom (country view: 500 kV and 220–345 kV, with a footer saying the panel counts from 154 kV).
+- **Map callouts:** only the current event gets the full tooltip, placed off the affected area with a 1 px #D0D1D4 leader to its pin; island labels are plain map text on the ocean side; captions over busy map areas sit on a #1E1F21 backing.
+- **Wording:** "personas sin suministro", "carga perdida" and "Centro-sur" everywhere; map tooltip titles reuse the history row's wording.
+- The nav shows the Sub50 wordmark (section 6) instead of the bolt.
+- Still open: 500 kV near-white vs magenta (section 3) and gray vs cream city labels.
 
 ## 4. Zoom levels
 
@@ -89,10 +109,11 @@ The name refers to grid frequency: Chile's grid runs at 50 Hz, and when frequenc
 - Options 11-20 say more about the product, mostly with "sub50" as a wordmark and some with a short Spanish tagline. Taglines are unreadable at the 200 px the README uses, so a version without text is needed for small sizes.
 - Option 01 (Subscript) is being refined: the "0" of the subscript 50 is a power button drawn as a Geist-width oval, so it reads "sub₅₀".
 
-The team chose option 01. `project-logo.png` holds it: black "sub" with a subscript "5" and a power-button "0" on white, 1000 x 1000 PNG, 40 KB (Platanus asks for under 500 KB, `plan.md` section 8). The current file is a larger crop: the wordmark fills more of the square so it reads at the README's 200 px. A version for small sizes is still open.
+The team chose option 01. `project-logo.png` holds it: black "sub" with a subscript "5" and a power-button "0" on white, 1000 x 1000 PNG, 40 KB (Platanus asks for under 500 KB, `plan.md` section 8). The current file is a larger crop: the wordmark fills more of the square so it reads at the README's 200 px.
+
+The favicon, `web/public/favicon.svg`, is the small-size mark: only the subscript "5" and the power-button "0", black on a white 32 x 32 tile with 2px corners, because "sub" is unreadable at 16 px. The "5" is Geist at weight 800 converted to a path (a favicon cannot load web fonts), and the power button reuses the stroke paths of the Paper "Logo" page, with the same spacing as the logo. A small-size version of the full wordmark (for the README or social cards) is still open.
 
 ## 7. Open items
 
-- Pick the variant to build (A is the working reference).
-- Port the Design v2 and v3 look into `web/`. The current app uses a full-screen map with a floating right panel and generation columns (`web/README.md`).
+- Variant A is built: mapa 3 follows the three Design v5 frames (`docs/mapa3.md` section 4). Where the app departs from the mockup, and why: islands are named "Isla 1", "Isla 2" because the cache does not say which zone an island covers; the timeline spans the engine's whole `duration_s` (20 to 29 s), not 8 s, so close events share a marker ("1–11"); the "Qué lo habría evitado" and "Validación" tabs are disabled until the engine computes them; the next-zoom-level box and the breadcrumb are not built; the Mapbox basemap (night, monochrome) is darker than the mockup's gray land, while the offline outline uses the mockup's gray.
 - Decide whether the demo uses the Mapbox basemap (needs internet and a token) or the offline map (`stack.md` section 1).

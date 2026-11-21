@@ -12,6 +12,7 @@ uv sync                                  # or: uv pip install -e . --group dev
 uv run cascadasen-build                  # download (cached in data/raw/) and unify -> data/processed/
 uv run cascadasen-build --refresh        # force a new download of every source
 uv run cascadasen-api                    # http://localhost:8000/map  (docs: /docs)
+uv run cascadasen-regional                 # other countries (BRA PER ARG BOL) -> data/processed/latam/ (docs/regional.md)
 uv run pytest
 ```
 

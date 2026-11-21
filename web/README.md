@@ -47,6 +47,8 @@ Mapa 3 is the main map and opens at `/` (also `?mapa=3`). Mapas 1 and 2 are **de
 
 Full guide, actors and legend: [`docs/mapa3.md`](../docs/mapa3.md). Minimum dataset: [`docs/minimum-dataset.md`](../docs/minimum-dataset.md).
 
+The interface follows the Paper "Design v5" frames (`docs/design.md` section 3.2): nav rail with scenarios, a docked panel with the Red and Simulación tabs, a timeline card with numbered events and island frequencies, a time pill, and a legend that switches between voltage and load. Usage: `docs/mapa3.md` section 4.
+
 Click a line to cut it and replay the cascade computed by the engine (`docs/engine.md`). It reads precomputed files from `web/public/cache/`, which is committed (the deployed image has no Python). After changing the engine or the data, regenerate and commit it:
 
 ```bash
@@ -57,13 +59,15 @@ Session mode: `?sesion=<sid>` (or **Crear sesión** in the panel) opens a shared
 
 Deep links: `?mapa=3&point=feb2025-1500&cut=R239` opens the 25F corridor cut. It uses Mapbox when `VITE_MAPBOX_TOKEN` is set and the offline outline otherwise.
 
-Mapa 3 keeps the camera near Chile (`maxBounds` about lon -85 to -55, lat -60 to -10; zoom 4 to 13, constants in `src/map/baseMap.ts`) and turns off 3D buildings, points of interest, transit and pedestrian roads in the Mapbox Standard style. The camera center must also stay on land or near it (`src/map/regionLimit.ts`: the margin is a quarter of the shorter viewport side, so it shrinks as you zoom in); after a move that ends too far offshore, the map snaps back to the last valid center. To allow another country, add its land GeoJSON URL to `LAND_URLS` in `baseMap.ts`. Add `?limite=0` to remove all of it and compare performance.
+Mapa 3 keeps the camera near Chile (`maxBounds` lon -110 to -35, lat -62 to -5, wide enough that the whole country fits at 1440 px; zoom 4 to 13, constants in `src/map/baseMap.ts`) and turns off 3D buildings, points of interest, transit and pedestrian roads in the Mapbox Standard style. The camera center must also stay on land or near it (`src/map/regionLimit.ts`: the margin is a quarter of the shorter viewport side, so it shrinks as you zoom in); after a move that ends too far offshore, the map snaps back to the last valid center. To allow another country, add its land GeoJSON URL to `LAND_URLS` in `baseMap.ts`. Add `?limite=0` to remove all of it and compare performance.
 
 ## How it is built
 
 | File | Role |
 |---|---|
-| `src/App.tsx` | Full-screen map plus the floating right panel |
+| `src/cascade/` | Mapa 3: the Design v5 shell, cascade playback and its styles (`cascade.css`); file list in `docs/mapa3.md` section 8 |
+| `src/map/baseMap.ts` | Mapa 3 basemap: Mapbox Standard (night, monochrome) or the offline outline, camera fit, projection for HTML overlays |
+| `src/App.tsx` | Deprecated mapas 1 and 2: full-screen map plus the floating right panel |
 | `src/Legend.tsx` | Right panel: what each colour and height means |
 | `src/map/chileMap.ts` | Offline map: creates the deck.gl `Deck`, the camera and tooltips |
 | `src/map/mapboxMap.ts` | `?mapa=2`: Mapbox basemap with deck.gl on top (`MapboxOverlay`) |

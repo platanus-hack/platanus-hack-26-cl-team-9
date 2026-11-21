@@ -20,6 +20,7 @@ Last updated: 2026-11-21. Status labels: **verified** (opened or downloaded and 
 | Comuna -> substation (service areas) | People affected per node | Own rule on INE census zones | **Done**, flagged as assumption |
 | Public cyber incidents on the SEN | Cyber scenarios, case V10 (`cyber.md`) | pv magazine articles citing CEN daily reports [34][35] | **Read** (secondary source) |
 | Critical loads (hospitals, water, Metro) with location | Question Q4 in `cyber.md` | None found | **Missing** |
+| Other countries' grids (Argentina, Bolivia, Brazil, Peru), context layer | Drawn under Chile's, never simulated (`regional.md`) | EPE WebMap (Brazil), Osinergmin GISEM (Peru), OpenStreetMap (Bolivia), Secretaría de Energía (Argentina) | **Built** for Brazil, Peru, Bolivia and (from OSM) Argentina; Argentina's official source was unreachable on 2026-11-21 |
 | Basemap (streets, water, buildings, place names) | Zoom-level designs (`design.md` section 4), `?mapa=2` in `web/` | Mapbox [40] | **Used** by `web/` `?mapa=2` and the Paper mockups; needs a token and internet |
 | Towers, poles, transformers, MT lines | Closest zoom levels (`design.md` section 4) | OpenStreetMap [41] | **Mockups only** (Calama, Nueva Pan de Azucar); not in the pipeline |
 

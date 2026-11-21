@@ -1,5 +1,4 @@
 # Changelog
-
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
 ## 2026-11-21 · fix(api): trusted client IP, rate-limit global runs, document the version tag
@@ -96,6 +95,107 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** Follow `docs/openapi.md` for every agent route: mark it, set `operation_id` from its list, English summary/description, `responses=errors(...)`, tags. Regenerate with `cd backend && uv run python -m cascadasen.api.agent_openapi` in the same commit, or the test fails. Session routes (`/sessions/*`) still need marking when they land. Tags and English summaries of the marked routes also changed in the full `/docs` (were `experimentos`, Spanish). `ErrorResponse.detail` is `str | object | list` because simulator input errors return `{field, message, valid}`.
 - **Files:** `backend/src/cascadasen/api/{agent_openapi,app,simulation_routes,simulation_schemas}.py`, `backend/tests/integration/test_agent_openapi.py`, `docs/openapi.md`, `docs/openapi/agents.openapi.json`, `docs/{stack,architecture,agents}.md`, `backend/README.md`.
 
+## 2026-11-21 · docs(pitch): add pitch ideas and project benefits
+- **Changed:** New `docs/pitch_idea.md`: pitch notes (25F losses of US$ 984 millones with source, "wow" moment ideas) and a "Beneficios de este proyecto" section with a short list of 17 benefits followed by a paragraph per benefit, including cost vs resilience trade-offs, best combination for a budget and minimum investment that avoids a national blackout.
+- **Why:** The team needs material for the pitch.
+- **Agents:** `docs/pitch_idea.md` is pitch material, in Spanish. Costs of the measures (e.g. US$ per MW of battery) are assumed values, not sourced data. The note in the doc says no user has been interviewed yet; do not turn the benefits into claims of validated demand.
+- **Files:** `docs/pitch_idea.md`, `CHANGELOG.md`.
+## 2026-11-21 · feat(regional): reduce the other countries' networks like Chile's
+
+- **Changed:** New `domain/regional_reduction.py`: substations within 3 km become one bus, line ends are snapped to the nearest bus (12 km), OSM ways are chained, parallel lines are folded, small pieces dropped, and plants are added up per bus (40 km). `cascadasen-regional` now writes the reduced layer: lines `<ISO3>-R<n>` with `a`/`b` bus ids drawn straight, buses `<ISO3>-B<n>`, generation `<ISO3>-G<n>` per bus. Lines before to after: BRA 2,264 to 1,286, PER 575 to 246, BOL 244 to 58, ARG 3,056 to 390. The web reads the new fields; tooltips show circuits and plant counts.
+- **Why:** Ricardo asked for the same reduction Chile has (`cascade/network.py`): one bus per substation, parallel lines folded, straight segments.
+- **Agents:** The thresholds (3, 12, 40 km, 3 buses) are assumptions, constants at the top of `regional_reduction.py`. Plants far from every substation are dropped (BRA 15,581 MW, ARG 5,475 MW). The schema changed to v2: `source_record` is now `source_records`, plants carry `bus`, `mw_by_tech` and `count`. Regenerate with `uv run cascadasen-regional` (Argentina: `--countries ARG --osm ARG`). The reduced lines are not a simulable topology.
+- **Files:** `backend/src/cascadasen/domain/regional_reduction.py`, `domain/regional.py`, `application/build_regional.py`, `backend/tests/unit/test_regional.py`, `backend/tests/validation/test_regional_data.py`, `data/processed/latam/`, `web/src/map/regional.ts`, `web/src/cascade/Legend.tsx`, `docs/regional.md`, `docs/stack.md`.
+
+## 2026-11-21 · docs(regional): document the sources and the common schema
+
+- **Changed:** New `docs/regional.md`: what is built, the common schema v1, the sources used with their status, and everything found and not used (region-wide datasets, Brazil ONS electrical parameters, Colombia XM API, Dominican Republic and Costa Rica ArcGIS services, Mexico CENACE, and the countries with nothing open). `datasets.md`, `architecture.md`, `stack.md` section 6.2, `idea.md` section 4 and `plan.md` section 9.14 point to it.
+- **Why:** The research was exhaustive by request; the next agent should not repeat it.
+- **Agents:** Status labels are verified / not verified / failed; only what was opened in this project is marked verified. Argentina's official source failed on 2026-11-21. Next candidates with verified sources: Dominican Republic, Costa Rica, Colombia (API only), Mexico (market data only).
+- **Files:** `docs/regional.md`, `docs/datasets.md`, `docs/architecture.md`, `docs/stack.md`, `docs/idea.md`, `docs/plan.md`.
+
+## 2026-11-21 · feat(web): draw the regional grid as a context layer
+
+- **Changed:** New `web/src/map/regional.ts` loads `data/processed/latam/` (a glob, so the app builds without it) and draws dimmed lines by kV, substations and plants by technology under Chile's layers (`regional-*` ids). Tooltips show the source and "Red de contexto: no se simula". The legend lists countries, counts, licences and attribution. The offline map draws the neighbours' outlines and the camera limits reach Brazil.
+- **Why:** Show the other Latin American grids in the same map without touching the Chile simulation.
+- **Agents:** Regional layers are never clickable as a cut: click handlers only react to the ids `lines*`, `nodes`, `load`. After merging the Design v5 interface the regional legend block lives in `HelpPanel` (Ayuda) and the tooltip branch in `CascadeApp._tooltip`. The first view still frames Chile. `npx vitest run` covers the layers and tooltips.
+- **Files:** `web/src/map/regional.ts`, `web/src/map/regional.test.ts`, `web/src/map/baseMap.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/layers.ts`, `web/src/cascade/Legend.tsx`.
+
+## 2026-11-21 · feat(data): add regional grid exports and country outlines
+
+- **Changed:** `data/processed/latam/` with lines, substations and plants for BRA (2,264 / 927 / 2,953), PER (575 / 269 / 246), BOL (244 / 71 / 31) and ARG from OpenStreetMap (3,056 / 308 / 208), a manifest, and `outlines.geojson` (geoBoundaries) built by `data/scripts/build_latam_outlines.sh`. New validation test `backend/tests/validation/test_regional_data.py`.
+- **Why:** The web map reads these files; they are versioned like the rest of `data/processed/` so the demo needs no download.
+- **Agents:** Argentina is the OSM fallback, not the official source; its 132 kV total looks high (duplicated circuits). Regenerate with `uv run cascadasen-regional` (add `--refresh` to download again). The validation test skips when the folder is missing.
+- **Files:** `data/processed/latam/`, `data/scripts/build_latam_outlines.sh`, `backend/tests/validation/test_regional_data.py`.
+
+## 2026-11-21 · feat(regional): add the regional grid model, adapters and command
+
+- **Changed:** New pure `domain/regional.py` (common schema, voltage and technology normalisers, `normalise`, GeoJSON and manifest builders) and port `RegionalGridSource`. Four adapters in `infrastructure/sources/regional/` (EPE Brazil, Osinergmin Peru, Secretaría de Energía Argentina, OpenStreetMap through Overpass) and the command `cascadasen-regional --countries BRA,PER,ARG,BOL [--osm ARG] [--refresh]`.
+- **Why:** Ricardo asked for other Latin American grids on the map in one common pattern. Decided with him: drawn only, no simulation; Brazil, Peru, Argentina, Bolivia.
+- **Agents:** EPE gives power in kW and Osinergmin in MW (four records in kW, read above 3,000 as kW). The Argentina adapter was never run against the real files (server unreachable); it is tested only on a synthetic CSV, so fix its column candidates when the server answers. A failing country does not stop the others. Run tests with `uv run pytest`.
+- **Files:** `backend/src/cascadasen/domain/regional.py`, `domain/ports.py`, `application/build_regional.py`, `infrastructure/sources/regional/`, `infrastructure/container.py`, `infrastructure/settings.py`, `backend/pyproject.toml`, `backend/tests/unit/test_regional.py`.
+
+## 2026-11-21 · fix(web): a substation without supply is drawn red
+
+- **Changed:** In mapa 3 a substation that loses supply (its island blacks out) is drawn as a red dot (`FAULT`, #FF5A48), a little bigger than a normal node and with a dark ring so it stands out on the gray lines. Before it was near-black (`DEAD_LINE`), which disappeared against the dark map. Lines between two dark substations keep the near-black "sin tensión" color. Code: the `nodes` layer in `web/src/cascade/layers.ts`.
+- **Why:** The team asked for it: a switched-off substation must read as a failure. It follows the rule in `design.md` that red is for faults.
+- **Agents:** The legend card does not list the red dot yet (it only lists line samples). Checked in the browser on the 25F cut: the substations of the island that blacks out turn red at 10,1 s.
+- **Files:** `web/src/cascade/layers.ts`.
+
+## 2026-11-21 · feat(web): rebuild mapa 3 on the Design v5 interface
+
+- **Changed:** Mapa 3 (`/`) follows the three Paper "Design v5" frames: 200 px nav rail with the sub50 wordmark and scenarios (Apagón 25F, the active cut, Escenario nuevo), a 440 px docked panel with the Red and Simulación tabs, a timeline card with numbered event markers and island frequency curves, a time pill that picks the operating point, square map controls with a layers popover (2D or 3D, flow, demand), and a legend that switches between voltage and load. Event pins and a callout sit on the map. Styles live in the new `web/src/cascade/cascade.css`; the old mapa 3 block left `styles.css`, which now also holds the Roboto tokens and square corners for the legacy classes.
+- **Why:** Ignacio asked for the Design v5 UI with all the functionality of the current cascade viewer, on the Mapbox basemap.
+- **Agents:** Playback is now continuous in seconds (`web/src/cascade/simulation.ts`): dark substations wait for their `island_blackout` event, people and lost load between events are an interpolation that ends exactly at the engine summary (`docs/mapa3.md` section 5.1). 2D is the default; `?vista=3d` tilts. The URL is rewritten with `point`, `cut` and `vista`. `MAX_BOUNDS` widened to lon -110 to -35 so the whole country fits at 1440 px; the panel is the Mapbox camera padding. Mapbox uses the Standard style with `theme: "monochrome"`. Islands are "Isla 1", "Isla 2" because the cache has no island zone. "Qué lo habría evitado" and "Validación" are disabled. Mapbox needs `VITE_MAPBOX_TOKEN` in `web/.env.local`; the repo-root `.env` is not read by Vite.
+- **Files:** `web/src/cascade/*` (new: `simulation.ts`, `Timeline.tsx`, `SimulationPanel.tsx`, `MapLegend.tsx`, `MapOverlays.tsx`, `ui.tsx`, `cascade.css`, `simulation.test.ts`), `web/src/map/baseMap.ts`, `web/src/map/gridData.test.ts`, `web/src/styles.css`, `docs/mapa3.md`, `docs/design.md`, `web/README.md`.
+
+## 2026-11-21 · feat(web): use the Roboto superfamily and square corners
+
+- **Changed:** `web/package.json` adds `@fontsource-variable/roboto`, `roboto-condensed` and `roboto-mono`; `web/src/main.tsx` imports them. `docs/design.md` section 2: the type rule is now the Roboto superfamily (replacing the Geist pair) and the corner rule is radius 0 on every container, card, button, tag, input and the time pill in the whole app; the layout bullet says "square-cornered floating panel".
+- **Why:** Ignacio chose Roboto as the main face with faces from the same family as secondaries, and the team extended Valentina's square-corner rule from the Battle Page to the whole app.
+- **Agents:** Faces come from npm, so the app needs no internet for fonts. Use the tokens `--font-sans`, `--font-condensed` and `--font-mono` (defined in `web/src/styles.css` in the next commit), never a font name. Display numbers never use Mono. The Paper `--radius-*` tokens are unchanged for older pages; do not use them on new work.
+- **Files:** `web/package.json`, `web/package-lock.json`, `web/src/main.tsx`, `docs/design.md`.
+
+## 2026-11-21 · docs(design): add the Design v5 page and its polish rules
+
+- **Changed:** `docs/design.md` section 1 lists the Paper page "Design v5" (copies of the three v4 frames with the council's fixes applied) as the current reference for the map and the simulation, and marks Design v4 as superseded. New section 3.2 records the v5 rules: grid and panel edges, type scale, small-text contrast, the `--color-fault` token, one event marker style, timeline geometry with a shared frequency scale, legend behaviour, map callouts and wording.
+- **Why:** A three-round council review of Design v4 (Claude Opus 5.5, GPT 6.2 Sol, Gemini 4 Neon, Claude Fable 5.2) found layout bugs (V2 nav and panel off-grid, a double-stacked timeline track), contrast failures (12px faint text on cards, white digits on red at 3.09:1) and inconsistencies between frames. All four reviewers were satisfied with v5 (final scores 9.0, 9.2, 9.0, 8.7 out of 10).
+- **Agents:** Build the map and simulation UI from Design v5, not v4. The Paper file has a new token `--color-fault` #FF5A48; digits on filled red use #18191B. The V1 km headline now equals the sum of the voltage rows (34.555); the mockup numbers remain invented (section 5). Still open: 500 kV near-white vs magenta, gray vs cream city labels, and whether Valentina's 0 to 2px corners and docked panels (section 2) extend to the whole app, which would require another pass on v5's rounded floating panel.
+- **Files:** `docs/design.md`, `CHANGELOG.md`.
+
+## 2026-11-21 · docs(design): record Valentina's Battle Page review
+
+- **Changed:** `docs/design.md` section 2 gets six rules from Valentina's review: Geist Sans only with tabular figures, 0 to 2px corners, panels docked to the nav rail and artboard edges, the event panel as an incident sheet, red and blue as the only battle colors, and effect-based wording.
+- **Why:** Valentina reviewed the Battle Page design; the rules are already applied to the Battle Page artboards each bullet names.
+- **Agents:** The corner and docking rules cover the Battle Page only. Whether they extend to the whole app is an open team decision: the "rounded floating panel" layout bullet and the `--radius-*` tokens are unchanged. B11 (floating HUD and log) and B7 (green and yellow move notation) are not updated yet.
+- **Files:** `docs/design.md`, `CHANGELOG.md`.
+
+## 2026-11-21 · docs(health): document the health index and flag stale 25F figures
+
+- **Changed:** New `docs/health.md` (rule, metrics with limits and sources, 25F against `feb2025-0300`, cautions). `architecture.md` lists the command and `health.yaml`. `engine.md`, `mapa3.md` and `minimum-dataset.md` carry a note that cutting R239 at `feb2025-1500` now gives 1,972 MW lost and 3.8 M people with `voltage_limited`, not 7,872 MW and 15.2 M.
+- **Why:** The code is the current state (`AGENTS.md` 1.4); the older figures no longer hold.
+- **Agents:** The cause of the change in the R239 result was not investigated, and the "cuts with no effect" column of `engine.md` was not re-run. The `minimum-dataset.md` section 2.4 worked case is out of date.
+- **Files:** `docs/health.md`, `docs/architecture.md`, `docs/engine.md`, `docs/mapa3.md`, `docs/minimum-dataset.md`.
+
+## 2026-11-21 · feat(cascade): add the cascadasen-health command
+
+- **Changed:** New `application/grid_health.py` and script `cascadasen-health`: prints the health index of operating points before a fault and after a cut (default `feb2025-1500` and `feb2025-0300`, cut `R239`), or JSON with `--json`. New validation test: the 25F scores below the reference both before and after the cut, limited by `transfer_25f` before it.
+- **Why:** Compare the 25F with a healthy point. Result: pre-fault 0.00 against 0.35; after R239, 0.00 (uncertain, `voltage_limited`) against 0.67.
+- **Agents:** `uv run cascadasen-health --points <ids> --cut <lines>`; no `--cut` gives pre-fault only. The validation test skips without `data/processed`.
+- **Files:** `backend/src/cascadasen/application/grid_health.py`, `backend/pyproject.toml`, `backend/tests/validation/test_health_25f.py`.
+
+## 2026-11-21 · feat(cascade): add the grid health index by margin to the limit
+
+- **Changed:** New `domain/cascade/health.py` (pure) with `params/health.yaml`: margins 0-1 (1 with room, 0 at the limit, `raw` below 0 beyond it) and an index equal to their minimum. Pre-fault: 25F corridor transfer, inertia, frequency after losing the largest synchronous bus, share of single cuts with no effect. After a cut: load served and island frequency. `engine._zone_load` is now public `zone_load`.
+- **Why:** Ricardo asked for a health metric to compare the 25F with a healthy operating point.
+- **Agents:** Our own model index, not an official indicator; limits marked `is_assumption` are placeholders. `n1_worst` is reported but outside the minimum (cutting a reduced line cuts the whole corridor). Run tests with `uv run pytest` (not `--active`).
+- **Files:** `backend/src/cascadasen/domain/cascade/health.py`, `backend/src/cascadasen/domain/cascade/params/health.yaml`, `backend/src/cascadasen/domain/cascade/engine.py`, `backend/tests/unit/test_health.py`.
+
+## 2026-11-21 · feat(web): add the Sub50 favicon
+- **Changed:** New `web/public/favicon.svg` (763 bytes): the logo's subscript "5" and power-button "0" in black on a white 32 x 32 tile. `web/index.html` links it with `<link rel="icon" type="image/svg+xml">`.
+- **Why:** The site had no favicon; the full "sub50" wordmark from the Paper "Logo" page is unreadable at tab size.
+- **Agents:** The "5" is Geist Variable at `wght` 800 (the `geist` npm package) outlined with fontTools, so the SVG needs no font. To regenerate it, outline the glyph again rather than adding a `<text>` element. No PNG or `.ico` fallback exists yet; add one only if a target browser lacks SVG favicon support.
+- **Files:** `web/public/favicon.svg`, `web/index.html`, `docs/design.md`.
 ## 2026-11-21 · feat(web): keep the mapa 3 camera over land
 - **Changed:** New `web/src/map/regionLimit.ts` (point in polygon, `nearLand`, viewport radius) with tests. `baseMap.ts` loads the land outlines in `LAND_URLS` (today `chile.geojson`) and, after every `moveend`, snaps the camera back to the last valid center when the center is farther from land than a quarter of the shorter viewport side.
 - **Why:** The sea (and Argentina's interior) could be zoomed into. A `maxBounds` rectangle cannot follow Chile's long, thin shape: a tight one forces a high minimum zoom on wide screens and hides the country.

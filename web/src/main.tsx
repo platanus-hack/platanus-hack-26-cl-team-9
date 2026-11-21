@@ -4,6 +4,9 @@ import { App } from "./App";
 import { mountChileMapWorkflow } from "./map/chileMap";
 import { mountMapboxMapWorkflow } from "./map/mapboxMap";
 import { CascadeApp } from "./cascade/CascadeApp";
+import "@fontsource-variable/roboto";
+import "@fontsource-variable/roboto-condensed";
+import "@fontsource-variable/roboto-mono";
 import "./styles.css";
 
 // Mapa 3 (cascade viewer) is the main map: `/` and `?mapa=3`.

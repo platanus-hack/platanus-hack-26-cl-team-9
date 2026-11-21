@@ -48,6 +48,7 @@ Dependency rule: `domain/` imports nothing from `api/`, `application/` or `infra
 |---|---|---|
 | `GridDataSource` | One public data source contributing to a `SourceBundle` | `infrastructure/sources/{infotecnica,ide_energia,ine_censo,pypsa_cl}.py` |
 | `SnapshotRepository` | Where the unified snapshot is stored and read | `infrastructure/snapshot_repository.py` (JSON) |
+| `RegionalGridSource` | One country of the regional context layer | `infrastructure/sources/regional/{epe_brasil,osinergmin_peru,energia_argentina,osm_overpass}.py` |
 | `ContractExporter` | Static files for the frontend | `infrastructure/exporters.py` |
 | `Interpreter` | Narration and after-action review | `domain/theater/narrative.py` (`TemplateInterpreter`), `infrastructure/llm.py` (`ClaudeInterpreter`) |
 | `CommanderAdvisor` | An LLM that picks among validated COAs for C2 | `infrastructure/llm.py` (Claude API, Bedrock, Bedrock Converse) |
@@ -82,6 +83,8 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 | Campaigns with fragility and adaptation indices | `run_campaign.py` | `/api/v1/sim/campaigns*` |
 | Facade over simulation and theatre | `simulation_service.py` | `api/simulation_routes.py` |
 | Precompute every single-line cut | `cache_builder.py` | `cascadasen-cache` → `web/public/cache/` |
+| Grid health index (margin to the limit, `health.md`) | `grid_health.py` over `domain/cascade/health.py` | `cascadasen-health` |
+| Regional context layer (other countries, `regional.md`) | `build_regional.py` over `domain/regional.py` | `cascadasen-regional` → `data/processed/latam/` |
 | Precompute offline theatre runs | `sim_fixtures.py` | `cascadasen-sim-fixtures` → `web/public/cache/theater/` |
 
 ### 2.4 Infrastructure (`infrastructure/`)
@@ -139,9 +142,9 @@ Vite + React + TypeScript; deck.gl layers over an offline base map or Mapbox (to
 
 | Folder | Responsibility |
 |---|---|
-| `src/cascade/` | Mapa 3 (`CascadeApp.tsx`): Red, Simulación, Datos, Leyenda and Supuestos tabs; line cut, cascade layers, network panel, timeline player. Data from `web/public/cache/` (`api.ts`), or from the sessions API with `?sesion=` |
+| `src/cascade/` | Mapa 3 (`CascadeApp.tsx`, Design v5 shell): Red and Simulación tabs (plus Datos in a session), Fuentes y supuestos and Ayuda views; line cut, cascade layers, network panel, timeline. Data from `web/public/cache/` (`api.ts`), or from the sessions API with `?sesion=` (`src/session/`) |
 | `src/session/` | Session mode of mapa 3: API client with SSE and polling (`sessionApi.ts`), `useSession`, session bar, Datos tab, nearest-bus geometry. Calls `/api`, proxied by the Vite dev server (`VITE_API_TARGET`) |
-| `src/map/` | Base map (offline or Mapbox), shared layers, node detail |
+| `src/map/` | Base map (offline or Mapbox), shared layers, node detail, regional context layer (`regional.ts`) |
 | `src/assets/icons/` | 2D icons |
 
 The operation tab, which draws the theatre on mapa 3, is not on `feat/strategic-sim-api`, a backend-only PR. It returns in a frontend PR (`agents.md` section 4). Visual rules: `design.md`.
@@ -150,7 +153,7 @@ The operation tab, which draws the theatre on mapa 3, is not on `feat/strategic-
 
 - `data/scripts/`: `build_operating_points.py` (demand per bus), `build_baseline_opf.py` (secure base case: DC OPF, inertia floor), `build_node_index.py`, `build_chile_outline.sh`.
 - `data/processed/`: snapshot, operating points, base case and geo layers. It is versioned so the demo does not depend on downloads.
-- Parameters: `domain/cascade/params/cascade.yaml`, `domain/simulation/params/*.yaml`, `domain/theater/params/*.yaml`. Provenance is enforced at load time. One known impurity: these loaders read files from the domain package, accepted because the files ship with the code.
+- Parameters: `domain/cascade/params/cascade.yaml`, `domain/cascade/params/health.yaml`, `domain/simulation/params/*.yaml`, `domain/theater/params/*.yaml`. Provenance is enforced at load time. One known impurity: these loaders read files from the domain package, accepted because the files ship with the code.
 
 ## 6. Deployment and tooling
 

@@ -197,4 +197,4 @@ cd backend && PYTHONPATH=src python -m pytest tests -q          # 41 tests, 11 i
 cd web && npx tsc --noEmit && npm test && npm run build
 ```
 
-Regression anchor: after any engine change, the 25F cut (`feb2025-1500`, `R239`) should still give 2 stages and about 15.2 M people. If it does not, the change altered behaviour. Decide whether that is intended, then update `docs/engine.md`.
+Regression anchor: after any engine change, the 25F cut (`feb2025-1500`, `R239`) should still give 2 stages and about 3.8 M people, 1,972 MW lost and `voltage_limited` (re-measured 2026-11-21; the earlier 15.2 M people and 7,872 MW no longer hold and the section 2.4 worked case below is out of date, cause not investigated). If it does not, the change altered behaviour. Decide whether that is intended, then update `docs/engine.md`.

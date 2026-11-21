@@ -41,12 +41,12 @@ The data scripts need the PyPSA-CL files in `data/raw/pypsa_cl/` (they download 
 
 | Hour | Cuts with no effect (of 273) | 25F corridor cut |
 |---|---|---|
-| Feb 2025 15:00 | 227 | 15.2 M people, 7,872 of 11,096 MW, 2 stages |
+| Feb 2025 15:00 | 227 | 3.8 M people, 1,972 of 11,096 MW, 2 stages, `voltage_limited` (uncertain) |
 | Feb 2025 03:00 | 238 | 0.3 M people, 631 of 8,719 MW |
-| Nov 2026 13:00 | 219 | 15.4 M people, 7,347 of 10,836 MW |
+| Nov 2026 13:00 | 219 | 5.6 M people, 2,649 of 10,836 MW, 3 stages, `voltage_limited` (uncertain) |
 | Nov 2026 20:00 | 222 | 3.9 M people, 1,825 of 10,934 MW |
 
-The corridor result depends on how loaded it was: that matches the CEN account of the 25F. Do not present these numbers as a forecast.
+The corridor result depends on how loaded it was: that matches the CEN account of the 25F. Do not present these numbers as a forecast. 2026-11-21: the 25F and Nov 2026 13:00 rows were re-run and differ from the 15.2 M people and 7,872 MW first documented (the code is the current state; the cause of the change was not investigated, and the "cuts with no effect" column was not re-run). A health index built on these results is in [`health.md`](health.md).
 
 ## Assumptions (also returned in every timeline)
 

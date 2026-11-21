@@ -19,6 +19,8 @@ dependencies = [
 cascadasen-api = "cascadasen.api.app:run"
 cascadasen-build = "cascadasen.cli:main"
 cascadasen-cache = "cascadasen.application.cache_builder:main"
+cascadasen-health = "cascadasen.application.grid_health:main"
+cascadasen-regional = "cascadasen.application.build_regional:main"
 cascadasen-sim-fixtures = "cascadasen.sim_fixtures:main"
 
 [project.optional-dependencies]

@@ -148,6 +148,8 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 13. Demo map: Mapbox basemap (needs internet and a token, matches the zoom-level designs) or the offline deck.gl map. The offline map stays as the fallback either way.
 14. Shared sessions (decided by the user, 2026-11-21): each user or agent works on a session, an overlay over the 188-bus network stored as one JSON document (memory, file or S3), pinned to one of the four operating points when created. The session id is the capability: no API key and no cookie (the browser shares `?sesion=<sid>`). Sessions and run records expire 24 h after their last change. Changes reach other clients through SSE with a polling fallback. Runs are nested under the session and persisted. `/protect` and `/suggestions` are out of scope. `POST /api/v1/admin/reload` is off in production (`CASCADASEN_ADMIN_ENABLED`). Agent guide: `sessions-api.md`.
 
+14. Regional context layer (decided 2026-11-21 with Ricardo): other Latin American grids are drawn, not simulated, in a common schema. First delivery: Brazil, Peru, Argentina, Bolivia (`regional.md`). Open: Argentina is built from OSM because its official source was unreachable (retry `cascadasen-regional --countries ARG`); whether to add Colombia, Dominican Republic and Costa Rica next (sources already verified in `regional.md` section 4).
+
 ## 10. First hour for an agent starting from scratch
 
 1. Read `AGENTS.md`, then `idea.md`, `cyber.md`, `stack.md`, `design.md`, `datasets.md`, then this file, then the newest `CHANGELOG.md` entries. Check `git log` and `git status`. Run `git config core.hooksPath scripts/hooks` once.
