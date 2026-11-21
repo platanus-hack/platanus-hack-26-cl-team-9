@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(theater): separate the two figures of one after-action summary line
+
+- **Changed:** `TemplateInterpreter.after_action` writes "Decisiones innecesarias: 1; reserva operacional final: 57 %." instead of "Decisiones innecesarias: 1. Reserva operacional final: 57 %.".
+- **Why:** In live tests the assistant read "1. Reserva…" as list numbering and wrote that the organisation "kept the reserve at 57 % without justification", which the report does not say.
+- **Agents:** Text only; no key or number changed. Clients that parse this summary line by its old wording must update.
+- **Files:** `backend/src/cascadasen/domain/theater/narrative.py`.
+
 ## 2026-11-21 · fix(mcp): report which overloads an edit caused
 
 - **Changed:** Every edit tool (`add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network`) reads the overloaded lines before the edit and returns `baseline.newly_overloaded` and `baseline.no_longer_overloaded` next to `overloaded_lines`. The assistant's prompt asks the model to separate what the edit caused from what was already overloaded.
