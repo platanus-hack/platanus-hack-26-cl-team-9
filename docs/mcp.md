@@ -17,7 +17,7 @@ claude mcp add sub50 --env SUB50_API_URL=http://localhost:8000 -- \
 | `SUB50_API_URL` | `http://localhost:8000` | API base URL, for example `https://sub50.cl` |
 | `SUB50_AGENT` | `mcp` | Name sent in `X-Sub50-Agent`, recorded in the session's `last_op.by` (64 characters) |
 
-Transport is stdio. The process holds the active session and run in memory only: the session id is a capability (`sessions-api.md` section 1), so it is never written to disk. `httpx` logging is set to WARNING because its INFO lines print URLs with the id. A remote HTTP transport and API authentication are not done (the API has no key).
+Transport is stdio. The process holds the active session and run in memory only: the session id is a capability (`sessions-api.md` section 1), so it is never written to disk. `httpx` logging is set to WARNING because its INFO lines print URLs with the id. A remote HTTP transport and API authentication are not done (the API has no key). The same tools also run inside the backend behind a chat endpoint, with no MCP client: `docs/assistant.md`.
 
 ## 2. Layout
 

@@ -319,6 +319,10 @@ Shared, persistent sessions under `/api/v1/sessions` (`api/session_routes.py`). 
 - Every agent endpoint takes `{sid}` in the path. Agent routes carry `x-sub50-agent`, an explicit `operationId` and English OpenAPI text (`docs/openapi.md`); error details stay in Spanish.
 - Limits (per process): 64 KB bodies (413), creation per client IP, cuts and writes per session (429 with `Retry-After`), 5 SSE streams per session and IP. Knobs are the `CASCADASEN_RATE_*` and `CASCADASEN_SSE_*` settings.
 
+### 7.3 Assistant API
+
+`POST /api/v1/assistant/chat` and `GET`/`DELETE /api/v1/assistant/conversations/{cid}` (`api/assistant_routes.py`) run natural-language requests through an LLM that calls the MCP tools over the app's own routes. Contract, limits and guardrails: `docs/assistant.md`. These routes are for the web client and are not marked `x-sub50-agent`.
+
 ## 8. Testing and CI
 
 MVP: Vitest tests for frontend logic (playback clock, narration templates, layer mapping, fixture validation against the JSON schema). Everything below is backlog.

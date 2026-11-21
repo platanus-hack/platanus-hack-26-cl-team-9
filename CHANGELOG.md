@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(assistant): document the in-app assistant and the third LLM role
+
+- **Changed:** New `docs/assistant.md` (turn it on, routes, how the loop and the in-process transport work, guardrails, what is not done). `docs/strategy.md` section 10 gets the assistant as a third LLM role; `docs/stack.md` gets section 7.3; `docs/mcp.md`, `backend/README.md` and `AGENTS.md` (read order) point to it.
+- **Why:** `strategy.md` said the LLM only explains or plays C2; the assistant executes what the user asks on the user's own session, so the doc had to say so.
+- **Agents:** Read `docs/assistant.md` before touching `api/assistant_routes.py` or `application/assistant.py`. Pending: a real run against Bedrock and the 188-bus network (to pick the `step` cap and check the 25 s deadline), Terraform for Bedrock permission and a longer CloudFront origin timeout, a daily cost cap per IP.
+- **Files:** `docs/{assistant,strategy,stack,mcp}.md`, `backend/README.md`, `AGENTS.md`.
+
 ## 2026-11-21 · feat(api): assistant chat routes with rate limit and body cap
 
 - **Changed:** `api/assistant_routes.py` adds `POST /api/v1/assistant/chat` (`{message 1-2000, conversation_id?, session_id?}` → `{conversation_id, session_id, run_id, reply, tool_calls, steps, truncated, notice}`), `GET` and `DELETE /api/v1/assistant/conversations/{cid}`. Each request builds its tools over `in_process_client(app, client_ip)` with `X-Sub50-Agent: asistente`. Limits: `rate_assistant_per_minute` (10) per client IP, and `BODY_LIMIT_PREFIXES` covers `/api/v1/assistant`. Errors: 503 when `CASCADASEN_LLM_ENABLED` is off or the provider is not `bedrock-converse`, 502 on a model failure (fixed Spanish text), 404, 409, 422, 429.
