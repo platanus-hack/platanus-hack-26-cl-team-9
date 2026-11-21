@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(web): use the Roboto superfamily and square corners
+
+- **Changed:** `web/package.json` adds `@fontsource-variable/roboto`, `roboto-condensed` and `roboto-mono`; `web/src/main.tsx` imports them. `docs/design.md` section 2: the type rule is now the Roboto superfamily (replacing the Geist pair) and the corner rule is radius 0 on every container, card, button, tag, input and the time pill in the whole app; the layout bullet says "square-cornered floating panel".
+- **Why:** Ignacio chose Roboto as the main face with faces from the same family as secondaries, and the team extended Valentina's square-corner rule from the Battle Page to the whole app.
+- **Agents:** Faces come from npm, so the app needs no internet for fonts. Use the tokens `--font-sans`, `--font-condensed` and `--font-mono` (defined in `web/src/styles.css` in the next commit), never a font name. Display numbers never use Mono. The Paper `--radius-*` tokens are unchanged for older pages; do not use them on new work.
+- **Files:** `web/package.json`, `web/package-lock.json`, `web/src/main.tsx`, `docs/design.md`.
+
 ## 2026-11-21 · docs(design): add the Design v5 page and its polish rules
 
 - **Changed:** `docs/design.md` section 1 lists the Paper page "Design v5" (copies of the three v4 frames with the council's fixes applied) as the current reference for the map and the simulation, and marks Design v4 as superseded. New section 3.2 records the v5 rules: grid and panel edges, type scale, small-text contrast, the `--color-fault` token, one event marker style, timeline geometry with a shared frequency scale, legend behaviour, map callouts and wording.
