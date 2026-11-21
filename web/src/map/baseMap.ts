@@ -4,16 +4,17 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import chileUrl from "../../../data/processed/chile.geojson?url";
+import { regionalOutlineUrl } from "./regional";
 import { landOf, nearLand, viewportRadiusDeg, type Land } from "./regionLimit";
 
 const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
 // Experiment: keep the camera near Chile and drop heavy Standard-style features. `?limite=0` turns it all off to compare.
 const LIMITED = new URLSearchParams(location.search).get("limite") !== "0";
-const MAX_BOUNDS: [[number, number], [number, number]] = [[-85, -60], [-55, -10]];
+const MAX_BOUNDS: [[number, number], [number, number]] = [[-85, -60], [-30, 8]]; // Chile plus Argentina, Bolivia, Peru and Brazil (docs/regional.md)
 const MIN_ZOOM = 4;
 const MAX_ZOOM = 13;
 // Countries the camera may look at: its center must stay on land (or near it, scaled to the viewport). Add other countries' outlines here.
-const LAND_URLS = [chileUrl];
+const LAND_URLS = regionalOutlineUrl ? [chileUrl, regionalOutlineUrl] : [chileUrl];
 const LAND_MARGIN = 0.25; // fraction of the shorter viewport side the center may be offshore
 const LITE_BASEMAP = { show3dObjects: false, showPointOfInterestLabels: false, showTransitLabels: false, showPedestrianRoads: false };
 const PITCH_DEGREES = 45;
@@ -69,12 +70,13 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers): BaseMap {
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
   container.appendChild(canvas);
   const outline = new GeoJsonLayer({ id: "chile-outline", data: chileUrl, stroked: true, filled: true, getFillColor: [16, 24, 40], getLineColor: [60, 80, 115], lineWidthMinPixels: 1 });
+  const neighbours = regionalOutlineUrl ? [new GeoJsonLayer({ id: "latam-outline", data: regionalOutlineUrl, stroked: true, filled: true, getFillColor: [12, 18, 32], getLineColor: [45, 62, 92], lineWidthMinPixels: 1 })] : [];
   let viewState: MapViewState = _viewState(container);
   const deck = new Deck({ canvas, views: new MapView({ repeat: false, ...(LIMITED ? { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM } : {}) }), controller: true, initialViewState: viewState,
     onViewStateChange: ({ viewState: next }) => { viewState = next as MapViewState; }, // the controller owns the camera; keep a copy to change only the pitch
-    layers: [outline], getTooltip: handlers.getTooltip, onClick: handlers.onClick, pickingRadius: 8 });
+    layers: [...neighbours, outline], getTooltip: handlers.getTooltip, onClick: handlers.onClick, pickingRadius: 8 });
   return {
-    setLayers: (layers) => deck.setProps({ layers: [outline, ...layers] }),
+    setLayers: (layers) => deck.setProps({ layers: [...neighbours, outline, ...layers] }),
     setMode: (mode) => deck.setProps({ controller: { dragRotate: mode === "3d", touchRotate: mode === "3d" }, initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: 600 } }),
     zoomBy: (d) => deck.setProps({ initialViewState: { ...viewState, zoom: viewState.zoom + d, transitionDuration: 300 } }),
     dispose: () => { deck.finalize(); canvas.remove(); },

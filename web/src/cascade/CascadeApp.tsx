@@ -1,6 +1,7 @@
-import type { PickingInfo } from "@deck.gl/core";
+import type { Layer, PickingInfo } from "@deck.gl/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
+import { buildRegionalLayers, loadRegionalGrid, regionalTooltip, type RegionalGrid } from "../map/regional";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers } from "./layers";
 import { CascadeLegend } from "./Legend";
@@ -32,10 +33,13 @@ export function CascadeApp() {
   const [railOpen, setRailOpen] = useState(localStorage.getItem("rail") !== "closed");
   const [mode, setMode] = useState<ViewMode>(params.get("vista") === "2d" ? "2d" : "3d");
   const [error, setError] = useState<string | null>(null);
-  const view = useRef({ network, buses, timeline, stage, cut, mode });
-  view.current = { network, buses, timeline, stage, cut, mode };
+  const [regional, setRegional] = useState<RegionalGrid | null>(null);
+  const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional) : []), [regional]);
+  const view = useRef({ network, buses, timeline, stage, cut, mode, regionalLayers });
+  view.current = { network, buses, timeline, stage, cut, mode, regionalLayers };
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
+  useEffect(() => { loadRegionalGrid().then(setRegional).catch((e) => console.error("No se pudo cargar la red regional", e)); }, []);
   useEffect(() => { _loadPoint(); }, [pointId, index]);
   useEffect(() => { _loadTimeline(); }, [pointId, cut, network]);
   useEffect(() => _mountMap(), []);
@@ -72,6 +76,7 @@ export function CascadeApp() {
 
   function _tooltip(info: PickingInfo): string | null {
     const { network: net, timeline: tl, stage: s } = view.current;
+    if (info.object && info.layer?.id.startsWith("regional-")) return regionalTooltip(info.layer.id, info.object);
     if (!info.object || !net) return null;
     if (info.layer?.id === "lines") {
       const id = (info.object as { id: string }).id;
@@ -91,7 +96,7 @@ export function CascadeApp() {
       const frame = v.timeline?.frames[Math.min(v.stage, (v.timeline?.frames.length ?? 1) - 1)];
       if (v.network && frame) {
         const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
-        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.cut, mode: v.mode }));
+        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.cut, mode: v.mode, regional: v.regionalLayers }));
       }
       raf = requestAnimationFrame(tick);
     };
@@ -146,7 +151,7 @@ export function CascadeApp() {
             {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
             {timeline && network && <Results timeline={timeline} network={network} events={visibleEvents} cut={cut} />}
           </>}
-          {tab === "legend" && network && <CascadeLegend network={network} buses={buses} mode={mode} />}
+          {tab === "legend" && network && <CascadeLegend network={network} buses={buses} mode={mode} regional={regional} />}
           {tab === "assumptions" && <ul className="assumptions">{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>}
         </div>
         <TimelineCard timeline={timeline} stage={stage} playing={playing} setPlaying={setPlaying} setStage={(n) => { setPlaying(false); setStage(n); }} />

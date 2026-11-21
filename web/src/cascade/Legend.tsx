@@ -1,11 +1,13 @@
 import { COLUMN_COLOR, LOADING_BANDS, NO_FLOW_COLOR, OPEN_COLOR, SELECTED_COLOR, WIDTH_BY_KV, MIN_FLOW_MW, MW_TO_METERS } from "./layers";
 import type { ViewMode } from "../map/baseMap";
 import type { BusState, Network } from "./types";
+import { TECH_COLORS } from "../map/layers";
+import type { RegionalGrid } from "../map/regional";
 
 const css = (c: number[]) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${(c[3] ?? 255) / 255})`;
 
 /** Why: every colour, size and moving element of mapa 3 is explained next to the map, with the counts of what is drawn. */
-export function CascadeLegend({ network, buses, mode }: { network: Network; buses: Record<string, BusState>; mode: ViewMode }) {
+export function CascadeLegend({ network, buses, mode, regional }: { network: Network; buses: Record<string, BusState>; mode: ViewMode; regional?: RegionalGrid | null }) {
   const columns = network.nodes.filter((n) => (buses[n.id]?.load_mw ?? 0) > 20).length;
   return (
     <section className="legend">
@@ -35,6 +37,8 @@ export function CascadeLegend({ network, buses, mode }: { network: Network; buse
         ? <Row swatch={<span className="col" style={{ background: css(COLUMN_COLOR) }} />} label={`Barra rectangular azul: demanda de la subestación (${MW_TO_METERS} m por MW, exagerada). ${columns} subestaciones con más de 20 MW. Desaparece al apagarse.`} />
         : <Row swatch={<span className="dot big" style={{ background: css([COLUMN_COLOR[0], COLUMN_COLOR[1], COLUMN_COLOR[2], 150]) }} />} label={`Círculo azul visto desde arriba: demanda de la subestación. Su tamaño crece con los MW. ${columns} subestaciones con más de 20 MW. Desaparece al apagarse.`} />}
 
+      {regional && <RegionalLegend regional={regional} />}
+
       <h3>Lo que no se dibuja</h3>
       <p className="muted">Generación por central, transformadores, tensión y potencia reactiva, y las redes bajo 66 kV. Las líneas del mapa 1 y 2 (1.930) se agrupan aquí en {network.lines.length}.</p>
     </section>
@@ -47,4 +51,19 @@ function Row({ swatch, label }: { swatch: React.ReactNode; label: string }) {
 
 function Bar({ color, height = 5 }: { color: string; height?: number }) {
   return <span className="bar" style={{ background: color, height }} />;
+}
+
+/** Why: the other countries are drawn from public sources with their own licences; the legend says what and from where. */
+function RegionalLegend({ regional }: { regional: RegionalGrid }) {
+  const sources = new Map(regional.countries.flatMap((c) => c.sources.map((s) => [s.id, s] as const)));
+  return (
+    <>
+      <h3>Otras redes de Latinoamérica</h3>
+      <p>Red de contexto, atenuada: solo se dibuja, no se simula. Líneas desde 66 kV; los colores por tensión son los del mapa; los puntos grandes son centrales (color por tecnología).</p>
+      {regional.countries.map((c) => <Row key={c.country} swatch={<span className="dot big" style={{ background: "#94a3b8" }} />} label={`${c.name}: ${c.counts.lines} líneas, ${c.counts.substations} subestaciones, ${c.counts.plants} centrales`} />)}
+      {Object.entries(TECH_COLORS).map(([tech, c]) => <Row key={tech} swatch={<span className="dot big" style={{ background: css([c[0], c[1], c[2], 160]) }} />} label={tech} />)}
+      <p className="sub">Fuentes</p>
+      {[...sources.values()].map((s) => <p key={s.id} className="muted">{s.attribution}. {s.name}. Licencia: {s.license}.</p>)}
+    </>
+  );
 }

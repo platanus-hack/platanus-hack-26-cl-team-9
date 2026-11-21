@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(web): draw the regional grid as a context layer
+
+- **Changed:** New `web/src/map/regional.ts` loads `data/processed/latam/` (a glob, so the app builds without it) and draws dimmed lines by kV, substations and plants by technology under Chile's layers (`regional-*` ids). Tooltips show the source and "Red de contexto: no se simula". The legend lists countries, counts, licences and attribution. The offline map draws the neighbours' outlines and the camera limits reach Brazil.
+- **Why:** Show the other Latin American grids in the same map without touching the Chile simulation.
+- **Agents:** Regional layers are never clickable as a cut: click handlers only react to the ids `lines`, `nodes`, `load`. The first view still frames Chile. `npx vitest run` covers the layers and tooltips.
+- **Files:** `web/src/map/regional.ts`, `web/src/map/regional.test.ts`, `web/src/map/baseMap.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/layers.ts`, `web/src/cascade/Legend.tsx`.
+
 ## 2026-11-21 · feat(data): add regional grid exports and country outlines
 
 - **Changed:** `data/processed/latam/` with lines, substations and plants for BRA (2,264 / 927 / 2,953), PER (575 / 269 / 246), BOL (244 / 71 / 31) and ARG from OpenStreetMap (3,056 / 308 / 208), a manifest, and `outlines.geojson` (geoBoundaries) built by `data/scripts/build_latam_outlines.sh`. New validation test `backend/tests/validation/test_regional_data.py`.
