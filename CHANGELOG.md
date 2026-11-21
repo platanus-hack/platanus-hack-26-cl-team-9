@@ -1,6 +1,11 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(web): keep the mapa 3 camera over land
+- **Changed:** New `web/src/map/regionLimit.ts` (point in polygon, `nearLand`, viewport radius) with tests. `baseMap.ts` loads the land outlines in `LAND_URLS` (today `chile.geojson`) and, after every `moveend`, snaps the camera back to the last valid center when the center is farther from land than a quarter of the shorter viewport side.
+- **Why:** The sea (and Argentina's interior) could be zoomed into. A `maxBounds` rectangle cannot follow Chile's long, thin shape: a tight one forces a high minimum zoom on wide screens and hides the country.
+- **Agents:** To add countries, put their land GeoJSON URL in `LAND_URLS` and widen `MAX_BOUNDS`. Only the Mapbox map snaps back; the offline deck.gl fallback keeps the zoom limits only. `?limite=0` disables it. Checked in headless Chrome: Pacific at zoom 9 returns to Santiago, Santiago at zoom 10 stays.
+- **Files:** `web/src/map/baseMap.ts`, `web/src/map/regionLimit.ts`, `web/src/map/regionLimit.test.ts`, `web/README.md`.
 ## 2026-11-21 · docs(architecture): document the system as built
 
 - **Changed:** New `docs/architecture.md`: system overview (sources → `data/processed` → API and static cache → web), backend ports and adapters with the dependency rule, the five ports and their adapters, domain modules (two engines, theatre, agents), use cases and CLI commands, the cut and theatre-cycle flows, frontend, data and parameters, deployment and tooling. `stack.md` sections 2-3 point to it and drop the stale `network.json`/`engine/` backlog entries; `AGENTS.md` and `backend/README.md` link it.
