@@ -81,6 +81,8 @@ The independent evaluation scored Ambition 3/5 because plant disconnections are 
 
 Do not build an "attacker finds the minimum cut to black out the country" feature. It adds dual-use risk and no judging value.
 
+Exception proposed 2026-11-21 (needs a team decision): a bounded replay of documented cyber incidents, such as the Huatacondo plant in Chile, with a local API for external agents. It stays a catalog of known scenarios, never an optimiser or a ranking. See `attack-sim.md`.
+
 ## 7. Hackathon context
 
 - Official rules: https://hack.platan.us/26-cl/bases. Platanus can change rules. Re-read them at the start.

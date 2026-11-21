@@ -107,7 +107,7 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 
 - **P0 (no demo without it):** network with sourced parameters, cascade and island frequency model with 25F defences, map with click, islands going dark, counter, narration, 25F replica in both modes, V2-V5 tests, validation table in the README.
 - **P1:** 2026 defences and scenarios, "what would have prevented it", live combinations, V6-V9, CI badge.
-- **P2 / stretch:** ambition upgrades in `idea.md` section 6, Plan A, LLM chat.
+- **P2 / stretch:** ambition upgrades in `idea.md` section 6, Plan A, LLM chat, cyber-incident replay and agent API (`attack-sim.md`).
 - **Cut:** telecoms, public ranking of dangerous lines, full AC voltage model, full dynamic simulation, live monitoring.
 
 ## 7. Risks to watch (details in `idea.md` section 8)
@@ -139,6 +139,7 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 7. Mirror repo for deployment: whose personal GitHub account.
 8. Real event close time and pitch length (not published in the sources checked).
 9. Whether the team talks to a mentor from the "science" or "data" tracks about power-system modelling, and whether outside consultation is allowed.
+10. Cyber-incident replay with a local agent API (`attack-sim.md`): approve the exception to the "no attacker feature" rule in `idea.md`, and choose local-only or exposed.
 
 ## 10. First hour for an agent starting from scratch
 
