@@ -4,7 +4,7 @@ of action. It knows where its crews are and does not send one that would arrive 
 from __future__ import annotations
 
 from cascadasen.domain.agents.base import AgentView
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.catalog import Role
 from cascadasen.domain.theater.decisions import COA
 
@@ -16,7 +16,7 @@ class LogisticsAgent:
 
     def __init__(
         self,
-        network: ReducedNetwork,
+        network: TheaterNetwork,
         crew_actions: frozenset[str] = frozenset(),
         max_eta: int | None = None,
         sites: dict[str, list[str]] | None = None,

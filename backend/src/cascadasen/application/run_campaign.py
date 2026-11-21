@@ -25,11 +25,11 @@ from statistics import mean
 from typing import Any
 
 from cascadasen.domain.simulation.grid import Physics
-from cascadasen.domain.simulation.network import ReducedNetwork
 from cascadasen.domain.simulation.timeline import NOTICE
 from cascadasen.domain.theater.config import theater_config
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunConfig, RunInputError, Simulation
 from cascadasen.domain.theater.rng import new_seed
+from cascadasen.domain.theater.world import TheaterWorld
 
 MODES = ("diagnostic", "adversarial", "capability")
 MAX_RUNS = 240
@@ -128,8 +128,9 @@ def _row(c: Cell) -> dict[str, Any]:
 
 
 class CampaignRunner:
-    def __init__(self, network: ReducedNetwork, physics: Physics) -> None:
-        self.network, self.physics = network, physics
+    def __init__(self, world: TheaterWorld, physics: Physics) -> None:
+        self.world, self.physics = world, physics
+        self.network = None  # network of the last campaign's runs (for the per-area table)
         self.campaigns: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
     def get(self, campaign_id: str) -> dict[str, Any]:
@@ -206,7 +207,7 @@ class CampaignRunner:
                             cells[(template, policy, u, adv, cap_id)] = cell
                             for seed in spec.seeds:
                                 sim = Simulation(
-                                    self.network,
+                                    self.world,
                                     RunConfig(
                                         template=template,
                                         policy=policy,
@@ -217,8 +218,10 @@ class CampaignRunner:
                                         capabilities=caps,
                                     ),
                                     self.physics,
+                                    light=True,
                                 )
                                 sim.run_to_end()
+                                self.network = sim.network
                                 cell.reports.append(sim.report())
                                 cell.area_continuity.append(self._area_continuity(sim))
         result = {

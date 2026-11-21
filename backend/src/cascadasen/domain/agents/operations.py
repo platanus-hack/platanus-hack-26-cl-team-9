@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from cascadasen.domain.agents.base import AgentView
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.catalog import Role
 from cascadasen.domain.theater.decisions import COA
 
@@ -13,7 +13,7 @@ OPS = Role.OPS.value
 class OperationsAgent:
     role = Role.OPS
 
-    def __init__(self, network: ReducedNetwork) -> None:
+    def __init__(self, network: TheaterNetwork) -> None:
         self.net = network
         self.verified: dict[str, int] = {}
         self.no_ack: set[str] = set()

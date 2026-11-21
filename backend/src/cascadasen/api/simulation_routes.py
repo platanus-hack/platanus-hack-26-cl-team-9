@@ -22,6 +22,7 @@ from cascadasen.application.run_campaign import CampaignNotFoundError, CampaignS
 from cascadasen.application.run_experiment import RunNotFoundError, run_config
 from cascadasen.application.simulate import SimulateCommand, SimulationInputError, SimulationTimeoutError
 from cascadasen.application.simulation_service import SimulationService
+from cascadasen.application.theater_world import default_world
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunFinishedError, RunInputError
 from cascadasen.domain.theater.narrative import templates
 from cascadasen.infrastructure.llm import llm_adapters
@@ -37,7 +38,10 @@ def get_simulation(request: Request) -> SimulationService:
         if service is None:
             raise HTTPException(503, "No hay snapshot de la red. Ejecuta `cascadasen-build` primero.")
         interpreter, advisor = llm_adapters(get_settings())
-        sim = SimulationService.from_snapshot(service.s, interpreter=interpreter, advisor=advisor)
+        world = default_world(str(get_settings().processed_dir))
+        sim = SimulationService.from_snapshot(
+            service.s, interpreter=interpreter, advisor=advisor, world=world
+        )
         request.app.state.simulation = sim
     return sim
 
@@ -50,13 +54,27 @@ def input_error(exc: SimulationInputError) -> HTTPException:
 
 
 @router.get(
-    "/sim/network",
+    "/simulate/network",
     response_model=NetworkOut,
     tags=["simulación"],
-    summary="Áreas y corredores de la red reducida: los objetivos seleccionables",
+    summary="Áreas y corredores de la red de 13 áreas de POST /simulate",
 )
 def network(sim: Sim) -> dict[str, Any]:
     return sim.network_view()
+
+
+@router.get(
+    "/sim/network",
+    tags=["experimentos"],
+    summary="Red del mapa 3 (barras B###, líneas R###) con áreas, corredores y defensas del teatro",
+)
+def theater_network(sim: Sim, point: str | None = None) -> dict[str, Any]:
+    try:
+        return sim.theater_network(point)
+    except KeyError as exc:
+        raise HTTPException(
+            404, {"field": "point", "message": "punto de operación desconocido", "valid": sim.world.points()}
+        ) from exc
 
 
 @router.post(

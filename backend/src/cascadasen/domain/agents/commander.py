@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from cascadasen.domain.agents.base import AgentView
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.catalog import ACTIONS, CONFLICTS, Role
 from cascadasen.domain.theater.decisions import COA, Decision, Intent, ISRReport, Verdict
 
@@ -18,7 +18,7 @@ RISK_TOLERANCE = {"A": 0.3, "B": 0.1, "C": 0.2}
 class CommanderAgent:
     role = Role.C2
 
-    def __init__(self, network: ReducedNetwork, plan_load: dict[str, float]) -> None:
+    def __init__(self, network: TheaterNetwork, plan_load: dict[str, float]) -> None:
         self.net = network
         self.estimate = dict(plan_load)  # what C2 believes each area is serving
         self.intent_now: Intent | None = None

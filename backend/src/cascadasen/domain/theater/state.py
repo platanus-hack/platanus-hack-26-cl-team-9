@@ -1,6 +1,6 @@
 """Real and observed state (docs/strategy.md section 3).
 
-`RealState` is what is happening: the physical grid (`GridState`), the true health of supervision
+`RealState` is what is happening: the physical grid (`TheaterGrid`, mapa 3 buses), the true health of supervision
 per area, and the abstract effects in force. Only the engine, the validator and the evaluator read
 it. `ObservedState` is what supervision shows; it is immutable and it is what agents receive.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from cascadasen.domain.simulation.grid import GridState
+from cascadasen.domain.theater.grid import TheaterGrid
 
 
 @dataclass
@@ -80,10 +80,11 @@ class Effect:
 @dataclass
 class RealState:
     cycle: int
-    grid: GridState
+    grid: TheaterGrid
     digital: dict[str, AreaDigital]
     effects: list[Effect] = field(default_factory=list)
-    last_transient: dict[str, Any] | None = None
+    last_transient: dict[str, Any] | None = None  # summary (audit log)
+    last_timeline: dict[str, Any] | None = None  # full mapa 3 cascade timeline of the last transient
     worst_level: str = "L0"
 
     def active_effects(self, area: str | None = None) -> list[Effect]:

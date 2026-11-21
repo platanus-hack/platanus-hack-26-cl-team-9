@@ -9,9 +9,11 @@ from cascadasen.application.simulation_service import SimulationService
 
 
 @pytest.fixture
-def client(toy_snapshot, toy_network):
+def client(toy_snapshot, toy_network, toy_world):
     return TestClient(
-        create_app(service=GridQueryService(toy_snapshot), simulation=SimulationService(toy_network))
+        create_app(
+            service=GridQueryService(toy_snapshot), simulation=SimulationService(toy_network, world=toy_world)
+        )
     )
 
 

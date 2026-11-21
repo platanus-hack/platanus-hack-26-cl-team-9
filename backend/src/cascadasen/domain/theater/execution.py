@@ -21,15 +21,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from cascadasen.domain.simulation.consequence import consequence_level
-from cascadasen.domain.simulation.defenses import DefenseSet
-from cascadasen.domain.simulation.engine import Change, ChangeError, TransientResult, run_transient
-from cascadasen.domain.simulation.grid import GridState, Physics
-from cascadasen.domain.simulation.network import ReducedNetwork, UnknownTargetError
-from cascadasen.domain.simulation.powerflow import islands
+from cascadasen.domain.theater.areas import TheaterNetwork, UnknownTargetError, bus_id
 from cascadasen.domain.theater.catalog import EVENTS
 from cascadasen.domain.theater.config import TheaterConfig
 from cascadasen.domain.theater.decisions import COA, FieldReport
+from cascadasen.domain.theater.grid import Change, ChangeError
 from cascadasen.domain.theater.state import AreaDigital, Effect, RealState
 from cascadasen.domain.theater.stochastic import Chance
 
@@ -45,6 +41,19 @@ RESTORABLE_EFFECTS = {
     "C5_remote_dispatch_loss",
 }
 SEGMENTATION_CLEARS = {"D3_unreliable_data", "D5_false_alarms", "C5_remote_dispatch_loss"}
+
+
+def consequence_level(summary: dict[str, Any]) -> str:
+    """L0 absorbed, L1 contained (load lost, every island survives), L2 regional blackout (some island
+    collapses), L3 national blackout (every island with load collapses). Same rule as
+    `domain/simulation/consequence.py`, read from a mapa 3 cascade summary."""
+    counted = [i for i in summary["islands"] if i["result"] != "dark"]
+    collapsed = [i for i in counted if i["result"] == "blackout"]
+    if counted and len(collapsed) == len(counted):
+        return "L3"
+    if collapsed:
+        return "L2"
+    return "L1" if summary["load_shed_mw"] > 0.5 else "L0"
 
 
 ON_SITE = frozenset({"field_verification", "manual_operation", "rearm_defense"})
@@ -111,14 +120,12 @@ def refresh_comms(d: AreaDigital, primary_ok: bool | None = None, backup: bool |
 class Executor:
     def __init__(
         self,
-        network: ReducedNetwork,
-        physics: Physics,
-        defenses: DefenseSet,
+        network: TheaterNetwork,
         cfg: TheaterConfig,
         defense_areas: dict[str, list[str]],
         chance: Chance | None = None,
     ) -> None:
-        self.net, self.physics, self.defenses, self.cfg = network, physics, defenses, cfg
+        self.net, self.cfg = network, cfg
         self.defense_areas = defense_areas
         self.chance = chance  # None: deterministic world (catalog sizes, actions always work)
 
@@ -139,11 +146,12 @@ class Executor:
             r = self.net.resolve(req.target)
         except UnknownTargetError as exc:
             raise UnknownEventTargetError(f"{req.target}: objetivo desconocido") from exc
-        if r.kind not in spec.targets and not (r.kind == "line" and "line" in spec.targets):
+        kind = "node" if r.kind == "bus" else r.kind  # catalog name for a substation
+        if kind not in spec.targets:
             if r.area and "area" in spec.targets:
                 return r.area, r.area
             raise EventError(f"{req.target}: objetivo no válido para {req.type}")
-        if r.kind == "node" and spec.family != "physical":
+        if kind == "node" and spec.family != "physical":
             return r.area, r.area  # digital effects act on the operating area
         return r.id, r.area
 
@@ -216,61 +224,84 @@ class Executor:
 
     def _physical_changes(self, real: RealState, eff: Effect) -> list[Change]:
         p, t = eff.params, eff.target
+        r = self.net.resolve(t) if eff.event != "C4_defense_not_acting" else None
         if eff.event == "C1_generation_loss":
+            if r and r.kind == "bus":  # a substation: its own online generation by default
+                b = int(r.id[1:])
+                mw = p.get("mw") or float(real.grid.sync[b] + real.grid.renew[b])
+                return [Change("trip_gen", r.area, mw=mw, tech=p.get("tech"))]
             return [Change("trip_gen", t, mw=p.get("mw"), share=p.get("share"), tech=p.get("tech"))]
         if eff.event in ("C2_common_mode_loss", "E2_renewable_drop"):
             kind = "group_out" if eff.event == "C2_common_mode_loss" else "renewable_drop"
             return [Change(kind, t, share=float(p.get("share", 0.4)), tech=p.get("tech", "solar"))]
         if eff.event == "C3_transmission_opening":
-            r = self.net.resolve(t)
             if r.kind == "corridor":
                 return [Change("open_corridor", r.id)]
-            if r.kind == "line" and r.corridor:
-                return [Change("lines_out", r.corridor, lines=(r.id,))]
-            node = r.id if r.kind == "node" else self.net.areas[r.area].main_node
-            return [Change("node_out", node)] if node else []
+            if r.kind == "line":
+                return [Change("lines_out", r.id, lines=(r.id,))]
+            bus = r.id if r.kind == "bus" else bus_id(self.net.areas[r.area].anchor_bus)
+            return [Change("node_out", bus)]
         if eff.event == "C4_defense_not_acting":
             return [Change("disable_defense", t)]
         if eff.event == "C5_remote_dispatch_loss":
             real.digital[eff.area].remote_control = False
             return [Change("no_reserve", eff.area)]
         if eff.event == "E1_demand_surge":
-            return [Change("load_step", t, mw=p.get("mw"), share=p.get("share"))]
+            target = r.area if r and r.kind == "bus" else t
+            return [Change("load_step", target, mw=p.get("mw"), share=p.get("share"))]
         return []
 
-    def transient(self, real: RealState, changes: list[Change]) -> TransientResult:
+    def transient(self, real: RealState, changes: list[Change]) -> dict[str, Any]:
+        """Apply the changes and run the mapa 3 cascade engine from the current state."""
+        g = real.grid
         misoperated: list[str] = []
         if self.chance:
-            armed = [
-                z
-                for z in self.defense_areas
-                if z.startswith("edac:") and z not in real.grid.disabled_defenses
-            ]
+            armed = [z for z in self.defense_areas if z.startswith("edac:") and z not in g.disabled]
             misoperated = self.chance.misoperating(armed)
             changes = [*changes, *(Change("disable_defense", d) for d in misoperated)]
+        served_before = dict(g.served_mw)
+        dark_before = set(g.dark)
+        cut: list[str] = []
         try:
-            res = run_transient(self.net, real.grid, changes, self.defenses, self.physics, full=False)
-        except ChangeError as exc:
+            for ch in changes:
+                cut += g.apply(ch)[0]
+            timeline = g.run_cascade(cut)
+        except (ChangeError, ValueError, KeyError) as exc:
             raise EventError(str(exc)) from exc
-        real.grid = res.state
-        level, uncertain = consequence_level(res.islands, res.load_lost_mw)
+        summary = timeline["summary"]
+        level = consequence_level(summary)
+        hit = [a for a in self.net.order if g.served_mw[a] < served_before[a] - 1.0]
+        newly_dark = g.dark - dark_before
+        real.last_timeline = timeline
         real.last_transient = {
             "cycle": real.cycle,
             "level": level,
-            "uncertain": uncertain,
-            "load_lost_mw": res.load_lost_mw,
-            "load_shed_mw": res.load_shed_mw,
-            "people_without_power": res.people_without_power,
+            "uncertain": False,
+            "load_lost_mw": summary["load_shed_mw"],
+            "load_shed_mw": round(
+                sum(e["params"]["mw"] for e in timeline["events"] if e["type"] == "load_shed"), 1
+            ),
+            "people_without_power": round(g.people_without_power()),
             "misoperated_defenses": misoperated,
-            "islands": [i.summary() for i in res.islands],
+            "lines_opened": sorted(set(summary["lines_opened"])),
+            "dark_buses": len(g.dark),
+            "islands": [
+                {
+                    "nodes": hit,
+                    "result": "blackout" if newly_dark else "maintains",
+                    "load_shed_mw": round(sum(served_before[a] - g.served_mw[a] for a in hit), 1),
+                }
+            ]
+            if hit
+            else [],
             "events": [
                 {"t": e["t"], "type": e["type"], "text_key": e["text_key"], "ids": e["ids"]}
-                for e in res.events
+                for e in timeline["events"]
             ],
         }
         if LEVELS.index(level) > LEVELS.index(real.worst_level):
             real.worst_level = level
-        return res
+        return timeline
 
     # --------------------------------------------------------------- actions
 
@@ -291,7 +322,7 @@ class Executor:
             ex.pending_reports.append(self._field_report(real, a))
         elif coa.action == "manual_operation":
             real.digital[a].manual_ops = True
-            real.grid.no_reserve_areas.discard(a)
+            real.grid.no_reserve.discard(a)
             ex.active[coa.key] = coa
         elif coa.action == "backup_comms":
             d = real.digital[a]
@@ -304,15 +335,15 @@ class Executor:
             ex.segmented_since[a] = cyc
             ex.active[coa.key] = coa
         elif coa.action == "preventive_load_reduction":
-            self._reduce_load(real.grid, a, float(act.get("share", 0.05)) * real.grid.load_mw[a])
+            real.grid.reduce_load(a, float(act.get("share", 0.05)) * real.grid.load_mw[a])
         elif coa.action == "fast_reserve":
-            real.grid.reserve_extra_mw[a] = real.grid.reserve_extra_mw.get(a, 0.0) + float(act.get("mw", 100))
+            real.grid.extra_reserve[a] = real.grid.extra_reserve.get(a, 0.0) + float(act.get("mw", 100))
             ex.active[coa.key] = coa
         elif coa.action == "battery_support":
-            real.grid.battery_mw[a] = real.grid.battery_mw.get(a, 0.0) + float(act.get("mw", 100))
+            real.grid.extra_reserve[a] = real.grid.extra_reserve.get(a, 0.0) + float(act.get("mw", 100))
             ex.active[coa.key] = coa
         elif coa.action == "rearm_defense":
-            real.grid.disabled_defenses.discard(a)
+            real.grid.disabled.discard(a)
             self._clear(real, lambda e: e.event == "C4_defense_not_acting" and e.target == a)
         elif coa.action == "islanding_prep":
             self.transient(real, [Change("open_corridor", a)])
@@ -340,11 +371,7 @@ class Executor:
     def _field_report(self, real: RealState, area: str, due: int | None = None) -> FieldReport:
         effects = real.active_effects(area)
         g = real.grid
-        physical = (
-            area in g.blackout_areas
-            or g.served_mw[area] < g.load_mw[area] - 1
-            or bool(sum(g.tripped_mw.get(area, {}).values()) > 1)
-        )
+        physical = area in g.blackout_areas or g.served_mw[area] < g.load_mw[area] - 1 or g.tripped(area) > 1
         kinds = sorted({EVENTS[e.event].family for e in effects})
         digital = (
             any(EVENTS[e.event].family == "digital" for e in effects) or not real.digital[area].remote_control
@@ -389,27 +416,7 @@ class Executor:
                 refresh_comms(d, primary_ok=True)
         elif e.event == "C5_remote_dispatch_loss" and not any(x.event == e.event for x in others):
             d.remote_control = True
-            real.grid.no_reserve_areas.discard(e.area)
-
-    def _reduce_load(self, g: GridState, area: str, mw: float) -> None:
-        mw = min(mw, g.served_mw[area])
-        g.served_mw[area] -= mw
-        self._rebalance(g, [area], -mw)
-
-    def _rebalance(self, g: GridState, areas: list[str], delta_load: float) -> None:
-        """Keep the island balanced after a load change by moving synchronous dispatch."""
-        island = self._island_of(g, areas[0])
-        sync = {a: g.sync_gen(a) for a in island}
-        total = sum(sync.values())
-        if total <= 0:
-            return
-        for a in island:
-            for t in g.gen_mw[a]:
-                if t in g.sync_techs and sync[a] > 0:
-                    g.gen_mw[a][t] = max(0.0, g.gen_mw[a][t] + delta_load * g.gen_mw[a][t] / total)
-
-    def _island_of(self, g: GridState, area: str) -> list[str]:
-        return next((isl for isl in islands(self.net, g) if area in isl), [area])
+            real.grid.no_reserve.discard(e.area)
 
     # ------------------------------------------------------------ per cycle
 
@@ -449,9 +456,6 @@ class Executor:
                 )
         notes += self._restore(real, ex)
         self._auto_release(real, ex)
-        for a in self.net.order:
-            used = real.grid.reserve_used_mw.get(a, 0.0)
-            real.grid.reserve_used_mw[a] = used * (1 - self.cfg.restoration["reserve_recovery"])
         return notes
 
     def _restore(self, real: RealState, ex: ExecutionState) -> list[dict[str, Any]]:
@@ -471,49 +475,46 @@ class Executor:
     def _restore_corridor(self, real: RealState, r: Restoration) -> tuple[bool, dict[str, Any] | None]:
         if real.cycle < r.ready:
             return False, None
-        g = real.grid
-        g.open_corridors.discard(r.target)
-        g.out_lines -= set(self.net.corridors[r.target].members)
+        real.grid.reclose(list(self.net.corridors[r.target].lines))
         self._clear(real, lambda e, t=r.target: e.event == "C3_transmission_opening" and e.target == t)
         return True, {"kind": "corridor_restored", "corridor": r.target}
 
     def _restore_area(self, real: RealState, r: Restoration) -> tuple[bool, dict[str, Any] | None]:
-        """Crews arrive the cycle after the decision, clear the area's restorable effects, then bring
-        back generation and load a share per cycle (slower under manual operation)."""
+        """Crews start on arrival: clear the area's restorable effects and reclose its open lines (except
+        those still held open by an active opening elsewhere), then bring back generation and load a
+        share per cycle (slower under manual operation)."""
         g, rest, a = real.grid, self.cfg.restoration, r.target
         d = real.digital[a]
         if real.cycle < r.started + 1:
             return False, None
         if real.cycle == r.started + 1:
             self._clear(real, lambda e: e.area == a and e.event in RESTORABLE_EFFECTS)
-            for nid in [n for n in g.out_nodes if self.net.nodes[n].area == a]:
-                g.out_nodes.discard(nid)
-                g.out_lines -= set(self.net.nodes[nid].corridor_lines)
+            held = {
+                lid
+                for e in real.active_effects()
+                if e.event == "C3_transmission_opening"
+                for lid in self._effect_lines(e)
+            }
+            g.reclose([lid for lid in self.net.area_lines(a) if lid not in held])
         if not d.manual_ops and (d.segmented or d.comms == "down" or not d.remote_control):
             return False, {"kind": "restoration_blocked", "area": a}
         speed = rest["manual_slowdown"] if d.manual_ops else 1.0
         if self.chance:
             speed *= self.chance.restore_factor()
-        g.blackout_areas.discard(a)
-        for t, mw in list(g.tripped_mw.get(a, {}).items()):
-            back = mw * rest["gen_share_per_cycle"] * speed if mw > 1 else mw
-            g.tripped_mw[a][t] = mw - back
-            g.gen_mw[a][t] = g.gen_mw[a].get(t, 0.0) + back
-            g.add_inertia(a, t, back)
-        island = self._island_of(g, a)
-        headroom = sum(g.reserve_mw(x) for x in island) + sum(g.gen(x) - g.served_mw[x] for x in island)
-        want = max(0.0, g.load_mw[a] - g.served_mw[a])
-        step = min(want, rest["load_share_per_cycle"] * speed * g.load_mw[a], max(0.0, headroom))
-        g.served_mw[a] += step
-        self._settle(g, island)
-        done = g.served_mw[a] >= g.load_mw[a] - 1.0 and sum(g.tripped_mw.get(a, {}).values()) <= 1.0
+        step, done = g.restore_step(
+            a, rest["load_share_per_cycle"] * speed, rest["gen_share_per_cycle"] * speed
+        )
         note = {"kind": "restoration_progress", "area": a, "restored_mw": round(step, 1), "done": done}
         return done or real.cycle - r.started > 12, note
 
-    def _settle(self, g: GridState, island: list[str]) -> None:
-        residual = sum(g.served_mw[x] for x in island) - sum(g.gen(x) for x in island)
-        if abs(residual) > 0.5:
-            self._rebalance(g, island, residual)
+    def _effect_lines(self, e: Effect) -> list[str]:
+        r = self.net.resolve(e.target)
+        if r.kind == "corridor":
+            return list(self.net.corridors[r.id].lines)
+        if r.kind == "line":
+            return [r.id]
+        bus = int(r.id[1:]) if r.kind == "bus" else self.net.areas[r.area].anchor_bus
+        return self.net.bus_lines(bus)
 
     def _auto_release(self, real: RealState, ex: ExecutionState) -> None:
         """Free crews and kits once an area's supervision and control are healthy again."""

@@ -8,7 +8,7 @@ preventive policy, load reduction; it vetoes restorations into an island that is
 from __future__ import annotations
 
 from cascadasen.domain.agents.base import AgentView
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.catalog import Role
 from cascadasen.domain.theater.decisions import COA
 
@@ -19,7 +19,7 @@ class StabilizationAgent:
     role = Role.STAB
 
     def __init__(
-        self, network: ReducedNetwork, plan_load: dict[str, float], defense_areas: dict[str, list[str]]
+        self, network: TheaterNetwork, plan_load: dict[str, float], defense_areas: dict[str, list[str]]
     ):
         self.net = network
         self.plan = dict(plan_load)

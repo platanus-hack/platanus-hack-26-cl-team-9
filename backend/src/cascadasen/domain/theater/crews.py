@@ -17,7 +17,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.theater.areas import TheaterNetwork
 
 EARTH_KM = 6371.0
 
@@ -51,7 +51,7 @@ class Assignment:
     arrival: int
 
 
-def _km(network: ReducedNetwork, a: str, b: str) -> float | None:
+def _km(network: TheaterNetwork, a: str, b: str) -> float | None:
     A, B = network.areas[a], network.areas[b]
     if None in (A.lat, A.lon, B.lat, B.lon):
         return None
@@ -61,7 +61,7 @@ def _km(network: ReducedNetwork, a: str, b: str) -> float | None:
 
 
 def travel_table(
-    network: ReducedNetwork, params: dict[str, Any], cycle_minutes: float
+    network: TheaterNetwork, params: dict[str, Any], cycle_minutes: float
 ) -> dict[tuple[str, str], float]:
     """Median travel time in cycles between every pair of areas (mobilisation included)."""
     order = network.order
@@ -88,7 +88,7 @@ class CrewRoster:
     @classmethod
     def build(
         cls,
-        network: ReducedNetwork,
+        network: TheaterNetwork,
         count: int,
         params: dict[str, Any],
         cycle_minutes: float,

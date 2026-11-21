@@ -13,14 +13,13 @@ from dataclasses import replace
 from typing import Any
 
 from cascadasen.domain.ports import CommanderAdvisor, Interpreter
-from cascadasen.domain.simulation.defenses import defense_sets
-from cascadasen.domain.simulation.grid import Physics, operating_points
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
 from cascadasen.domain.theater.catalog import ACTIONS, EVENTS, OBJECTIVES
 from cascadasen.domain.theater.config import theater_config
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunConfig, Simulation
 from cascadasen.domain.theater.narrative import TemplateInterpreter
+from cascadasen.domain.theater.world import DEFENSES_ID, TheaterWorld
 
 MAX_RUNS = 100
 
@@ -32,13 +31,13 @@ class RunNotFoundError(KeyError):
 class RunManager:
     def __init__(
         self,
-        network: ReducedNetwork,
+        world: TheaterWorld,
         physics: Physics,
         max_runs: int = MAX_RUNS,
         interpreter: Interpreter | None = None,
         advisor: CommanderAdvisor | None = None,
     ) -> None:
-        self.network, self.physics, self.max_runs = network, physics, max_runs
+        self.world, self.physics, self.max_runs = world, physics, max_runs
         self.runs: OrderedDict[str, Simulation] = OrderedDict()
         self.interpreter = interpreter or TemplateInterpreter()
         self.advisor = advisor  # LLM commander, used only by runs created with llm_commander
@@ -61,7 +60,7 @@ class RunManager:
     # ------------------------------------------------------------ commands
 
     def create(self, config: RunConfig, auto_run: bool = False) -> dict[str, Any]:
-        sim = Simulation(self.network, config, self.physics, advisor=self.advisor)
+        sim = Simulation(self.world, config, self.physics, advisor=self.advisor)
         run_id = self._put(sim)
         if auto_run:
             sim.run_to_end()
@@ -83,7 +82,7 @@ class RunManager:
         if original.config.llm_commander and "llm_choices" not in overrides:
             overrides = {**overrides, "llm_choices": tuple(sorted(original.llm_record.items()))}
         config = replace(original.config, **overrides)
-        sim = Simulation(self.network, config, self.physics, advisor=self.advisor)
+        sim = Simulation(self.world, config, self.physics, advisor=self.advisor)
         new_id = self._put(sim)
         target = cycles if cycles is not None else (original.cycle or sim.horizon)
         by_cycle: dict[int, list[dict[str, Any]]] = {}
@@ -141,7 +140,7 @@ class RunManager:
         return {"run_id": run_id, **self.interpreter.after_action(sim.report(), sim.snapshots)}
 
 
-def catalog(network: ReducedNetwork) -> dict[str, Any]:
+def catalog(world: TheaterWorld) -> dict[str, Any]:
     """Everything the frontend can choose from: events, actions, policies, objectives, templates."""
     cfg = theater_config()
     return {
@@ -197,16 +196,15 @@ def catalog(network: ReducedNetwork) -> dict[str, Any]:
                 "label_key": t.label_key,
                 "question_key": t.question_key,
                 "operating_point": t.operating_point,
-                "defenses": t.defenses,
                 "horizon": t.horizon,
                 "adversary": {k: v for k, v in t.adversary.items() if k != "plan"},
                 "scenario_events": len(t.scenario_events),
             }
             for t in cfg.templates.values()
         ],
-        "operating_points": sorted(operating_points()),
-        "defense_sets": sorted(defense_sets()),
-        "zones": network.zones,
+        "operating_points": world.points(),
+        "defense_sets": [DEFENSES_ID],
+        "zones": world.load(world.points()[0])[0].zones if world.points() else [],
         "resources": cfg.resources,
         "uncertainty_levels": {"0": "información perfecta", "1": "línea base", "2": "entorno degradado"},
         "cycle_minutes": cfg.clock["cycle_minutes"],
@@ -224,8 +222,7 @@ def run_config(body: dict[str, Any]) -> RunConfig:
         horizon=body.get("horizon"),
         adversary=AdversaryConfig(**adv) if adv else None,
         capabilities=tuple(sorted((body.get("capabilities") or {}).items())),
-        operating_point=body.get("operating_point"),
-        defenses=body.get("defenses"),
+        operating_point=body.get("point") or body.get("operating_point"),
         initial_events=tuple(body.get("initial_events") or ()),
         stochastic=bool(body.get("stochastic", True)),
         llm_commander=bool(body.get("llm_commander", False)),

@@ -1,28 +1,31 @@
-"""Flagship experiment on the real reduced SEN (docs/strategy.md section 9): the three policies
-face the same scenario and seed and must produce different, reproducible outcomes."""
+"""Flagship experiment on the mapa 3 network (docs/strategy.md section 9, docs/mapa3.md): the three
+policies face the same scenario and seed and must produce different, reproducible outcomes."""
 
 import pytest
 
-from cascadasen.domain.simulation.network import build_reduced_network
+from cascadasen.application.theater_world import ProcessedWorld
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunConfig, Simulation
 from cascadasen.infrastructure.settings import get_settings
-from cascadasen.infrastructure.snapshot_repository import JsonSnapshotRepository
 
-SNAP = JsonSnapshotRepository(get_settings().snapshot_path).load()
-pytestmark = pytest.mark.skipif(SNAP is None, reason="run cascadasen-build first")
+PROCESSED = get_settings().processed_dir
+pytestmark = pytest.mark.skipif(
+    not (PROCESSED / "operating_points.json").exists() or not (PROCESSED / "grid_snapshot.json").exists(),
+    reason="needs data/processed (cascadasen-build and the data scripts)",
+)
 
 
 @pytest.fixture(scope="module")
 def reports():
-    net = build_reduced_network(SNAP)
+    world = ProcessedWorld(PROCESSED)
     out = {}
     for policy in ("A", "B", "C"):
         sim = Simulation(
-            net,
+            world,
             RunConfig(
                 template="flagship_observability",
                 policy=policy,
                 seed=7,
+                operating_point="nov2026-1300",
                 adversary=AdversaryConfig(True, "reduce_observability", 8, False),
             ),
         )
@@ -43,8 +46,7 @@ def test_preventive_policy_pays_in_unnecessary_actions(reports):
 
 
 def test_adaptive_coordination_keeps_most_of_the_mission(reports):
-    """With crews on the map, the preventive policy ties local crews up in manual operation and
-    segmentation, so it no longer beats the reactive one; adaptive coordination stays best."""
+    """On the mapa 3 network with crews on the map, adaptive coordination keeps the most continuity."""
     mc = {p: r["indicators"]["mission_continuity"] for p, r in reports.items()}
     assert mc["C"] > mc["A"] and mc["C"] > mc["B"]
 

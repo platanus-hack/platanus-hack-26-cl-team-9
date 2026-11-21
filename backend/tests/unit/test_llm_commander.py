@@ -36,9 +36,9 @@ def _run(net, advisor, **kw):
     return sim
 
 
-def test_llm_picks_at_most_one_and_is_audited(toy_network):
+def test_llm_picks_at_most_one_and_is_audited(toy_world):
     adv = FirstOnly()
-    sim = _run(toy_network, adv)
+    sim = _run(toy_world, adv)
     assert adv.calls
     for s in sim.snapshots:
         assert sum(d["approved"] for d in s["decisions"]) <= 1
@@ -49,18 +49,18 @@ def test_llm_picks_at_most_one_and_is_audited(toy_network):
     assert sim.log.verify()
 
 
-def test_replay_uses_recorded_picks_without_calling_the_llm(toy_network):
-    first = _run(toy_network, FirstOnly())
+def test_replay_uses_recorded_picks_without_calling_the_llm(toy_world):
+    first = _run(toy_world, FirstOnly())
     again_adv = FirstOnly()
-    again = _run(toy_network, again_adv, llm_choices=tuple(sorted(first.llm_record.items())))
+    again = _run(toy_world, again_adv, llm_choices=tuple(sorted(first.llm_record.items())))
     assert again_adv.calls == []
     assert [s["decisions"] for s in again.snapshots] == [s["decisions"] for s in first.snapshots]
 
 
-def test_failure_falls_back_to_the_rules(toy_network):
-    rules = Simulation(toy_network, RunConfig(template="open_field", seed=9, horizon=14, adversary=ADV))
+def test_failure_falls_back_to_the_rules(toy_world):
+    rules = Simulation(toy_world, RunConfig(template="open_field", seed=9, horizon=14, adversary=ADV))
     rules.run_to_end()
-    broken = _run(toy_network, Broken())
+    broken = _run(toy_world, Broken())
     assert [s["decisions"] for s in broken.snapshots] == [s["decisions"] for s in rules.snapshots]
 
 
@@ -83,8 +83,8 @@ def test_claude_commander_parses_json_and_handles_refusal():
     assert ClaudeCommander(Settings(), client=FakeClient("not json")).choose({}, [], 1) is None
 
 
-def test_claude_interpreter_keeps_the_template_on_failure(toy_network):
-    sim = Simulation(toy_network, RunConfig(template="open_field", seed=2, horizon=4))
+def test_claude_interpreter_keeps_the_template_on_failure(toy_world):
+    sim = Simulation(toy_world, RunConfig(template="open_field", seed=2, horizon=4))
     sim.run_to_end()
     out = ClaudeInterpreter(Settings(), client=FakeClient("oops")).after_action(sim.report(), sim.snapshots)
     assert out["interpreter"] == "template" and out["summary"]

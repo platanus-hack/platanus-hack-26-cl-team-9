@@ -35,29 +35,29 @@ def _external(sim):
     ]
 
 
-def test_the_world_has_the_same_luck_under_any_policy(toy_network):
+def test_the_world_has_the_same_luck_under_any_policy(toy_world):
     runs = {}
     for policy in ("A", "B"):
-        sim = Simulation(toy_network, RunConfig(template="open_field", policy=policy, seed=11, horizon=40))
+        sim = Simulation(toy_world, RunConfig(template="open_field", policy=policy, seed=11, horizon=40))
         sim.run_to_end()
         runs[policy] = sim
     assert _external(runs["A"])  # unplanned events happen
     assert _external(runs["A"]) == _external(runs["B"])
 
 
-def test_different_seeds_give_different_runs(toy_network):
+def test_different_seeds_give_different_runs(toy_world):
     adv = AdversaryConfig(True, "reduce_observability", 8, True)
     heads = set()
     for seed in (1, 2, 3):
-        sim = Simulation(toy_network, RunConfig(template="open_field", seed=seed, horizon=20, adversary=adv))
+        sim = Simulation(toy_world, RunConfig(template="open_field", seed=seed, horizon=20, adversary=adv))
         sim.run_to_end()
         heads.add(sim.log.head)
     assert len(heads) == 3
 
 
-def test_stochastic_off_keeps_catalog_sizes_and_no_unplanned_events(toy_network):
+def test_stochastic_off_keeps_catalog_sizes_and_no_unplanned_events(toy_world):
     sim = Simulation(
-        toy_network,
+        toy_world,
         RunConfig(
             template="open_field",
             seed=5,

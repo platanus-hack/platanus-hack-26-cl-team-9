@@ -50,7 +50,6 @@ class Template:
     label_key: str
     question_key: str
     operating_point: str
-    defenses: str
     mission: str
     horizon: int
     adversary: dict[str, Any]
@@ -104,7 +103,6 @@ def theater_config() -> TheaterConfig:
             label_key=spec["label_key"],
             question_key=spec["question_key"],
             operating_point=spec["operating_point"],
-            defenses=spec["defenses"],
             mission=spec["mission"],
             horizon=int(spec["horizon"]),
             adversary=dict(spec.get("adversary") or {}),

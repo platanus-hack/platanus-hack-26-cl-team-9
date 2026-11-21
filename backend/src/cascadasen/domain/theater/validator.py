@@ -10,13 +10,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cascadasen.domain.simulation.defenses import DefenseSet
-from cascadasen.domain.simulation.engine import Change, run_transient
-from cascadasen.domain.simulation.grid import Physics
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.catalog import ACTIONS, Role
 from cascadasen.domain.theater.config import Mission
 from cascadasen.domain.theater.decisions import COA, Intent, Verdict
+from cascadasen.domain.theater.grid import Change
 from cascadasen.domain.theater.resources import Ledger
 from cascadasen.domain.theater.state import RealState
 
@@ -28,15 +26,13 @@ HIDDEN = {"unsafe_separation": "stability_check_failed"}
 
 @dataclass
 class ValidationContext:
-    network: ReducedNetwork
+    network: TheaterNetwork
     real: RealState
     ledger: Ledger
     mission: Mission
     intent: Intent | None
     action_params: dict[str, dict]
     defense_areas: dict[str, list[str]]
-    defenses: DefenseSet
-    physics: Physics
     active: set[str] = field(default_factory=set)
     check_resources: bool = True
     check_physics: bool = True
@@ -138,29 +134,28 @@ def _feasible(coa: COA, ctx: ValidationContext) -> Verdict:
 
 def _islanding(coa: COA, ctx: ValidationContext) -> Verdict:
     grid = ctx.real.grid
-    if grid.corridor(ctx.network, coa.target) is None:
+    if not grid.corridor_closed(coa.target):
         return _verdict(False, "already_open")
     if not ctx.check_physics:
         return _verdict(True, "ok", "controlled_separation")
-    res = run_transient(
-        ctx.network, grid, [Change("open_corridor", coa.target)], ctx.defenses, ctx.physics, full=False
-    )
-    if any(r.result == "blackout" for r in res.islands) or res.load_lost_mw > 0.5:
+    trial = grid.copy()  # the mapa 3 cascade engine on a copy of the real state
+    trial.apply(Change("open_corridor", coa.target))
+    summary = trial.run_cascade(list(ctx.network.corridors[coa.target].lines))["summary"]
+    if any(i["result"] == "blackout" for i in summary["islands"]) or summary["load_shed_mw"] > 0.5:
         return _verdict(False, "unsafe_separation")
     return _verdict(True, "ok", "controlled_separation")
 
 
-def restorable(area: str, ctx_real: RealState, network: ReducedNetwork) -> bool:
+def restorable(area: str, ctx_real: RealState, network: TheaterNetwork) -> bool:
     g = ctx_real.grid
-    tripped = sum(g.tripped_mw.get(area, {}).values())
-    return area in g.blackout_areas or g.served_mw[area] < g.load_mw[area] - 1.0 or tripped > 1.0
+    return area in g.blackout_areas or g.served_mw[area] < g.load_mw[area] - 1.0 or g.tripped(area) > 1.0
 
 
 def _restore(coa: COA, ctx: ValidationContext) -> Verdict:
     real, net, grid = ctx.real, ctx.network, ctx.real.grid
     if coa.target in net.corridors:
         c = net.corridors[coa.target]
-        if grid.corridor(net, coa.target) is not None:
+        if not any(lid in grid.open_lines for lid in c.lines):
             return _verdict(False, "nothing_to_restore")
         if c.a in grid.blackout_areas and c.b in grid.blackout_areas:
             return _verdict(False, "no_restoration_path")
@@ -172,11 +167,9 @@ def _restore(coa: COA, ctx: ValidationContext) -> Verdict:
     if blocked:
         return _verdict(False, blocked)
     if a in grid.blackout_areas:
-        own_sync = sum(mw for t, mw in grid.tripped_mw.get(a, {}).items() if t in grid.sync_techs)
+        own_sync = grid.tripped(a, "sync")
         neighbour = any(
-            (c.a if c.b == a else c.b) not in grid.blackout_areas
-            and c.effective(grid.out_lines) is not None
-            and c.id not in grid.open_corridors
+            (c.a if c.b == a else c.b) not in grid.blackout_areas and grid.corridor_closed(c.id)
             for c in net.incident(a)
         )
         if own_sync <= 1.0 and not neighbour:

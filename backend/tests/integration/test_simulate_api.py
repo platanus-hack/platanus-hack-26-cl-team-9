@@ -9,14 +9,16 @@ from cascadasen.application.simulation_service import SimulationService
 
 
 @pytest.fixture
-def client(toy_snapshot, toy_network):
+def client(toy_snapshot, toy_network, toy_world):
     return TestClient(
-        create_app(service=GridQueryService(toy_snapshot), simulation=SimulationService(toy_network))
+        create_app(
+            service=GridQueryService(toy_snapshot), simulation=SimulationService(toy_network, world=toy_world)
+        )
     )
 
 
 def test_network_lists_selectable_targets(client):
-    net = client.get("/api/v1/sim/network").json()
+    net = client.get("/api/v1/simulate/network").json()
     assert [a["id"] for a in net["areas"]] == ["T1", "T2", "T3"]
     t2 = next(a for a in net["areas"] if a["id"] == "T2")
     assert "SE104" in t2["aggregates"] and t2["main_node"] == "SE102"
@@ -110,3 +112,14 @@ def test_simulation_unavailable_without_snapshot(toy_snapshot):
     app = create_app(service=GridQueryService(toy_snapshot))
     app.state.service = None
     assert TestClient(app).get("/api/v1/sim/network").status_code == 503
+
+
+def test_theater_network_is_the_mapa3_network(client):
+    """GET /sim/network serves the mapa 3 Network (B###, R###) plus the theatre's areas."""
+    net = client.get("/api/v1/sim/network").json()
+    ids = {n["id"] for n in net["nodes"]}
+    assert ids == {f"B{i:03d}" for i in range(6)} and all(ln["id"].startswith("R") for ln in net["lines"])
+    assert [a["id"] for a in net["areas"]] == ["T1", "T2", "T3"]
+    assert {c["id"] for c in net["corridors"]} == {"T1-T2", "T2-T3"}
+    assert all(set(a["buses"]) <= ids and a["anchor_bus"] in a["buses"] for a in net["areas"])
+    assert client.get("/api/v1/sim/network", params={"point": "nope"}).status_code == 404

@@ -9,9 +9,11 @@ from cascadasen.application.simulation_service import SimulationService
 
 
 @pytest.fixture
-def client(toy_snapshot, toy_network):
+def client(toy_snapshot, toy_network, toy_world):
     return TestClient(
-        create_app(service=GridQueryService(toy_snapshot), simulation=SimulationService(toy_network))
+        create_app(
+            service=GridQueryService(toy_snapshot), simulation=SimulationService(toy_network, world=toy_world)
+        )
     )
 
 
@@ -27,9 +29,10 @@ def test_select_a_node_trigger_step_and_read(client):
     assert run.status_code == 201
     rid = run.json()["run_id"]
     inj = client.post(
-        f"/api/v1/sim/runs/{rid}/events", json={"type": "C3_transmission_opening", "target": "SE104"}
+        f"/api/v1/sim/runs/{rid}/events", json={"type": "C3_transmission_opening", "target": "SE_C1"}
     )
-    assert inj.status_code == 200 and inj.json()["area"] == "T2"
+    # a real node id behind a mapa 3 bus resolves to the bus and its area
+    assert inj.status_code == 200 and inj.json()["area"] == "T2" and inj.json()["resolved_target"] == "B002"
     step = client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 3}).json()
     assert len(step["snapshots"]) == 3 and step["snapshots"][0]["events"][0]["source"] == "user"
     snap = step["snapshots"][-1]

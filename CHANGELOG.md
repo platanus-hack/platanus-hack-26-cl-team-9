@@ -2,6 +2,17 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · refactor(theater): run the strategic theatre on the mapa 3 network
+
+- **Changed:**
+  - New `domain/theater/areas.py` (`TheaterNetwork`): the 13 operating areas are groups of the 188 mapa 3 buses by latitude band; corridors are the `R###` lines crossing area boundaries (`A06-A07`); defence functions are `edac:norte_grande` and `edac:centro_sur`. `resolve` accepts area, zone, corridor, `B###`, `R###` and real `SE...` ids.
+  - New `domain/theater/grid.py` (`TheaterGrid`): per-bus state (plan vs current load, sync/renewable generation, inertia, open lines, dark buses, disabled EDAC zones, extra reserve) with area reads and explicit writes; physical events run `run_cascade_state` (mapa 3 engine). `frame()` gives the mapa 3 `Frame` of each cycle.
+  - New `domain/theater/world.py` (`TheaterWorld`, `StaticWorld`) and `application/theater_world.py` (`ProcessedWorld` over `data/processed`). `Simulation(world, config)`; `RunManager`/`CampaignRunner` take a world. Templates use mapa 3 points (`nov2026-1300`) and the new corridor/defence ids; `pdce_zn` and the `defenses` option are gone (one defence set: `cen_25f_edac`).
+  - Snapshots add `grid` (mapa 3 frame + served MW per bus), `transient` (full mapa 3 cascade timeline when a physical event happened), `areas` (observability, posture, effects) and crews with `bus`, `lon`, `lat`, `target_bus`. `GET /api/v1/sim/network?point=` serves the mapa 3 network plus areas, corridors and defences; the old 13-area view moved to `GET /api/v1/simulate/network`. `POST /sim/runs` accepts `point`.
+- **Why:** Ricardo: mapa 3 is the important view; one physics so the theatre's MW, dark buses and open lines are what the viewer draws.
+- **Agents:** The theatre no longer uses `domain/simulation` physics (only its params loader and the area bands). Campaigns run with `light=True` (no per-cycle frame): 36 flagship runs take about 9 s. Flagship on `nov2026-1300`, seed 7, static adversary: C keeps the most continuity, B makes the most unnecessary decisions (test still holds). The adversary never targets `B###`/`R###` (tested). `cascadasen-sim-fixtures` still needs porting (next commit).
+- **Files:** `backend/src/cascadasen/domain/theater/{areas,grid,world,execution,validator,digital,cycle,state,config,crews}.py`, `params/templates.yaml`, `domain/agents/*.py`, `application/{theater_world,run_experiment,run_campaign,simulation_service}.py`, `api/simulation_{routes,schemas}.py`, `backend/tests/**`.
+
 ## 2026-11-21 · feat(cascade): run the cascade from a running state
 
 - **Changed:** New `run_cascade_state(net, point, cuts, params, *, open_lines, edac_off, extra_reserve_by_bus)` returns the timeline plus a `CascadeState` (per-bus gen, load, sync, inertia, open lines, dark buses). `IslandInput.extra_reserve_mw` adds fast reserve to an island. `run_cascade_workflow` is now a thin wrapper with identical output (checked on 162 real cuts across two points).

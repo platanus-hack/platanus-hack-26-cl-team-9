@@ -26,13 +26,12 @@ from cascadasen.domain.agents.logistics import LogisticsAgent
 from cascadasen.domain.agents.operations import OperationsAgent
 from cascadasen.domain.agents.stabilization import StabilizationAgent
 from cascadasen.domain.ports import CommanderAdvisor
-from cascadasen.domain.simulation.defenses import DefenseSet, UnknownDefenseSetError
-from cascadasen.domain.simulation.grid import Physics, UnknownOperatingPointError, build_state
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
+from cascadasen.domain.theater.areas import bus_id
 from cascadasen.domain.theater.audit import AuditLog
 from cascadasen.domain.theater.catalog import EVENTS, OBJECTIVES
-from cascadasen.domain.theater.config import TheaterConfig, UnknownTemplateError, theater_config
+from cascadasen.domain.theater.config import TheaterConfig, theater_config
 from cascadasen.domain.theater.crews import CrewRoster
 from cascadasen.domain.theater.decisions import COA, ActionFeedback, Decision
 from cascadasen.domain.theater.digital import observe
@@ -44,11 +43,13 @@ from cascadasen.domain.theater.execution import (
     Executor,
     UnknownEventTargetError,
 )
+from cascadasen.domain.theater.grid import TheaterGrid
 from cascadasen.domain.theater.resources import Ledger
 from cascadasen.domain.theater.rng import new_seed, rng_for
 from cascadasen.domain.theater.state import AreaDigital, ObservedState, RealState
 from cascadasen.domain.theater.stochastic import Chance
 from cascadasen.domain.theater.validator import ValidationContext, costs_of, validate
+from cascadasen.domain.theater.world import DEFENSES_ID, TheaterWorld
 
 UNCERTAINTY_RANGE = (0.0, 2.0)
 
@@ -90,8 +91,7 @@ class RunConfig:
     horizon: int | None = None
     adversary: AdversaryConfig | None = None
     capabilities: tuple[tuple[str, float], ...] = ()
-    operating_point: str | None = None
-    defenses: str | None = None
+    operating_point: str | None = None  # a mapa 3 point id (nov2026-1300, feb2025-1500...)
     initial_events: tuple[dict[str, Any], ...] = ()
     stochastic: bool = True  # False: catalog sizes, no unplanned events, actions always work
     llm_commander: bool = False  # C2 picks among validated COAs with the configured LLM advisor
@@ -104,31 +104,19 @@ class RunConfig:
         return d
 
 
-def defense_areas(network: ReducedNetwork, defenses: DefenseSet) -> dict[str, list[str]]:
-    out = {
-        "pdce_zn": [a for a in (defenses.pdce_north, defenses.pdce_south) if a in network.areas],
-        "edac": list(network.order),
-        "extreme_edac": [a for z in defenses.extreme_mw_by_zone for a in network.zone_areas(z)]
-        or list(network.order),
-        "lfsm_o": list(network.order),
-    }
-    for z in network.zones:
-        out[f"edac:{z}"] = network.zone_areas(z)
-    return out
-
-
 @dataclass
 class Simulation:
-    network: ReducedNetwork
+    world: TheaterWorld
     config: RunConfig
     physics: Physics = field(default_factory=Physics.load)
     cfg: TheaterConfig = field(default_factory=theater_config)
     advisor: CommanderAdvisor | None = None  # used only when config.llm_commander
+    light: bool = False  # campaigns: skip the per-cycle map frame (no effect on the run itself)
 
     def __post_init__(self) -> None:
         if self.config.seed is None:
             self.config = replace(self.config, seed=new_seed())
-        cfg, conf, net = self.cfg, self.config, self.network
+        cfg, conf = self.cfg, self.config
         self._validate_config()
         self.template = cfg.template(conf.template)
         self.horizon = conf.horizon or self.template.horizon
@@ -140,19 +128,24 @@ class Simulation:
         )
         self.adversary_config = adv
         self.operating_point = conf.operating_point or self.template.operating_point
-        self.defenses_id = conf.defenses or self.template.defenses
-        self.defenses = DefenseSet.load(self.defenses_id)
+        if self.operating_point not in self.world.points():
+            raise RunInputError(
+                "operating_point", "punto de operación desconocido", sorted(self.world.points())
+            )
+        self.network, base_point = self.world.load(self.operating_point)
+        net = self.network
+        self.defenses_id = DEFENSES_ID
         self.mission = cfg.missions[self.template.mission]
         self.policy = cfg.policies[conf.policy]
-        grid = build_state(net, self.operating_point, self.physics)
+        grid = TheaterGrid.from_point(net, base_point)
         self.plan_load = dict(grid.load_mw)
         self.real = RealState(0, grid, {a: AreaDigital() for a in net.order})
         self.ledger = Ledger({**cfg.resources, **dict(conf.capabilities)})
-        self.defense_areas = defense_areas(net, self.defenses)
+        self.defense_areas = net.defense_areas()
         self.chance = (
             Chance.for_run(conf.seed, cfg.stochastic) if conf.stochastic and cfg.stochastic else None
         )
-        self.executor = Executor(net, self.physics, self.defenses, cfg, self.defense_areas, self.chance)
+        self.executor = Executor(net, cfg, self.defense_areas, self.chance)
         self.ex = ExecutionState()
         self.log = AuditLog()
         self.isr = ISRAgent(net, cfg.isr)
@@ -256,17 +249,6 @@ class Simulation:
                 raise RunInputError("capabilities", f"{pool}: recurso desconocido", sorted(cfg.resources))
             if not 0 <= cap <= 10_000:
                 raise RunInputError("capabilities", f"{pool}: entre 0 y 10000")
-        try:
-            if conf.operating_point:
-                build_state(self.network, conf.operating_point, self.physics)
-            if conf.defenses:
-                DefenseSet.load(conf.defenses)
-        except UnknownOperatingPointError as exc:
-            raise RunInputError("operating_point", "punto de operación desconocido") from exc
-        except UnknownDefenseSetError as exc:
-            raise RunInputError("defenses", "conjunto de defensas desconocido") from exc
-        except UnknownTemplateError as exc:  # pragma: no cover - checked above
-            raise RunInputError("template", "plantilla desconocida") from exc
 
     def _check_event(self, req: EventRequest) -> tuple[str, str | None]:
         try:
@@ -358,12 +340,7 @@ class Simulation:
         )
 
     def _people(self) -> float:
-        g = self.real.grid
-        return sum(
-            self.network.areas[a].population * max(0.0, 1.0 - g.served_mw[a] / g.load_mw[a])
-            for a in self.network.order
-            if g.load_mw[a] > 0
-        )
+        return self.real.grid.people_without_power()
 
     def _sites(self, target: str) -> list[str]:
         """Areas where a crew can carry out an action on `target`."""
@@ -373,6 +350,26 @@ class Simulation:
         if target in net.corridors:
             return [net.corridors[target].a, net.corridors[target].b]
         return self.defense_areas.get(target) or list(net.order)
+
+    def _crews_view(self) -> list[dict[str, Any]]:
+        """Crews with the map position of their area's anchor substation (mapa 3 bus id and lon/lat)."""
+        if not self.roster:
+            return []
+        out = []
+        buses = self.network.buses
+        for c in self.roster.snapshot():
+            anchor = self.network.areas[c["position"]].anchor_bus
+            target = c["target"] if c["target"] in self.network.areas else None
+            out.append(
+                {
+                    **c,
+                    "bus": bus_id(anchor) if anchor is not None else None,
+                    "lon": buses.lon[anchor] if anchor is not None else None,
+                    "lat": buses.lat[anchor] if anchor is not None else None,
+                    "target_bus": bus_id(self.network.areas[target].anchor_bus) if target else None,
+                }
+            )
+        return out
 
     def _crew_eta(self) -> tuple[tuple[str, int], ...]:
         if not self.roster:
@@ -501,8 +498,6 @@ class Simulation:
             intent,
             self.cfg.actions,
             self.defense_areas,
-            self.defenses,
-            self.physics,
             active=set(self.ex.active),
         )
         verdicts = {c.key: validate(c, ctx) for c in coas}
@@ -568,8 +563,6 @@ class Simulation:
             None,
             self.cfg.actions,
             self.defense_areas,
-            self.defenses,
-            self.physics,
             active=set(self.ex.active),
             check_physics=False,
         )
@@ -668,12 +661,28 @@ class Simulation:
             "events": applied,
             "real": {
                 "areas": areas,
-                "corridors": {cid: ("closed" if g.corridor(net, cid) else "open") for cid in net.corridors},
+                "corridors": {cid: ("closed" if g.corridor_closed(cid) else "open") for cid in net.corridors},
                 "disabled_defenses": sorted(g.disabled_defenses),
                 "transient": real.last_transient
                 if real.last_transient and real.last_transient["cycle"] == k
                 else None,
                 "worst_level": real.worst_level,
+            },
+            "grid": None if self.light else g.frame(),
+            "transient": real.last_timeline
+            if real.last_transient and real.last_transient["cycle"] == k
+            else None,
+            "areas": {
+                a: {
+                    "observability": real.digital[a].health(),
+                    "posture": "segmented"
+                    if real.digital[a].segmented
+                    else ("manual" if real.digital[a].manual_ops else "normal"),
+                    "effects": [
+                        {"id": e.id, "type": e.event, "source": e.source} for e in real.active_effects(a)
+                    ],
+                }
+                for a in net.order
             },
             "observed": obs.as_dict(),
             "estimated": {
@@ -690,7 +699,7 @@ class Simulation:
             "notes": notes,
             "findings": findings,
             "resources": self.ledger.snapshot(),
-            "crews": self.roster.snapshot() if self.roster else [],
+            "crews": self._crews_view(),
             "metrics": metrics,
         }
 

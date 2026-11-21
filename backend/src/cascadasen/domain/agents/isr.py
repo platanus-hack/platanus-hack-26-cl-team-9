@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 
 from cascadasen.domain.agents.base import AgentView
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.catalog import Role
 from cascadasen.domain.theater.decisions import COA, ISRReport
 
@@ -37,7 +37,7 @@ def _sigmoid(x: float) -> float:
 class ISRAgent:
     role = Role.ISR
 
-    def __init__(self, network: ReducedNetwork, cfg: dict[str, float]) -> None:
+    def __init__(self, network: TheaterNetwork, cfg: dict[str, float]) -> None:
         self.net, self.cfg = network, cfg
         self.suspicion = {a: 0.0 for a in network.order}
         self.digital_streak = {a: 0 for a in network.order}

@@ -12,7 +12,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.state import Alarm, AreaObs, ObservedState, RealState
 
 FALSE_ALARM_KINDS = ("load_loss", "breaker_open", "data_anomaly", "defense_fault", "control_lost")
@@ -37,15 +37,15 @@ def _poisson(rng: random.Random, lam: float) -> int:
         k += 1
 
 
-def corridor_status(network: ReducedNetwork, real: RealState, cid: str) -> str:
-    return "closed" if real.grid.corridor(network, cid) is not None else "open"
+def corridor_status(network: TheaterNetwork, real: RealState, cid: str) -> str:
+    return "closed" if real.grid.corridor_closed(cid) else "open"
 
 
 @dataclass
 class _Observer:
     """One observation pass. Methods run in a fixed order so the seeded noise is reproducible."""
 
-    network: ReducedNetwork
+    network: TheaterNetwork
     real: RealState
     history: list[dict[str, tuple[float, bool]]]
     prev: ObservedState | None
@@ -154,7 +154,7 @@ class _Observer:
 
 
 def observe(
-    network: ReducedNetwork,
+    network: TheaterNetwork,
     real: RealState,
     history: list[dict[str, tuple[float, bool]]],
     prev: ObservedState | None,

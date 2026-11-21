@@ -47,8 +47,8 @@ def _reachable(obj, seen=None):
             yield from _reachable(v, seen)
 
 
-def test_no_agent_view_reaches_the_real_state(toy_network):
-    sim = _sim(toy_network, adversary=AdversaryConfig(True, "reduce_observability", 6, True))
+def test_no_agent_view_reaches_the_real_state(toy_world):
+    sim = _sim(toy_world, adversary=AdversaryConfig(True, "reduce_observability", 6, True))
     sim.inject("D4_comms_loss", "T2")
     sim.step(3)
     obs = sim.observations[-1]
@@ -58,12 +58,12 @@ def test_no_agent_view_reaches_the_real_state(toy_network):
     assert not [o for o in _reachable(sim._adversary_view()) if isinstance(o, FORBIDDEN)]
 
 
-def test_same_recipe_same_trace_and_different_policy_differs(toy_network):
+def test_same_recipe_same_trace_and_different_policy_differs(toy_world):
     def run(policy):
-        sim = _sim(toy_network, policy=policy, adversary=AdversaryConfig(True, "raise_uncertainty", 6, True))
-        sim.inject("C3_transmission_opening", "T2-T3/220", cause="intentional")
+        sim = _sim(toy_world, policy=policy, adversary=AdversaryConfig(True, "raise_uncertainty", 6, True))
+        sim.inject("C3_transmission_opening", "T2-T3", cause="intentional")
         sim.step(4)
-        sim.inject("D3_unreliable_data", "SE104")
+        sim.inject("D3_unreliable_data", "SE_C1")
         sim.run_to_end()
         return sim
 
@@ -81,10 +81,10 @@ def test_audit_chain_detects_tampering():
     assert not log.verify()
 
 
-def test_auditor_has_no_write_path(toy_network):
+def test_auditor_has_no_write_path(toy_world):
     fields = {f.name for f in dataclasses.fields(AuditorAgent)}
     assert not fields & {"log", "sim", "real", "ledger", "executor"}
-    sim = _sim(toy_network)
+    sim = _sim(toy_world)
     sim.inject("D1_telemetry_loss", "T1")
     sim.step(2)
     assert any(e["actor"] == "auditor" and e["kind"] == "findings" for e in sim.log.entries)
@@ -99,14 +99,12 @@ def _ctx(sim, **kw):
         None,
         sim.cfg.actions,
         sim.defense_areas,
-        sim.defenses,
-        sim.physics,
         **kw,
     )
 
 
-def test_validator_is_inviolable(toy_network):
-    sim = _sim(toy_network)
+def test_validator_is_inviolable(toy_world):
+    sim = _sim(toy_world)
     ctx = _ctx(sim)
     assert validate(COA("preventive_load_reduction", "T2", "operations", "x"), ctx).code == "not_permitted"
     sim.real.digital["T2"].comms = "down"
@@ -120,21 +118,21 @@ def test_validator_is_inviolable(toy_network):
     assert validate(COA("restore_element", "T1", "operations", "x"), ctx).code == "nothing_to_restore"
 
 
-def test_digital_engine_perfect_information_and_comms_loss(toy_network):
-    perfect = _sim(toy_network, uncertainty=0.0)
+def test_digital_engine_perfect_information_and_comms_loss(toy_world):
+    perfect = _sim(toy_world, uncertainty=0.0)
     perfect.inject("D4_comms_loss", "T2")
     perfect.step(1)
     obs = perfect.observations[-1]
     assert all(a.served_mw == pytest.approx(perfect.real.grid.served_mw[a.area]) for a in obs.areas)
-    base = _sim(toy_network, uncertainty=1.0)
+    base = _sim(toy_world, uncertainty=1.0)
     base.inject("D4_comms_loss", "T2")
     base.step(1)
     o = base.observations[-1]
     assert o.area("T2").served_mw is None and any(x.kind == "comms_lost" for x in o.alarms_in("T2"))
 
 
-def test_unreliable_data_looks_normal(toy_network):
-    sim = _sim(toy_network, uncertainty=1.0)
+def test_unreliable_data_looks_normal(toy_world):
+    sim = _sim(toy_world, uncertainty=1.0)
     sim.inject("D3_unreliable_data", "T3")
     sim.step(1)
     real = sim.real.grid.served_mw["T3"]
@@ -142,12 +140,12 @@ def test_unreliable_data_looks_normal(toy_network):
     assert seen is not None and seen != pytest.approx(real, rel=1e-3)  # frozen and biased, not missing
 
 
-def test_adversary_stays_in_the_abstract_catalog_and_adapts(toy_network):
+def test_adversary_stays_in_the_abstract_catalog_and_adapts(toy_world):
     cfg = theater_config()
 
     def run(policy):
         sim = _sim(
-            toy_network,
+            toy_world,
             policy=policy,
             horizon=20,
             adversary=AdversaryConfig(True, "pressure_resources", 12, True),
@@ -159,13 +157,13 @@ def test_adversary_stays_in_the_abstract_catalog_and_adapts(toy_network):
     allowed = set(cfg.adversary["objectives"]["pressure_resources"])
     for sim in (a, b):
         effects = [e for e in sim.real.effects if e.source == "adversary"]
-        assert effects and all(e.event in allowed and e.area in toy_network.areas for e in effects)
+        assert effects and all(e.event in allowed and e.area in toy_world.network.areas for e in effects)
         assert set(sim.report()["adversary"]["strategy_mix"]) <= allowed  # event types only, no areas
     assert a.adversary.weights != b.adversary.weights  # it learned differently against another defence
 
 
-def test_perfect_information_has_no_estimation_gap(toy_network):
-    sim = _sim(toy_network, uncertainty=0.0)
+def test_perfect_information_has_no_estimation_gap(toy_world):
+    sim = _sim(toy_world, uncertainty=0.0)
     sim.inject("C1_generation_loss", "T1", {"share": 0.5})
     sim.run_to_end()
     assert sim.report()["indicators"]["situational_awareness"]["mean_estimation_gap"] == pytest.approx(
@@ -184,13 +182,13 @@ def test_ledger_keeps_reserve_and_refills_attention():
     assert led.available("field_crews") == 4 and led.available("operator_attention") == 2
 
 
-def test_run_input_errors(toy_network):
+def test_run_input_errors(toy_world):
     with pytest.raises(RunInputError) as e:
-        _sim(toy_network, template="nope")
+        _sim(toy_world, template="nope")
     assert e.value.not_found
     with pytest.raises(RunInputError):
-        _sim(toy_network, policy="Z")
-    sim = _sim(toy_network, horizon=1)
+        _sim(toy_world, policy="Z")
+    sim = _sim(toy_world, horizon=1)
     with pytest.raises(RunInputError) as e:
         sim.inject("D1_telemetry_loss", "NOPE")
     assert e.value.not_found
@@ -199,12 +197,12 @@ def test_run_input_errors(toy_network):
         sim.inject("D1_telemetry_loss", "T1")
 
 
-def test_adversary_with_defence_events_runs_and_stays_abstract(toy_network):
+def test_adversary_with_defence_events_runs_and_stays_abstract(toy_world):
     """complicate_recovery includes C4 (defence not acting): its arms target defence functions,
     never an area id, and the run completes for every seed."""
     for seed in range(10):
         sim = _sim(
-            toy_network,
+            toy_world,
             seed=seed,
             horizon=16,
             adversary=AdversaryConfig(True, "complicate_recovery", 12, True),
@@ -214,18 +212,18 @@ def test_adversary_with_defence_events_runs_and_stays_abstract(toy_network):
         assert kinds and kinds <= set(sim.defense_areas)
         for e in (e for e in sim.real.effects if e.source == "adversary"):
             assert (
-                e.target in toy_network.areas
+                e.target in toy_world.network.areas
                 or e.target in sim.defense_areas
-                or e.target in toy_network.zones
+                or e.target in toy_world.network.zones
             )
 
 
-def test_run_without_seed_gets_a_recorded_random_seed(toy_network):
-    a = Simulation(toy_network, RunConfig(template="open_field", horizon=3))
-    b = Simulation(toy_network, RunConfig(template="open_field", horizon=3))
+def test_run_without_seed_gets_a_recorded_random_seed(toy_world):
+    a = Simulation(toy_world, RunConfig(template="open_field", horizon=3))
+    b = Simulation(toy_world, RunConfig(template="open_field", horizon=3))
     assert isinstance(a.config.seed, int) and a.config.seed != b.config.seed
     assert a.log.entries[0]["payload"]["config"]["seed"] == a.config.seed  # in the recipe
-    again = Simulation(toy_network, RunConfig(template="open_field", horizon=3, seed=a.config.seed))
+    again = Simulation(toy_world, RunConfig(template="open_field", horizon=3, seed=a.config.seed))
     a.run_to_end()
     again.run_to_end()
     assert a.log.head == again.log.head

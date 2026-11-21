@@ -101,8 +101,11 @@ class RunCreate(BaseModel):
     capabilities: dict[str, float] = Field(
         default_factory=dict, description="Capacidad por recurso (modo III)"
     )
-    operating_point: str | None = None
-    defenses: str | None = None
+    point: str | None = Field(
+        None,
+        description="Punto de operación del mapa 3 (nov2026-1300, feb2025-1500…); por defecto el de la plantilla",
+    )
+    operating_point: str | None = Field(None, description="Alias de `point`")
     initial_events: list[EventIn] = Field(default_factory=list)
     auto_run: bool = Field(False, description="Correr hasta el final al crear")
     llm_commander: bool = Field(
