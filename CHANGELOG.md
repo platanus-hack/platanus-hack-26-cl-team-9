@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(agents): pending work of the physical bots
+
+- **Changed:** `docs/agents.md` section 4 is now a table of pending work: LLM commander physical context, operation view drawing the readings, releasing reserve and batteries, regenerating the map cache, the repeating `low_inertia` alarm, the per-island inertia floor, and V2–V9 calibration on the 188-bus network.
+- **Why:** Ricardo asked to keep the "not done yet" items written down.
+- **Agents:** Pick pending work from `docs/agents.md` section 4 and remove the row when it is done.
+- **Files:** `docs/agents.md`.
+
 ## 2026-11-21 · feat(agents): bots read frequency, rocof, inertia and voltage-limited islands
 
 - **Changed:** `AreaObs` gains `freq_hz` and `rocof_hz_s`, filtered by supervision (missing → `None`, stale or unreliable → a normal 50 Hz, fresh → noise `digital.freq_noise_hz`). New alarms: `frequency_out_of_band` (49.0–51.0 Hz), `high_rocof` (≥ 1 Hz/s), `low_inertia` (island below 31,000 MWs after losing units) and `voltage_limited`; thresholds in `theater.yaml` → `physics_alarms` (`TheaterConfig.physics_alarms`, merged into `digital`). ISR weighs them as physical evidence. Stabilisation proposes batteries on steep RoCoF or lost inertia, reserve under frequency, and load reduction when nothing is left; it vetoes restorations into out-of-band or voltage-uncertain islands and a controlled islanding next to a low-inertia island. New `docs/agents.md` holds the bots' physical contract; `strategy.md`, `stack.md` 4.6 and `AGENTS.md` (read order) point to it.
