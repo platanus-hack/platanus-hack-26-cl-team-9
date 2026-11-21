@@ -51,6 +51,7 @@ Dependency rule: `domain/` imports nothing from `api/`, `application/` or `infra
 | `ContractExporter` | Static files for the frontend | `infrastructure/exporters.py` |
 | `Interpreter` | Narration and after-action review | `domain/theater/narrative.py` (`TemplateInterpreter`), `infrastructure/llm.py` (`ClaudeInterpreter`) |
 | `CommanderAdvisor` | An LLM that picks among validated COAs for C2 | `infrastructure/llm.py` (Claude API, Bedrock, Bedrock Converse) |
+| `DocumentStore` | JSON documents by key with conditional writes (`if_match`, `if_none_match`; a lost race raises `ConflictError`) for run records and sessions | `infrastructure/document_store.py` (memory, file, S3) |
 
 Adding a data source means writing one adapter and registering it in `container.py`; domain and application do not change.
 
@@ -87,6 +88,7 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 - `http.py`, `arcgis.py`: cached HTTP client and ArcGIS paging.
 - `snapshot_repository.py`, `exporters.py`: persistence and static files.
 - `llm.py`: Claude API and Amazon Bedrock clients. Optional extra `llm`, off by default (`CASCADASEN_LLM_ENABLED`).
+- `document_store.py`: `MemoryDocumentStore` (default), `FileDocumentStore` (`data/sessions/`, git-ignored; atomic writes, rejects keys with `..`) and `S3DocumentStore` (S3 conditional writes `IfMatch`/`IfNoneMatch`). Chosen by `CASCADASEN_SESSION_STORE` (`memory`, `file`, `s3` with `CASCADASEN_SESSION_BUCKET`) in `container.document_store`. Memory and file entries expire `CASCADASEN_SESSION_TTL_HOURS` (24) after their last write; S3 relies on a bucket lifecycle rule.
 - `settings.py`: settings `CASCADASEN_*` from the environment or `backend/.env`. Keys are never stored there.
 - `container.py`: composition root.
 

@@ -1,6 +1,12 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(store): document store port with memory, file and S3 adapters
+- **Changed:** `domain/ports.py` gains `ConflictError` and the `DocumentStore` Protocol (`get` → `(doc, etag) | None`, `put(key, doc, if_match=, if_none_match=)` → etag, `head`, `delete`). New `infrastructure/document_store.py` with `MemoryDocumentStore`, `FileDocumentStore` and `S3DocumentStore`; `container.document_store(settings)` picks one. `Settings` adds `session_store`, `session_bucket`, `session_dir` (property `sessions_dir`), `session_ttl_hours` (24), `run_cache_size` (20), `admin_enabled` (false), `version`, and the rate and SSE knobs used by later session work. `boto3>=1.40` is a main dependency.
+- **Why:** Runs and sessions must survive restarts and be shared across instances (shared-sessions plan item 1).
+- **Agents:** Keys are `runs/<run_id>.json`, `sessions/<sid>.json` and `sessions/<sid>/runs/<rid>.json`. Memory and file stores take `ttl_s` and a `clock`; the file store stamps mtime with its clock and raises `ValueError` on keys with `..`, a leading `/` or a backslash. S3 `PreconditionFailed`/`ConditionalRequestConflict`/412/409 → `ConflictError`, `NoSuchKey`/404 → `None` (a 404 on an `if_match` put is also a conflict). `data/sessions/` is git-ignored. Nothing uses the store yet; the rate and SSE settings are unused until the session API lands.
+- **Files:** `backend/src/cascadasen/domain/ports.py`, `backend/src/cascadasen/infrastructure/{document_store,settings,container}.py`, `backend/tests/unit/test_document_store.py`, `backend/pyproject.toml`, `backend/uv.lock`, `.gitignore`, `docs/architecture.md`.
+
 ## 2026-11-21 · feat(web): keep the mapa 3 camera over land
 - **Changed:** New `web/src/map/regionLimit.ts` (point in polygon, `nearLand`, viewport radius) with tests. `baseMap.ts` loads the land outlines in `LAND_URLS` (today `chile.geojson`) and, after every `moveend`, snaps the camera back to the last valid center when the center is farther from land than a quarter of the shorter viewport side.
 - **Why:** The sea (and Argentina's interior) could be zoomed into. A `maxBounds` rectangle cannot follow Chile's long, thin shape: a tight one forces a high minimum zoom on wide screens and hides the country.

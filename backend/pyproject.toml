@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Simulador abierto de apagones del sistema eléctrico chileno (Platanus Hack 26)"
 requires-python = ">=3.12"
 dependencies = [
+    "boto3>=1.40",
     "fastapi>=0.165.0",
     "networkx>=3.7",
     "numpy>=2.5.5",

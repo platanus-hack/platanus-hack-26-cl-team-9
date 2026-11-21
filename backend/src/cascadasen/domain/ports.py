@@ -46,3 +46,23 @@ class CommanderAdvisor(Protocol):
     (unavailable, invalid, refused): the commander then falls back to its rules."""
 
     def choose(self, context: dict, options: list[dict], capacity: int) -> dict | None: ...
+
+
+class ConflictError(RuntimeError):
+    """A conditional write lost: the document changed (or already exists) since it was read."""
+
+
+class DocumentStore(Protocol):
+    """JSON documents by key with optimistic concurrency (sessions and run records). `put` with
+    `if_match` writes only when the stored etag still matches; with `if_none_match` only when the key
+    is absent. Both raise `ConflictError` otherwise. Expired documents read as missing."""
+
+    def get(self, key: str) -> tuple[dict, str] | None: ...
+
+    def put(
+        self, key: str, doc: dict, *, if_match: str | None = None, if_none_match: bool = False
+    ) -> str: ...
+
+    def head(self, key: str) -> str | None: ...
+
+    def delete(self, key: str) -> None: ...

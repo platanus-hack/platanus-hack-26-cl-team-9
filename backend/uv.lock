@@ -159,6 +159,7 @@ name = "cascadasen"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "boto3" },
     { name = "fastapi" },
     { name = "networkx" },
     { name = "numpy" },
@@ -186,6 +187,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", extras = ["bedrock"], marker = "extra == 'llm'", specifier = ">=1.0.0" },
+    { name = "boto3", specifier = ">=1.40" },
     { name = "fastapi", specifier = ">=0.165.0" },
     { name = "networkx", specifier = ">=3.7" },
     { name = "numpy", specifier = ">=2.5.5" },

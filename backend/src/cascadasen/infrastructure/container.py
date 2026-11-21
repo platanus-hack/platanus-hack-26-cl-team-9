@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from cascadasen.application.build_grid import BuildGridSnapshot
+from cascadasen.domain.ports import DocumentStore
 from cascadasen.domain.unify import GridUnifier
+from cascadasen.infrastructure.document_store import FileDocumentStore, MemoryDocumentStore, S3DocumentStore
 from cascadasen.infrastructure.exporters import StaticFilesExporter
 from cascadasen.infrastructure.http import CachedHttp
 from cascadasen.infrastructure.settings import Settings
@@ -32,3 +34,15 @@ def build_use_case(settings: Settings) -> BuildGridSnapshot:
         repository=repository(settings),
         exporters=[StaticFilesExporter(settings.processed_dir)],
     )
+
+
+def document_store(settings: Settings) -> DocumentStore:
+    """Where sessions and run records live (`CASCADASEN_SESSION_STORE`)."""
+    ttl_s = settings.session_ttl_hours * 3600
+    if settings.session_store == "file":
+        return FileDocumentStore(settings.sessions_dir, ttl_s=ttl_s)
+    if settings.session_store == "s3":
+        if not settings.session_bucket:
+            raise ValueError("CASCADASEN_SESSION_BUCKET is required when CASCADASEN_SESSION_STORE=s3")
+        return S3DocumentStore(settings.session_bucket, settings.aws_region, settings.aws_profile)
+    return MemoryDocumentStore(ttl_s=ttl_s)
