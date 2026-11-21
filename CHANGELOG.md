@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): operation tab in mapa 3 (theatre on the map)
+
+- **Changed:** Mapa 3 has two tabs: "Corte" (unchanged cut viewer) and "Operación" (`?modo=operacion`). New `web/src/operation/OperationPanel.tsx`: pick scenario, defence policy and adaptive or static adversary; start a run (seed shown); play or step 5-minute cycles; the map draws the cycle's grid, areas and crews; "Ver cascada" replays the cycle's cascade in seconds with its events and frequency chart; click a line to open it (C3) or a substation for C1/D1/D4 next cycle; final report and after-action; repeat with the same seed and another policy. `CascadeApp` delegates layers, clicks and tooltips to the active tab through a `MapBridge` ref; `FrequencyChart` moved to `cascade/FrequencyChart.tsx`. Styles for tabs and the panel.
+- **Why:** Join the frontend with the theatre (approved plan).
+- **Agents:** Offline (no backend) the tab plays the precomputed runs and refuses events. Verified through the Vite proxy against the real API (R239 on `feb2025-1500` gives 15.2 M people, same as the cut viewer); `tsc`, `npm test` (19) and `npm run build` pass. Not verified by clicking in a browser here.
+- **Files:** `web/src/operation/OperationPanel.tsx`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/FrequencyChart.tsx`, `web/src/styles.css`.
+
 ## 2026-11-21 · feat(web): operation layers for mapa 3 (areas, crews, effects)
 
 - **Changed:** New `web/src/operation/layers.ts`: `buildOperationLayers` reuses `buildCascadeLayers` with the cycle's frame and served load per bus, and adds operating areas (circle at the centroid, posture colour, more opaque as observability drops), effect labels per area (effect type only) and field crews moving linearly toward their target substation by cycle. Colour constants `POSTURE_COLOR`, `CREW_COLOR`, `CREW_BUSY_COLOR` for map and legend. Tests in `layers.test.ts`.

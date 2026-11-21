@@ -4,6 +4,8 @@ import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers } from "./layers";
 import { CascadeLegend } from "./Legend";
+import { FrequencyChart } from "./FrequencyChart";
+import { OperationPanel, type MapBridge } from "../operation/OperationPanel";
 import { formatPeople, lineName, narrate } from "./text";
 import type { BusState, Index, Network, Timeline } from "./types";
 
@@ -26,8 +28,10 @@ export function CascadeApp() {
   const [playing, setPlaying] = useState(false);
   const [mode, setMode] = useState<ViewMode>(params.get("vista") === "2d" ? "2d" : "3d");
   const [error, setError] = useState<string | null>(null);
-  const view = useRef({ network, buses, timeline, stage, cut, mode });
-  view.current = { network, buses, timeline, stage, cut, mode };
+  const [tab, setTab] = useState<"corte" | "operacion">(params.get("modo") === "operacion" ? "operacion" : "corte");
+  const bridge = useRef<MapBridge | null>(null);  // the operation panel draws on the same map through this
+  const view = useRef({ network, buses, timeline, stage, cut, mode, tab });
+  view.current = { network, buses, timeline, stage, cut, mode, tab };
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
   useEffect(() => { _loadPoint(); }, [pointId, index]);
@@ -50,8 +54,11 @@ export function CascadeApp() {
 
   function _mountMap() {
     const map = createBaseMap(mapRef.current!, {
-      onClick: (info: PickingInfo) => { if (info.layer?.id === "lines" && info.object) setCut((info.object as { id: string }).id); },
-      getTooltip: (info: PickingInfo) => _tooltip(info),
+      onClick: (info: PickingInfo) => {
+        if (view.current.tab === "operacion") return bridge.current?.onClick(info);
+        if (info.layer?.id === "lines" && info.object) setCut((info.object as { id: string }).id);
+      },
+      getTooltip: (info: PickingInfo) => (view.current.tab === "operacion" ? bridge.current?.tooltip(info) ?? null : _tooltip(info)),
     });
     baseMap.current = map;
     map.setMode(view.current.mode);
@@ -76,15 +83,24 @@ export function CascadeApp() {
     let raf = 0;
     const tick = (now: number) => {
       const v = view.current;
+      const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
+      const operation = v.tab === "operacion" ? bridge.current?.layers(time, v.mode) : null;
       const frame = v.timeline?.frames[Math.min(v.stage, (v.timeline?.frames.length ?? 1) - 1)];
-      if (v.network && frame) {
-        const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
-        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.cut, mode: v.mode }));
+      if (operation) baseMap.current?.setLayers(operation);
+      else if (v.network && frame) {
+        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.tab === "corte" ? v.cut : null, mode: v.mode }));
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+  }
+
+  function _switchTab(next: "corte" | "operacion") {
+    setTab(next);
+    const url = new URL(location.href);
+    if (next === "operacion") url.searchParams.set("modo", "operacion"); else url.searchParams.delete("modo");
+    history.replaceState(null, "", url);
   }
 
   function _autoplay() {
@@ -107,16 +123,23 @@ export function CascadeApp() {
       </div>
       <div className="panels wide">
         <h1>CascadaSEN</h1>
+        <div className="tabs" role="tablist">
+          {([["corte", "Corte"], ["operacion", "Operación"]] as const).map(([id, text]) => (
+            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => _switchTab(id)}>{text}</button>
+          ))}
+        </div>
         {error && <p className="note warn">{error}</p>}
         <label className="field">Hora del caso base
           <select value={pointId} onChange={(e) => { setCut(null); setPointId(e.target.value); }}>
             {index?.points.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </label>
-        <p className="muted">Haz clic en una línea para cortarla y mira cómo se propaga la falla. Usa Reproducir o la barra para recorrer las etapas.</p>
-        {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
-        {timeline && network && <Results timeline={timeline} network={network} stage={stage} setStage={(s) => { setPlaying(false); setStage(s); }} playing={playing} setPlaying={setPlaying} events={visibleEvents} cut={cut} />}
-        {network && <CascadeLegend network={network} buses={buses} />}
+        {tab === "operacion" ? <OperationPanel pointId={pointId} bridge={bridge} /> : <>
+          <p className="muted">Haz clic en una línea para cortarla y mira cómo se propaga la falla. Usa Reproducir o la barra para recorrer las etapas.</p>
+          {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
+          {timeline && network && <Results timeline={timeline} network={network} stage={stage} setStage={(s) => { setPlaying(false); setStage(s); }} playing={playing} setPlaying={setPlaying} events={visibleEvents} cut={cut} />}
+          {network && <CascadeLegend network={network} buses={buses} />}
+        </>}
         <details><summary>Supuestos del modelo</summary>
           <ul>{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>
         </details>
@@ -146,22 +169,5 @@ function Results(p: { timeline: Timeline; network: Network; stage: number; setSt
       <ol className="events">{p.events.map((e, i) => <li key={i}><span className="t">{e.t.toFixed(1)} s</span> {narrate(e, p.network)}</li>)}</ol>
       <FrequencyChart curves={p.timeline.frequency_hz} />
     </section>
-  );
-}
-
-function FrequencyChart({ curves }: { curves: Timeline["frequency_hz"] }) {
-  const entries = Object.entries(curves);
-  if (!entries.length) return <p className="muted">Sin desbalance de potencia: la frecuencia se mantiene en 50 Hz.</p>;
-  const tMax = Math.max(...entries.flatMap(([, c]) => c.map((p) => p[0])), 1);
-  const x = (t: number) => (t / tMax) * 300, y = (f: number) => 80 - ((f - 47) / 4) * 80;
-  return (
-    <figure>
-      <svg viewBox="0 0 300 80" className="chart">
-        <line x1="0" x2="300" y1={y(50)} y2={y(50)} stroke="#475569" strokeDasharray="3 3" />
-        <line x1="0" x2="300" y1={y(47.5)} y2={y(47.5)} stroke="#ef4444" strokeDasharray="3 3" />
-        {entries.map(([id, c], i) => <polyline key={id} fill="none" stroke={["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399"][i % 4]} strokeWidth="1.2" points={c.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ")} />)}
-      </svg>
-      <figcaption className="muted">Frecuencia por isla (47–51 Hz). Línea roja: 47,5 Hz, límite de apagón.</figcaption>
-    </figure>
   );
 }
