@@ -142,3 +142,56 @@ def test_bedrock_adapters_use_the_aws_profile(monkeypatch):
     interpreter, advisor = llm_adapters(settings)
     assert interpreter is not None and advisor is not None
     assert built and all(k["aws_profile"] == "cascadasen" and k["aws_region"] == "us-east-1" for k in built)
+
+
+class ValidationException(Exception):
+    pass
+
+
+class FakeConverse:
+    """Fake bedrock-runtime client: `forced` says whether the model accepts a forced tool call."""
+
+    def __init__(self, forced=True, text='{"narrative": "La organización resistió."}'):
+        self.forced, self.text, self.calls = forced, text, []
+
+    def converse(self, **kw):
+        self.calls.append(kw)
+        if "toolConfig" in kw:
+            if not self.forced:
+                raise ValidationException("toolChoice not supported")
+            return {
+                "output": {
+                    "message": {
+                        "content": [
+                            {
+                                "toolUse": {
+                                    "name": "responder",
+                                    "input": {"chosen": ["x"], "explanation": "ok"},
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        return {"output": {"message": {"content": [{"text": "```json\n" + self.text + "\n```"}]}}}
+
+
+def test_converse_uses_a_forced_tool_with_the_schema_and_the_model_id_as_is():
+    client = FakeConverse()
+    settings = _settings(llm_provider="bedrock-converse", llm_model="amazon.nova-pro-v1:0")
+    out = ClaudeCommander(settings, client=client).choose({}, [{"id": "x"}], 1)
+    assert out == {"chosen": ["x"], "explanation": "ok"}
+    call = client.calls[0]
+    assert call["modelId"] == "amazon.nova-pro-v1:0"
+    assert call["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]["required"] == [
+        "chosen",
+        "explanation",
+    ]
+
+
+def test_converse_falls_back_to_the_schema_in_the_prompt():
+    client = FakeConverse(forced=False)
+    settings = _settings(llm_provider="bedrock-converse", llm_model="meta.llama3-3-70b-instruct-v1:0")
+    out = ClaudeCommander(settings, client=client)._json("s", {}, {"type": "object"})
+    assert out == {"narrative": "La organización resistió."}
+    assert "toolConfig" not in client.calls[1] and "esquema" in client.calls[1]["system"][0]["text"]

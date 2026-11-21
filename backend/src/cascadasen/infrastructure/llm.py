@@ -13,7 +13,11 @@ JSON), so the simulation never depends on the LLM. The `anthropic[bedrock]` pack
   refusal fallback;
 - `bedrock`: Amazon Bedrock through `AnthropicBedrockMantle`, with the AWS profile and region of
   CASCADASEN_AWS_PROFILE / CASCADASEN_AWS_REGION (credentials stay in ~/.aws). Bedrock model ids carry
-  the `anthropic.` prefix and Bedrock has no server-side fallbacks, so they are not sent.
+  the `anthropic.` prefix and Bedrock has no server-side fallbacks, so they are not sent;
+- `bedrock-converse`: any Bedrock text model (Amazon Nova, Llama, Mistral, Claude...) through the
+  Bedrock Converse API with boto3. CASCADASEN_LLM_MODEL is the Bedrock model or inference-profile id as
+  is (for example `amazon.nova-pro-v1:0` or `us.amazon.nova-pro-v1:0`). The JSON answer is requested as
+  a forced tool call with the schema; models that do not support that get the schema in the prompt.
 """
 
 from __future__ import annotations
@@ -69,12 +73,25 @@ NARRATIVE_SCHEMA = {
 BEDROCK_PREFIX = "anthropic."
 
 
+CONVERSE = "bedrock-converse"
+
+
 def model_id(settings: Settings) -> str:
     m = settings.llm_model
     return m if settings.llm_provider != "bedrock" or m.startswith(BEDROCK_PREFIX) else BEDROCK_PREFIX + m
 
 
 def make_client(settings: Settings) -> Any:
+    if settings.llm_provider == CONVERSE:
+        import boto3  # optional extra: uv sync --extra llm
+        from botocore.config import Config
+
+        session = boto3.Session(profile_name=settings.aws_profile or None)  # None: env vars first
+        return session.client(
+            "bedrock-runtime",
+            region_name=settings.aws_region or None,
+            config=Config(read_timeout=settings.llm_timeout_s, retries={"max_attempts": 1}),
+        )
     import anthropic  # optional extra: uv sync --extra llm
 
     if settings.llm_provider == "bedrock":
@@ -91,6 +108,7 @@ class _Claude:
     def __init__(self, settings: Settings, client: Any = None) -> None:
         self.model, self.effort = model_id(settings), settings.llm_effort
         self.bedrock = settings.llm_provider == "bedrock"
+        self.converse = settings.llm_provider == CONVERSE
         self.client = client if client is not None else make_client(settings)
 
     def _create(self, **request: Any) -> Any:
@@ -100,8 +118,52 @@ class _Claude:
             betas=["server-side-fallback-2026-07-01"], fallbacks="default", **request
         )
 
+    def _converse(
+        self, system: str, payload: dict[str, Any], schema: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Bedrock Converse: ask for a forced tool call carrying the JSON; if the model does not support
+        forced tools, ask again with the schema in the prompt and parse the text."""
+        user = [{"role": "user", "content": [{"text": json.dumps(payload, ensure_ascii=False)}]}]
+        request = {
+            "modelId": self.model,
+            "messages": user,
+            "inferenceConfig": {"maxTokens": 2000, "temperature": 0.2},
+        }
+        tool = {
+            "toolSpec": {
+                "name": "responder",
+                "description": "Entrega la respuesta.",
+                "inputSchema": {"json": schema},
+            }
+        }
+        try:
+            out = self.client.converse(
+                system=[{"text": system}],
+                toolConfig={"tools": [tool], "toolChoice": {"tool": {"name": "responder"}}},
+                **request,
+            )
+        except Exception as exc:
+            if type(exc).__name__ != "ValidationException":
+                raise
+            prompt = (
+                f"{system}\nResponde solo con un objeto JSON que cumpla este esquema: {json.dumps(schema)}"
+            )
+            out = self.client.converse(system=[{"text": prompt}], **request)
+        for block in out["output"]["message"]["content"]:
+            if "toolUse" in block and isinstance(block["toolUse"].get("input"), dict):
+                return block["toolUse"]["input"]
+            if "text" in block:
+                text = block["text"].strip().removeprefix("```json").removeprefix("```").removesuffix("```")
+                start, end = text.find("{"), text.rfind("}")
+                if start >= 0 and end > start:
+                    data = json.loads(text[start : end + 1])
+                    return data if isinstance(data, dict) else None
+        return None
+
     def _json(self, system: str, payload: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any] | None:
         try:
+            if self.converse:
+                return self._converse(system, payload, schema)
             response = self._create(
                 model=self.model,
                 max_tokens=4000,

@@ -22,9 +22,10 @@ class Settings(BaseSettings):
     llm_model: str = "claude-opus-5-5"
     llm_effort: str = "low"  # one call per C2 decision cycle: keep it fast
     llm_timeout_s: float = 30.0
-    # provider: "anthropic" (Claude API, ANTHROPIC_API_KEY or an `ant auth login` profile) or "bedrock"
-    # (Amazon Bedrock with an AWS profile: credentials stay in ~/.aws, never in .env)
-    llm_provider: Literal["anthropic", "bedrock"] = "anthropic"
+    # provider: "anthropic" (Claude API, ANTHROPIC_API_KEY or an `ant auth login` profile), "bedrock"
+    # (Claude in Amazon Bedrock) or "bedrock-converse" (any Bedrock text model, model id as is). AWS
+    # credentials come from the environment or a profile, never from .env
+    llm_provider: Literal["anthropic", "bedrock", "bedrock-converse"] = "anthropic"
     aws_region: str | None = None
     aws_profile: str | None = None
 

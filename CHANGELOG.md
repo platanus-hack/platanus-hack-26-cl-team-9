@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(llm): any Bedrock model through the Converse API
+
+- **Changed:** New provider `CASCADASEN_LLM_PROVIDER=bedrock-converse`: `infrastructure/llm.py` calls `bedrock-runtime` `converse` (boto3) with the model or inference-profile id as is (`CASCADASEN_LLM_MODEL`, e.g. `amazon.nova-pro-v1:0`). The JSON answer is a forced tool call with the schema; on `ValidationException` (model without forced tools) it retries with the schema in the prompt and parses the text. Same AWS credential chain (environment variables or profile). README: provider docs and a script that lists the Bedrock models the account can actually call.
+- **Why:** Ricardo's AWS account (402909940511) has no Claude model available on Bedrock ("not available for this account"); the LLM commander should work with another model.
+- **Agents:** Prompts and fallbacks are unchanged; any failure still falls back to the rules (`llm_unavailable`). Quality of C2 picks depends on the chosen model; the validator still filters every option first.
+- **Files:** `backend/src/cascadasen/infrastructure/{llm,settings}.py`, `backend/tests/unit/test_llm_commander.py`, `backend/README.md`.
+
 ## 2026-11-21 · fix(llm): Bedrock with temporary AWS environment credentials
 
 - **Changed:** An empty `CASCADASEN_AWS_PROFILE`/`CASCADASEN_AWS_REGION` now means "not set", so `AnthropicBedrockMantle` uses the standard AWS chain (environment variables first). `docker-compose.yml` passes `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_REGION` through to `backend` when set on the host. README and docker docs explain both options (environment variables or a profile).

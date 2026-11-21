@@ -83,6 +83,7 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
     Credentials, either way (never in `.env`): export the temporary `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` in the terminal that runs the API (SSO portal → "Set AWS environment variables"), **or** add `CASCADASEN_AWS_PROFILE=<your profile>` and run `aws sso login --profile <your profile>`. A profile set in `.env` takes precedence over the environment variables, so leave it out when you use variables.
     The model id gets the Bedrock prefix (`anthropic.claude-opus-5-5`); Bedrock has no server-side refusal fallback, so a refusal falls back to the rules.
   - Claude API: `CASCADASEN_LLM_ENABLED=true` and `ANTHROPIC_API_KEY` in your shell (or an `ant auth login` profile).
+  - Any other Bedrock text model (Amazon Nova, Llama, Mistral...), through the Bedrock Converse API: `CASCADASEN_LLM_PROVIDER=bedrock-converse` and `CASCADASEN_LLM_MODEL=<Bedrock model or inference-profile id, as is>` (e.g. `amazon.nova-pro-v1:0` or `us.amazon.nova-pro-v1:0`). Same AWS credentials as above. To find the models your account can call, see "Which Bedrock models can I use" below.
 
   Runs created with `"llm_commander": true` let the LLM pick C2's actions among validated ones; `after_action` adds a narrative. Settings: `CASCADASEN_LLM_MODEL` (default `claude-opus-5-5`), `CASCADASEN_LLM_EFFORT` (default `low`), `CASCADASEN_LLM_TIMEOUT_S`. Every failure (no profile, no model access, timeout, refusal) falls back to the deterministic path and is logged as `llm_unavailable` in the audit.
 - `uv run cascadasen-sim-fixtures [--point ID] [--seed N] [--no-campaign] [--out DIR]` writes the offline theatre cache for mapa 3 to `web/public/cache/theater/` (git-ignored): `index.json`, networks, one flagship run per policy and point, and a campaign per point. The files are generated: regenerate them, do not edit them.
@@ -102,3 +103,23 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
 | V8 | As V7 with step 3 inactive | blackout | passes |
 | V9 | Polpaico frequency curve | RMSE 0-5 s | skipped: digitised curve not in the repo |
 | V10 | 103 MW lost in Norte Grande at midday | L0 or L1 | passes (L0) |
+
+### Which Bedrock models can I use
+
+The catalog (`aws bedrock list-foundation-models`) lists what Bedrock offers in a region, not what your account may call. This script tries a tiny Converse call on every on-demand text model and prints the ones that answer (run it where your AWS credentials are exported):
+
+```bash
+cd backend && uv run python - <<'PY'
+import boto3
+region = "us-east-1"
+bedrock, rt = boto3.client("bedrock", region_name=region), boto3.client("bedrock-runtime", region_name=region)
+models = [m["modelId"] for m in bedrock.list_foundation_models(byOutputModality="TEXT", byInferenceType="ON_DEMAND")["modelSummaries"]]
+profiles = [p["inferenceProfileId"] for p in bedrock.list_inference_profiles()["inferenceProfileSummaries"]]
+for mid in models + profiles:
+    try:
+        rt.converse(modelId=mid, messages=[{"role": "user", "content": [{"text": "hola"}]}], inferenceConfig={"maxTokens": 5})
+        print("OK  ", mid)
+    except Exception as e:
+        pass
+PY
+```
