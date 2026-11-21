@@ -13,7 +13,7 @@ All mockups are in the team's Paper file "Platanus Hack": https://app.paper.desi
 | Design v2 (Claude) | Same 6 screens x 3 variations in the Electricity Maps style, plus tower-level views Z1-Z3 (Nueva Pan de Azucar, a selected tower, a tower fault) | Current reference for screens. Frame 6C was blocked by a Paper sync error; check it exists |
 | Design v1 / v2 (Gemini) | Gemini's variations; v2 has 5 "control center" options on charcoal grays | Alternatives, not chosen |
 | Design v3 | The 5 zoom levels from all of Chile down to S/E Calama (section 4), in the variant A interface | Current reference for the map |
-| Logo Ideas | 20 black and white logo options, 1000 x 1000 (section 6) | No pick yet |
+| Logo Ideas | 20 black and white logo options, 1000 x 1000 (section 6) | Option 01 (Subscript) chosen, in `project-logo.png` |
 | Battle Page | Ideas for a "Batalla" tab that shows the attacker vs defender agent game | In progress; see the open decision in `plan.md` section 9 |
 | Vacía (borrar) | Empty page created by mistake | Delete by hand (Paper's API cannot delete pages) |
 
@@ -79,10 +79,10 @@ The name refers to grid frequency: Chile's grid runs at 50 Hz, and when frequenc
 - Options 11-20 say more about the product, mostly with "sub50" as a wordmark and some with a short Spanish tagline. Taglines are unreadable at the 200 px the README uses, so a version without text is needed for small sizes.
 - Option 01 (Subscript) is being refined: the "0" of the subscript 50 is a power button drawn as a Geist-width oval, so it reads "sub₅₀".
 
-`project-logo.png` is still the template logo. Export the chosen option as a 1000 x 1000 PNG under 500 KB (`plan.md` section 8).
+The team chose option 01. `project-logo.png` holds it: black "sub" with a subscript "5" and a power-button "0" on white, 1000 x 1000 PNG, 36 KB (Platanus asks for under 500 KB, `plan.md` section 8). A version for small sizes is still open.
 
 ## 7. Open items
 
-- Pick the variant to build (A is the working reference) and the logo.
+- Pick the variant to build (A is the working reference).
 - Port the Design v2 and v3 look into `web/`. The current app uses a full-screen map with a floating right panel and generation columns (`web/README.md`).
 - Decide whether the demo uses the Mapbox basemap (needs internet and a token) or the offline map (`stack.md` section 1).
