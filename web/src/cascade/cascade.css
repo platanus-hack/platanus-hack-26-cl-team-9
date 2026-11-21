@@ -1,0 +1,240 @@
+/* Mapa 3 in the Paper "Design v5" shell (docs/design.md sections 2 and 3.2). Square corners everywhere except round map
+   symbols and event markers. Faces come from the --font-sans / --font-mono tokens in styles.css; nothing here names a font. */
+.shell {
+  --bg: #1f2022; --sidebar: #18191b; --surface: #1e1f21; --glass: #1e1f21f7; --card: #27282b; --selected: #2a2b2e;
+  --border: #ffffff14; --border-strong: #ffffff1a; --fg: #ffffff; --fg-2: #e6e6e8; --fg-3: #d0d1d4; --muted: #a1a2a6;
+  --faint: #8a8b90; --place: #fff1da; --fault: #ff5a48;
+  --rail-w: 200px; --gap: 12px; --panel-w: 440px; --timeline-h: 122px;
+  --panel-x: calc(var(--rail-w) + var(--gap));
+  position: relative; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg-2);
+  font: 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+.shell *, .shell *::before, .shell *::after { box-sizing: border-box; }
+.shell button, .shell select { font-family: inherit; }
+.shell .map { position: absolute; inset: 0; background: var(--bg); }
+.shell .fault { color: var(--fault); }
+.shell .cream { color: var(--place); }
+
+/* ---- Nav rail ---- */
+.shell .rail { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: var(--rail-w); padding: 16px 12px; background: var(--sidebar); display: flex; flex-direction: column; gap: 4px; border: 0; }
+.shell .wordmark { display: flex; align-items: flex-end; gap: 1px; height: 28px; margin-bottom: 12px; padding-inline: 10px; color: var(--fg); flex-shrink: 0; }
+.shell .wordmark .sub { font-size: 20px; font-weight: 600; line-height: 24px; letter-spacing: -0.02em; }
+.shell .wordmark .subscript { display: flex; align-items: center; gap: 1px; padding-bottom: 1px; font-size: 12px; font-weight: 600; line-height: 12px; }
+.shell .rail-item { display: flex; align-items: center; gap: 10px; height: 32px; width: 100%; flex-shrink: 0; padding: 0 10px; background: none; border: 0; color: var(--fg-3); font-size: 14px; line-height: 18px; text-align: left; cursor: pointer; }
+.shell .rail-item:hover { color: var(--fg); }
+.shell .rail-item.on { background: var(--selected); color: var(--fg); font-weight: 500; }
+.shell .rail-item.static { cursor: default; }
+.shell .rail-item.static:hover { color: var(--fg-3); }
+.shell .rail-item[aria-disabled="true"] { color: var(--faint); cursor: default; }
+.shell .rail-item.faint { color: var(--faint); }
+.shell .rail-item.faint.on, .shell .rail-item.faint:hover { color: var(--fg); }
+.shell .rail-spacer { flex: 1; }
+.shell .scenarios { display: flex; flex-direction: column; gap: 2px; margin-left: 17px; padding-left: 12px; border-left: 1px solid var(--border-strong); flex-shrink: 0; }
+.shell .scenario { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 28px; padding: 0 8px; background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; min-width: 0; }
+.shell .scenario:hover { color: var(--fg); }
+.shell .scenario.on { background: #ffffff0d; color: var(--fg); }
+.shell .scenario.muted { color: var(--faint); }
+.shell .scenario .year { color: var(--faint); font-size: 12px; flex-shrink: 0; }
+.shell .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Panel ---- */
+.shell .panel { position: absolute; z-index: 2; left: var(--panel-x); top: var(--gap); width: var(--panel-w); max-height: min(742px, calc(100% - var(--timeline-h) - 3 * var(--gap))); display: flex; flex-direction: column; background: var(--glass); border: 1px solid var(--border); }
+.shell .panel-head { flex-shrink: 0; padding: 12px 12px 0; border-bottom: 1px solid var(--border); }
+.shell .crumbs { display: flex; align-items: center; gap: 8px; height: 28px; padding-left: 12px; }
+.shell .crumbs h1 { margin: 0; color: var(--fg); font-size: 16px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+.shell .crumbs span { color: var(--faint); font-size: 14px; line-height: 18px; white-space: nowrap; }
+.shell .view-head { justify-content: space-between; height: 40px; padding: 0 12px 12px; }
+.shell .tabs { display: flex; gap: 4px; margin: 0; padding-top: 6px; border: 0; }
+.shell .tabs button { height: 38px; padding: 0 12px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--faint); font-size: 14px; line-height: 18px; white-space: nowrap; cursor: pointer; }
+.shell .tabs button:hover:not(.on):not([aria-disabled]) { color: var(--fg-2); }
+.shell .tabs button.on { color: var(--fg); font-weight: 500; border-bottom-color: var(--fg); }
+.shell .tabs button[aria-disabled] { cursor: default; }
+.shell .panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
+.shell .card { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 14px 12px; background: var(--card); border: 0; flex-shrink: 0; }
+.shell .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shell .card-head .title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.shell .card-head h3 { margin: 0; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 20px; }
+.shell .unit, .shell .share { color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap; }
+.shell .share { font-size: 13px; line-height: 18px; }
+.shell .meta { margin: 0; color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .source { margin: 0; padding: 0 12px; color: var(--faint); font-size: 12px; line-height: 16px; flex-shrink: 0; }
+.shell .note { margin: 0; padding: 8px 12px; background: #ff5a481a; color: #e8b4a6; font-size: 12px; line-height: 16px; flex-shrink: 0; }
+.shell .info { display: inline-flex; flex-shrink: 0; cursor: help; }
+.shell .info:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+.shell .tip { position: fixed; z-index: 50; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border-strong); color: var(--fg-2); font-size: 12px; line-height: 16px; pointer-events: none; box-shadow: 0 6px 20px #0006; }
+.shell .text-btn { padding: 0; background: none; border: 0; color: var(--muted); font-size: 12px; line-height: 16px; cursor: pointer; }
+.shell .text-btn:hover { color: var(--fg); }
+
+/* Red tab */
+.shell .figures { flex-direction: row; gap: 8px; }
+.shell .figure { flex: 1 1 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shell .figure b { color: var(--fg); font-size: 24px; font-weight: 600; line-height: 30px; }
+.shell .figure > span { color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .value-row { display: flex; align-items: center; gap: 6px; }
+.shell .band { display: flex; align-items: center; gap: 10px; height: 26px; }
+.shell .band .sample { width: 22px; flex-shrink: 0; }
+.shell .band-label { flex: 1; color: var(--fg-2); font-size: 13px; line-height: 16px; }
+.shell .band .track { display: flex; width: 120px; height: 6px; flex-shrink: 0; background: var(--surface); }
+.shell .band .track span { height: 6px; }
+.shell .band-value { width: 44px; flex-shrink: 0; color: var(--muted); font-size: 12px; line-height: 16px; text-align: right; }
+.shell .list-head { display: flex; justify-content: space-between; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .row-btn { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 7px 0; background: none; border: 0; border-top: 1px solid var(--border); color: var(--fg-2); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; }
+.shell .row-btn:hover { color: var(--fg); }
+.shell .row-btn .num { flex-shrink: 0; color: var(--muted); }
+
+/* Simulación tab */
+.shell .impact { gap: 12px; }
+.shell .people { color: #f8eddb; font-size: 44px; font-weight: 600; line-height: 48px; letter-spacing: -0.02em; }
+.shell .mini-figures { display: flex; gap: 8px; }
+.shell .mini-figures > div { flex: 1 1 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shell .mini-figures b { color: var(--fg); font-size: 16px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+.shell .mini-figures b.fault { color: var(--fault); }
+.shell .mini-figures small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.shell .mini-figures > div > span { color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .mini-figures.ruled { padding-top: 10px; border-top: 1px solid var(--border); }
+.shell .empty h3 { margin: 0; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 20px; }
+.shell .empty p:not(.meta) { margin: 0; color: var(--fg-3); font-size: 13px; line-height: 20px; }
+.shell .history { gap: 4px; padding: 14px 4px 8px; }
+.shell .card-head.pad { padding: 0 8px 6px; }
+.shell .event { display: flex; gap: 10px; width: 100%; padding: 7px 8px; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
+.shell .event:hover { background: #ffffff06; }
+.shell .event.current { background: #ffffff0a; }
+.shell .badge { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; border: 1px solid var(--fg-3); border-radius: 10px; color: var(--fg); font-size: 11px; font-weight: 600; line-height: 12px; }
+.shell .event.current .badge { background: var(--fault); border-color: var(--fault); color: #18191b; }
+.shell .when { width: 36px; flex-shrink: 0; color: var(--muted); font-size: 12px; font-weight: 500; line-height: 20px; white-space: nowrap; }
+.shell .event.current .when { color: var(--fault); }
+.shell .what { flex: 1 1 0; color: var(--fg-3); font-size: 13px; line-height: 20px; }
+.shell .event.current .what { color: var(--fg); }
+.shell .assumptions-row { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; flex-shrink: 0; padding: 0 12px; background: none; border: 1px solid var(--border); color: var(--fg-3); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; }
+.shell .assumptions-row span:nth-child(2) { flex: 1; }
+.shell .assumptions-row:hover { border-color: var(--border-strong); background: #ffffff06; }
+
+/* Ayuda and Fuentes y supuestos */
+.shell .prose { padding: 0 12px; color: var(--fg-3); font-size: 13px; line-height: 20px; }
+.shell .prose h3 { margin: 14px 0 4px; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 20px; }
+.shell .prose h3:first-child { margin-top: 4px; }
+.shell .prose p { margin: 0 0 8px; }
+.shell .prose ul, .shell .prose ol { margin: 0 0 8px; padding-left: 18px; }
+.shell .prose li { margin-bottom: 6px; }
+.shell .legend-row { display: flex; align-items: flex-start; gap: 10px; margin: 6px 0; font-size: 13px; line-height: 20px; }
+.shell .legend-swatch { display: flex; align-items: center; justify-content: center; width: 30px; min-height: 20px; flex: none; }
+.shell .legend-row .bar { display: block; width: 26px; }
+.shell .legend-row .dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); }
+.shell .legend-row .dot.big { width: 10px; height: 10px; }
+.shell .legend-row .col { display: block; width: 10px; height: 16px; }
+
+/* ---- Timeline card ---- */
+.shell .timeline { position: absolute; z-index: 2; left: var(--panel-x); bottom: var(--gap); width: var(--panel-w); height: var(--timeline-h); margin: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 24px; background: var(--glass); border: 1px solid var(--border); }
+.shell .timeline-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 28px; }
+.shell .clock { color: var(--fg); font: 600 14px/18px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shell .timeline-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.shell .readout { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: 13px; line-height: 18px; white-space: nowrap; }
+.shell .readout > span { overflow: hidden; text-overflow: ellipsis; }
+.shell .readout em { font-style: normal; color: #c9cbcf; }
+.shell .readout em.fault { color: var(--fault); }
+.shell .speed { position: relative; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; flex-shrink: 0; background: #2e2f33; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
+.shell .speed select, .shell .legend-mode select, .shell .time-pill select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.shell .timeline-row { display: flex; align-items: flex-end; gap: 10px; margin: 0; }
+.shell .play { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; padding: 0; margin-bottom: 10px; background: var(--fg); border: 0; border-radius: 0; cursor: pointer; }
+.shell .play:disabled { opacity: 0.35; cursor: default; }
+.shell .track-area { position: relative; width: 290px; height: 52px; flex-shrink: 0; touch-action: none; cursor: pointer; outline: none; }
+.shell .track-area:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+.shell .track-area[tabindex="-1"] { cursor: default; }
+.shell .curves { position: absolute; left: 0; top: 0; overflow: visible; }
+.shell .track-rail { position: absolute; left: 0; top: 36px; width: 290px; height: 4px; background: #3a3b3f; }
+.shell .track-rail.played { background: var(--fg); }
+.shell .head { position: absolute; top: 31px; width: 14px; height: 14px; margin-left: -7px; background: var(--fg); }
+.shell .marker, .shell .pin {
+  display: flex; align-items: center; justify-content: center; height: 20px; min-width: 20px; padding: 0 5px;
+  background: var(--surface); border: 1px solid var(--fg-3); border-radius: 10px; box-shadow: 0 0 0 2px var(--surface);
+  color: var(--fg); font-size: 11px; font-weight: 600; line-height: 12px; white-space: nowrap; cursor: pointer;
+}
+.shell .marker { position: absolute; top: 28px; }
+.shell .marker.future { border-color: #ffffff33; color: var(--faint); }
+.shell .marker.current, .shell .pin.current { height: 24px; min-width: 24px; border: 2px solid var(--fg); border-radius: 12px; background: var(--fault); color: #18191b; font-size: 12px; }
+.shell .marker.current { top: 26px; }
+.shell .timeline-right { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; width: 52px; height: 52px; flex-shrink: 0; padding: 3px 0 6px; }
+.shell .timeline-right .ref { color: var(--faint); font-size: 12px; line-height: 16px; white-space: nowrap; }
+.shell .timeline-right .pos { color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap; }
+
+/* ---- Time pill, map controls, legend, scale ---- */
+.shell .time-pill { position: absolute; z-index: 2; top: var(--gap); left: calc(var(--panel-x) + var(--panel-w) + 118px); width: 160px; display: flex; flex-direction: column; align-items: center; padding: 8px 0; background: var(--surface); border: 1px solid var(--border-strong); cursor: pointer; }
+.shell .time-pill:hover { border-color: #ffffff33; }
+.shell .time-pill .date { color: var(--fg-2); font-size: 13px; line-height: 16px; }
+.shell .time-pill .hms { color: var(--fg); font: 600 14px/18px var(--font-mono); font-variant-numeric: tabular-nums; }
+.shell .time-pill .hms span { color: var(--muted); font-weight: 400; }
+.shell .pill-chevron { position: absolute; right: 10px; top: 50%; display: flex; transform: translateY(-50%); }
+.shell .map-controls { position: absolute; z-index: 3; top: var(--gap); right: var(--gap); width: 36px; display: flex; flex-direction: column; gap: 4px; }
+.shell .ctl { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; background: var(--surface); border: 1px solid var(--border-strong); cursor: pointer; }
+.shell .ctl:hover, .shell .ctl.on { background: var(--selected); }
+.shell .ctl-stack { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border-strong); }
+.shell .ctl-stack .ctl { width: 34px; border: 0; }
+.shell .ctl-stack .ctl + .ctl { border-top: 1px solid var(--border-strong); }
+.shell .layers-pop { position: absolute; top: 0; right: 44px; width: 210px; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--border-strong); }
+.shell .layers-pop h3 { margin: 0; color: var(--muted); font-size: 12px; font-weight: 600; line-height: 16px; }
+.shell .layers-pop h3 + .check, .shell .layers-pop .seg + h3 { margin-top: 4px; }
+.shell .seg { display: flex; border: 1px solid var(--border-strong); background: none; }
+.shell .seg button { flex: 1; padding: 6px 0; background: none; border: 0; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.shell .seg button.on { background: var(--fg-2); color: #18191b; }
+.shell .check { display: flex; align-items: center; gap: 8px; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
+.shell .check input { margin: 0; accent-color: var(--fg-2); }
+.shell .map-foot { position: absolute; z-index: 2; right: var(--gap); bottom: var(--gap); width: 300px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; pointer-events: none; }
+.shell .map-foot > * { pointer-events: auto; }
+.shell .scale { display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.shell .scale-bar { display: block; height: 6px; border: 1px solid var(--fg-3); border-top: 0; }
+.shell .scale-label { color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 16px; text-shadow: 0 0 3px var(--bg), 0 0 6px var(--bg); }
+.shell .legend-card { width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--border-strong); }
+.shell .legend-head { display: flex; align-items: center; justify-content: space-between; }
+.shell .legend-head h3 { margin: 0; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 18px; }
+.shell .legend-mode { position: relative; display: flex; align-items: center; gap: 4px; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
+.shell .samples { display: flex; flex-wrap: wrap; gap: 10px; }
+.shell .sample { display: flex; flex-direction: column; gap: 8px; width: 82px; flex-shrink: 0; color: var(--fg-2); font-size: 12px; line-height: 16px; }
+.shell .sample .swatch { display: block; width: 28px; height: 3px; flex: none; }
+.shell .sample.absent .swatch, .shell .sample.absent svg { opacity: 0.4; }
+.shell .sample.absent > span:last-child { color: var(--muted); }
+.shell .sample.fault > span:last-child { color: var(--fault); }
+.shell .legend-foot { margin: 0; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 16px; }
+
+/* ---- HTML overlays on the map (moved every frame by CascadeApp) ---- */
+.shell .map-overlays { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.shell .anchor { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
+.shell .city-dot { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; background: var(--fg); }
+.shell .city-name { position: absolute; top: -8px; color: var(--fg); font-size: 12px; font-weight: 600; line-height: 16px; white-space: nowrap; text-shadow: 0 0 3px var(--bg), 0 0 6px var(--bg); }
+.shell .city.left .city-name { right: 8px; }
+.shell .city.right .city-name { left: 8px; }
+.shell .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; }
+.shell .map-event.past { z-index: 1; }
+.shell .map-event.current { z-index: 2; }
+.shell .callout { position: absolute; left: 40px; top: -20px; width: 252px; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--glass); border: 1px solid var(--border-strong); pointer-events: auto; }
+.shell .callout::before { content: ""; position: absolute; top: 19px; right: 100%; width: 28px; height: 1px; background: var(--fg-3); }
+.shell .flip .callout { left: auto; right: 40px; }
+.shell .flip .callout::before { right: auto; left: 100%; }
+.shell .callout-head { display: flex; justify-content: space-between; gap: 8px; color: var(--faint); font-size: 12px; line-height: 16px; }
+.shell .callout h4 { margin: 0; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 20px; }
+.shell .callout-figures { display: flex; gap: 24px; padding-top: 8px; border-top: 1px solid var(--border); }
+.shell .callout-figures > div { display: flex; flex-direction: column; gap: 1px; }
+.shell .callout-figures b { color: var(--fg); font-size: 14px; font-weight: 600; line-height: 18px; }
+.shell .callout-figures b.cream { color: var(--place); }
+.shell .callout-figures span { color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap; }
+.shell .pin-label { position: absolute; left: 28px; top: -20px; display: flex; flex-direction: column; padding: 4px 10px; background: var(--surface); white-space: nowrap; }
+.shell .pin-label b { color: var(--fg); font-size: 13px; font-weight: 600; line-height: 18px; }
+.shell .pin-label span { color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .flip .pin-label { left: auto; right: 28px; }
+
+/* Narrow screens: the time pill moves next to the map controls so it never covers the panel. */
+@media (max-width: 1100px) {
+  .shell .time-pill { left: auto; right: 60px; }
+}
+
+/* Mapbox logo and attribution: bottom-left of the visible map, right of the timeline card. */
+.shell .mapboxgl-ctrl-bottom-left { left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); }
+.shell .mapboxgl-ctrl-attrib.mapboxgl-compact { background: #1e1f21cc; color: var(--muted); }
+.shell .mapboxgl-ctrl-attrib a { color: var(--muted); }
+
+/* The event history scrolls inside its card, so the people card above it stays in view (Design v5, V2). */
+.shell .history { flex-shrink: 1; min-height: 150px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
+.shell .history .card-head { position: sticky; top: -14px; z-index: 1; margin-top: -14px; padding-top: 14px; background: var(--card); }
+.shell .pin-label { max-width: 280px; }
+.shell .pin-label b, .shell .pin-label span { overflow: hidden; text-overflow: ellipsis; }
+.shell .up .callout { top: auto; bottom: -20px; }
+.shell .up .callout::before { top: auto; bottom: 19px; }

@@ -1,6 +1,41 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · fix(web): a substation without supply is drawn red
+
+- **Changed:** In mapa 3 a substation that loses supply (its island blacks out) is drawn as a red dot (`FAULT`, #FF5A48), a little bigger than a normal node and with a dark ring so it stands out on the gray lines. Before it was near-black (`DEAD_LINE`), which disappeared against the dark map. Lines between two dark substations keep the near-black "sin tensión" color. Code: the `nodes` layer in `web/src/cascade/layers.ts`.
+- **Why:** The team asked for it: a switched-off substation must read as a failure. It follows the rule in `design.md` that red is for faults.
+- **Agents:** The legend card does not list the red dot yet (it only lists line samples). Checked in the browser on the 25F cut: the substations of the island that blacks out turn red at 10,1 s.
+- **Files:** `web/src/cascade/layers.ts`.
+
+## 2026-11-21 · feat(web): rebuild mapa 3 on the Design v5 interface
+
+- **Changed:** Mapa 3 (`/`) follows the three Paper "Design v5" frames: 200 px nav rail with the sub50 wordmark and scenarios (Apagón 25F, the active cut, Escenario nuevo), a 440 px docked panel with the Red and Simulación tabs, a timeline card with numbered event markers and island frequency curves, a time pill that picks the operating point, square map controls with a layers popover (2D or 3D, flow, demand), and a legend that switches between voltage and load. Event pins and a callout sit on the map. Styles live in the new `web/src/cascade/cascade.css`; the old mapa 3 block left `styles.css`, which now also holds the Roboto tokens and square corners for the legacy classes.
+- **Why:** Ignacio asked for the Design v5 UI with all the functionality of the current cascade viewer, on the Mapbox basemap.
+- **Agents:** Playback is now continuous in seconds (`web/src/cascade/simulation.ts`): dark substations wait for their `island_blackout` event, people and lost load between events are an interpolation that ends exactly at the engine summary (`docs/mapa3.md` section 5.1). 2D is the default; `?vista=3d` tilts. The URL is rewritten with `point`, `cut` and `vista`. `MAX_BOUNDS` widened to lon -110 to -35 so the whole country fits at 1440 px; the panel is the Mapbox camera padding. Mapbox uses the Standard style with `theme: "monochrome"`. Islands are "Isla 1", "Isla 2" because the cache has no island zone. "Qué lo habría evitado" and "Validación" are disabled. Mapbox needs `VITE_MAPBOX_TOKEN` in `web/.env.local`; the repo-root `.env` is not read by Vite.
+- **Files:** `web/src/cascade/*` (new: `simulation.ts`, `Timeline.tsx`, `SimulationPanel.tsx`, `MapLegend.tsx`, `MapOverlays.tsx`, `ui.tsx`, `cascade.css`, `simulation.test.ts`), `web/src/map/baseMap.ts`, `web/src/map/gridData.test.ts`, `web/src/styles.css`, `docs/mapa3.md`, `docs/design.md`, `web/README.md`.
+
+## 2026-11-21 · feat(web): use the Roboto superfamily and square corners
+
+- **Changed:** `web/package.json` adds `@fontsource-variable/roboto`, `roboto-condensed` and `roboto-mono`; `web/src/main.tsx` imports them. `docs/design.md` section 2: the type rule is now the Roboto superfamily (replacing the Geist pair) and the corner rule is radius 0 on every container, card, button, tag, input and the time pill in the whole app; the layout bullet says "square-cornered floating panel".
+- **Why:** Ignacio chose Roboto as the main face with faces from the same family as secondaries, and the team extended Valentina's square-corner rule from the Battle Page to the whole app.
+- **Agents:** Faces come from npm, so the app needs no internet for fonts. Use the tokens `--font-sans`, `--font-condensed` and `--font-mono` (defined in `web/src/styles.css` in the next commit), never a font name. Display numbers never use Mono. The Paper `--radius-*` tokens are unchanged for older pages; do not use them on new work.
+- **Files:** `web/package.json`, `web/package-lock.json`, `web/src/main.tsx`, `docs/design.md`.
+
+## 2026-11-21 · docs(design): add the Design v5 page and its polish rules
+
+- **Changed:** `docs/design.md` section 1 lists the Paper page "Design v5" (copies of the three v4 frames with the council's fixes applied) as the current reference for the map and the simulation, and marks Design v4 as superseded. New section 3.2 records the v5 rules: grid and panel edges, type scale, small-text contrast, the `--color-fault` token, one event marker style, timeline geometry with a shared frequency scale, legend behaviour, map callouts and wording.
+- **Why:** A three-round council review of Design v4 (Claude Opus 5.5, GPT 6.2 Sol, Gemini 4 Neon, Claude Fable 5.2) found layout bugs (V2 nav and panel off-grid, a double-stacked timeline track), contrast failures (12px faint text on cards, white digits on red at 3.09:1) and inconsistencies between frames. All four reviewers were satisfied with v5 (final scores 9.0, 9.2, 9.0, 8.7 out of 10).
+- **Agents:** Build the map and simulation UI from Design v5, not v4. The Paper file has a new token `--color-fault` #FF5A48; digits on filled red use #18191B. The V1 km headline now equals the sum of the voltage rows (34.555); the mockup numbers remain invented (section 5). Still open: 500 kV near-white vs magenta, gray vs cream city labels, and whether Valentina's 0 to 2px corners and docked panels (section 2) extend to the whole app, which would require another pass on v5's rounded floating panel.
+- **Files:** `docs/design.md`, `CHANGELOG.md`.
+
+## 2026-11-21 · docs(design): record Valentina's Battle Page review
+
+- **Changed:** `docs/design.md` section 2 gets six rules from Valentina's review: Geist Sans only with tabular figures, 0 to 2px corners, panels docked to the nav rail and artboard edges, the event panel as an incident sheet, red and blue as the only battle colors, and effect-based wording.
+- **Why:** Valentina reviewed the Battle Page design; the rules are already applied to the Battle Page artboards each bullet names.
+- **Agents:** The corner and docking rules cover the Battle Page only. Whether they extend to the whole app is an open team decision: the "rounded floating panel" layout bullet and the `--radius-*` tokens are unchanged. B11 (floating HUD and log) and B7 (green and yellow move notation) are not updated yet.
+- **Files:** `docs/design.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · docs(health): document the health index and flag stale 25F figures
 
 - **Changed:** New `docs/health.md` (rule, metrics with limits and sources, 25F against `feb2025-0300`, cautions). `architecture.md` lists the command and `health.yaml`. `engine.md`, `mapa3.md` and `minimum-dataset.md` carry a note that cutting R239 at `feb2025-1500` now gives 1,972 MW lost and 3.8 M people with `voltage_limited`, not 7,872 MW and 15.2 M.

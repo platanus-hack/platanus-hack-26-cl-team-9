@@ -118,41 +118,57 @@ The cache (about 23 MB, 4 hours x 273 cuts) is committed, because the deployed w
 | `http://localhost:5173/` | Base case, Nov 2026 13:00 (same as `?mapa=3`) |
 | `/?mapa=3&point=feb2025-1500` | Pick the hour: `feb2025-1500`, `feb2025-0300`, `nov2026-1300`, `nov2026-2000` |
 | `/?mapa=3&point=feb2025-1500&cut=R239` | The 25F corridor cut, already playing |
+| `/?point=feb2025-1500&cut=R239&vista=3d` | The same, with the camera tilted |
+
+The URL follows the app: choosing a point, cutting a line or switching to 3D rewrites `point`, `cut` and `vista`, so the address bar is always a deep link to the current view.
 
 With `VITE_MAPBOX_TOKEN` in `web/.env.local` (git-ignored) the basemap is Mapbox. Without it, the offline Chile outline is used.
 
 ## 3. 2D and 3D views
 
-The 2D | 3D button sits at the top of the map. Both views use the same Mapbox Standard (night) map. 3D: camera tilted 45 degrees, demand as rectangular bars. 2D: the camera looks straight down and cannot be tilted or rotated, and the bars become flat discs whose size grows with MW. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`). Open directly in 2D with `?vista=2d`.
+The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`).
 
 ## 4. How to use it
 
-Layout: a collapsible rail on the left (button at its bottom), a floating panel with four tabs, and the controls on the map.
+Layout (Paper "Design v5", `docs/design.md` section 3.2): a 200 px nav rail, a 440 px panel docked next to it with four tabs, the timeline card under the panel, a time pill at the top of the map, map controls at the top right, and the legend with the scale bar at the bottom right.
 
-1. **Case pill** (top center of the map): choose the operating point. Changing it resets the cut.
-2. **Tab Red**: size of the grid (km of lines, substations, installed MW, km by voltage band) and the detail of the substation you clicked (kV, zone, generation, demand, people, connected lines with their loading; a click on one of those lines cuts it).
-3. **Click a line** on the map to cut it. The panel switches to **Simulación**.
-4. **Tab Simulación**: people without power, MW shed and share of demand, cascade stages, the event list (each with its time in seconds) and the frequency chart (one curve per island, red dashed line at 47.5 Hz, the blackout limit). **Volver al caso base** removes the cut.
-5. **Timeline card** (bottom of the panel): play or pause, the stage slider and the time. Stage 0 is the instant after the cut.
-6. **Tab Leyenda**: what the map draws (section 5).
-7. **Tab Supuestos**: the assumptions the engine returned with this timeline.
-8. **Top right**: 2D | 3D and zoom buttons.
+1. **Time pill** (top of the map): date and clock of the operating point plus the simulated seconds. Click it to choose the operating point; changing it removes the cut.
+2. **Nav rail, Escenarios**: "Apagón 25F" opens the 25F corridor cut (`feb2025-1500`, `R239`); a custom cut shows as "Corte ..." while it is active; "Escenario nuevo" removes the cut. "Fuentes y supuestos" opens the sources and every engine assumption in the panel; "Ayuda" opens what the map draws (section 5). "Validación" is not built yet.
+3. **Tab Red**: size of the whole IDE Energía grid (km of lines, substations, installed MW, km by voltage band) and the detail of the substation you clicked (kV, zone, generation, demand, people, connected lines with their loading; a click on one of those lines cuts it). Line colour shows voltage.
+4. **Click a line** on the map to take it out of service. The panel switches to **Simulación** and line colour switches to load.
+5. **Tab Simulación**: people without supply and their share of the country, lost load, lost generation, the lowest island frequency (or "apagón"), and the numbered event history. Every figure is read at the current second of the timeline, so it grows as the cascade plays (section 5.1). A click on an event jumps to it. The "N supuestos en esta simulación" row opens the assumptions.
+6. **Timeline card**: clock with tenths, the frequency of each island, speed (1x, 2x, 4x), play, pause or repeat, and the rail. The rail spans the whole timeline (`duration_s`, usually 20 to 29 s) with the numbered event markers at their true times; events whose markers would overlap share one ("1·2", "1–11"). The curves above the rail are the island frequencies on a fixed scale (y = 11 - 4 x (Hz - 50) in 22 px), drawn up to the current second; red means the island fell below 49 Hz. Drag the rail, click a marker, or use the arrow keys (Shift for 1 s steps), Home and End.
+7. **Map pins and callout**: the same event numbers appear on the map where the event happens (the cut or tripped line, the centroid of the zone that sheds load, the centroid of the area that goes dark). The latest event with a place is red and has a callout with people without supply and lost load; the first event keeps a short label. Events without a place (an island forms, an island stabilises) appear only in the history and on the rail.
+8. **Legend** (bottom right): "Color de líneas" switches between Tensión and Carga. The Tensión legend lists only the voltage tiers in the model network; the Carga legend always lists six items and dims the ones absent from the current frame.
+9. **"Qué lo habría evitado" and "Validación"** tabs are shown as in the design but disabled: the engine does not compute them yet.
 
 ## 5. Legend (what the map draws)
 
 | Element | Meaning |
 |---|---|
-| Line colour | Loading at the current stage: up to 60%, 60 to 90%, 90 to 100%, over 100% |
-| Open line | Cut by you or tripped by overload |
-| Selected line | The one you clicked |
-| Line width | 500 kV, 220 to 499 kV, below 220 kV |
+| Line colour, Red tab | Voltage: 500 kV near-white, 154 to 345 kV orange, 100 to 110 kV blue, 44 to 69 kV steel blue, medium voltage gray |
+| Line colour, Simulación tab | Loading at the current second: under 50 % gray, 50 to 75 % light gray, 75 to 100 % pale red, over 100 % red and thicker |
+| Near-black line with a faint outline | "sin tensión": both ends are without supply |
+| Dashed gray line | "fuera": cut by you or tripped by overload (over 120 %) |
+| Line width | Always voltage: 500 kV, 154 to 345 kV, lower |
 | Moving white dots | Direction of flow. Only lines with 60 MW or more |
-| Substation circle | White = energised, red = dark. Larger = 500 kV |
-| Blue rectangular bar | Demand of the substation, 90 m per MW. It disappears when the substation goes dark |
+| Substation dot | Light gray = with supply (larger: 500 kV), near-black with an outline = without supply |
+| Cream disc or column | Demand of the substation (off by default) |
+| Numbered pins | Events, the same numbers as the history and the timeline |
 
-The panel legend is built from the same constants as the layers (`LOADING_BANDS`, `WIDTH_BY_KV` in `web/src/cascade/layers.ts`), so it cannot drift from the map.
+The map legend, the "Ayuda" view and the layers share the constants in `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `LOAD_BANDS`, `DEAD_LINE`, `OPEN_LINE`), so they cannot drift apart. The panel's "Líneas por tensión" card uses `VOLTAGE_BANDS` in `networkSummary.ts`, which counts the whole IDE Energía grid rather than the 273-line model.
 
 Not drawn: generation per plant, transformers, voltage and reactive power, networks below 66 kV, and the 1,930 original map lines of mapas 1 and 2.
+
+### 5.1 Reading the cascade at second t
+
+The cache stores one frame per network stage and events with their own times (`web/src/cascade/simulation.ts`):
+
+- **Dark substations**: a frame's `dark` list is the state at the end of its stage, but an island only goes dark when its `island_blackout` event fires (in the 25F case 8 s after the stage starts), so new dark substations wait for that event.
+- **People without supply and lost load**: dark substations count whole. Load shed in islands that survive is not stored per substation, so it is spread over time by the MW shed so far, and shed MW count at the system's people per MW before their island collapses. Both are capped by the engine summary, and from the last event on they equal it exactly (ASSUMPTION: the in-between values are an interpolation, not engine output).
+- **Lost generation**: generation at dark substations. The engine has no generator trips.
+- **Island frequency**: linear between the curve samples. An island whose curve stops at a blackout event shows "apagón".
+- **Island names**: "Isla 1", "Isla 2" in the order the engine simulated them. The cache does not say which zone an island covers, so the app does not call them Norte or Centro-sur as the mockup does.
 
 ## 6. Worked example: the 25F corridor
 
@@ -196,9 +212,14 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/public/cache/network-<year>.json` | The 188 substations and 273 lines |
 | `web/public/cache/<point>/buses.json` | Generation, demand, people per substation |
 | `web/public/cache/<point>/baseline.json` and `<line id>.json` | One timeline per cut: events, frames, frequency curves, summary |
+| `web/src/cascade/CascadeApp.tsx` | Design v5 shell: state, animation loop (clock, layers, HTML overlays), rail, panel, time pill, controls |
+| `web/src/cascade/simulation.ts` | Reads a timeline at second t: dark set, impact, island frequency, event markers and their map places |
 | `web/src/cascade/layers.ts` | deck.gl layers and colour constants |
-| `web/src/cascade/Legend.tsx` | Panel legend |
-| `web/src/cascade/text.ts` | Spanish narration of events |
+| `web/src/cascade/NetworkPanel.tsx`, `SimulationPanel.tsx` | Tabs Red and Simulación |
+| `web/src/cascade/Timeline.tsx`, `MapLegend.tsx`, `MapOverlays.tsx` | Timeline card, map legend, event pins and callout |
+| `web/src/cascade/Legend.tsx` | "Ayuda" and "Fuentes y supuestos" views |
+| `web/src/cascade/text.ts` | Spanish narration of events, place names, number and clock formats |
+| `web/src/cascade/cascade.css` | Styles of the shell (Design v5 tokens) |
 | `web/src/map/shapes.ts` | Outline of the rectangular bars |
 
 The frontend only reads files. All physics is in `backend/src/cascadasen/domain/cascade/`.
