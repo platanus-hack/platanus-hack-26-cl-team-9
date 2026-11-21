@@ -73,7 +73,18 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
 - `domain/agents/`: C2, ISR, Operations, Stabilisation, Logistics, Auditor and the adaptive Adversary. They are deterministic and seeded. Views (`base.py`) never carry the real state, which a test checks.
 - `application/run_experiment.py`: `RunManager` (in-memory LRU of 100 runs; replay re-injects events at their cycles, so an unchanged replay gives the same trace hash) and the catalog. Endpoints are under `/api/v1/sim/*` (`docs/stack.md` 7.1).
 - `domain/theater/narrative.py` and `params/narrative_es.yaml`: Spanish templates for every key the API returns, plus the deterministic after-action review (`TemplateInterpreter`, behind the `Interpreter` port in `domain/ports.py`). An LLM-backed interpreter can implement the same port later; it would explain, never decide.
-- Optional LLM (off by default): `uv sync --extra llm`, then `CASCADASEN_LLM_ENABLED=true` plus Anthropic credentials (`ANTHROPIC_API_KEY` or an `ant auth login` profile). Runs created with `"llm_commander": true` let the LLM pick C2's actions among validated ones; `after_action` adds a narrative. Settings: `CASCADASEN_LLM_MODEL` (default `claude-opus-5-5`), `CASCADASEN_LLM_EFFORT` (default `low`), `CASCADASEN_LLM_TIMEOUT_S`. Every failure falls back to the deterministic path.
+- Optional LLM (off by default): `uv sync --extra llm`, then in `backend/.env` (git-ignored; settings only, **never keys**):
+  - Amazon Bedrock with an AWS profile (credentials stay in `~/.aws`, e.g. `aws configure --profile cascadasen` or `aws sso login --profile cascadasen`):
+    ```
+    CASCADASEN_LLM_ENABLED=true
+    CASCADASEN_LLM_PROVIDER=bedrock
+    CASCADASEN_AWS_REGION=us-east-1
+    CASCADASEN_AWS_PROFILE=cascadasen
+    ```
+    The model id gets the Bedrock prefix (`anthropic.claude-opus-5-5`); Bedrock has no server-side refusal fallback, so a refusal falls back to the rules.
+  - Claude API: `CASCADASEN_LLM_ENABLED=true` and `ANTHROPIC_API_KEY` in your shell (or an `ant auth login` profile).
+
+  Runs created with `"llm_commander": true` let the LLM pick C2's actions among validated ones; `after_action` adds a narrative. Settings: `CASCADASEN_LLM_MODEL` (default `claude-opus-5-5`), `CASCADASEN_LLM_EFFORT` (default `low`), `CASCADASEN_LLM_TIMEOUT_S`. Every failure (no profile, no model access, timeout, refusal) falls back to the deterministic path and is logged as `llm_unavailable` in the audit.
 - `uv run cascadasen-sim-fixtures [--point ID] [--seed N] [--no-campaign] [--out DIR]` writes the offline theatre cache for mapa 3 to `web/public/cache/theater/` (git-ignored): `index.json`, networks, one flagship run per policy and point, and a campaign per point. The files are generated: regenerate them, do not edit them.
 
 ### Validation cases (`docs/plan.md` section 5)

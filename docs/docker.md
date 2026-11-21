@@ -28,3 +28,11 @@ Restart `backend` or call `POST /api/v1/admin/reload` afterwards.
 - The backend image uses `uv sync --locked`, so `backend/uv.lock` must be current.
 - `web` runs the dev server, not a production build.
 - Compose may warn that buildx is missing (Colima); the build still works with the classic builder.
+
+## Optional LLM in Docker
+
+`docker compose` reads `backend/.env` if it exists (only `CASCADASEN_*` settings, never keys). To use the LLM commander with Amazon Bedrock, build with the extra and share your AWS profile read-only:
+
+1. `backend/.env` with `CASCADASEN_LLM_ENABLED=true`, `CASCADASEN_LLM_PROVIDER=bedrock`, `CASCADASEN_AWS_REGION=us-east-1`, `CASCADASEN_AWS_PROFILE=cascadasen`.
+2. Uncomment the `${HOME}/.aws:/root/.aws:ro` volume of `backend` in `docker-compose.yml`.
+3. `WITH_LLM=1 docker compose up --build`.

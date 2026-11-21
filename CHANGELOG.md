@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(llm): Amazon Bedrock provider with an AWS profile
+
+- **Changed:** `Settings` gains `llm_provider` (`anthropic` | `bedrock`), `aws_region` and `aws_profile` (`CASCADASEN_LLM_PROVIDER`, `CASCADASEN_AWS_REGION`, `CASCADASEN_AWS_PROFILE`). With Bedrock, `infrastructure/llm.py` builds `anthropic.AnthropicBedrockMantle(aws_profile, aws_region)`, prefixes the model (`anthropic.claude-opus-5-5`) and sends no `betas`/`fallbacks` (not supported on Bedrock); structured JSON output stays. A client that cannot be built (e.g. unknown profile) disables the LLM with a warning. Extra `llm` is now `anthropic[bedrock]` (adds boto3); `uv.lock` updated. Docker: optional `WITH_LLM=1` build arg, `backend/.env` as optional `env_file`, commented `~/.aws` read-only volume.
+- **Why:** Ricardo runs the LLM through Bedrock with an AWS profile; credentials stay in `~/.aws`, never in `.env`.
+- **Agents:** `backend/.env` holds settings only. Tests build `Settings(_env_file=None, ...)` so a developer's `.env` cannot change them. No test calls AWS.
+- **Files:** `backend/src/cascadasen/infrastructure/{llm,settings}.py`, `backend/pyproject.toml`, `backend/uv.lock`, `backend/Dockerfile`, `docker-compose.yml`, `backend/tests/unit/test_llm_commander.py`, `backend/README.md`, `docs/strategy.md`, `docs/docker.md`.
+
 ## 2026-11-21 · feat(web): operation tab in mapa 3 (theatre on the map)
 
 - **Changed:** Mapa 3 has two tabs: "Corte" (unchanged cut viewer) and "Operación" (`?modo=operacion`). New `web/src/operation/OperationPanel.tsx`: pick scenario, defence policy and adaptive or static adversary; start a run (seed shown); play or step 5-minute cycles; the map draws the cycle's grid, areas and crews; "Ver cascada" replays the cycle's cascade in seconds with its events and frequency chart; click a line to open it (C3) or a substation for C1/D1/D4 next cycle; final report and after-action; repeat with the same seed and another policy. `CascadeApp` delegates layers, clicks and tooltips to the active tab through a `MapBridge` ref; `FrequencyChart` moved to `cascade/FrequencyChart.tsx`. Styles for tabs and the panel.

@@ -5,9 +5,15 @@
 - `ClaudeInterpreter` implements `Interpreter`: the template after-action review plus a short
   narrative in Spanish written from the run's report (never from the real state of a live run).
 
-Both return None or the deterministic result on any failure (no key, timeout, refusal, bad JSON),
-so the simulation never depends on the LLM. The `anthropic` package is the optional `llm` extra.
-Enable with CASCADASEN_LLM_ENABLED=true and Anthropic credentials (ANTHROPIC_API_KEY or a profile).
+Both return None or the deterministic result on any failure (no credentials, timeout, refusal, bad
+JSON), so the simulation never depends on the LLM. The `anthropic[bedrock]` package is the optional
+`llm` extra. Providers (CASCADASEN_LLM_PROVIDER):
+
+- `anthropic`: the Claude API (ANTHROPIC_API_KEY or an `ant auth login` profile), with the server-side
+  refusal fallback;
+- `bedrock`: Amazon Bedrock through `AnthropicBedrockMantle`, with the AWS profile and region of
+  CASCADASEN_AWS_PROFILE / CASCADASEN_AWS_REGION (credentials stay in ~/.aws). Bedrock model ids carry
+  the `anthropic.` prefix and Bedrock has no server-side fallbacks, so they are not sent.
 """
 
 from __future__ import annotations
@@ -60,22 +66,45 @@ NARRATIVE_SCHEMA = {
 }
 
 
+BEDROCK_PREFIX = "anthropic."
+
+
+def model_id(settings: Settings) -> str:
+    m = settings.llm_model
+    return m if settings.llm_provider != "bedrock" or m.startswith(BEDROCK_PREFIX) else BEDROCK_PREFIX + m
+
+
+def make_client(settings: Settings) -> Any:
+    import anthropic  # optional extra: uv sync --extra llm
+
+    if settings.llm_provider == "bedrock":
+        return anthropic.AnthropicBedrockMantle(
+            aws_profile=settings.aws_profile,
+            aws_region=settings.aws_region,
+            timeout=settings.llm_timeout_s,
+            max_retries=1,
+        )
+    return anthropic.Anthropic(timeout=settings.llm_timeout_s, max_retries=1)
+
+
 class _Claude:
     def __init__(self, settings: Settings, client: Any = None) -> None:
-        self.model, self.effort = settings.llm_model, settings.llm_effort
-        if client is None:
-            import anthropic  # optional extra: uv sync --extra llm
+        self.model, self.effort = model_id(settings), settings.llm_effort
+        self.bedrock = settings.llm_provider == "bedrock"
+        self.client = client if client is not None else make_client(settings)
 
-            client = anthropic.Anthropic(timeout=settings.llm_timeout_s, max_retries=1)
-        self.client = client
+    def _create(self, **request: Any) -> Any:
+        if self.bedrock:  # no server-side fallbacks on Bedrock: a refusal falls back to the rules
+            return self.client.messages.create(**request)
+        return self.client.beta.messages.create(
+            betas=["server-side-fallback-2026-07-01"], fallbacks="default", **request
+        )
 
     def _json(self, system: str, payload: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any] | None:
         try:
-            response = self.client.beta.messages.create(
+            response = self._create(
                 model=self.model,
                 max_tokens=4000,
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
                 output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": schema}},
                 system=system,
                 messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
@@ -122,4 +151,7 @@ def llm_adapters(settings: Settings) -> tuple[Interpreter | None, CommanderAdvis
         return ClaudeInterpreter(settings), ClaudeCommander(settings)
     except ImportError:
         log.warning("CASCADASEN_LLM_ENABLED is set but `anthropic` is not installed (uv sync --extra llm)")
+        return None, None
+    except Exception as exc:
+        log.warning("LLM client could not be built (%s); using the deterministic path", type(exc).__name__)
         return None, None
