@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(infra): sessions bucket policy
+- **Changed:** `infrastructure/s3.tf` adds `aws_s3_bucket_policy.sessions`: any principal of this AWS account (`aws:PrincipalAccount` condition) may Get/Put/Delete objects under `sessions/*` and `runs/*` and list the bucket. It depends on the public access block, which stays on.
+- **Why:** The user wants the policy in PR #50 as written; it lets the task role, CI and admins read and write session documents without a per-role grant.
+- **Agents:** Never applied here (no plan/apply in this work). The grant is account-wide, not scoped to the ECS task role; narrowing it is a separate decision.
+- **Files:** `infrastructure/s3.tf`.
 ## 2026-11-21 · fix(web): retry the busy 409 in the web client and raise the waiter cap to 10
 - **Changed:** `call()` in `web/src/session/sessionApi.ts` retries a 409 that carries `Retry-After` up to 2 times, after that wait (capped at 10 s), with the same method, headers and body. A 409 without `Retry-After` (another instance won the write) is not retried.
 - **Changed:** `useSession` keeps the session when the first load still gets a busy 409 and retries it every 3 s with the note "La sesión está ocupada con otra solicitud. Se reintenta la carga en unos segundos."; network errors and 5xx still fall back to the base case.
