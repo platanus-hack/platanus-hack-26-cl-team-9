@@ -121,7 +121,11 @@ The cache (about 23 MB, 4 hours x 273 cuts) is git-ignored and must be generated
 
 With `VITE_MAPBOX_TOKEN` in `web/.env.local` (git-ignored) the basemap is Mapbox. Without it, the offline Chile outline is used.
 
-## 3. How to use it (right panel)
+## 3. 2D and 3D views
+
+The 2D | 3D button sits at the top of the map. Both views use the same Mapbox Standard (night) map. 3D: camera tilted 45 degrees, demand as rectangular bars. 2D: the camera looks straight down and cannot be tilted or rotated, and the bars become flat discs whose size grows with MW. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`). Open directly in 2D with `?vista=2d`.
+
+## 4. How to use it (right panel)
 
 1. **Hora del caso base**: choose the operating point. Changing it resets the cut.
 2. **Click a line** on the map to cut it. The results block appears.

@@ -116,7 +116,7 @@ export function CascadeApp() {
         <p className="muted">Haz clic en una línea para cortarla y mira cómo se propaga la falla. Usa Reproducir o la barra para recorrer las etapas.</p>
         {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
         {timeline && network && <Results timeline={timeline} network={network} stage={stage} setStage={(s) => { setPlaying(false); setStage(s); }} playing={playing} setPlaying={setPlaying} events={visibleEvents} cut={cut} />}
-        {network && <CascadeLegend network={network} buses={buses} />}
+        {network && <CascadeLegend network={network} buses={buses} mode={mode} />}
         <details><summary>Supuestos del modelo</summary>
           <ul>{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>
         </details>
