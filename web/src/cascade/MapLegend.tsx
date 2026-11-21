@@ -56,9 +56,12 @@ function LoadSamples({ network, frame }: { network: Network; frame: Frame | unde
 function Sample({ label, style, absent = false, fault = false, dashed = false }: { label: string; style?: React.CSSProperties; absent?: boolean; fault?: boolean; dashed?: boolean }) {
   return (
     <div className={absent ? "sample absent" : fault ? "sample fault" : "sample"}>
-      {dashed
-        ? <svg width="28" height="4" viewBox="0 0 28 4" aria-hidden><path d="M0 2H28" fill="none" stroke={OPEN_LINE} strokeWidth="2" strokeDasharray="3 2.5" /></svg>
-        : <span className="swatch" style={style} />}
+      {/* A fixed-height slot centers swatches of every thickness, so all labels sit on one line. */}
+      <span className="swatch-slot">
+        {dashed
+          ? <svg width="28" height="4" viewBox="0 0 28 4" aria-hidden><path d="M0 2H28" fill="none" stroke={OPEN_LINE} strokeWidth="2" strokeDasharray="3 2.5" /></svg>
+          : <span className="swatch" style={style} />}
+      </span>
       <span>{label}</span>
     </div>
   );

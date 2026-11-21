@@ -1,6 +1,22 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(regional): draw the other countries' lines like Chile's
+
+- **Changed:** Regional lines now use Chile's `VOLTAGE_TIERS` colours and widths at full opacity instead of the old atlas `kvColor` palette (yellow and orange) dimmed to alpha 130. Regional substations use Chile's node style (`NODE_COLOR`, radius 3 at 500 kV, 2 below). In the Simulación (load) view regional lines turn neutral gray `#767B80` (`REGIONAL_NO_LOAD`), because they have no load and green would claim "< 50 %". The help legend text and swatch follow.
+- **Why:** Ignacio asked for the lines outside Chile to follow the design (`design.md` section 3, Design v6 tokens) and look the same as Chile's. Closes the open item of the entry below: the regional `KV_COLORS` read like load colors next to Chile.
+- **Agents:** `buildRegionalLayers(grid, colorMode)` now takes the colour mode; `CascadeApp` rebuilds the regional layers when it changes. `hex` is exported from `web/src/cascade/layers.ts`. Regional lines have no `autoHighlight` on purpose: clicking them does not cut. Regional plants keep the old `TECH_COLORS` discs (Chile's map draws no plants). `kvColor` and `KV_COLORS` in `web/src/map/layers.ts` are now only used by the old `/map` page.
+- **Files:** `web/src/map/regional.ts`, `web/src/map/regional.test.ts`, `web/src/cascade/layers.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/Legend.tsx`, `docs/regional.md`, `docs/mapa3.md`, `CHANGELOG.md`.
+
+## 2026-11-21 · feat(web): line colors with a logic and conditions in the nav rail
+
+- **Changed:** Line colors in mapa 3 follow one rule: cold colors describe the network, the traffic-light ramp describes its stress, red is always failure. Voltage is white 500 kV, light cyan `#7FDBFF` 154-345 kV, blue `#3B9BF5` 100-110 kV, deep blue `#4F78E0` 44-69 kV. Load is green `#28B47E` under 50 %, yellow `#F5D547` 50-75 %, orange `#FF9838` 75-100 %, red over 100 %.
+- **Changed:** The time pill over the map is removed. "Escenarios" in the nav rail is a two-level tree (new `Scenarios.tsx`): each scenario expands into the four operating conditions, and the active condition carries the selection.
+- **Changed:** The dashed "fuera" lines are drawn above the live lines, so the cut line is no longer hidden under a parallel overloaded line.
+- **Why:** Ignacio's review of the Paper mockup (page "Design v6"): the gray-to-red load ramp was too flat, the voltage hues had no logic, and the conditions belong under each scenario.
+- **Agents:** `web/src/cascade/layers.ts` is still the single source for line colors; `networkSummary.ts` now derives `VOLTAGE_BANDS` from `VOLTAGE_TIERS`. A scenario is now a cut alone: "Apagón 25F" is cut `R239` at any point (it opens at `feb2025-1500` by default), so do not test for the 25F case with the point. `clock()` in `text.ts` returns only `hms` and `tenths`; `conditionName` and `conditionDate` format a point for the rail. The rules are in `docs/design.md` section 3.3. Open: the other countries' lines still use `KV_COLORS` from `web/src/map/layers.ts` (yellow and orange), which now read like load colors next to Chile. The draw order of "fuera" was not checked visually at close zoom.
+- **Files:** `web/src/cascade/layers.ts`, `Scenarios.tsx`, `CascadeApp.tsx`, `cascade.css`, `MapLegend.tsx`, `Legend.tsx`, `networkSummary.ts`, `text.ts`, `text.test.ts`, `ui.tsx`, `docs/design.md`, `docs/mapa3.md`, `web/README.md`.
+
 ## 2026-11-21 · fix(web): draw the wordmark subscript with the logo's SVG paths
 
 - **Changed:** The nav-rail wordmark draws its subscript "50" with the two paths of `web/public/favicon.svg` (Geist 800 "5" and the power button) instead of a Roboto "5" next to a hand-drawn 8 x 11 oval. Size and drop below the baseline are measured from `project-logo.png`.

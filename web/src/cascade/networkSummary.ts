@@ -1,15 +1,17 @@
 import linesUrl from "../../../data/processed/geo/lines.geojson?url";
 import plantsUrl from "../../../data/processed/geo/plants.geojson?url";
 import substationsUrl from "../../../data/processed/geo/substations.geojson?url";
+import { VOLTAGE_TIERS } from "./layers";
 
-/** Voltage groups of the Design v5 "Red" panel. `color` and `stroke` (sample height, px) are the design tokens. */
-export const VOLTAGE_BANDS: { label: string; minKv: number; color: string; stroke: number }[] = [
-  { label: "500 kV", minKv: 500, color: "#F0F2F4", stroke: 4 },
-  { label: "154–345 kV", minKv: 154, color: "#F99549", stroke: 3.5 },
-  { label: "100–110 kV", minKv: 100, color: "#3FB1EA", stroke: 3 },
-  { label: "44–69 kV", minKv: 44, color: "#7AA5BF", stroke: 2.5 },
-  { label: "Media tensión", minKv: 0, color: "#767B80", stroke: 2 },
-];
+const SAMPLE_STROKES = [4, 3.5, 3, 2.5, 2];
+
+/**
+ * Voltage groups of the "Red" panel: the map's tiers (labels, kV limits and colors from `layers.ts`, so the panel cannot
+ * drift from the map) with a thicker sample height in px (`stroke`), as in the design.
+ */
+export const VOLTAGE_BANDS: { label: string; minKv: number; color: string; stroke: number }[] = VOLTAGE_TIERS.map((t, i) => (
+  { label: t.label, minKv: t.minKv, color: t.color, stroke: SAMPLE_STROKES[i] }
+));
 
 export interface NetworkSummary { km: number; substations: number; mw: number; kmByBand: number[] }
 interface Collection<P> { features: { properties: P }[] }
