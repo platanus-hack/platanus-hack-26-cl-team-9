@@ -120,3 +120,14 @@ def test_every_tool_maps_to_an_operation_of_the_agent_spec():
     ids = {op["operationId"] for path in spec["paths"].values() for op in path.values()}
     used = {op for ops in OPERATIONS.values() for op in ops}
     assert used <= ids, used - ids
+
+
+def test_an_edit_separates_new_overloads_from_ones_already_there(tools):
+    tools.start_session()
+    before = tools.describe_network()["baseline"]["overloaded_lines"]
+    base = tools.add_datacenter(bus="B002", mw=1000, name="DC grande")["baseline"]
+    assert set(base["newly_overloaded"]) == set(base["overloaded_lines"]) - set(before)
+    assert set(base["no_longer_overloaded"]) == set(before) - set(base["overloaded_lines"])
+    assert base["newly_overloaded"], "a 1000 MW datacenter on the toy grid should overload something"
+    again = tools.edit_element("D001", {"mw": 1000})["baseline"]
+    assert again["newly_overloaded"] == []  # nothing changed, so nothing is new

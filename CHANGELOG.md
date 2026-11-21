@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(mcp): report which overloads an edit caused
+
+- **Changed:** Every edit tool (`add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network`) reads the overloaded lines before the edit and returns `baseline.newly_overloaded` and `baseline.no_longer_overloaded` next to `overloaded_lines`. The assistant's prompt asks the model to separate what the edit caused from what was already overloaded.
+- **Why:** The assistant said a 120 MW datacenter in Antofagasta "sobrecarga" eight lines, but R014, R045, R122 and R247 were already over capacity in the untouched base case. The tools returned only the list after the edit, so the model could not tell.
+- **Agents:** `baseline.overloaded_lines` alone is not the effect of an edit. Edit tools now make one extra `GET /network` before the edit (datacenter and generator reuse the one they already did).
+- **Files:** `backend/src/cascadasen/{mcp/tools.py,api/assistant_routes.py}`, `backend/tests/integration/test_mcp_server.py`, `docs/mcp.md`.
+
 ## 2026-11-21 · fix(api): keep the waiter cap of 10 and document the threadpool trade-off
 - **Changed:** Reverts the cap of 5 from the entry below: `session_lock_max_waiters` and `SessionLocks` default to 10 again, and the 409 text, agent spec, `docs/sessions-api.md` and `docs/stack.md` say 10 (spec regenerated). The `SessionLocks` docstring and `docs/sessions-api.md` section 7 now state the trade-off: one busy session holds up to 11 of AnyIO's 40 sync workers, and four busy sessions can delay every sync route, including the health check.
 - **Why:** The cap of 10 is a user decision (entry "retry the busy 409 in the web client and raise the waiter cap to 10"); review pass 3 allowed keeping it if the trade-off is written down.

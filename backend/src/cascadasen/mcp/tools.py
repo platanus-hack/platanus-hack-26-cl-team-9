@@ -151,23 +151,26 @@ class Sub50Tools:
 
     def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter") -> dict[str, Any]:
         """Add a datacenter (a load) of `mw` megawatts. `bus` is a bus id (B010), an area id or name
-        (A02, Antofagasta) or a unique part of a bus name. The rebalance and any line it overloads are
-        reported; read `baseline.overloaded_lines` afterwards."""
-        bus_id = digest.resolve_bus(self._network(), bus)
+        (A02, Antofagasta) or a unique part of a bus name. The rebalance is reported with the
+        baseline: `newly_overloaded` are the lines this edit pushed over capacity, while the rest of
+        `overloaded_lines` were already over capacity before it."""
+        net = self._network()
+        bus_id, before = digest.resolve_bus(net, bus), self._overloaded(net)
         resp = self.client.post(
             f"{self._base()}/loads", {"bus": bus_id, "mw": mw, "kind": "datacenter", "name": name}
         )
-        return {"bus": bus_id, **digest.edit_digest(resp), **self._after_edit()}
+        return {"bus": bus_id, **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_generator(self, bus: str, mw: float, tech: str, name: str | None = None) -> dict[str, Any]:
         """Add a generator of `mw` megawatts at a bus (same bus resolution as add_datacenter). `tech`:
         solar, eolica, hidro, termica, bioenergia, geotermica (the last four are synchronous)."""
-        bus_id = digest.resolve_bus(self._network(), bus)
+        net = self._network()
+        bus_id, before = digest.resolve_bus(net, bus), self._overloaded(net)
         body = {
             k: v for k, v in {"bus": bus_id, "mw": mw, "tech": tech, "name": name}.items() if v is not None
         }
         resp = self.client.post(f"{self._base()}/generators", body)
-        return {"bus": bus_id, **digest.edit_digest(resp), **self._after_edit()}
+        return {"bus": bus_id, **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_line(
         self, a: str, b: str, kv: float, capacity_mw: float, name: str | None = None
@@ -177,37 +180,50 @@ class Sub50Tools:
         body = {
             k: v for k, v in {"a": a, "b": b, "kv": kv, "capacity_mw": capacity_mw, "name": name}.items() if v
         }
+        before = self._overloaded()
         resp = self.client.post(f"{self._base()}/lines", body)
-        return {**digest.edit_digest(resp), **self._after_edit()}
+        return {**digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_bus(self, name: str, lat: float, lon: float, kv: float) -> dict[str, Any]:
         """Add a new bus (substation) at a location. It starts isolated: connect it with add_line."""
+        before = self._overloaded()
         resp = self.client.post(f"{self._base()}/buses", {"name": name, "lat": lat, "lon": lon, "kv": kv})
-        return {**digest.edit_digest(resp), **self._after_edit()}
+        return {**digest.edit_digest(resp), **self._after_edit(before)}
 
     def edit_element(self, element_id: str, changes: dict[str, Any]) -> dict[str, Any]:
         """Change an element by id. Bus B###: name, kv, lat, lon, load_mw, gen_mw, sync_mw, inertia_mws,
         in_service. Line R###/U###: capacity_mw, x_pu, in_service. Load or datacenter D###: mw, kind,
         name, in_service. Generator G###: mw, tech, synchronous, inertia_h, name, in_service. Base
         elements are taken out with in_service=false, not deleted."""
+        before = self._overloaded()
         resp = self.client.patch(self._element_path(element_id), changes)
-        return {"id": element_id.upper(), **digest.edit_digest(resp), **self._after_edit()}
+        return {"id": element_id.upper(), **digest.edit_digest(resp), **self._after_edit(before)}
 
     def remove_element(self, element_id: str) -> dict[str, Any]:
         """Delete an element the session added (U###, D###, G###, or a B### nothing uses). Base elements
         answer 409: use edit_element with in_service=false."""
+        before = self._overloaded()
         resp = self.client.delete(self._element_path(element_id))
-        return {"removed": element_id.upper(), **digest.edit_digest(resp or {}), **self._after_edit()}
+        return {"removed": element_id.upper(), **digest.edit_digest(resp or {}), **self._after_edit(before)}
 
     def reset_network(self) -> dict[str, Any]:
         """Remove every edit and open line of the session; runs keep the dataset they were created with."""
+        before = self._overloaded()
         resp = self.client.post(f"{self._base()}/reset")
-        return {"reset": True, "warnings": resp.get("warnings", []), **self._after_edit()}
+        return {"reset": True, "warnings": resp.get("warnings", []), **self._after_edit(before)}
 
-    def _after_edit(self) -> dict[str, Any]:
-        """The baseline after an edit: a large edit can overload lines before any cut."""
-        net = self._network()
-        return {"baseline": digest.baseline_digest(net.get("baseline", {})), "notice": digest.NOTICE}
+    def _overloaded(self, net: dict[str, Any] | None = None) -> list[str]:
+        """Lines over capacity in the base case right now (before an edit)."""
+        return (net or self._network()).get("baseline", {}).get("overloaded", [])
+
+    def _after_edit(self, before: list[str]) -> dict[str, Any]:
+        """The baseline after an edit and what the edit changed: the base case can already have
+        overloaded lines, so only `newly_overloaded` is the edit's doing."""
+        base = digest.baseline_digest(self._network().get("baseline", {}))
+        now = set(base["overloaded_lines"])
+        base["newly_overloaded"] = sorted(now - set(before))
+        base["no_longer_overloaded"] = sorted(set(before) - now)
+        return {"baseline": base, "notice": digest.NOTICE}
 
     # -- sandbox -----------------------------------------------------------------------------
 

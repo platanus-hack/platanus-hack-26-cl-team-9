@@ -41,7 +41,7 @@ A session serves one request at a time (`sessions-api.md` section 7), so a tool 
 | Strategic runs | `start_run`, `inject_event`, `step`, `submit_action`, `run_status`, `run_report`, `after_action`, `replay` |
 
 - Where a tool takes a bus it accepts `B###`, an area id or name (`A02`, "Antofagasta", which maps to the area's anchor bus) or a unique part of a bus name; otherwise it answers with the candidate ids.
-- Edits return the new id, `warnings`, the redispatch rule with `is_assumption: true` and the baseline (`overloaded_lines`, `load_shed_mw`), because a large datacenter can overload lines before any cut.
+- Edits return the new id, `warnings`, the redispatch rule with `is_assumption: true` and the baseline (`overloaded_lines`, `load_shed_mw`) and what the edit changed in it (`newly_overloaded`, `no_longer_overloaded`). The base case can already have overloaded lines, so only `newly_overloaded` is the edit's doing.
 - Ids for events, actions, policies and templates come from `list_options` (the catalog).
 
 ## 4. Guardrails
