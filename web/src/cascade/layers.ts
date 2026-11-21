@@ -96,11 +96,11 @@ export function buildCascadeLayers(v: View): Layer[] {
     ...(v.toggles.demand ? [_demand(v, dark)] : []),
     new ScatterplotLayer<NetNode>({
       id: "nodes", data: v.network.nodes, pickable: true, radiusUnits: "pixels", getPosition: (n) => [n.lon, n.lat],
-      getRadius: (n) => (n.id === v.selectedNode ? 6 : n.kv >= 500 ? 3 : 2),
-      getFillColor: (n) => (dark.has(n.id) ? hex(DEAD_LINE) : hex(NODE_COLOR, n.id === v.selectedNode ? 255 : 200)),
-      stroked: true, lineWidthUnits: "pixels", getLineWidth: (n) => (n.id === v.selectedNode ? 2 : dark.has(n.id) ? 1 : 0),
-      getLineColor: (n) => (n.id === v.selectedNode ? [255, 255, 255, 255] : [255, 255, 255, 64]),
-      updateTriggers: { getFillColor: [v.frame, v.selectedNode], getRadius: [v.selectedNode], getLineWidth: [v.frame, v.selectedNode], getLineColor: [v.selectedNode] },
+      getRadius: (n) => (n.id === v.selectedNode ? 6 : dark.has(n.id) ? 4 : n.kv >= 500 ? 3 : 2),
+      getFillColor: (n) => (dark.has(n.id) ? hex(FAULT) : hex(NODE_COLOR, n.id === v.selectedNode ? 255 : 200)), // a substation without supply is a fault: red
+      stroked: true, lineWidthUnits: "pixels", getLineWidth: (n) => (n.id === v.selectedNode ? 2 : dark.has(n.id) ? 1.5 : 0),
+      getLineColor: (n) => (n.id === v.selectedNode ? [255, 255, 255, 255] : dark.has(n.id) ? [24, 25, 27, 255] : [255, 255, 255, 64]),
+      updateTriggers: { getFillColor: [v.frame, v.selectedNode], getRadius: [v.frame, v.selectedNode], getLineWidth: [v.frame, v.selectedNode], getLineColor: [v.frame, v.selectedNode] },
     }),
   ];
 }

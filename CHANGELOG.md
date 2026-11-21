@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · fix(web): a substation without supply is drawn red
+
+- **Changed:** In mapa 3 a substation that loses supply (its island blacks out) is drawn as a red dot (`FAULT`, #FF5A48), a little bigger than a normal node and with a dark ring so it stands out on the gray lines. Before it was near-black (`DEAD_LINE`), which disappeared against the dark map. Lines between two dark substations keep the near-black "sin tensión" color. Code: the `nodes` layer in `web/src/cascade/layers.ts`.
+- **Why:** The team asked for it: a switched-off substation must read as a failure. It follows the rule in `design.md` that red is for faults.
+- **Agents:** The legend card does not list the red dot yet (it only lists line samples). Checked in the browser on the 25F cut: the substations of the island that blacks out turn red at 10,1 s.
+- **Files:** `web/src/cascade/layers.ts`.
+
 ## 2026-11-21 · feat(web): rebuild mapa 3 on the Design v5 interface
 
 - **Changed:** Mapa 3 (`/`) follows the three Paper "Design v5" frames: 200 px nav rail with the sub50 wordmark and scenarios (Apagón 25F, the active cut, Escenario nuevo), a 440 px docked panel with the Red and Simulación tabs, a timeline card with numbered event markers and island frequency curves, a time pill that picks the operating point, square map controls with a layers popover (2D or 3D, flow, demand), and a legend that switches between voltage and load. Event pins and a callout sit on the map. Styles live in the new `web/src/cascade/cascade.css`; the old mapa 3 block left `styles.css`, which now also holds the Roboto tokens and square corners for the legacy classes.
