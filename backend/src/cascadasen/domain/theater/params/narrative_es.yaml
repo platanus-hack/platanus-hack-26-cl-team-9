@@ -82,6 +82,7 @@ rationale:
   stab_wait_for_stability: "Estabilización pide esperar a que la isla se estabilice."
   log_request_external_support: "Logística pide apoyo externo."
   log_keep_crew_for_recovery: "Logística reserva cuadrillas para la recuperación."
+  log_crew_too_far: "Logística no envía cuadrilla: ninguna libre llegaría a tiempo."
 
 decisions:
   approved: "Aprobada"
@@ -105,6 +106,9 @@ verdicts:
   stability_check_failed: "La separación no es estable"
   already_open: "Ya está abierto"
   unknown_action_or_target: "Acción u objetivo desconocido"
+  action_failed: "La acción no resultó en este intento"
+  no_crew_in_range: "No queda una cuadrilla libre que llegue a tiempo"
+  failed: "Falló al ejecutarse"
 
 audit:
   audit_conflict: "Conflicto entre recomendaciones en {key}."

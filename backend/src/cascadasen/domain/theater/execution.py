@@ -47,6 +47,9 @@ RESTORABLE_EFFECTS = {
 SEGMENTATION_CLEARS = {"D3_unreliable_data", "D5_false_alarms", "C5_remote_dispatch_loss"}
 
 
+ON_SITE = frozenset({"field_verification", "manual_operation", "rearm_defense"})
+
+
 class EventError(ValueError):
     """An event request cannot be applied (unknown type, target or parameters)."""
 
@@ -94,6 +97,7 @@ class ExecutionState:
     pending_reports: list[FieldReport] = field(default_factory=list)
     pending_support: dict[str, int] = field(default_factory=dict)
     released: list[str] = field(default_factory=list)
+    arrivals: list[tuple[int, COA]] = field(default_factory=list)  # crew actions waiting for the crew
 
 
 def refresh_comms(d: AreaDigital, primary_ok: bool | None = None, backup: bool | None = None) -> None:
@@ -270,9 +274,17 @@ class Executor:
 
     # --------------------------------------------------------------- actions
 
-    def apply_action(self, real: RealState, ex: ExecutionState, coa: COA) -> str:
-        """Carry out an approved, validated action. Returns an observable outcome code."""
+    def apply_action(self, real: RealState, ex: ExecutionState, coa: COA, arrival: int | None = None) -> str:
+        """Carry out an approved, validated action. Returns an observable outcome code.
+
+        `arrival` is the cycle a dispatched crew reaches the site: on-site actions (verification,
+        manual operation, re-arming) take effect then, and a repair starts then."""
         a, cyc, act = coa.target, real.cycle, self.cfg.actions.get(coa.action, {})
+        if arrival is not None and coa.action in ON_SITE and arrival > cyc:
+            if coa.action == "manual_operation":
+                ex.active[coa.key] = coa  # committed: not proposed again while the crew travels
+            ex.arrivals.append((arrival, coa))
+            return "dispatched"
         if coa.action == "isr_tasking":
             real.digital[a].tasked_until = cyc + int(act.get("duration", 3))
         elif coa.action == "field_verification":
@@ -307,12 +319,25 @@ class Executor:
         elif coa.action == "restore_element":
             nominal = int(act.get("duration", 2))
             duration = self.chance.repair_cycles(nominal) if self.chance else nominal
-            ex.restorations.append(Restoration(coa.key, a, cyc, cyc + duration))
+            start = max(cyc, (arrival or cyc + 1) - 1)  # area work begins the cycle after `start`
+            ex.restorations.append(Restoration(coa.key, a, start, start + duration))
         elif coa.action == "request_external_support":
             ex.pending_support[a] = cyc + int(act.get("duration", 3))
         return "executed"
 
-    def _field_report(self, real: RealState, area: str) -> FieldReport:
+    def _arrive(self, real: RealState, ex: ExecutionState) -> list[dict[str, Any]]:
+        """Crews reaching their site this cycle carry out their on-site action."""
+        notes = []
+        for due, coa in [x for x in ex.arrivals if x[0] <= real.cycle]:
+            ex.arrivals.remove((due, coa))
+            if coa.action == "field_verification":
+                ex.pending_reports.append(self._field_report(real, coa.target, due=real.cycle))
+            else:
+                self.apply_action(real, ex, coa)
+            notes.append({"kind": "crew_arrived", "action": coa.action, "target": coa.target})
+        return notes
+
+    def _field_report(self, real: RealState, area: str, due: int | None = None) -> FieldReport:
         effects = real.active_effects(area)
         g = real.grid
         physical = (
@@ -327,7 +352,7 @@ class Executor:
         if digital and self.chance and self.chance.field_misses():
             digital = False  # the crew did not find it
         return FieldReport(
-            real.cycle + 1,
+            real.cycle + 1 if due is None else due,
             area,
             digital,
             physical,
@@ -392,6 +417,7 @@ class Executor:
         """Expire effects, advance segmentation, external support and restorations. Returns notes."""
         notes: list[dict[str, Any]] = []
         cyc = real.cycle
+        notes += self._arrive(real, ex)
         for e in real.effects:
             if e.established and e.cleared is None and e.expires is not None and cyc >= e.expires:
                 e.cleared = e.expires

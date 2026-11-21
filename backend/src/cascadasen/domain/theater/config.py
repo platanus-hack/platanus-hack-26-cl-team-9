@@ -71,6 +71,7 @@ class TheaterConfig:
     missions: dict[str, Mission]
     templates: dict[str, Template]
     stochastic: dict[str, Any] = field(default_factory=dict)
+    crews: dict[str, Any] = field(default_factory=dict)
     provenance: tuple[Provenance, ...] = field(default=())
 
     def template(self, template_id: str) -> Template:
@@ -124,5 +125,6 @@ def theater_config() -> TheaterConfig:
         missions=missions,
         templates=templates,
         stochastic=v.get("stochastic", {}),
+        crews=v.get("crews", {}),
         provenance=tuple(collect_provenance(p, "theater") + collect_provenance(t, "templates")),
     )

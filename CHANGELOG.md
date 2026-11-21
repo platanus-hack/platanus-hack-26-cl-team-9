@@ -2,6 +2,17 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(theater): field crews with home bases and road travel
+
+- **Changed:**
+  - New `domain/theater/crews.py` (`CrewRoster`): crews with a base and position, travel time from area centroids (haversine × road factor / speed + mobilisation, spread from the `field` stream), dispatch of the nearest free crew within `max_eta_cycles`, timed or held tasks.
+  - Verification, manual operation and re-arming wait for the crew (`ExecutionState.arrivals`, note `crew_arrived`); repairs start at arrival. Field reports arrive with the crew.
+  - Logistics vetoes crew actions whose nearest free crew is too far (`log_crew_too_far`); `AgentView.crew_eta` gives it the nearest free crew per area. Executed records carry `crew` and `arrival`; snapshots carry `crews`.
+  - `theater.yaml`: new `crews` section; `field_crews` 6 → 9.
+- **Why:** Ricardo wants defenders that repair anywhere in the country with real distances.
+- **Agents:** The flagship validation now asserts that C keeps the most continuity; B no longer beats A once crews are on the map (finding recorded in `strategy.md` 6). New verdict codes `no_crew_in_range`, `action_failed`, `failed` have Spanish text in `narrative_es.yaml`. `request_external_support` does not add crews yet.
+- **Files:** `backend/src/cascadasen/domain/theater/crews.py`, `execution.py`, `cycle.py`, `config.py`, `params/theater.yaml`, `params/narrative_es.yaml`, `backend/src/cascadasen/domain/agents/logistics.py`, `base.py`, `backend/tests/unit/test_crews.py`, `backend/tests/validation/test_flagship.py`, `docs/strategy.md`, `docs/stack.md`.
+
 ## 2026-11-21 · feat(theater): chance in the world on independent seeded streams
 
 - **Changed:**

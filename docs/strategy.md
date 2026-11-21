@@ -119,6 +119,8 @@ All events are abstract and defined at area or function level (`cyber.md` sectio
 
 Defensive COAs: ISR tasking, field verification, manual/local operation, backup communications, digital segmentation, preventive load reduction, fast reserve, battery support, re-arm a defence, controlled islanding, restore element, request external support. Each COA states its cost, expected effect, risk, required resources, reversibility, and which roles may propose or approve it. Resources: field crews, backup communications kits, fast reserve MW, battery MW, analyst attention and operator attention per cycle (which models saturation).
 
+**Field crews on the map** (`theater/crews.py`, `theater.yaml` → `crews`, all `is_assumption`). Each crew has a home base (an operating area, 9 crews by default) and a current position. Reaching a site takes 10 min of mobilisation plus road travel between area centroids (90 km/h, road factor 1.25, lognormal spread), so a neighbouring area is typically 1.5 to 4 hours away. Verification, manual operation and re-arming take effect when the crew arrives; a repair starts then. A crew that finishes stays where it worked. Logistics sees the nearest free crew per area and vetoes a crew action that would arrive after 90 min (`log_crew_too_far`); the roster never dispatches beyond that (`no_crew_in_range`). In a 2-3 hour incident, areas without a nearby crew must be handled remotely. Finding (seed 7, flagship): with crews on the map the preventive policy B ties local crews up in manual operation and repeated segmentation and falls below the reactive policy; adaptive coordination C stays best.
+
 ## 7. Strategic cycle, validator and audit
 
 Each operational cycle runs six steps:

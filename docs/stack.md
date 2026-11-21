@@ -252,7 +252,7 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 | `POST /sim/runs/{id}/events` | Select a node and trigger an event: `{type, target, params}`, applied at the next cycle and logged with `source: user` |
 | `POST /sim/runs/{id}/step` | Advance `n` cycles; returns one snapshot per cycle |
 | `POST /sim/runs/{id}/replay` | New run with the same seed and injected events, and another policy or capabilities |
-| `GET /sim/runs/{id}` | Real, observed and per-agent estimated state, resources, live indicators |
+| `GET /sim/runs/{id}` | Real, observed and per-agent estimated state, resources, field crews (`crews`: id, base, position, task, target, arrival, status), live indicators |
 | `GET /sim/runs/{id}/trace` | Hash-chained audit log and the replay recipe |
 | `GET /sim/runs/{id}/report` | Indicators, indices, consequence card (L0-L3, people, unserved MWh, cost) and after-action keys |
 | `POST /sim/campaigns`, `GET /sim/campaigns/{id}` | Campaign matrix (modes I, II, III): comparison table, Decisional Fragility Index, Adaptation Index |

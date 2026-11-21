@@ -32,6 +32,7 @@ from cascadasen.domain.simulation.timeline import NOTICE
 from cascadasen.domain.theater.audit import AuditLog
 from cascadasen.domain.theater.catalog import EVENTS, OBJECTIVES
 from cascadasen.domain.theater.config import TheaterConfig, UnknownTemplateError, theater_config
+from cascadasen.domain.theater.crews import CrewRoster
 from cascadasen.domain.theater.decisions import COA, ActionFeedback, Decision
 from cascadasen.domain.theater.digital import observe
 from cascadasen.domain.theater.evaluator import Evaluator, real_affected, wrong_decision
@@ -154,7 +155,23 @@ class Simulation:
         self.c2 = CommanderAgent(net, self.plan_load)
         self.ops = OperationsAgent(net)
         self.stab = StabilizationAgent(net, self.plan_load, self.defense_areas)
-        self.logistics = LogisticsAgent(net)
+        self.crew_actions = frozenset(
+            a for a, spec in cfg.actions.items() if (spec.get("costs") or {}).get("field_crews")
+        )
+        self.roster = (
+            CrewRoster.build(
+                net,
+                int(self.ledger.capacity.get("field_crews", 0)),
+                cfg.crews,
+                cfg.clock["cycle_minutes"],
+                rng=self.chance.field if self.chance else None,
+            )
+            if cfg.crews
+            else None
+        )
+        self.logistics = LogisticsAgent(
+            net, self.crew_actions, cfg.crews.get("max_eta_cycles"), self.defense_areas
+        )
         self.auditor = AuditorAgent()
         self.adversary: AdversaryAgent | None = None
         if adv.enabled:
@@ -311,6 +328,7 @@ class Simulation:
             field_reports=reports,
             feedback=tuple(self.feedback),
             active=tuple(sorted(self.ex.active)),
+            crew_eta=self._crew_eta(),
             **extra,
         )
 
@@ -341,6 +359,21 @@ class Simulation:
             for a in self.network.order
             if g.load_mw[a] > 0
         )
+
+    def _sites(self, target: str) -> list[str]:
+        """Areas where a crew can carry out an action on `target`."""
+        net = self.network
+        if target in net.areas:
+            return [target]
+        if target in net.corridors:
+            return [net.corridors[target].a, net.corridors[target].b]
+        return self.defense_areas.get(target) or list(net.order)
+
+    def _crew_eta(self) -> tuple[tuple[str, int], ...]:
+        if not self.roster:
+            return ()
+        etas = ((a, self.roster.best_eta(a)) for a in self.network.order)
+        return tuple((a, e) for a, e in etas if e is not None)
 
     def _admissible(self, reqs: list[EventRequest]) -> list[EventRequest]:
         """Adversary events that resolve to an area, zone or defence function. Anything else is
@@ -384,6 +417,8 @@ class Simulation:
         for key in self.ex.released:
             self.ledger.release(key)
         self.ex.released.clear()
+        if self.roster:
+            self.roster.sync(k, {r.action_key for r in self.ledger.reservations if r.pool == "field_crews"})
 
         # 1. events
         reqs = [*self.scheduled.get(k, []), *self.queue]
@@ -493,14 +528,31 @@ class Simulation:
             duration = self.cfg.actions.get(d.coa.action, {}).get("duration")
             if d.coa.action == "restore_element":
                 duration = None  # the executor releases the crew when the repair ends
+            arrival, crew = None, None
+            if self.roster and d.coa.action in self.crew_actions:
+                work = int(duration) if duration else None
+                job = self.roster.dispatch(self._sites(d.coa.target), d.coa.key, k, work)
+                if job is None:  # every crew in range was taken earlier in this cycle
+                    feedback.append(ActionFeedback(k, d.coa.action, d.coa.target, False, "no_crew_in_range"))
+                    executed.append({**d.coa.as_dict(), "verdict": "no_crew_in_range", "ok": False})
+                    continue
+                arrival, crew = job.arrival, job.crew
+            start = arrival if arrival is not None else k
             self.ledger.spend(
-                costs_of(d.coa, self.cfg.actions), d.coa.key, k + int(duration) if duration else None
+                costs_of(d.coa, self.cfg.actions), d.coa.key, start + int(duration) if duration else None
             )
-            self.executor.apply_action(real, self.ex, d.coa)
+            self.executor.apply_action(real, self.ex, d.coa, arrival)
             ctx.active = set(self.ex.active)
             ok_count += 1
             feedback.append(ActionFeedback(k, d.coa.action, d.coa.target, True, "executed"))
-            executed.append({**d.coa.as_dict(), "verdict": "ok", "ok": True})
+            executed.append(
+                {
+                    **d.coa.as_dict(),
+                    "verdict": "ok",
+                    "ok": True,
+                    **({"crew": crew, "arrival": arrival} if crew else {}),
+                }
+            )
         self.feedback = feedback
 
         # 6. evaluate and adapt
@@ -634,6 +686,7 @@ class Simulation:
             "notes": notes,
             "findings": findings,
             "resources": self.ledger.snapshot(),
+            "crews": self.roster.snapshot() if self.roster else [],
             "metrics": metrics,
         }
 

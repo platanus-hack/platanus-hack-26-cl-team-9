@@ -42,9 +42,11 @@ def test_preventive_policy_pays_in_unnecessary_actions(reports):
     assert wrong["B"] > wrong["A"] and wrong["B"] > wrong["C"]
 
 
-def test_reactive_policy_keeps_less_of_the_mission(reports):
+def test_adaptive_coordination_keeps_most_of_the_mission(reports):
+    """With crews on the map, the preventive policy ties local crews up in manual operation and
+    segmentation, so it no longer beats the reactive one; adaptive coordination stays best."""
     mc = {p: r["indicators"]["mission_continuity"] for p, r in reports.items()}
-    assert mc["A"] < mc["B"] and mc["A"] < mc["C"]
+    assert mc["C"] > mc["A"] and mc["C"] > mc["B"]
 
 
 def test_reports_carry_the_notice_and_no_constraint_violation(reports):
