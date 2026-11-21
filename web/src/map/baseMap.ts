@@ -1,4 +1,4 @@
-import { Deck, MapView, WebMercatorViewport, type Layer, type PickingInfo } from "@deck.gl/core";
+import { Deck, MapView, WebMercatorViewport, type Layer, type MapViewState, type PickingInfo } from "@deck.gl/core";
 import { GeoJsonLayer } from "@deck.gl/layers";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import mapboxgl from "mapbox-gl";
@@ -9,7 +9,9 @@ const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5
 const PITCH_DEGREES = 45;
 const PANEL_CLEARANCE_PX = 460;
 
-export interface BaseMap { setLayers(layers: Layer[]): void; dispose(): void }
+export type ViewMode = "2d" | "3d";
+export interface BaseMap { setLayers(layers: Layer[]): void; setMode(mode: ViewMode): void; dispose(): void }
+const pitchOf = (mode: ViewMode) => (mode === "2d" ? 0 : PITCH_DEGREES);
 export interface Handlers { onClick(info: PickingInfo): void; getTooltip(info: PickingInfo): string | null }
 
 /** Why: the cascade viewer needs the same Mapbox basemap as mapa2 but with layers it swaps every frame; without a token it falls back to the offline outline. */
@@ -26,7 +28,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   });
   const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: handlers.onClick, getTooltip: handlers.getTooltip, pickingRadius: 8 });
   map.addControl(overlay);
-  return { setLayers: (layers) => overlay.setProps({ layers }), dispose: () => map.remove() };
+  return { setLayers: (layers) => overlay.setProps({ layers }), setMode: (mode) => map.easeTo({ pitch: pitchOf(mode), bearing: 0, duration: 600 }), dispose: () => map.remove() };
 }
 
 function _offlineMap(container: HTMLDivElement, handlers: Handlers): BaseMap {
@@ -34,9 +36,15 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers): BaseMap {
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
   container.appendChild(canvas);
   const outline = new GeoJsonLayer({ id: "chile-outline", data: chileUrl, stroked: true, filled: true, getFillColor: [16, 24, 40], getLineColor: [60, 80, 115], lineWidthMinPixels: 1 });
-  const deck = new Deck({ canvas, views: new MapView({ repeat: false }), controller: true, initialViewState: _viewState(container),
+  let viewState: MapViewState = _viewState(container);
+  const deck = new Deck({ canvas, views: new MapView({ repeat: false }), controller: true, initialViewState: viewState,
+    onViewStateChange: ({ viewState: next }) => { viewState = next as MapViewState; }, // the controller owns the camera; keep a copy to change only the pitch
     layers: [outline], getTooltip: handlers.getTooltip, onClick: handlers.onClick, pickingRadius: 8 });
-  return { setLayers: (layers) => deck.setProps({ layers: [outline, ...layers] }), dispose: () => { deck.finalize(); canvas.remove(); } };
+  return {
+    setLayers: (layers) => deck.setProps({ layers: [outline, ...layers] }),
+    setMode: (mode) => deck.setProps({ initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: 600 } }),
+    dispose: () => { deck.finalize(); canvas.remove(); },
+  };
 }
 
 function _viewState(container: HTMLDivElement) {

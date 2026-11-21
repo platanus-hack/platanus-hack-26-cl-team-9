@@ -57,3 +57,6 @@ figcaption { font-size: 11px; margin-top: 4px; }
 .legend .col { display: block; width: 10px; height: 16px; }
 .node-popup .more { margin: 8px 0 4px; background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
 .legend summary { cursor: pointer; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
+.view-toggle { position: absolute; top: 16px; right: 456px; z-index: 4; display: flex; background: #1c1d20; border: 1px solid #334155; border-radius: 6px; overflow: hidden; }
+.view-toggle button { background: none; border: 0; color: #94a3b8; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.view-toggle button.on { background: #e2e8f0; color: #0f172a; }

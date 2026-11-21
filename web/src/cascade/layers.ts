@@ -1,6 +1,7 @@
 import type { Layer } from "@deck.gl/core";
 import { TripsLayer } from "@deck.gl/geo-layers";
 import { ColumnLayer, PathLayer, ScatterplotLayer } from "@deck.gl/layers";
+import type { ViewMode } from "../map/baseMap";
 import { RECTANGLE_BASE } from "../map/shapes";
 import type { BusState, EdgeState, Frame, NetLine, NetNode, Network } from "./types";
 
@@ -33,7 +34,7 @@ export function loadingColor(state: EdgeState | undefined): Rgba {
 
 const lineWidth = (l: NetLine) => WIDTH_BY_KV.find((w) => l.kv >= w.minKv)!.width;
 
-export interface View { network: Network; buses: Record<string, BusState>; frame: Frame; time: number; selected: string | null }
+export interface View { network: Network; buses: Record<string, BusState>; frame: Frame; time: number; selected: string | null; mode: ViewMode }
 
 /** Flat network with the load as 3D columns; dots move along each line in the direction of the flow. */
 export function buildCascadeLayers(v: View): Layer[] {
@@ -51,7 +52,7 @@ export function buildCascadeLayers(v: View): Layer[] {
       id: "flow", data: flowTrips(v, pos), getPath: (d) => d.path, getTimestamps: (d) => d.timestamps, getColor: (d) => d.color,
       currentTime: v.time, trailLength: 0.25, widthMinPixels: 4, capRounded: true, fadeTrail: true,
     }),
-    new ColumnLayer<NetNode>({
+    v.mode === "2d" ? _demandDiscs(v, dark) : new ColumnLayer<NetNode>({
       id: "load", data: v.network.nodes.filter((n) => (v.buses[n.id]?.load_mw ?? 0) > 20), pickable: true, extruded: true,
       vertices: RECTANGLE_BASE, diskResolution: 4, radiusUnits: "pixels", radius: 4, getPosition: (n) => [n.lon, n.lat],
       getElevation: (n) => (dark.has(n.id) ? 0 : v.buses[n.id].load_mw) * MW_TO_METERS,
@@ -64,6 +65,15 @@ export function buildCascadeLayers(v: View): Layer[] {
       stroked: dark.size > 0, getLineColor: [0, 0, 0, 255], lineWidthMinPixels: 1, updateTriggers: { getFillColor: [v.frame], getRadius: [v.frame] },
     }),
   ];
+}
+
+/** 2D has no height, so demand is the area of a flat disc (radius grows with the square root of MW). */
+function _demandDiscs(v: View, dark: Set<string>) {
+  return new ScatterplotLayer<NetNode>({
+    id: "load-2d", data: v.network.nodes.filter((n) => (v.buses[n.id]?.load_mw ?? 0) > 20 && !dark.has(n.id)), pickable: true,
+    radiusUnits: "pixels", getPosition: (n) => [n.lon, n.lat], getRadius: (n) => Math.sqrt(v.buses[n.id].load_mw) * 0.5,
+    getFillColor: [...COLUMN_COLOR.slice(0, 3), 150] as Rgba, updateTriggers: { getRadius: [v.frame], getFillColor: [v.frame] },
+  });
 }
 
 const DOT_COUNT = 3;

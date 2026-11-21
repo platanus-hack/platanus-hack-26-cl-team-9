@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): 2D / 3D toggle in mapa 3 (#16)
+
+- **Changed:** A 2D / 3D button at the top of the map (left of the panel). 3D is the previous view: camera pitch 45 and rectangular demand bars. 2D sets pitch 0 and draws demand as flat discs (radius grows with the square root of MW). `?vista=2d` opens in 2D. `BaseMap` has a new `setMode()` for both the Mapbox and the offline map.
+- **Why:** The new interface (Paper, design.md) wants the same map in 2D and 3D. This is the toggle only; the nav rail, tabs, city labels and the new colours are not built.
+- **Agents:** The 2D demand layer has its own id (`load-2d`). Reusing the id `load` for a different layer class makes deck.gl throw an accessor error. In 2D the discs replace the bars, so there is no height encoding.
+- **Files:** `web/src/map/baseMap.ts`, `web/src/cascade/layers.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/styles.css`.
+
 ## 2026-11-21 · feat(web): mapa 3 is the main map; mapas 1 and 2 deprecated (#14)
 
 - **Changed:** `/` and `?mapa=3` open mapa 3 (the cascade viewer). `?mapa=1` (offline deck.gl map) and `?mapa=2` (Mapbox basemap) still work but log a deprecation warning. No code was deleted.
