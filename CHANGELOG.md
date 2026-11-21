@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(cascade): add the cascadasen-health command
+
+- **Changed:** New `application/grid_health.py` and script `cascadasen-health`: prints the health index of operating points before a fault and after a cut (default `feb2025-1500` and `feb2025-0300`, cut `R239`), or JSON with `--json`. New validation test: the 25F scores below the reference both before and after the cut, limited by `transfer_25f` before it.
+- **Why:** Compare the 25F with a healthy point. Result: pre-fault 0.00 against 0.35; after R239, 0.00 (uncertain, `voltage_limited`) against 0.67.
+- **Agents:** `uv run cascadasen-health --points <ids> --cut <lines>`; no `--cut` gives pre-fault only. The validation test skips without `data/processed`.
+- **Files:** `backend/src/cascadasen/application/grid_health.py`, `backend/pyproject.toml`, `backend/tests/validation/test_health_25f.py`.
+
 ## 2026-11-21 · feat(cascade): add the grid health index by margin to the limit
 
 - **Changed:** New `domain/cascade/health.py` (pure) with `params/health.yaml`: margins 0-1 (1 with room, 0 at the limit, `raw` below 0 beyond it) and an index equal to their minimum. Pre-fault: 25F corridor transfer, inertia, frequency after losing the largest synchronous bus, share of single cuts with no effect. After a cut: load served and island frequency. `engine._zone_load` is now public `zone_load`.
