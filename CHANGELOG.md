@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(infra): marker line for second deploy
+
+- **Changed:** One marker line in `docs/infrastructure.md`.
+- **Why:** New commit gives a new image tag, so the second deploy proves the blue/green swap.
+- **Agents:** Previous deploy: task definition `cascadasen:2`, tag `aade205`.
+- **Files:** `docs/infrastructure.md`.
 ## 2026-11-21 · feat(infra): add ACM certificate for sub50.cl (not applied)
 - **Changed:** `infrastructure/acm.tf` adds `aws_acm_certificate` (`sub50.cl` + `*.sub50.cl`, DNS), the validation records in the Route 53 zone and `aws_acm_certificate_validation`. Output `acm_certificate_arn`. Docs updated.
 - **Why:** A certificate is needed for CloudFront and the ALB HTTPS listener before the domain goes live.

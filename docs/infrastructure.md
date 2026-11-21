@@ -68,3 +68,5 @@ No issue numbers yet: `scripts/issue.sh` does not exist in the repo and the fork
 - CloudFront origin secret header, so the ALB rejects requests that do not come from this distribution (the prefix list allows any CloudFront distribution).
 - Multi-task high availability.
 - Load data from S3 instead of baking it into the image.
+
+Last deploy check: blue/green swap proof (second deploy).
