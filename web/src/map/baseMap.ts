@@ -4,6 +4,7 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import chileUrl from "../../../data/processed/chile.geojson?url";
+import { landOf, nearLand, viewportRadiusDeg, type Land } from "./regionLimit";
 
 const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
 // Experiment: keep the camera near Chile and drop heavy Standard-style features. `?limite=0` turns it all off to compare.
@@ -11,6 +12,9 @@ const LIMITED = new URLSearchParams(location.search).get("limite") !== "0";
 const MAX_BOUNDS: [[number, number], [number, number]] = [[-85, -60], [-55, -10]];
 const MIN_ZOOM = 4;
 const MAX_ZOOM = 13;
+// Countries the camera may look at: its center must stay on land (or near it, scaled to the viewport). Add other countries' outlines here.
+const LAND_URLS = [chileUrl];
+const LAND_MARGIN = 0.25; // fraction of the shorter viewport side the center may be offshore
 const LITE_BASEMAP = { show3dObjects: false, showPointOfInterestLabels: false, showTransitLabels: false, showPedestrianRoads: false };
 const PITCH_DEGREES = 45;
 const STYLE = "mapbox://styles/mapbox/standard";
@@ -35,6 +39,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
     ...(LIMITED ? { maxBounds: MAX_BOUNDS, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM } : {}),
     bounds: SEN_BOUNDS, fitBoundsOptions: { padding: { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 }, pitch: PITCH_DEGREES }, pitch: PITCH_DEGREES,
   });
+  if (LIMITED) _keepOverLand(map, container);
   const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: handlers.onClick, getTooltip: handlers.getTooltip, pickingRadius: 8 });
   map.addControl(overlay);
   const setMode = (mode: ViewMode) => {
@@ -46,6 +51,19 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   return { setLayers: (layers) => overlay.setProps({ layers }), setMode, zoomBy: (d) => map.easeTo({ zoom: map.getZoom() + d, duration: 300 }), dispose: () => map.remove() };
 }
 
+/** Why: zooming into the sea or a neighbour's interior is useless; after each move, a center that is too far from land snaps back to the last valid one. */
+function _keepOverLand(map: mapboxgl.Map, container: HTMLDivElement) {
+  let land: Land = [];
+  let lastGood = map.getCenter();
+  Promise.all(LAND_URLS.map((url) => fetch(url).then((r) => r.json()))).then((files) => { land = files.flatMap(landOf); }).catch((e) => console.error("No se pudo cargar el contorno", e));
+  map.on("moveend", () => {
+    if (!land.length) return;
+    const { lng, lat } = map.getCenter();
+    const radius = viewportRadiusDeg(map.getZoom(), container.clientWidth, container.clientHeight, LAND_MARGIN);
+    if (nearLand(land, lng, lat, radius)) lastGood = map.getCenter();
+    else map.easeTo({ center: lastGood, duration: 400 });
+  });
+}
 function _offlineMap(container: HTMLDivElement, handlers: Handlers): BaseMap {
   const canvas = document.createElement("canvas");
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";

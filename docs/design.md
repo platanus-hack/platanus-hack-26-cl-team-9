@@ -89,7 +89,9 @@ The name refers to grid frequency: Chile's grid runs at 50 Hz, and when frequenc
 - Options 11-20 say more about the product, mostly with "sub50" as a wordmark and some with a short Spanish tagline. Taglines are unreadable at the 200 px the README uses, so a version without text is needed for small sizes.
 - Option 01 (Subscript) is being refined: the "0" of the subscript 50 is a power button drawn as a Geist-width oval, so it reads "sub₅₀".
 
-The team chose option 01. `project-logo.png` holds it: black "sub" with a subscript "5" and a power-button "0" on white, 1000 x 1000 PNG, 40 KB (Platanus asks for under 500 KB, `plan.md` section 8). The current file is a larger crop: the wordmark fills more of the square so it reads at the README's 200 px. A version for small sizes is still open.
+The team chose option 01. `project-logo.png` holds it: black "sub" with a subscript "5" and a power-button "0" on white, 1000 x 1000 PNG, 40 KB (Platanus asks for under 500 KB, `plan.md` section 8). The current file is a larger crop: the wordmark fills more of the square so it reads at the README's 200 px.
+
+The favicon, `web/public/favicon.svg`, is the small-size mark: only the subscript "5" and the power-button "0", black on a white 32 x 32 tile with 2px corners, because "sub" is unreadable at 16 px. The "5" is Geist at weight 800 converted to a path (a favicon cannot load web fonts), and the power button reuses the stroke paths of the Paper "Logo" page, with the same spacing as the logo. A small-size version of the full wordmark (for the README or social cards) is still open.
 
 ## 7. Open items
 
