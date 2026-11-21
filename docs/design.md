@@ -113,6 +113,8 @@ The team chose option 01. `project-logo.png` holds it: black "sub" with a subscr
 
 The favicon, `web/public/favicon.svg`, is the small-size mark: only the subscript "5" and the power-button "0", black on a white 32 x 32 tile with 2px corners, because "sub" is unreadable at 16 px. The "5" is Geist at weight 800 converted to a path (a favicon cannot load web fonts), and the power button reuses the stroke paths of the Paper "Logo" page, with the same spacing as the logo. A small-size version of the full wordmark (for the README or social cards) is still open.
 
+The in-app wordmark (`Wordmark` in `web/src/cascade/ui.tsx`) sets "sub" in Roboto and draws the subscript "50" with the favicon's two paths, never with a font "5" or a hand-drawn oval (an earlier 8 x 11 oval read as a stretched "0"). Its size comes from `project-logo.png` measured against the "sub" x-height: the "5" is 0.69 x-heights tall and the subscript drops 0.43 x-heights below the baseline.
+
 ## 7. Open items
 
 - Variant A is built: mapa 3 follows the three Design v5 frames (`docs/mapa3.md` section 4). Where the app departs from the mockup, and why: islands are named "Isla 1", "Isla 2" because the cache does not say which zone an island covers; the timeline spans the engine's whole `duration_s` (20 to 29 s), not 8 s, so close events share a marker ("1–11"); the "Qué lo habría evitado" and "Validación" tabs are disabled until the engine computes them; the next-zoom-level box and the breadcrumb are not built; the Mapbox basemap (night, monochrome) is darker than the mockup's gray land, while the offline outline uses the mockup's gray.

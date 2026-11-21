@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): draw the wordmark subscript with the logo's SVG paths
+
+- **Changed:** The nav-rail wordmark draws its subscript "50" with the two paths of `web/public/favicon.svg` (Geist 800 "5" and the power button) instead of a Roboto "5" next to a hand-drawn 8 x 11 oval. Size and drop below the baseline are measured from `project-logo.png`.
+- **Why:** Ignacio saw the "0" as stretched and the subscript at the wrong size; the old oval was taller than wide, while the logo's power button is nearly round.
+- **Agents:** The ratios (5 = 0.69 "sub" x-heights tall, drop = 0.43 x-heights) are in `docs/design.md` section 6 and in the `.wordmark .subscript` rule. If the "sub" font size changes, rescale `width`, `height` and `vertical-align` together.
+- **Files:** `web/src/cascade/ui.tsx`, `web/src/cascade/cascade.css`, `docs/design.md`.
+
 ## 2026-11-21 · docs(pitch): add pitch ideas and project benefits
 - **Changed:** New `docs/pitch_idea.md`: pitch notes (25F losses of US$ 984 millones with source, "wow" moment ideas) and a "Beneficios de este proyecto" section with a short list of 17 benefits followed by a paragraph per benefit, including cost vs resilience trade-offs, best combination for a budget and minimum investment that avoids a national blackout.
 - **Why:** The team needs material for the pitch.
