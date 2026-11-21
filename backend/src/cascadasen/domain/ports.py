@@ -37,3 +37,12 @@ class Interpreter(Protocol):
     deterministic; an LLM-backed adapter may implement it, but never decides or computes."""
 
     def after_action(self, report: dict, snapshots: list[dict]) -> dict: ...
+
+
+class CommanderAdvisor(Protocol):
+    """Optional C2 decision maker (docs/strategy.md 10). It only chooses among courses of action the
+    deterministic validator already approved, up to C2's attention capacity; it never computes,
+    validates or plays the adversary. Returns {"chosen": [option ids], "explanation": str} or None
+    (unavailable, invalid, refused): the commander then falls back to its rules."""
+
+    def choose(self, context: dict, options: list[dict], capacity: int) -> dict | None: ...

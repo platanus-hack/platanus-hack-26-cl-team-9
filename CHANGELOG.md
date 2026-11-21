@@ -2,6 +2,17 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(theater): optional LLM commander and after-action narrative
+
+- **Changed:**
+  - New port `CommanderAdvisor` (`domain/ports.py`). `CommanderAgent.decide(..., advisor=...)`: after the rules filter and resolve conflicts, an advisor may pick among the eligible validated COAs within attention; others get `not_selected_by_c2`.
+  - `Simulation(advisor=...)` + `RunConfig.llm_commander` / `llm_choices`: picks and Spanish explanations go to the audit log (`llm_choice`) and the recipe; replays reuse them and never call the LLM.
+  - New `infrastructure/llm.py`: `ClaudeCommander` and `ClaudeInterpreter` on the Anthropic SDK (`claude-opus-5-5`, effort `low`, JSON schema output, server-side refusal fallback `"default"`), wired by `llm_adapters(settings)` in the API. Optional extra `llm` (`anthropic>=1.0.0`, lock updated).
+  - `POST /sim/runs` field `llm_commander`; settings `CASCADASEN_LLM_ENABLED`, `_MODEL`, `_EFFORT`, `_TIMEOUT_S`.
+- **Why:** Ricardo chose rules by default plus an optional LLM as C2 that only chooses among validated options.
+- **Agents:** `strategy.md` 10 now allows the LLM as C2 (never the adversary, never computing or validating). Without the extra or credentials everything runs as before. Campaigns never pass an advisor. Tests use fake advisors/clients; no test calls the API.
+- **Files:** `backend/src/cascadasen/domain/ports.py`, `domain/agents/commander.py`, `domain/theater/cycle.py`, `infrastructure/llm.py`, `infrastructure/settings.py`, `application/run_experiment.py`, `application/simulation_service.py`, `api/simulation_routes.py`, `api/simulation_schemas.py`, `params/narrative_es.yaml`, `backend/pyproject.toml`, `backend/uv.lock`, `backend/tests/unit/test_llm_commander.py`, `backend/README.md`, `docs/strategy.md`, `docs/stack.md`.
+
 ## 2026-11-21 · feat(theater): campaigns with random seeds and spread across seeds
 
 - **Changed:** `POST /sim/campaigns` accepts `random_seeds` (1-10): fresh seeds drawn per campaign, returned in `spec.seeds`, the same in every cell. Each row adds `spread` with p10/p50/p90 of mission continuity and recoverability. New API guardrail test: no run, trace, report or campaign payload carries adversary `weights`, `arms`, `probs` or a `ranking`.

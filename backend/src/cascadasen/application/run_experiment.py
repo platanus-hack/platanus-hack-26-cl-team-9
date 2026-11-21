@@ -12,7 +12,7 @@ from collections import OrderedDict
 from dataclasses import replace
 from typing import Any
 
-from cascadasen.domain.ports import Interpreter
+from cascadasen.domain.ports import CommanderAdvisor, Interpreter
 from cascadasen.domain.simulation.defenses import defense_sets
 from cascadasen.domain.simulation.grid import Physics, operating_points
 from cascadasen.domain.simulation.network import ReducedNetwork
@@ -36,10 +36,12 @@ class RunManager:
         physics: Physics,
         max_runs: int = MAX_RUNS,
         interpreter: Interpreter | None = None,
+        advisor: CommanderAdvisor | None = None,
     ) -> None:
         self.network, self.physics, self.max_runs = network, physics, max_runs
         self.runs: OrderedDict[str, Simulation] = OrderedDict()
         self.interpreter = interpreter or TemplateInterpreter()
+        self.advisor = advisor  # LLM commander, used only by runs created with llm_commander
 
     # --------------------------------------------------------------- store
 
@@ -59,7 +61,7 @@ class RunManager:
     # ------------------------------------------------------------ commands
 
     def create(self, config: RunConfig, auto_run: bool = False) -> dict[str, Any]:
-        sim = Simulation(self.network, config, self.physics)
+        sim = Simulation(self.network, config, self.physics, advisor=self.advisor)
         run_id = self._put(sim)
         if auto_run:
             sim.run_to_end()
@@ -78,8 +80,10 @@ class RunManager:
         """New run with the original seed and injected events (re-injected at their cycles) and
         the given overrides (policy, uncertainty, adversary, capabilities, seed)."""
         original = self.get(run_id)
+        if original.config.llm_commander and "llm_choices" not in overrides:
+            overrides = {**overrides, "llm_choices": tuple(sorted(original.llm_record.items()))}
         config = replace(original.config, **overrides)
-        sim = Simulation(self.network, config, self.physics)
+        sim = Simulation(self.network, config, self.physics, advisor=self.advisor)
         new_id = self._put(sim)
         target = cycles if cycles is not None else (original.cycle or sim.horizon)
         by_cycle: dict[int, list[dict[str, Any]]] = {}
@@ -224,4 +228,5 @@ def run_config(body: dict[str, Any]) -> RunConfig:
         defenses=body.get("defenses"),
         initial_events=tuple(body.get("initial_events") or ()),
         stochastic=bool(body.get("stochastic", True)),
+        llm_commander=bool(body.get("llm_commander", False)),
     )

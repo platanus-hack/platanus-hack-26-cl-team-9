@@ -248,7 +248,7 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 |---|---|
 | `GET /sim/network` | Areas and corridors of the reduced network: `id`, `name`, `lon`/`lat`, `zone`, `aggregates` (real node ids). These are the selectable targets |
 | `GET /sim/catalog` | Event types, defensive COAs, policies A/B/C, adversary objectives, missions, experiment templates |
-| `POST /sim/runs` | Create a run: `template`, `policy`, `adversary` `{objective, budget, adaptive}`, `uncertainty`, `seed` (optional: omitted means a fresh random seed, returned in the summary and recorded in the recipe), `horizon`, `capabilities`, `initial_events`, `auto_run` |
+| `POST /sim/runs` | Create a run: `template`, `policy`, `adversary` `{objective, budget, adaptive}`, `uncertainty`, `seed` (optional: omitted means a fresh random seed, returned in the summary and recorded in the recipe), `horizon`, `capabilities`, `initial_events`, `auto_run`, `stochastic` (default true), `llm_commander` (default false; needs the server's LLM adapter, else rules) |
 | `POST /sim/runs/{id}/events` | Select a node and trigger an event: `{type, target, params}`, applied at the next cycle and logged with `source: user` |
 | `POST /sim/runs/{id}/step` | Advance `n` cycles; returns one snapshot per cycle |
 | `POST /sim/runs/{id}/replay` | New run with the same seed and injected events, and another policy or capabilities |
@@ -256,7 +256,7 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 | `GET /sim/runs/{id}/trace` | Hash-chained audit log and the replay recipe |
 | `GET /sim/runs/{id}/report` | Indicators, indices, consequence card (L0-L3, people, unserved MWh, cost) and after-action keys |
 | `POST /sim/campaigns`, `GET /sim/campaigns/{id}` | Campaign matrix (modes I, II, III): comparison table, Decisional Fragility Index, Adaptation Index |
-| `GET /sim/runs/{id}/after_action` | After-action review in Spanish, deterministic, from fixed templates |
+| `GET /sim/runs/{id}/after_action` | After-action review in Spanish from fixed templates; with the LLM adapter enabled it adds `narrative` (`interpreter: llm`) |
 | `GET /sim/narrative` | Spanish templates for every `text_key`, `rationale_key`, label and reason code |
 
 - `target` accepts an area id or any real snapshot node id. The response echoes `resolved_target`, so a click on a substation of the frontend map works directly.

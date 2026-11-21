@@ -90,6 +90,7 @@ decisions:
   attention_saturated: "Postergada: C2 no tiene más capacidad de atención en este ciclo"
   conflict_lost: "Descartada por conflicto con otra acción"
   vetoed: "Vetada"
+  not_selected_by_c2: "C2 eligió otras acciones en este ciclo"
   invalid: "No válida"
 
 verdicts:

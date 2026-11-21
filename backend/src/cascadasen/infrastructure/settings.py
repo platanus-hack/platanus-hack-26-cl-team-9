@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     http_timeout_s: float = 120.0
     user_agent: str = "cascadasen/0.1 (Platanus Hack 26; datos abiertos)"
 
+    # optional LLM commander and interpreter (docs/strategy.md 10); needs `uv sync --extra llm`
+    llm_enabled: bool = False
+    llm_model: str = "claude-opus-5-5"
+    llm_effort: str = "low"  # one call per C2 decision cycle: keep it fast
+    llm_timeout_s: float = 30.0
+
     ide_energia_url: str = (
         "https://ide-energia.minenergia.cl/server/rest/services/IDE_Energia/Visor_IDE_Energ%C3%ADa/MapServer"
     )

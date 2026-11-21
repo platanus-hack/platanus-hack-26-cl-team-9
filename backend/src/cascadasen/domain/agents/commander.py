@@ -3,6 +3,8 @@ conflicts and decides within its attention capacity. It cannot override the vali
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from cascadasen.domain.agents.base import AgentView
 from cascadasen.domain.simulation.network import ReducedNetwork
 from cascadasen.domain.theater.catalog import ACTIONS, CONFLICTS, Role
@@ -86,8 +88,16 @@ class CommanderAgent:
         return 1 if action in second else 2
 
     def decide(
-        self, view: AgentView, coas: list[COA], verdicts: dict[str, Verdict], vetoes: dict[str, str]
+        self,
+        view: AgentView,
+        coas: list[COA],
+        verdicts: dict[str, Verdict],
+        vetoes: dict[str, str],
+        advisor: Callable[[list[COA], int], set[str] | None] | None = None,
     ) -> list[Decision]:
+        """Rules filter invalid, vetoed and low-confidence COAs and resolve conflicts. The final pick
+        within attention is by score, or by `advisor` (an optional LLM, given only the eligible COAs)
+        when it answers; any advisor failure falls back to the score."""
         policy, isr = view.policy, view.isr
         out: list[Decision] = []
         candidates: list[tuple[float, COA]] = []
@@ -128,10 +138,17 @@ class CommanderAgent:
                 lost[coa.key] = clash.key
 
         capacity = int(view.available("operator_attention"))
+        eligible = [coa for _, coa in candidates if coa.key not in lost]
+        picks = advisor(eligible, capacity) if advisor and eligible and capacity > 0 else None
+        if picks is not None:
+            picks = {k for k in picks if k in {c.key for c in eligible}}
+            picks = set(sorted(picks, key=[c.key for c in eligible].index)[:capacity])
         for _, coa in candidates:
             v = verdicts[coa.key]
             if coa.key in lost:
                 out.append(Decision(coa, False, "conflict_lost", v, (lost[coa.key],)))
+            elif picks is not None and coa.key not in picks:
+                out.append(Decision(coa, False, "not_selected_by_c2", v))
             elif capacity <= 0:
                 out.append(Decision(coa, False, "attention_saturated", v))
             else:

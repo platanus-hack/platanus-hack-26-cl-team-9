@@ -24,6 +24,8 @@ from cascadasen.application.simulate import SimulateCommand, SimulationInputErro
 from cascadasen.application.simulation_service import SimulationService
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunFinishedError, RunInputError
 from cascadasen.domain.theater.narrative import templates
+from cascadasen.infrastructure.llm import llm_adapters
+from cascadasen.infrastructure.settings import get_settings
 
 router = APIRouter(prefix="/api/v1")
 
@@ -34,7 +36,8 @@ def get_simulation(request: Request) -> SimulationService:
         service = request.app.state.service
         if service is None:
             raise HTTPException(503, "No hay snapshot de la red. Ejecuta `cascadasen-build` primero.")
-        sim = SimulationService.from_snapshot(service.s)
+        interpreter, advisor = llm_adapters(get_settings())
+        sim = SimulationService.from_snapshot(service.s, interpreter=interpreter, advisor=advisor)
         request.app.state.simulation = sim
     return sim
 

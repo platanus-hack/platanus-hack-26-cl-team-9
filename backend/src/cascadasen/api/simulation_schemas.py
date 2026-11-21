@@ -105,6 +105,9 @@ class RunCreate(BaseModel):
     defenses: str | None = None
     initial_events: list[EventIn] = Field(default_factory=list)
     auto_run: bool = Field(False, description="Correr hasta el final al crear")
+    llm_commander: bool = Field(
+        False, description="C2 elige entre acciones validadas con el LLM configurado (si no hay, usa reglas)"
+    )
     stochastic: bool = Field(
         True,
         description="Azar del mundo: tamaño de eventos, eventos imprevistos, fallas de acciones y defensas",

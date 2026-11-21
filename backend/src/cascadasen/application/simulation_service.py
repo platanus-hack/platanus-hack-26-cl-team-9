@@ -9,6 +9,7 @@ from cascadasen.application.run_campaign import CampaignRunner
 from cascadasen.application.run_experiment import RunManager, catalog
 from cascadasen.application.simulate import PhysicsSimulator, SimulateCommand
 from cascadasen.domain.model import GridSnapshot
+from cascadasen.domain.ports import CommanderAdvisor, Interpreter
 from cascadasen.domain.simulation.grid import Physics, build_state
 from cascadasen.domain.simulation.network import NetworkSpec, ReducedNetwork, build_reduced_network
 
@@ -16,16 +17,24 @@ REFERENCE_OPERATING_POINT = "midday_2026"
 
 
 class SimulationService:
-    def __init__(self, network: ReducedNetwork, physics: Physics | None = None) -> None:
+    def __init__(
+        self,
+        network: ReducedNetwork,
+        physics: Physics | None = None,
+        interpreter: Interpreter | None = None,
+        advisor: CommanderAdvisor | None = None,
+    ) -> None:
         self.network = network
         self.physics = physics or Physics.load()
         self.simulator = PhysicsSimulator(network, self.physics)
-        self.runs = RunManager(network, self.physics)
+        self.runs = RunManager(network, self.physics, interpreter=interpreter, advisor=advisor)
         self.campaigns = CampaignRunner(network, self.physics)
 
     @classmethod
-    def from_snapshot(cls, snapshot: GridSnapshot, spec: NetworkSpec | None = None) -> SimulationService:
-        return cls(build_reduced_network(snapshot, spec))
+    def from_snapshot(
+        cls, snapshot: GridSnapshot, spec: NetworkSpec | None = None, **adapters: Any
+    ) -> SimulationService:
+        return cls(build_reduced_network(snapshot, spec), **adapters)
 
     # ------------------------------------------------------------- network
 

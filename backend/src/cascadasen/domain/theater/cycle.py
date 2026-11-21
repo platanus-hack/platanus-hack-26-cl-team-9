@@ -25,6 +25,7 @@ from cascadasen.domain.agents.isr import ISRAgent
 from cascadasen.domain.agents.logistics import LogisticsAgent
 from cascadasen.domain.agents.operations import OperationsAgent
 from cascadasen.domain.agents.stabilization import StabilizationAgent
+from cascadasen.domain.ports import CommanderAdvisor
 from cascadasen.domain.simulation.defenses import DefenseSet, UnknownDefenseSetError
 from cascadasen.domain.simulation.grid import Physics, UnknownOperatingPointError, build_state
 from cascadasen.domain.simulation.network import ReducedNetwork
@@ -93,6 +94,8 @@ class RunConfig:
     defenses: str | None = None
     initial_events: tuple[dict[str, Any], ...] = ()
     stochastic: bool = True  # False: catalog sizes, no unplanned events, actions always work
+    llm_commander: bool = False  # C2 picks among validated COAs with the configured LLM advisor
+    llm_choices: tuple[tuple[int, tuple[str, ...]], ...] = ()  # recorded picks, replayed verbatim
 
     def as_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -120,6 +123,7 @@ class Simulation:
     config: RunConfig
     physics: Physics = field(default_factory=Physics.load)
     cfg: TheaterConfig = field(default_factory=theater_config)
+    advisor: CommanderAdvisor | None = None  # used only when config.llm_commander
 
     def __post_init__(self) -> None:
         if self.config.seed is None:
@@ -199,6 +203,7 @@ class Simulation:
         self.queue: list[EventRequest] = []
         self.feedback: list[ActionFeedback] = []
         self.cycle = 0
+        self.llm_record: dict[int, tuple[str, ...]] = dict(conf.llm_choices)
         self.effect_seq = 0
         self.scheduled: dict[int, list[EventRequest]] = {}
         sources = [("scenario", e) for e in self.template.scenario_events]
@@ -505,9 +510,8 @@ class Simulation:
             **self.stab.review(staff["stabilization"], coas),
             **self.logistics.review(staff["logistics"], coas),
         }
-        decisions = self.c2.decide(
-            self._view("c2", obs, reports, isr=isr_report, intent=intent), coas, verdicts, vetoes
-        )
+        c2_view = self._view("c2", obs, reports, isr=isr_report, intent=intent)
+        decisions = self.c2.decide(c2_view, coas, verdicts, vetoes, self._llm_pick(c2_view))
 
         # 5. execute
         executed, feedback, wrong, ok_count = [], [], 0, 0
@@ -692,8 +696,56 @@ class Simulation:
 
     # ------------------------------------------------------------ outputs
 
+    def _llm_pick(self, view: AgentView):
+        """C2's LLM advisor for this cycle, or None. A recorded pick (replay) wins over a new call,
+        so a replay never calls the LLM again. The advisor sees only C2's view, never the real state."""
+        if not self.config.llm_commander:
+            return None
+        recorded = dict(self.config.llm_choices)
+        k = self.cycle
+
+        def pick(eligible: list[COA], capacity: int) -> set[str] | None:
+            if k in recorded:
+                return set(recorded[k])
+            if self.advisor is None:
+                return None
+            options = [{"id": c.key, **c.as_dict()} for c in eligible]
+            context = {
+                "cycle": k,
+                "minutes": k * self.cfg.clock["cycle_minutes"],
+                "mission": {"priority_areas": list(view.mission.priority_areas)},
+                "policy": view.policy.id,
+                "intent": view.intent.as_dict() if view.intent else None,
+                "isr": view.isr.as_dict() if view.isr else None,
+                "outages_seen": view.outages(),
+                "alarms": [{"area": a.area, "kind": a.kind} for a in view.observed.alarms],
+                "resources": dict(view.resources),
+                "crew_eta_cycles": dict(view.crew_eta),
+            }
+            answer = self.advisor.choose(context, options, capacity)
+            chosen = (answer or {}).get("chosen")
+            if not isinstance(chosen, list):
+                self.log.append(k, "decide", "c2", "llm_unavailable", {})
+                return None
+            keys = tuple(str(x) for x in chosen if str(x) in {o["id"] for o in options})[:capacity]
+            self.llm_record[k] = keys
+            self.log.append(
+                k,
+                "decide",
+                "c2",
+                "llm_choice",
+                {"chosen": list(keys), "explanation": str(answer.get("explanation", ""))[:2000]},
+            )
+            return set(keys)
+
+        return pick
+
     def recipe(self) -> dict[str, Any]:
-        return {"config": self.config.as_dict(), "injected": list(self.injected)}
+        return {
+            "config": self.config.as_dict(),
+            "injected": list(self.injected),
+            "llm_choices": [[k, list(v)] for k, v in sorted(self.llm_record.items())],
+        }
 
     def trace(self) -> dict[str, Any]:
         return {
