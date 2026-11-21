@@ -72,7 +72,7 @@ export function CascadeApp() {
   }, [located, states]);
 
   const [regional, setRegional] = useState<RegionalGrid | null>(null);
-  const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional) : []), [regional]);
+  const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional, colorMode) : []), [regional, colorMode]);
 
   const live = useRef({ network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers });
   live.current = { network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers };

@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(regional): draw the other countries' lines like Chile's
+
+- **Changed:** Regional lines now use Chile's `VOLTAGE_TIERS` colours and widths at full opacity instead of the old atlas `kvColor` palette dimmed to alpha 130. Regional substations use Chile's node style (`NODE_COLOR`, radius 3 at 500 kV, 2 below). In the Simulación (load) view regional lines turn the `< 50 %` gray that Chile's lines get without a computed flow. The help legend text and swatch follow.
+- **Why:** Ignacio asked for the lines outside Chile to follow the design (`design.md` section 3, Design v5 tokens) and look the same as Chile's.
+- **Agents:** `buildRegionalLayers(grid, colorMode)` now takes the colour mode; `CascadeApp` rebuilds the regional layers when it changes. `hex` is exported from `web/src/cascade/layers.ts`. Regional lines have no `autoHighlight` on purpose: clicking them does not cut. Regional plants keep the old `TECH_COLORS` discs (Chile's map draws no plants).
+- **Files:** `web/src/map/regional.ts`, `web/src/map/regional.test.ts`, `web/src/cascade/layers.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/Legend.tsx`, `docs/regional.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · docs(pitch): add pitch ideas and project benefits
 - **Changed:** New `docs/pitch_idea.md`: pitch notes (25F losses of US$ 984 millones with source, "wow" moment ideas) and a "Beneficios de este proyecto" section with a short list of 17 benefits followed by a paragraph per benefit, including cost vs resilience trade-offs, best combination for a budget and minimum investment that avoids a national blackout.
 - **Why:** The team needs material for the pitch.
