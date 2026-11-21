@@ -1,4 +1,4 @@
-import type { BusState, Event, Frame, Network, Timeline } from "./types";
+import type { BusState, Event, Frame, NetLine, Network, Timeline } from "./types";
 
 /**
  * Continuous-time reading of a precomputed cascade (Design v5 timeline). The engine stores one frame per network stage
@@ -145,4 +145,28 @@ export function eventLocation(e: Event, tl: Timeline, network: Network): [number
 export function frameAt(tl: Timeline, t: number): Frame {
   const f = tl.frames[frameIndexAt(tl, t)];
   return { ...f, dark: [...darkAt(tl, t)] };
+}
+
+export type LineStatus = "en servicio" | "sobrecargada" | "fuera de servicio" | "sin tensión";
+/**
+ * A line at the current frame, as the engine computed it: flow from `from` to `to` (bus ids), loading as a share of
+ * capacity. The engine marks lines that sit exactly at their limit in the base case as "overload" (loading 1.0); the
+ * map draws them as 75-100 %, so here only loading above 100 % counts as overloaded and the limit is `atLimit`.
+ */
+export interface LineState { status: LineStatus; flowMw: number; loading: number; from: string; to: string; atLimit: boolean }
+
+export function lineStateAt(line: NetLine, frame: Frame | undefined): LineState {
+  const e = frame?.edges[line.id];
+  const dark = new Set(frame?.dark ?? []);
+  const flow = e?.flow_mw ?? 0;
+  const [from, to] = flow >= 0 ? [line.a, line.b] : [line.b, line.a];
+  const status: LineStatus = e?.status === "open" ? "fuera de servicio" : dark.has(line.a) && dark.has(line.b) ? "sin tensión"
+    : e && e.loading > 1 + 1e-6 ? "sobrecargada" : "en servicio";
+  const loading = e?.status === "open" ? 0 : e?.loading ?? 0;
+  return { status, flowMw: e?.status === "open" ? 0 : Math.abs(flow), loading, from, to, atLimit: status === "en servicio" && loading >= 0.995 };
+}
+
+/** True once the cascade has played out (last event reached) and the engine found nobody without supply and no lost load. */
+export function withstandsAt(tl: Timeline, t: number): boolean {
+  return t + 1e-9 >= lastEventTime(tl) && tl.summary.people_without_power === 0 && tl.summary.load_shed_mw === 0;
 }

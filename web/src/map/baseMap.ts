@@ -29,6 +29,8 @@ export type ViewMode = "2d" | "3d";
 export interface Camera { lon: number; lat: number; zoom: number }
 export interface BaseMap {
   setLayers(layers: Layer[]): void; setMode(mode: ViewMode): void; zoomBy(delta: number): void; dispose(): void;
+  /** Back to the initial camera: the whole country next to the panel. */
+  fitAll(): void;
   /** Screen position (px, relative to the map container) of a point, for HTML overlays such as event pins. */
   project(lon: number, lat: number): [number, number];
   camera(): Camera;
@@ -37,7 +39,9 @@ export interface BaseMap {
 }
 const pitchOf = (mode: ViewMode) => (mode === "2d" ? 0 : PITCH_DEGREES);
 export type Tooltip = string | { text: string; style?: Partial<CSSStyleDeclaration> } | null;
-export interface Handlers { onClick(info: PickingInfo): void; getTooltip(info: PickingInfo): Tooltip }
+/** `onClick` gets the gesture's tapCount (1, 2, ...); see clicks.ts for how each basemap delivers a double click. */
+export interface Handlers { onClick(info: PickingInfo, tapCount: number): void; getTooltip(info: PickingInfo): Tooltip; isClickable(info: PickingInfo): boolean }
+const tapsOf = (event: unknown) => Number((event as { tapCount?: number } | undefined)?.tapCount ?? 1);
 
 /** Why: the cascade viewer needs the same Mapbox basemap as mapa2 but with layers it swaps every frame; without a token it falls back to the offline outline. */
 export function createBaseMap(container: HTMLDivElement, handlers: Handlers, initialMode: ViewMode = "3d"): BaseMap {
@@ -55,11 +59,25 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
     pitch: pitchOf(initialMode),
   });
   // The fit's padding stays as the camera padding, so the center (zoom, land check) is the center of the map left visible.
-  map.fitBounds(SEN_BOUNDS, { padding: { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 }, pitch: pitchOf(initialMode), duration: 0 });
+  const fit = (pitch: number, duration: number) => map.fitBounds(SEN_BOUNDS, { padding: { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 }, pitch, bearing: 0, duration });
+  fit(pitchOf(initialMode), 0);
   map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");
   if (LIMITED) _keepOverLand(map, container);
-  const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: handlers.onClick, getTooltip: handlers.getTooltip, pickingRadius: 8 });
+  // MapboxOverlay forwards Mapbox `click` as a click with tapCount 1 and `dblclick` as a click with tapCount 2
+  // (@deck.gl/mapbox dist/mapbox-overlay.js, _handleMouseEvent), so a double click arrives as three clicks.
+  const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: (info, event) => handlers.onClick(info, tapsOf(event)), getTooltip: handlers.getTooltip, pickingRadius: 8,
+    // The overlay's own cursor goes on a container with pointer-events none, so it never shows; set it on the map canvas.
+    onHover: (info) => { map.getCanvas().style.cursor = handlers.isClickable(info) ? "pointer" : ""; } });
   map.addControl(overlay);
+  // A double click on a line cuts it, so it must not also zoom. On empty map double-click zoom stays. Touch double tap
+  // zooms in a separate handler that cannot be stopped per target, so touch screens lose double-tap zoom (pinch remains).
+  if (matchMedia("(any-pointer: coarse)").matches) map.doubleClickZoom.disable();
+  map.on("dblclick", (e) => {
+    try {
+      const info = overlay.pickObject({ x: e.point.x, y: e.point.y, radius: 8 });
+      if (info && handlers.isClickable(info)) e.preventDefault(); // stops ClickZoomHandler (MapMouseEvent.preventDefault)
+    } catch { /* picking unavailable: keep the default zoom */ }
+  });
   const setMode = (mode: ViewMode) => {
     // 2D is the same map seen from straight above: it cannot be tilted or rotated.
     const flat = mode === "2d"; // a true 2D map cannot be tilted or rotated
@@ -68,6 +86,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   };
   return {
     setLayers: (layers) => overlay.setProps({ layers }), setMode, zoomBy: (d) => map.easeTo({ zoom: map.getZoom() + d, duration: 300 }), dispose: () => map.remove(),
+    fitAll: () => fit(map.getPitch(), 600),
     project: (lon, lat) => { const p = map.project([lon, lat]); return [p.x, p.y]; },
     camera: () => { const c = map.getCenter(); return { lon: c.lng, lat: c.lat, zoom: map.getZoom() }; },
     hasLabels: true,
@@ -94,13 +113,20 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode:
   const outline = new GeoJsonLayer({ id: "chile-outline", data: chileUrl, stroked: true, filled: true, getFillColor: LAND_FILL, getLineColor: LAND_LINE, lineWidthMinPixels: 1 });
   const neighbours = regionalOutlineUrl ? [new GeoJsonLayer({ id: "latam-outline", data: regionalOutlineUrl, stroked: true, filled: true, getFillColor: LAND_FILL, getLineColor: LAND_LINE, lineWidthMinPixels: 1 })] : [];
   let viewState: MapViewState = { ..._viewState(container), pitch: pitchOf(initialMode) };
-  const deck = new Deck({ canvas, views: new MapView({ repeat: false, ...(LIMITED ? { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM } : {}) }), controller: true, initialViewState: viewState,
+  // Double-click zoom off: then the dblclick recognizer is disabled, `click` has no enabled recognizer to wait for and
+  // fires at once on every tap with tapCount 1, 2, ... (@deck.gl/core dist/lib/constants.js RECOGNIZERS, mjolnir.js
+  // dist/hammerjs/recognizers/tap.js). With it on, every single click would wait 300 ms.
+  const controller = (mode: ViewMode) => ({ doubleClickZoom: false, dragRotate: mode === "3d", touchRotate: mode === "3d" });
+  let hovering = false;
+  const deck = new Deck({ canvas, views: new MapView({ repeat: false, ...(LIMITED ? { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM } : {}) }), controller: controller(initialMode), initialViewState: viewState,
     onViewStateChange: ({ viewState: next }) => { viewState = next as MapViewState; }, // the controller owns the camera; keep a copy to change only the pitch
-    layers: [...neighbours, outline], getTooltip: handlers.getTooltip, onClick: handlers.onClick, pickingRadius: 8 });
+    layers: [...neighbours, outline], getTooltip: handlers.getTooltip, onClick: (info, event) => handlers.onClick(info, tapsOf(event)), pickingRadius: 8,
+    onHover: (info) => { hovering = handlers.isClickable(info); }, getCursor: ({ isDragging }) => (isDragging ? "grabbing" : hovering ? "pointer" : "grab") });
   return {
     setLayers: (layers) => deck.setProps({ layers: [...neighbours, outline, ...layers] }),
-    setMode: (mode) => deck.setProps({ controller: { dragRotate: mode === "3d", touchRotate: mode === "3d" }, initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: 600 } }),
+    setMode: (mode) => deck.setProps({ controller: controller(mode), initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: 600 } }),
     zoomBy: (d) => deck.setProps({ initialViewState: { ...viewState, zoom: viewState.zoom + d, transitionDuration: 300 } }),
+    fitAll: () => deck.setProps({ initialViewState: { ..._viewState(container), pitch: viewState.pitch, transitionDuration: 600 } }),
     dispose: () => { deck.finalize(); canvas.remove(); },
     project: (lon, lat) => {
       const vp = new WebMercatorViewport({ ...viewState, width: container.clientWidth, height: container.clientHeight });
