@@ -37,7 +37,11 @@ resource "aws_ecs_task_definition" "app" {
         { name = "CASCADASEN_SESSION_STORE", value = "s3" },
         { name = "CASCADASEN_SESSION_BUCKET", value = aws_s3_bucket.sessions.bucket },
         { name = "CASCADASEN_AWS_REGION", value = data.aws_region.current.region },
+        # Informational: the tag of the last terraform apply. CI swaps images on a copy of this task
+        # definition, so later deploys keep this value (docs/infrastructure.md).
         { name = "CASCADASEN_VERSION", value = var.image_tag },
+        # CloudFront and the ALB each append to X-Forwarded-For; the client is the 2nd from the right.
+        { name = "CASCADASEN_TRUSTED_PROXY_HOPS", value = "2" },
       ] : []
       logConfiguration = {
         logDriver = "awslogs"

@@ -2,6 +2,15 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(api): trusted client IP, rate-limit global runs, document the version tag
+
+- **Changed:** `limits.client_ip` takes the `X-Forwarded-For` entry `CASCADASEN_TRUSTED_PROXY_HOPS` from the right (new setting `trusted_proxy_hops`, default 0 = peer address); `infrastructure/ecs.tf` sets it to 2 (CloudFront appends the viewer, the ALB appends CloudFront). The leftmost entry, which a client can set, is ignored.
+- **Changed:** `POST /api/v1/sim/runs`, `/events`, `/step` and `/replay` are limited to `rate_writes_per_minute` (60) per client IP (429 with `Retry-After`, declared in the agent spec) and `BodyLimitMiddleware` covers `/api/v1/sim/runs` as well as `/api/v1/sessions` (`BODY_LIMIT_PREFIXES`).
+- **Changed:** `docs/infrastructure.md` and a comment in `ecs.tf` say `CASCADASEN_VERSION` is the image tag of the last `terraform apply` (CI swaps images on a copy of the task definition), so run records' `code_version` is informational.
+- **Why:** Review findings 5, 6 and 9: rotating `X-Forwarded-For` bypassed the session-create limit and the SSE slots; every global run command is an S3 PUT in production with no limit or body cap; the version note was missing.
+- **Agents:** Behind any other proxy chain set `CASCADASEN_TRUSTED_PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For`. Nothing was applied to AWS; the env var lands with the pending sessions apply. Verification: `uv run pytest -q` 244 passed, 2 skipped, 1 failed (only the Bedrock test); `terraform -chdir=infrastructure fmt -check -recursive` and `validate` ok; lint clean; agent spec regenerated.
+- **Files:** `backend/src/cascadasen/api/{limits,simulation_routes}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/integration/test_sessions_api.py`, `infrastructure/ecs.tf`, `docs/openapi/agents.openapi.json`, `docs/{infrastructure,sessions-api,stack}.md`.
+
 ## 2026-11-21 · fix(sessions): separate dataset revision, document uncapped external actions
 
 - **Changed:** Session documents carry `dataset_revision` next to `revision` (also in `last_op`, SSE events, `/network`, `/state`, edit and cut/repair responses). Edits, reset, cut and repair bump both; `run_created`/`run_updated` bump only `revision`. `If-Match` is checked against `dataset_revision`; `/network`, `/state`, edits, reset, cut and repair send `ETag: "<dataset_revision>"`; `GET /{sid}` and run commands keep `ETag: "<revision>"`. The network view and the session world are cached by `(sid, dataset_revision)`. A `run_updated` index write that loses its retries no longer turns a persisted step into 409.

@@ -280,3 +280,28 @@ def test_session_routes_follow_the_agent_conventions(app):
                     assert ref.endswith("/ErrorResponse"), (path, code)
             seen.add(op["operationId"])
     assert seen == OPERATION_IDS
+
+
+def test_rate_limits_key_on_the_address_the_trusted_proxy_appended(app):
+    app.state.settings = app.state.settings.model_copy(update={"trusted_proxy_hops": 2})
+    client = TestClient(app)
+    for i in range(3):  # a spoofed left-most entry changes on every call; the viewer address does not
+        headers = {"X-Forwarded-For": f"10.0.0.{i}, 203.0.113.7, 130.176.0.1"}
+        assert client.post(BASE, json={}, headers=headers).status_code == 201
+    spoofed = client.post(BASE, json={}, headers={"X-Forwarded-For": "10.9.9.9, 203.0.113.7, 130.176.0.1"})
+    assert spoofed.status_code == 429
+    other = client.post(BASE, json={}, headers={"X-Forwarded-For": "203.0.113.8, 130.176.0.1"})
+    assert other.status_code == 201
+
+
+def test_global_runs_are_rate_limited_and_body_capped(app):
+    app.state.settings = app.state.settings.model_copy(update={"rate_writes_per_minute": 2})
+    client = TestClient(app)
+    for _ in range(2):
+        assert client.post("/api/v1/sim/runs", json={"seed": 1, "horizon": 4}).status_code == 201
+    limited = client.post("/api/v1/sim/runs", json={"seed": 1, "horizon": 4})
+    assert limited.status_code == 429 and int(limited.headers["Retry-After"]) >= 1
+    big = client.post(
+        "/api/v1/sim/runs", content=b"{" + b" " * 70000 + b"}", headers={"Content-Type": "application/json"}
+    )
+    assert big.status_code == 413

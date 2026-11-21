@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 
 from cascadasen.api.agent_openapi import AGENT, errors
+from cascadasen.api.limits import client_ip
 from cascadasen.api.simulation_schemas import (
     CampaignIn,
     EventIn,
@@ -54,6 +55,16 @@ def get_simulation(request: Request) -> SimulationService:
 
 
 Sim = Annotated[SimulationService, Depends(get_simulation)]
+
+
+def global_run_limit(request: Request) -> None:
+    """Every global run command writes a record (an S3 PUT in production): limited per client IP."""
+    s = request.app.state.settings
+    request.app.state.limiter.check("global_runs", client_ip(request), s.rate_writes_per_minute, 60.0)
+
+
+RATE_LIMITED = [Depends(global_run_limit)]
+TOO_MANY = {429: "Rate limit reached (per client IP); wait the seconds in Retry-After."}
 RunId = Annotated[
     str,
     Path(
@@ -193,8 +204,10 @@ def sim_catalog(sim: Sim) -> dict[str, Any]:
         {
             404: "Unknown template or event target.",
             422: "Invalid input (policy, operating point, horizon, adversary, capabilities, event type).",
+            **TOO_MANY,
         }
     ),
+    dependencies=RATE_LIMITED,
     openapi_extra=AGENT,
 )
 def create_run(sim: Sim, body: RunCreate) -> dict[str, Any]:
@@ -236,8 +249,10 @@ def get_run(sim: Sim, run_id: RunId) -> dict[str, Any]:
             404: "Unknown run_id or target.",
             409: "The run has finished; replay it instead.",
             422: "Invalid event type or body.",
+            **TOO_MANY,
         }
     ),
+    dependencies=RATE_LIMITED,
     openapi_extra=AGENT,
 )
 def inject_event(sim: Sim, run_id: RunId, body: EventIn) -> dict[str, Any]:
@@ -253,7 +268,8 @@ def inject_event(sim: Sim, run_id: RunId, body: EventIn) -> dict[str, Any]:
         "Runs `cycles` cycles (1 to 72) and returns one snapshot per cycle. Queued events apply in "
         "the first one. A finished run returns no new snapshots."
     ),
-    responses=errors({404: "Unknown run_id.", 422: "`cycles` outside 1-72."}),
+    responses=errors({404: "Unknown run_id.", 422: "`cycles` outside 1-72.", **TOO_MANY}),
+    dependencies=RATE_LIMITED,
     openapi_extra=AGENT,
 )
 def step_run(sim: Sim, run_id: RunId, body: StepIn) -> dict[str, Any]:
@@ -273,7 +289,8 @@ def step_run(sim: Sim, run_id: RunId, body: StepIn) -> dict[str, Any]:
         "original (or `cycles`). An unchanged replay gives the same trace hash. Returns the new run "
         "summary with `replay_of` and `overrides`."
     ),
-    responses=errors({404: "Unknown run_id.", 422: "Invalid override."}),
+    responses=errors({404: "Unknown run_id.", 422: "Invalid override.", **TOO_MANY}),
+    dependencies=RATE_LIMITED,
     openapi_extra=AGENT,
 )
 def replay_run(sim: Sim, run_id: RunId, body: ReplayIn) -> dict[str, Any]:

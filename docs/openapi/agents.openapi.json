@@ -147,6 +147,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Rate limit reached (per client IP); wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "x-sub50-agent": true
@@ -289,6 +299,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Rate limit reached (per client IP); wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "x-sub50-agent": true
@@ -360,6 +380,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Rate limit reached (per client IP); wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "x-sub50-agent": true
@@ -422,6 +452,16 @@
           },
           "422": {
             "description": "Invalid override.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached (per client IP); wait the seconds in Retry-After.",
             "content": {
               "application/json": {
                 "schema": {

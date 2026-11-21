@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     admin_enabled: bool = False  # POST /api/v1/admin/reload; off in production
     version: str = "dev"  # code version recorded in each run record
     rate_create_per_hour: int = 10
+    trusted_proxy_hops: int = 0  # proxies that append to X-Forwarded-For; 2 behind CloudFront + ALB
     rate_writes_per_minute: int = 60
     rate_cuts_per_minute: int = 30
     sse_per_session_ip: int = 5

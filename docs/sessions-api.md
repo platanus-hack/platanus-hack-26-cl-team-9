@@ -167,7 +167,7 @@ The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agen
 | Runs per session | 20 (422 above) | |
 | Session lifetime | 24 h after the last change | `CASCADASEN_SESSION_TTL_HOURS` |
 
-Rate limits are counted per backend process, so with several instances the effective limit is per instance. The client IP is the first `X-Forwarded-For` entry.
+Rate limits are counted per backend process, so with several instances the effective limit is per instance. The client IP is the `X-Forwarded-For` entry appended by the outermost trusted proxy, `CASCADASEN_TRUSTED_PROXY_HOPS` entries from the right (2 in production behind CloudFront and the ALB; entries further left are client-supplied and ignored). With the default 0, as in local dev, it is the peer address. The global runs `/api/v1/sim/runs*` (create, events, step, replay) share the 64 KB body cap and are limited to 60 commands per minute per client IP (`CASCADASEN_RATE_WRITES_PER_MINUTE`), because each command writes a run record.
 
 Expiry: every write renews the 24 h. The memory and file stores treat older documents as gone. On S3 the bucket lifecycle expires objects after 1 day, and S3 rounds that to the next midnight UTC, so an idle session can live up to about 48 h there; `expires_at` in the document is the 24 h figure. A run record expires 24 h after its last command, even if its session lives on; reading it after that gives 404.
 

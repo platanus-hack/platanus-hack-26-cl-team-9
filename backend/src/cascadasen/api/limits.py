@@ -1,5 +1,5 @@
-"""Per-process limits of the sessions API (docs/sessions-api.md, Limits): token-bucket rate limits,
-SSE connection slots and a 64 KB request body cap. With several instances each one counts on its
+"""Per-process limits of the sessions API and the global runs (docs/sessions-api.md, Limits):
+token-bucket rate limits, SSE connection slots and a 64 KB request body cap. With several instances each one counts on its
 own, so the effective limit is per instance."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 MAX_BODY_BYTES = 65536
-BODY_LIMIT_PREFIX = "/api/v1/sessions"
+BODY_LIMIT_PREFIXES = ("/api/v1/sessions", "/api/v1/sim/runs")
 MAX_BUCKETS = 10000
 
 
@@ -68,22 +68,27 @@ class SseSlots:
 
 
 def client_ip(request: Request) -> str:
-    """The first X-Forwarded-For entry (CloudFront/ALB put the client first), else the peer."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    first = forwarded.split(",")[0].strip()
-    if first:
-        return first
+    """The client address for rate limits. Each trusted proxy appends the address it saw to
+    X-Forwarded-For, so the client is the entry `trusted_proxy_hops` from the right (2 behind
+    CloudFront and the ALB); entries further left are client-supplied and ignored. With no trusted
+    proxy (0, the default) or a shorter header it is the peer address."""
+    hops = request.app.state.settings.trusted_proxy_hops
+    entries = [e.strip() for e in request.headers.get("x-forwarded-for", "").split(",") if e.strip()]
+    if hops > 0 and len(entries) >= hops:
+        return entries[-hops]
     return request.client.host if request.client else "unknown"
 
 
 class BodyLimitMiddleware:
-    """ASGI middleware: 413 when a sessions request declares a body over MAX_BODY_BYTES."""
+    """ASGI middleware: 413 when a sessions or global runs request declares a body over MAX_BODY_BYTES."""
 
-    def __init__(self, app: Any, max_bytes: int = MAX_BODY_BYTES, prefix: str = BODY_LIMIT_PREFIX) -> None:
-        self.app, self.max_bytes, self.prefix = app, max_bytes, prefix
+    def __init__(
+        self, app: Any, max_bytes: int = MAX_BODY_BYTES, prefixes: tuple[str, ...] = BODY_LIMIT_PREFIXES
+    ) -> None:
+        self.app, self.max_bytes, self.prefixes = app, max_bytes, prefixes
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
-        if scope["type"] == "http" and scope["path"].startswith(self.prefix):
+        if scope["type"] == "http" and scope["path"].startswith(self.prefixes):
             length = dict(scope.get("headers") or []).get(b"content-length")
             if length is not None and (not length.isdigit() or int(length) > self.max_bytes):
                 body = json.dumps(
