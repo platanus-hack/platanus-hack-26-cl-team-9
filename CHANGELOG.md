@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · build(mcp): optional mcp extra and cascadasen-mcp entry point
+
+- **Changed:** `pyproject.toml` gets the optional extra `mcp = ["mcp>=2.0", "httpx>=0.28"]` and the script `cascadasen-mcp = "cascadasen.mcp.server:main"`; `uv.lock` is updated.
+- **Why:** The MCP server (next commit) needs the SDK and `httpx` at runtime, and `httpx` was dev-only. The SDK is `mcp` 2.x, where `FastMCP` became `mcp.server.mcpserver.MCPServer`.
+- **Agents:** Install with `uv sync --extra mcp`. The script exists only once the `cascadasen.mcp` package lands in the next commit.
+- **Files:** `backend/pyproject.toml`, `backend/uv.lock`.
+
 ## 2026-11-21 · fix(api): trusted client IP, rate-limit global runs, document the version tag
 
 - **Changed:** `limits.client_ip` takes the `X-Forwarded-For` entry `CASCADASEN_TRUSTED_PROXY_HOPS` from the right (new setting `trusted_proxy_hops`, default 0 = peer address); `infrastructure/ecs.tf` sets it to 2 (CloudFront appends the viewer, the ALB appends CloudFront). The leftmost entry, which a client can set, is ignored.
