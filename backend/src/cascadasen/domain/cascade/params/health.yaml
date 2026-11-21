@@ -1,0 +1,20 @@
+# Grid health index parameters (docs/health.md). Every number sits in `value` with a `source` or
+# `is_assumption: true` (docs/datasets.md section 6). The limits that already live in `cascade.yaml`
+# (47.5 Hz blackout, 49.0 Hz first EDAC step, 25F corridor limits) are read from there, not repeated.
+version: 1
+
+inertia:
+  min_mws:
+    value: 31000.0
+    is_assumption: true
+    note: "Floor of the 31.0 to 42.4 GVAs range per CEN operation scenario (datasets.md section 4, earlier research, not re-checked); also the floor of the secure base case"
+  ref_mws:
+    value: 42400.0
+    is_assumption: true
+    note: "Top of the same range: at or above it the inertia margin is 1"
+
+n1:
+  no_effect_mw:
+    value: 1.0
+    is_assumption: true
+    note: "A single-line cut that sheds less than this counts as having no effect (N-1 secure)"

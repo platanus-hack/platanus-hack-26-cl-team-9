@@ -79,6 +79,7 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 | Campaigns with fragility and adaptation indices | `run_campaign.py` | `/api/v1/sim/campaigns*` |
 | Facade over simulation and theatre | `simulation_service.py` | `api/simulation_routes.py` |
 | Precompute every single-line cut | `cache_builder.py` | `cascadasen-cache` → `web/public/cache/` |
+| Grid health index (margin to the limit, `health.md`) | `grid_health.py` over `domain/cascade/health.py` | `cascadasen-health` |
 | Precompute offline theatre runs | `sim_fixtures.py` | `cascadasen-sim-fixtures` → `web/public/cache/theater/` |
 
 ### 2.4 Infrastructure (`infrastructure/`)
@@ -134,7 +135,7 @@ The operation tab, which draws the theatre on mapa 3, is not on `feat/strategic-
 
 - `data/scripts/`: `build_operating_points.py` (demand per bus), `build_baseline_opf.py` (secure base case: DC OPF, inertia floor), `build_node_index.py`, `build_chile_outline.sh`.
 - `data/processed/`: snapshot, operating points, base case and geo layers. It is versioned so the demo does not depend on downloads.
-- Parameters: `domain/cascade/params/cascade.yaml`, `domain/simulation/params/*.yaml`, `domain/theater/params/*.yaml`. Provenance is enforced at load time. One known impurity: these loaders read files from the domain package, accepted because the files ship with the code.
+- Parameters: `domain/cascade/params/cascade.yaml`, `domain/cascade/params/health.yaml`, `domain/simulation/params/*.yaml`, `domain/theater/params/*.yaml`. Provenance is enforced at load time. One known impurity: these loaders read files from the domain package, accepted because the files ship with the code.
 
 ## 6. Deployment and tooling
 

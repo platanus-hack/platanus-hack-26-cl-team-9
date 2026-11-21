@@ -1,6 +1,27 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · docs(health): document the health index and flag stale 25F figures
+
+- **Changed:** New `docs/health.md` (rule, metrics with limits and sources, 25F against `feb2025-0300`, cautions). `architecture.md` lists the command and `health.yaml`. `engine.md`, `mapa3.md` and `minimum-dataset.md` carry a note that cutting R239 at `feb2025-1500` now gives 1,972 MW lost and 3.8 M people with `voltage_limited`, not 7,872 MW and 15.2 M.
+- **Why:** The code is the current state (`AGENTS.md` 1.4); the older figures no longer hold.
+- **Agents:** The cause of the change in the R239 result was not investigated, and the "cuts with no effect" column of `engine.md` was not re-run. The `minimum-dataset.md` section 2.4 worked case is out of date.
+- **Files:** `docs/health.md`, `docs/architecture.md`, `docs/engine.md`, `docs/mapa3.md`, `docs/minimum-dataset.md`.
+
+## 2026-11-21 · feat(cascade): add the cascadasen-health command
+
+- **Changed:** New `application/grid_health.py` and script `cascadasen-health`: prints the health index of operating points before a fault and after a cut (default `feb2025-1500` and `feb2025-0300`, cut `R239`), or JSON with `--json`. New validation test: the 25F scores below the reference both before and after the cut, limited by `transfer_25f` before it.
+- **Why:** Compare the 25F with a healthy point. Result: pre-fault 0.00 against 0.35; after R239, 0.00 (uncertain, `voltage_limited`) against 0.67.
+- **Agents:** `uv run cascadasen-health --points <ids> --cut <lines>`; no `--cut` gives pre-fault only. The validation test skips without `data/processed`.
+- **Files:** `backend/src/cascadasen/application/grid_health.py`, `backend/pyproject.toml`, `backend/tests/validation/test_health_25f.py`.
+
+## 2026-11-21 · feat(cascade): add the grid health index by margin to the limit
+
+- **Changed:** New `domain/cascade/health.py` (pure) with `params/health.yaml`: margins 0-1 (1 with room, 0 at the limit, `raw` below 0 beyond it) and an index equal to their minimum. Pre-fault: 25F corridor transfer, inertia, frequency after losing the largest synchronous bus, share of single cuts with no effect. After a cut: load served and island frequency. `engine._zone_load` is now public `zone_load`.
+- **Why:** Ricardo asked for a health metric to compare the 25F with a healthy operating point.
+- **Agents:** Our own model index, not an official indicator; limits marked `is_assumption` are placeholders. `n1_worst` is reported but outside the minimum (cutting a reduced line cuts the whole corridor). Run tests with `uv run pytest` (not `--active`).
+- **Files:** `backend/src/cascadasen/domain/cascade/health.py`, `backend/src/cascadasen/domain/cascade/params/health.yaml`, `backend/src/cascadasen/domain/cascade/engine.py`, `backend/tests/unit/test_health.py`.
+
 ## 2026-11-21 · feat(web): add the Sub50 favicon
 - **Changed:** New `web/public/favicon.svg` (763 bytes): the logo's subscript "5" and power-button "0" in black on a white 32 x 32 tile. `web/index.html` links it with `<link rel="icon" type="image/svg+xml">`.
 - **Why:** The site had no favicon; the full "sub50" wordmark from the Paper "Logo" page is unreadable at tab size.
