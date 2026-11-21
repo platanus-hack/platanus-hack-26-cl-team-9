@@ -30,8 +30,11 @@ def build_cache_workflow(processed: Path, out: Path, point_ids: list[str] | None
 
 def _points(processed: Path, wanted: list[str] | None) -> list[dict]:
     ops = json.loads((processed / "operating_points.json").read_text(encoding="utf-8"))["points"]
-    return [{"id": p["id"], "label": p["label"], "year": int(p["snapshot"][:4]), "snapshot": p["snapshot"]}
-            for p in ops if not wanted or p["id"] in wanted]
+    return [
+        {"id": p["id"], "label": p["label"], "year": int(p["snapshot"][:4]), "snapshot": p["snapshot"]}
+        for p in ops
+        if not wanted or p["id"] in wanted
+    ]
 
 
 def _build_point(processed: Path, out: Path, point: dict) -> int:
@@ -39,8 +42,17 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
     _write(out / f"network-{point['year']}.json", _network_json(net))
     folder = out / point["id"]
     folder.mkdir(exist_ok=True)
-    _write(folder / "buses.json", {f"B{i:03d}": {"gen_mw": round(float(op.gen[i]), 1), "load_mw": round(float(op.load[i]), 1),
-                                                  "people": round(float(op.people[i]))} for i in range(net.size)})
+    _write(
+        folder / "buses.json",
+        {
+            f"B{i:03d}": {
+                "gen_mw": round(float(op.gen[i]), 1),
+                "load_mw": round(float(op.load[i]), 1),
+                "people": round(float(op.people[i])),
+            }
+            for i in range(net.size)
+        },
+    )
     _write(folder / "baseline.json", run_cascade_workflow(net, op, []))
     for line in net.lines:
         _write(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
@@ -49,10 +61,33 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
 
 def _network_json(net: ReducedNetwork) -> dict:
     ids = [f"B{i:03d}" for i in range(net.size)]
-    return {"nodes": [{"id": ids[i], "name": net.names[i], "lon": net.lon[i], "lat": net.lat[i], "kv": net.kv[i],
-                       "zone": net.zone(i), "map_nodes": net.map_nodes[i]} for i in range(net.size)],
-            "lines": [{"id": ln.id, "a": ids[ln.a], "b": ids[ln.b], "kv": ln.kv, "capacity_mw": round(ln.capacity_mw, 1),
-                       "x_pu": ln.x_pu, "map_edges": list(ln.map_edges), "branches": list(ln.branches)} for ln in net.lines]}
+    return {
+        "nodes": [
+            {
+                "id": ids[i],
+                "name": net.names[i],
+                "lon": net.lon[i],
+                "lat": net.lat[i],
+                "kv": net.kv[i],
+                "zone": net.zone(i),
+                "map_nodes": net.map_nodes[i],
+            }
+            for i in range(net.size)
+        ],
+        "lines": [
+            {
+                "id": ln.id,
+                "a": ids[ln.a],
+                "b": ids[ln.b],
+                "kv": ln.kv,
+                "capacity_mw": round(ln.capacity_mw, 1),
+                "x_pu": ln.x_pu,
+                "map_edges": list(ln.map_edges),
+                "branches": list(ln.branches),
+            }
+            for ln in net.lines
+        ],
+    }
 
 
 def _write(path: Path, data: dict) -> None:

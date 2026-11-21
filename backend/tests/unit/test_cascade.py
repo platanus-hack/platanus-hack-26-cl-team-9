@@ -10,7 +10,13 @@ import pytest
 from cascadasen.domain.cascade.engine import CascadeParams, run_cascade_workflow
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
 from cascadasen.domain.cascade.frequency import (
-    CENTRO_SUR_ZONES, F0, IslandInput, Params, edac_tables, simulate_island)
+    CENTRO_SUR_ZONES,
+    F0,
+    IslandInput,
+    Params,
+    edac_tables,
+    simulate_island,
+)
 from cascadasen.domain.cascade.network import Line, ReducedNetwork, reduce_network, substation_of
 from cascadasen.domain.cascade.scenario import OperatingPoint, load_network_and_point
 
@@ -22,22 +28,49 @@ def _bus(name, kv, node=None):
 
 
 def _branch(name, a, b, mva, x, kind="Line", year=2020):
-    return {"name": name, "bus0": a, "bus1": b, "s_nom_mva": mva, "x_pu": x, "kv": 220, "asset_type": kind,
-            "build_year": year, "edges": [f"L_{name}"]}
+    return {
+        "name": name,
+        "bus0": a,
+        "bus1": b,
+        "s_nom_mva": mva,
+        "x_pu": x,
+        "kv": 220,
+        "asset_type": kind,
+        "build_year": year,
+        "edges": [f"L_{name}"],
+    }
 
 
 def _toy_net(caps=(200.0, 200.0, 100.0)) -> ReducedNetwork:
     """A(0) - B(1), A - C(2), B - C. Equal reactances."""
-    lines = [Line("R0", 0, 1, caps[0], 0.01, 220, ("ab",), ()), Line("R1", 0, 2, caps[1], 0.01, 220, ("ac",), ()),
-             Line("R2", 1, 2, caps[2], 0.01, 220, ("bc",), ())]
-    return ReducedNetwork(names=["A", "B", "C"], lat=[-33.0] * 3, lon=[-70.0] * 3, kv=[220.0] * 3,
-                          model_buses=[["A_220"], ["B_220"], ["C_220"]], map_nodes=[[], [], []], lines=lines,
-                          index={"A": 0, "B": 1, "C": 2}, bus_of_model_bus={"A_220": 0, "B_220": 1, "C_220": 2})
+    lines = [
+        Line("R0", 0, 1, caps[0], 0.01, 220, ("ab",), ()),
+        Line("R1", 0, 2, caps[1], 0.01, 220, ("ac",), ()),
+        Line("R2", 1, 2, caps[2], 0.01, 220, ("bc",), ()),
+    ]
+    return ReducedNetwork(
+        names=["A", "B", "C"],
+        lat=[-33.0] * 3,
+        lon=[-70.0] * 3,
+        kv=[220.0] * 3,
+        model_buses=[["A_220"], ["B_220"], ["C_220"]],
+        map_nodes=[[], [], []],
+        lines=lines,
+        index={"A": 0, "B": 1, "C": 2},
+        bus_of_model_bus={"A_220": 0, "B_220": 1, "C_220": 2},
+    )
 
 
 def _toy_point(gen=(300.0, 0.0, 0.0), load=(0.0, 150.0, 150.0)) -> OperatingPoint:
-    return OperatingPoint("toy", "toy", np.array(load), np.array(gen), np.array([gen[0], 0, 0]),
-                          np.array([30000.0, 0, 0]), np.array([0.0, 1000.0, 1000.0]))
+    return OperatingPoint(
+        "toy",
+        "toy",
+        np.array(load),
+        np.array(gen),
+        np.array([gen[0], 0, 0]),
+        np.array([30000.0, 0, 0]),
+        np.array([0.0, 1000.0, 1000.0]),
+    )
 
 
 def test_substation_name_drops_voltage_suffix():
@@ -49,14 +82,20 @@ def test_substation_name_drops_voltage_suffix():
 def test_reduction_folds_transformers_and_parallel_lines_and_skips_later_links():
     snapshot = {
         "model_buses": [_bus("X_500", 500, "N1"), _bus("X_220", 220, "N1"), _bus("Y_220", 220, "N2")],
-        "model_branches": [_branch("trafo", "X_500", "X_220", 1800, 0.006, "Transformer"),
-                           _branch("l1", "X_220", "Y_220", 100, 0.02), _branch("l2", "X_220", "Y_220", 100, 0.02),
-                           _branch("future", "X_500", "Y_220", 3000, 0.005, year=2029)]}
+        "model_branches": [
+            _branch("trafo", "X_500", "X_220", 1800, 0.006, "Transformer"),
+            _branch("l1", "X_220", "Y_220", 100, 0.02),
+            _branch("l2", "X_220", "Y_220", 100, 0.02),
+            _branch("future", "X_500", "Y_220", 3000, 0.005, year=2029),
+        ],
+    }
     net = reduce_network(snapshot, year=2026)
     assert net.size == 2 and len(net.lines) == 1
     line = net.lines[0]
     assert line.capacity_mw == 200 and line.x_pu == pytest.approx(0.01) and set(line.branches) == {"l1", "l2"}
-    assert reduce_network(snapshot).lines[0].capacity_mw == 3200  # without a year the 2029 link joins the same pair
+    assert (
+        reduce_network(snapshot).lines[0].capacity_mw == 3200
+    )  # without a year the 2029 link joins the same pair
 
 
 def test_dc_flow_splits_by_reactance_and_conserves_power():
@@ -76,8 +115,15 @@ def test_islands_follow_open_lines():
 
 def test_initial_frequency_slope_matches_the_cen_reference():
     # docs/stack.md 4.4: a 3,000 MW loss with 44.3 GVAs gives about 1.69 Hz/s
-    island = IslandInput(inertia_mws=44300.0, sync_mw=20000.0, gen_mw=7000.0, load_mw=10000.0, nonsync_mw=0.0,
-                         zone_load_mw={}, edac={})
+    island = IslandInput(
+        inertia_mws=44300.0,
+        sync_mw=20000.0,
+        gen_mw=7000.0,
+        load_mw=10000.0,
+        nonsync_mw=0.0,
+        zone_load_mw={},
+        edac={},
+    )
     curve = simulate_island(island, Params(horizon_s=1.0)).curve
     t, f = curve[1]
     assert (F0 - f) / t == pytest.approx(1.69, abs=0.08)

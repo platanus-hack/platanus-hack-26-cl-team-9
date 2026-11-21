@@ -1,6 +1,11 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · fix(backend): make ruff check and format pass in CI
+- **Changed:** `zip(..., strict=True)` for flows and lines in `engine.py` (B905), unquoted type annotation in `scenario.py` (UP037), sorted imports in `test_cascade.py` (I001), and `ruff format` on 7 cascade files (`cache_builder.py`, `engine.py`, `flow.py`, `frequency.py`, `network.py`, `scenario.py`, `test_cascade.py`). No behaviour change; 41 tests pass.
+- **Why:** The lint workflow failed on 4 ruff errors and the format check on 7 files.
+- **Agents:** CI runs `ruff check .` and `ruff format --check .` (ruff 0.17.6). Run `scripts/lint.sh --fix <files>` on every Python file you touch. The cache in `web/public/cache/` needs no regeneration.
+- **Files:** `backend/src/cascadasen/application/cache_builder.py`, `backend/src/cascadasen/domain/cascade/*.py`, `backend/tests/unit/test_cascade.py`.
 ## 2026-11-21 · perf(web): limit the mapa 3 camera to Chile and lighten the Mapbox style
 - **Changed:** `baseMap.ts` sets `maxBounds` (lon -85 to -55, lat -60 to -10), `minZoom` 4 and `maxZoom` 13 on the Mapbox map and the same zoom limits on the offline deck.gl map. The Standard style config turns off `show3dObjects`, `showPointOfInterestLabels`, `showTransitLabels` and `showPedestrianRoads`.
 - **Why:** The whole world was reachable although the data covers only Chile; the team wants to cut rendering cost. Effect not measured yet.

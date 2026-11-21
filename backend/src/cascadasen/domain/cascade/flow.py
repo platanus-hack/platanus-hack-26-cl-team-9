@@ -27,7 +27,9 @@ def find_islands(net: ReducedNetwork, open_lines: set[str]) -> list[list[int]]:
     return sorted(groups.values(), key=len, reverse=True)
 
 
-def dc_flow(net: ReducedNetwork, open_lines: set[str], injection_mw: np.ndarray, islands: list[list[int]]) -> np.ndarray:
+def dc_flow(
+    net: ReducedNetwork, open_lines: set[str], injection_mw: np.ndarray, islands: list[list[int]]
+) -> np.ndarray:
     """Flow in MW per line (positive from a to b). Each island has its own slack, which absorbs any residual."""
     flows = np.zeros(len(net.lines))
     position = {ln.id: k for k, ln in enumerate(net.lines)}
