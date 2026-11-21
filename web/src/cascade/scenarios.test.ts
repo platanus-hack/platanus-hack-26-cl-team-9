@@ -5,6 +5,7 @@ describe("scenarios", () => {
   it("finds the scenario for a point and cut, and null for a manual cut", () => {
     expect(findScenario("feb2025-1500", "R239")?.id).toBe("25f");
     expect(findScenario("feb2025-0300", null)?.id).toBe("noche-normal");
+    expect(findScenario("nov2026-2000", "R006")?.id).toBe("alto-jahuel-ancoa");
     expect(findScenario("feb2025-1500", "R001")).toBeNull();
   });
 
