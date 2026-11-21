@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(cascade): add the grid health index by margin to the limit
+
+- **Changed:** New `domain/cascade/health.py` (pure) with `params/health.yaml`: margins 0-1 (1 with room, 0 at the limit, `raw` below 0 beyond it) and an index equal to their minimum. Pre-fault: 25F corridor transfer, inertia, frequency after losing the largest synchronous bus, share of single cuts with no effect. After a cut: load served and island frequency. `engine._zone_load` is now public `zone_load`.
+- **Why:** Ricardo asked for a health metric to compare the 25F with a healthy operating point.
+- **Agents:** Our own model index, not an official indicator; limits marked `is_assumption` are placeholders. `n1_worst` is reported but outside the minimum (cutting a reduced line cuts the whole corridor). Run tests with `uv run pytest` (not `--active`).
+- **Files:** `backend/src/cascadasen/domain/cascade/health.py`, `backend/src/cascadasen/domain/cascade/params/health.yaml`, `backend/src/cascadasen/domain/cascade/engine.py`, `backend/tests/unit/test_health.py`.
+
 ## 2026-11-21 · feat(web): add the Sub50 favicon
 - **Changed:** New `web/public/favicon.svg` (763 bytes): the logo's subscript "5" and power-button "0" in black on a white 32 x 32 tile. `web/index.html` links it with `<link rel="icon" type="image/svg+xml">`.
 - **Why:** The site had no favicon; the full "sub50" wordmark from the Paper "Logo" page is unreadable at tab size.
