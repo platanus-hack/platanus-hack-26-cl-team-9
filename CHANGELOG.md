@@ -1,6 +1,14 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+
+## 2026-11-21 · fix(web): draw the wordmark subscript with the logo's SVG paths
+
+- **Changed:** The nav-rail wordmark draws its subscript "50" with the two paths of `web/public/favicon.svg` (Geist 800 "5" and the power button) instead of a Roboto "5" next to a hand-drawn 8 x 11 oval. Size and drop below the baseline are measured from `project-logo.png`.
+- **Why:** Ignacio saw the "0" as stretched and the subscript at the wrong size; the old oval was taller than wide, while the logo's power button is nearly round.
+- **Agents:** The ratios (5 = 0.69 "sub" x-heights tall, drop = 0.43 x-heights) are in `docs/design.md` section 6 and in the `.wordmark .subscript` rule. If the "sub" font size changes, rescale `width`, `height` and `vertical-align` together.
+- **Files:** `web/src/cascade/ui.tsx`, `web/src/cascade/cascade.css`, `docs/design.md`.
+
 ## 2026-11-21 · feat(regional): reduce the other countries' networks like Chile's
 
 - **Changed:** New `domain/regional_reduction.py`: substations within 3 km become one bus, line ends are snapped to the nearest bus (12 km), OSM ways are chained, parallel lines are folded, small pieces dropped, and plants are added up per bus (40 km). `cascadasen-regional` now writes the reduced layer: lines `<ISO3>-R<n>` with `a`/`b` bus ids drawn straight, buses `<ISO3>-B<n>`, generation `<ISO3>-G<n>` per bus. Lines before to after: BRA 2,264 to 1,286, PER 575 to 246, BOL 244 to 58, ARG 3,056 to 390. The web reads the new fields; tooltips show circuits and plant counts.
