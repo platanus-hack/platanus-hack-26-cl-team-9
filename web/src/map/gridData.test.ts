@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { aggregatePlantsByNode, type Substation } from "./gridData";
 import { describeTopology, formatNumber } from "./nodeDetail";
 import { formatPeople, narrate } from "../cascade/text";
-import { LOADING_BANDS, loadingColor } from "../cascade/layers";
+import { LOAD_BANDS, loadColor } from "../cascade/layers";
 import type { Network } from "../cascade/types";
 
 const SUBS: Substation[] = [
@@ -60,33 +60,32 @@ describe("cascade narration", () => {
 
   it("names the line in a cut and an overload", () => {
     const cut = { t: 0, type: "line_cut", ids: ["R000"], text_key: "line_cut", params: {} };
-    expect(narrate(cut, network)).toBe("Se corta la línea A – B (500 kV).");
-    expect(narrate({ ...cut, text_key: "line_overload_open" }, network)).toContain("supera el 120%");
+    expect(narrate(cut, network)).toBe("Sale de servicio la línea A – B (500 kV).");
+    expect(narrate({ ...cut, text_key: "line_overload_open" }, network)).toContain("supera el 120 %");
   });
 
   it("explains why an island goes dark", () => {
     const e = { t: 1, type: "island_blackout", ids: [], text_key: "island_blackout", params: { buses: 3, load_mw: 58, reason: "no_inertia", min_hz: null } };
-    expect(narrate(e, network)).toBe("Apagón en una isla de 3 barras (58 MW): no tiene inercia sincrónica.");
+    expect(narrate(e, network)).toBe("Se apaga una isla de 3 subestaciones (58 MW): no tiene inercia sincrónica.");
   });
 
   it("writes people in millions", () => {
-    expect(formatPeople(15200000)).toContain("millones");
-    expect(formatPeople(158000)).not.toContain("millones");
+    expect(formatPeople(15200000)).toBe("15,2 M");
+    expect(formatPeople(158000)).toBe("158.000");
   });
 });
 
 describe("cascade colours", () => {
   it("colours a line by its loading, in the same bands the legend shows", () => {
     const edge = (loading: number) => ({ flow_mw: 100, status: "ok" as const, loading });
-    expect(loadingColor(edge(0.5))).toEqual(LOADING_BANDS[0].color);
-    expect(loadingColor(edge(0.6))).toEqual(LOADING_BANDS[0].color);
-    expect(loadingColor(edge(0.75))).toEqual(LOADING_BANDS[1].color);
-    expect(loadingColor(edge(0.95))).toEqual(LOADING_BANDS[2].color);
-    expect(loadingColor(edge(1.3))).toEqual(LOADING_BANDS[3].color);
+    expect(loadColor(edge(0.4))).toEqual(LOAD_BANDS[0].color);
+    expect(loadColor(edge(0.5))).toEqual(LOAD_BANDS[0].color);
+    expect(loadColor(edge(0.6))).toEqual(LOAD_BANDS[1].color);
+    expect(loadColor(edge(0.95))).toEqual(LOAD_BANDS[2].color);
+    expect(loadColor(edge(1.3))).toEqual(LOAD_BANDS[3].color);
   });
 
-  it("draws open lines and missing flows differently from loaded ones", () => {
-    expect(loadingColor({ flow_mw: 0, status: "open", loading: 0 })).not.toEqual(LOADING_BANDS[0].color);
-    expect(loadingColor(undefined)[3]).toBeLessThan(200);
+  it("treats a missing flow as the lowest band", () => {
+    expect(loadColor(undefined)).toEqual(LOAD_BANDS[0].color);
   });
 });
