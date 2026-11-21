@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
+from cascadasen.api import agent_openapi
 from cascadasen.api.schemas import EdgePage, Health, IslandsRequest, IslandsResponse, NodePage, Page
 from cascadasen.api.simulation_routes import router as simulation_router
 from cascadasen.application.grid_queries import GridQueryService, NotFoundError
@@ -60,6 +61,7 @@ def create_app(
     app.state.service = service
     app.state.simulation = simulation  # built lazily from the snapshot on the first /sim request
     app.include_router(simulation_router)
+    agent_openapi.mount(app)  # agent-only spec at /api/v1/agents/openapi.json (docs/openapi.md)
 
     def found(fn, *args, **kwargs):
         try:

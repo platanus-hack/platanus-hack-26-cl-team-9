@@ -1,6 +1,14 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(api): agent-only OpenAPI spec for external agents
+
+- **Changed:** New `api/agent_openapi.py`: `AGENT` marker (`openapi_extra={"x-sub50-agent": True}`), shared `ErrorResponse {detail}` with `errors({code: text})`, and a spec built from the marked routes, served at `GET /api/v1/agents/openapi.json` with a Swagger page at `/api/v1/agents/docs`. Marked and documented in English (operationId, summary, description, error responses, param and body field descriptions with examples): `/sim/catalog` (`get_catalog`, tag `catalog`), `/sim/network` (`global_get_network`) and every `/sim/runs*` route (`global_*`, tag `global-runs`).
+- **Changed:** Versioned `docs/openapi/agents.openapi.json` and `tests/integration/test_agent_openapi.py` (exact marked set, unique snake_case ids, text, ErrorResponse on 4xx, body field descriptions, committed file equals the app's spec, served route, full `/openapi.json` unchanged). No endpoint behaviour changed.
+- **Why:** Agents (and a later MCP wrapper) need a small public spec with only the CRUD, run and catalog endpoints, separate from the full `/docs`.
+- **Agents:** Follow `docs/openapi.md` for every agent route: mark it, set `operation_id` from its list, English summary/description, `responses=errors(...)`, tags. Regenerate with `cd backend && uv run python -m cascadasen.api.agent_openapi` in the same commit, or the test fails. Session routes (`/sessions/*`) still need marking when they land. Tags and English summaries of the marked routes also changed in the full `/docs` (were `experimentos`, Spanish). `ErrorResponse.detail` is `str | object | list` because simulator input errors return `{field, message, valid}`.
+- **Files:** `backend/src/cascadasen/api/{agent_openapi,app,simulation_routes,simulation_schemas}.py`, `backend/tests/integration/test_agent_openapi.py`, `docs/openapi.md`, `docs/openapi/agents.openapi.json`, `docs/{stack,architecture,agents}.md`, `backend/README.md`.
+
 ## 2026-11-21 · feat(web): keep the mapa 3 camera over land
 - **Changed:** New `web/src/map/regionLimit.ts` (point in polygon, `nearLand`, viewport radius) with tests. `baseMap.ts` loads the land outlines in `LAND_URLS` (today `chile.geojson`) and, after every `moveend`, snaps the camera back to the last valid center when the center is farther from land than a quarter of the shorter viewport side.
 - **Why:** The sea (and Argentina's interior) could be zoomed into. A `maxBounds` rectangle cannot follow Chile's long, thin shape: a tight one forces a high minimum zoom on wide screens and hides the country.

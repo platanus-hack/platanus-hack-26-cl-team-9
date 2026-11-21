@@ -92,7 +92,7 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 
 ### 2.5 API (`api/`)
 
-`app.py` creates the FastAPI app (grid queries, health, admin reload, the `static/map.html` test page) and includes `simulation_routes.py` (`/api/v1/simulate`, `/api/v1/sim/*`). Schemas are in `schemas.py` and `simulation_schemas.py`. HTTP contract: `stack.md` sections 7 and 7.1. Command: `cascadasen-api`.
+`app.py` creates the FastAPI app (grid queries, health, admin reload, the `static/map.html` test page) and includes `simulation_routes.py` (`/api/v1/simulate`, `/api/v1/sim/*`). Schemas are in `schemas.py` and `simulation_schemas.py`. `agent_openapi.py` builds the agent-only spec from the routes marked `openapi_extra=AGENT` and serves it at `/api/v1/agents/openapi.json` (rules in `openapi.md`; versioned copy in `docs/openapi/agents.openapi.json`, regenerated with `uv run python -m cascadasen.api.agent_openapi`). HTTP contract: `stack.md` sections 7 and 7.1. Command: `cascadasen-api`.
 
 ## 3. Simulation flows
 

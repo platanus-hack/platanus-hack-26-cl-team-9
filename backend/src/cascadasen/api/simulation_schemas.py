@@ -71,63 +71,115 @@ class SimulateRequest(BaseModel):
 
 
 class AdversaryIn(BaseModel):
-    enabled: bool = True
-    objective: str = Field("reduce_observability", description="Ver /sim/catalog → objectives")
-    budget: float = Field(8, description="Acciones del adversario (digital = 1, física = 2)")
-    adaptive: bool = Field(True, description="True: aprende (EXP3); False: juega el plan de la plantilla")
+    enabled: bool = Field(True, description="Whether the adversary plays", examples=[True])
+    objective: str = Field(
+        "reduce_observability",
+        description="Adversary objective; see `GET /api/v1/sim/catalog` → `objectives`",
+        examples=["reduce_observability"],
+    )
+    budget: float = Field(
+        8, description="Adversary actions, 0 to 50 (digital action = 1, physical = 2)", examples=[8]
+    )
+    adaptive: bool = Field(
+        True,
+        description="True: it learns during the run (EXP3); False: it plays the template's plan",
+        examples=[True],
+    )
 
 
 class EventIn(BaseModel):
     type: str = Field(
-        description="Ver /sim/catalog → events, p. ej. D1_telemetry_loss, C3_transmission_opening"
+        description="Event type; see `GET /api/v1/sim/catalog` → `events`",
+        examples=["C3_transmission_opening", "D1_telemetry_loss"],
     )
     target: str = Field(
-        description="Área (A06), corredor (A06-A07/500), zona (NG), defensa (pdce_zn) o id real (SE…)"
+        description=(
+            "Area (A06), zone (NG), corridor (A06-A07/500), bus B###, line R###, defence function "
+            "(pdce_zn) or real substation id (SE…)"
+        ),
+        examples=["A06", "B042"],
     )
-    params: dict[str, Any] = Field(default_factory=dict)
-    cause: Literal["intentional", "failure"] = "intentional"
-    cycle: int | None = Field(None, ge=0, description="Solo en initial_events: ciclo en que ocurre")
+    params: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Overrides of the event's default size (catalog `events[].defaults`)",
+        examples=[{}],
+    )
+    cause: Literal["intentional", "failure"] = Field(
+        "intentional", description="Intentional event or plain failure", examples=["intentional"]
+    )
+    cycle: int | None = Field(
+        None, ge=0, description="Only in `initial_events`: cycle at which it happens", examples=[0]
+    )
 
 
 class RunCreate(BaseModel):
-    template: str = Field("open_field", description="Ver /sim/catalog → templates (flagship_observability…)")
-    policy: str = Field("C", description="A reactiva, B preventiva, C coordinación adaptativa")
-    seed: int | None = Field(
-        None, ge=0, description="Vacío: semilla al azar (cada corrida distinta), devuelta en la respuesta"
+    template: str = Field(
+        "open_field",
+        description="Experiment template; see `GET /api/v1/sim/catalog` → `templates`",
+        examples=["flagship_observability", "open_field"],
     )
-    uncertainty: float = Field(1.0, description="0 información perfecta, 1 línea base, 2 degradado")
-    horizon: int | None = Field(None, description="Ciclos de 5 min; por defecto el de la plantilla")
-    adversary: AdversaryIn | None = Field(None, description="Por defecto el de la plantilla")
+    policy: str = Field(
+        "C",
+        description="Defensive policy: A reactive, B preventive, C adaptive coordination",
+        examples=["C"],
+    )
+    seed: int | None = Field(
+        None,
+        ge=0,
+        description="Random seed; omitted means a fresh one, returned in the summary",
+        examples=[11],
+    )
+    uncertainty: float = Field(
+        1.0, description="0 perfect information, 1 baseline, 2 degraded", examples=[1.0]
+    )
+    horizon: int | None = Field(
+        None, description="Cycles of 5 min (1 to 72); default is the template's", examples=[30]
+    )
+    adversary: AdversaryIn | None = Field(None, description="Default is the template's adversary")
     capabilities: dict[str, float] = Field(
-        default_factory=dict, description="Capacidad por recurso (modo III)"
+        default_factory=dict,
+        description="Capacity per defensive resource (mode III), 0 to 10000; see catalog `resources`",
+        examples=[{"field_crews": 12}],
     )
     point: str | None = Field(
         None,
-        description="Punto de operación del mapa 3 (nov2026-1300, feb2025-1500…); por defecto el de la plantilla",
+        description="Mapa 3 operating point (catalog `operating_points`); default is the template's",
+        examples=["nov2026-1300"],
     )
-    operating_point: str | None = Field(None, description="Alias de `point`")
-    initial_events: list[EventIn] = Field(default_factory=list)
-    auto_run: bool = Field(False, description="Correr hasta el final al crear")
+    operating_point: str | None = Field(None, description="Alias of `point`", examples=["nov2026-1300"])
+    initial_events: list[EventIn] = Field(
+        default_factory=list,
+        description="Events applied at their `cycle` (default 0)",
+        examples=[[{"type": "C3_transmission_opening", "target": "A06", "cycle": 2}]],
+    )
+    auto_run: bool = Field(False, description="Play the run to the end before returning", examples=[False])
     llm_commander: bool = Field(
-        False, description="C2 elige entre acciones validadas con el LLM configurado (si no hay, usa reglas)"
+        False,
+        description="C2 picks among validated actions with the server's LLM (rules if none is configured)",
+        examples=[False],
     )
     stochastic: bool = Field(
         True,
-        description="Azar del mundo: tamaño de eventos, eventos imprevistos, fallas de acciones y defensas",
+        description="Chance in the world: event sizes, unplanned events, action and defence failures",
+        examples=[True],
     )
 
 
 class StepIn(BaseModel):
-    cycles: int = Field(1, ge=1, le=72)
+    cycles: int = Field(1, ge=1, le=72, description="Cycles of 5 minutes to advance", examples=[3])
 
 
 class ReplayIn(BaseModel):
-    policy: str | None = None
-    uncertainty: float | None = None
-    seed: int | None = None
-    adversary: AdversaryIn | None = None
-    capabilities: dict[str, float] | None = None
-    cycles: int | None = Field(None, ge=1, le=72, description="Por defecto los ciclos que corrió la original")
+    policy: str | None = Field(None, description="New policy A, B or C", examples=["A"])
+    uncertainty: float | None = Field(None, description="New uncertainty level, 0 to 2", examples=[2.0])
+    seed: int | None = Field(None, description="New seed; omitted keeps the original", examples=[12])
+    adversary: AdversaryIn | None = Field(None, description="New adversary; omitted keeps the original")
+    capabilities: dict[str, float] | None = Field(
+        None, description="New capacity per defensive resource", examples=[{"field_crews": 12}]
+    )
+    cycles: int | None = Field(
+        None, ge=1, le=72, description="Cycles to play; default is what the original played", examples=[6]
+    )
 
 
 class RunSummary(BaseModel):
