@@ -1,6 +1,11 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · fix(web): rename the site title from CascadaSEN to Sub50
+- **Changed:** The browser tab `<title>` in `web/index.html` and the panel `<h1>` in `web/src/App.tsx` now read "Sub50".
+- **Why:** The project is called Sub50; the site still showed the old name.
+- **Agents:** The backend package is still `cascadasen` (`backend/src/cascadasen/`); it was not renamed because users never see it and renaming it touches every import.
+- **Files:** `web/index.html`, `web/src/App.tsx`.
 ## 2026-11-21 · fix(backend): make ruff check and format pass in CI
 - **Changed:** `zip(..., strict=True)` for flows and lines in `engine.py` (B905), unquoted type annotation in `scenario.py` (UP037), sorted imports in `test_cascade.py` (I001), and `ruff format` on 7 cascade files (`cache_builder.py`, `engine.py`, `flow.py`, `frequency.py`, `network.py`, `scenario.py`, `test_cascade.py`). No behaviour change; 41 tests pass.
 - **Why:** The lint workflow failed on 4 ruff errors and the format check on 7 files.
