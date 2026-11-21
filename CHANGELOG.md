@@ -1,6 +1,11 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(web): add the Sub50 favicon
+- **Changed:** New `web/public/favicon.svg` (763 bytes): the logo's subscript "5" and power-button "0" in black on a white 32 x 32 tile. `web/index.html` links it with `<link rel="icon" type="image/svg+xml">`.
+- **Why:** The site had no favicon; the full "sub50" wordmark from the Paper "Logo" page is unreadable at tab size.
+- **Agents:** The "5" is Geist Variable at `wght` 800 (the `geist` npm package) outlined with fontTools, so the SVG needs no font. To regenerate it, outline the glyph again rather than adding a `<text>` element. No PNG or `.ico` fallback exists yet; add one only if a target browser lacks SVG favicon support.
+- **Files:** `web/public/favicon.svg`, `web/index.html`, `docs/design.md`.
 ## 2026-11-21 · feat(web): keep the mapa 3 camera over land
 - **Changed:** New `web/src/map/regionLimit.ts` (point in polygon, `nearLand`, viewport radius) with tests. `baseMap.ts` loads the land outlines in `LAND_URLS` (today `chile.geojson`) and, after every `moveend`, snaps the camera back to the last valid center when the center is farther from land than a quarter of the shorter viewport side.
 - **Why:** The sea (and Argentina's interior) could be zoomed into. A `maxBounds` rectangle cannot follow Chile's long, thin shape: a tight one forces a high minimum zoom on wide screens and hides the country.
