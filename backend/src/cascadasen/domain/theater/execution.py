@@ -25,7 +25,7 @@ from cascadasen.domain.theater.areas import TheaterNetwork, UnknownTargetError, 
 from cascadasen.domain.theater.catalog import EVENTS
 from cascadasen.domain.theater.config import TheaterConfig
 from cascadasen.domain.theater.decisions import COA, FieldReport
-from cascadasen.domain.theater.grid import Change, ChangeError
+from cascadasen.domain.theater.grid import Change, ChangeError, TheaterGrid
 from cascadasen.domain.theater.state import AreaDigital, Effect, RealState
 from cascadasen.domain.theater.stochastic import Chance
 
@@ -260,7 +260,6 @@ class Executor:
             misoperated = self.chance.misoperating(armed)
             changes = [*changes, *(Change("disable_defense", d) for d in misoperated)]
         served_before = dict(g.served_mw)
-        dark_before = set(g.dark)
         cut: list[str] = []
         try:
             for ch in changes:
@@ -271,12 +270,11 @@ class Executor:
         summary = timeline["summary"]
         level = consequence_level(summary)
         hit = [a for a in self.net.order if g.served_mw[a] < served_before[a] - 1.0]
-        newly_dark = g.dark - dark_before
         real.last_timeline = timeline
         real.last_transient = {
             "cycle": real.cycle,
             "level": level,
-            "uncertain": False,
+            "uncertain": bool(summary.get("uncertain", False)),
             "load_lost_mw": summary["load_shed_mw"],
             "load_shed_mw": round(
                 sum(e["params"]["mw"] for e in timeline["events"] if e["type"] == "load_shed"), 1
@@ -285,15 +283,7 @@ class Executor:
             "misoperated_defenses": misoperated,
             "lines_opened": sorted(set(summary["lines_opened"])),
             "dark_buses": len(g.dark),
-            "islands": [
-                {
-                    "nodes": hit,
-                    "result": "blackout" if newly_dark else "maintains",
-                    "load_shed_mw": round(sum(served_before[a] - g.served_mw[a] for a in hit), 1),
-                }
-            ]
-            if hit
-            else [],
+            "islands": self._islands(g, hit, served_before),
             "events": [
                 {"t": e["t"], "type": e["type"], "text_key": e["text_key"], "ids": e["ids"]}
                 for e in timeline["events"]
@@ -340,7 +330,7 @@ class Executor:
             real.grid.extra_reserve[a] = real.grid.extra_reserve.get(a, 0.0) + float(act.get("mw", 100))
             ex.active[coa.key] = coa
         elif coa.action == "battery_support":
-            real.grid.extra_reserve[a] = real.grid.extra_reserve.get(a, 0.0) + float(act.get("mw", 100))
+            real.grid.battery[a] = real.grid.battery.get(a, 0.0) + float(act.get("mw", 100))
             ex.active[coa.key] = coa
         elif coa.action == "rearm_defense":
             real.grid.disabled.discard(a)
@@ -420,10 +410,39 @@ class Executor:
 
     # ------------------------------------------------------------ per cycle
 
+    def _islands(
+        self, g: TheaterGrid, hit: list[str], served_before: dict[str, float]
+    ) -> list[dict[str, Any]]:
+        """The engine's islands that touch an area hit by this transient, in area terms (docs/agents.md 1).
+        `voltage_limited` reads as `uncertain`: voltage is documented, not computed."""
+        out = []
+        for isl in g.last_islands:
+            nodes = [a for a in isl["areas"] if a in hit] or (
+                isl["areas"] if isl["result"] == "voltage_limited" else []
+            )
+            if not nodes:
+                continue
+            result = {"voltage_limited": "uncertain", "local_cut": "blackout", "dark": "blackout"}.get(
+                isl["result"], isl["result"]
+            )
+            out.append(
+                {
+                    "nodes": nodes,
+                    "result": result,
+                    "load_shed_mw": round(sum(served_before[a] - g.served_mw[a] for a in nodes), 1),
+                    "min_hz": isl.get("min_hz"),
+                    "final_hz": isl.get("final_hz"),
+                    "rocof_hz_s": isl.get("rocof_hz_s"),
+                    "inertia_mws": isl.get("inertia_mws"),
+                }
+            )
+        return out
+
     def tick(self, real: RealState, ex: ExecutionState) -> list[dict[str, Any]]:
         """Expire effects, advance segmentation, external support and restorations. Returns notes."""
         notes: list[dict[str, Any]] = []
         cyc = real.cycle
+        real.grid.settle_frequency()
         notes += self._arrive(real, ex)
         for e in real.effects:
             if e.established and e.cleared is None and e.expires is not None and cyc >= e.expires:

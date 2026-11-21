@@ -20,6 +20,7 @@ import numpy as np
 
 from cascadasen.domain.cascade.engine import CascadeParams, run_cascade_state
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
+from cascadasen.domain.cascade.frequency import F0
 from cascadasen.domain.cascade.frequency import Params as FrequencyParams
 from cascadasen.domain.cascade.scenario import OperatingPoint
 from cascadasen.domain.theater.areas import EDAC_ZONES, TheaterNetwork, bus_id
@@ -64,7 +65,17 @@ class TheaterGrid:
     dark: set[int] = field(default_factory=set)
     disabled: set[str] = field(default_factory=set)  # defence ids "edac:<zone>"
     no_reserve: set[str] = field(default_factory=set)  # areas
-    extra_reserve: dict[str, float] = field(default_factory=dict)  # area -> MW (fast reserve + batteries)
+    extra_reserve: dict[str, float] = field(default_factory=dict)  # area -> MW of fast reserve (first order)
+    battery: dict[str, float] = field(
+        default_factory=dict
+    )  # area -> MW of batteries (200 ms delay, 300 ms ramp)
+    # physical readings of the last transient per area (docs/agents.md 1): frequency after the transient,
+    # its nadir and initial RoCoF, and the island verdict. Areas without a transient this cycle sit at f0.
+    freq_hz: dict[str, float | None] = field(default_factory=dict)
+    nadir_hz: dict[str, float | None] = field(default_factory=dict)
+    rocof_hz_s: dict[str, float] = field(default_factory=dict)
+    island_result: dict[str, str] = field(default_factory=dict)
+    last_islands: list[dict[str, Any]] = field(default_factory=list)
 
     # ------------------------------------------------------------- build
 
@@ -72,7 +83,7 @@ class TheaterGrid:
     def from_point(cls, net: TheaterNetwork, point: OperatingPoint) -> TheaterGrid:
         sync = point.sync_mw.astype(float).copy()
         renew = np.maximum(point.gen - point.sync_mw, 0.0).astype(float)
-        return cls(
+        grid = cls(
             net,
             point.id,
             point.load.astype(float).copy(),
@@ -85,6 +96,8 @@ class TheaterGrid:
             renew,
             point.inertia_mws.astype(float).copy(),
         )
+        grid.settle_frequency()
+        return grid
 
     def copy(self) -> TheaterGrid:
         return copy.deepcopy(self)
@@ -141,7 +154,30 @@ class TheaterGrid:
     def reserve_mw(self, area: str) -> float:
         if area in self.no_reserve or area in self.blackout_areas:
             return 0.0
-        return RESERVE_SHARE * self.sync_gen(area) + self.extra_reserve.get(area, 0.0)
+        return (
+            RESERVE_SHARE * self.sync_gen(area)
+            + self.extra_reserve.get(area, 0.0)
+            + self.battery.get(area, 0.0)
+        )
+
+    def island_inertia_mws(self, area: str) -> float:
+        """Kinetic energy of the synchronous units online in the area's island (solar and wind add none)."""
+        mine = set(self.net.areas[area].buses)
+        for isl in self.islands():
+            if mine & set(isl):
+                return float(self.inertia[isl].sum())
+        return 0.0
+
+    def settle_frequency(self) -> None:
+        """Between operational cycles secondary control brings energized islands back to f0 (assumption,
+        docs/agents.md 1.2); dark areas have no frequency."""
+        dark = self.blackout_areas
+        for a in self.net.order:
+            self.freq_hz[a] = None if a in dark else F0
+            self.nadir_hz[a] = None if a in dark else F0
+            self.rocof_hz_s[a] = 0.0
+            self.island_result[a] = "dark" if a in dark else "maintains"
+        self.last_islands = []
 
     def corridor_closed(self, cid: str) -> bool:
         """At least one line of the corridor is in service."""
@@ -187,6 +223,44 @@ class TheaterGrid:
                 out[b] += mw * share
         return out
 
+    def battery_by_bus(self) -> np.ndarray:
+        """Battery MW per area spread over the area's loaded buses (batteries sit near demand)."""
+        out = np.zeros(self.net.buses.size)
+        for a, mw in self.battery.items():
+            if mw <= 0:
+                continue
+            b = list(self.net.areas[a].buses)
+            load = self.load[b]
+            out[b] += mw * (load / load.sum() if load.sum() > 0 else np.full(len(b), 1.0 / len(b)))
+        return out
+
+    def _read_islands(self, islands: list[dict[str, Any]]) -> None:
+        """Per-area physics from the engine's settled islands: an area split between islands takes the
+        island that holds most of its demand."""
+        self.settle_frequency()
+        out = []
+        weight: dict[str, float] = {}
+        for isl in islands:
+            buses = isl["bus_idx"]
+            areas: dict[str, float] = {}
+            for b in buses:
+                a = self.net.area_of_bus[b]
+                areas[a] = areas.get(a, 0.0) + float(self.plan_load[b])
+            entry = {k: v for k, v in isl.items() if k != "bus_idx"}
+            entry["areas"] = sorted(areas, key=self.net.order.index)
+            out.append(entry)
+            for a, w in areas.items():
+                if w < weight.get(a, -1.0):
+                    continue
+                weight[a] = w
+                result = isl["result"]
+                lost = result in ("dark", "blackout", "local_cut")
+                self.island_result[a] = result
+                self.freq_hz[a] = None if lost else isl.get("final_hz")
+                self.nadir_hz[a] = isl.get("min_hz")
+                self.rocof_hz_s[a] = float(isl.get("rocof_hz_s") or 0.0)
+        self.last_islands = out
+
     def run_cascade(self, cut_lines: list[str]) -> dict[str, Any]:
         """Run the mapa 3 cascade engine from the current state and keep its result."""
         cut = [lid for lid in dict.fromkeys(cut_lines) if lid not in self.open_lines]
@@ -198,6 +272,7 @@ class TheaterGrid:
             open_lines=frozenset(self.open_lines),
             edac_off=frozenset(d.split(":", 1)[1] for d in self.disabled if d.split(":", 1)[1] in EDAC_ZONES),
             extra_reserve_by_bus=self.extra_reserve_by_bus(),
+            battery_by_bus=self.battery_by_bus(),
         )
         self.load = state.load.astype(float)
         self.sync = np.minimum(state.sync.astype(float), state.gen.astype(float))
@@ -205,6 +280,7 @@ class TheaterGrid:
         self.inertia = state.inertia.astype(float)
         self.open_lines = set(state.open_lines)
         self.dark |= set(state.dark)
+        self._read_islands(state.islands)
         return timeline
 
     def frame(self) -> dict[str, Any]:
