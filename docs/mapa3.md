@@ -130,10 +130,10 @@ The layers button (top right, above zoom) opens a small panel with **Vista 2D | 
 
 ## 4. How to use it
 
-Layout (Paper "Design v5", `docs/design.md` section 3.2): a 200 px nav rail, a 440 px panel docked next to it with four tabs, the timeline card under the panel, a time pill at the top of the map, map controls at the top right, and the legend with the scale bar at the bottom right.
+Layout (Paper "Design v5", `docs/design.md` section 3.2, with the Design v6 rail and line colors of section 3.3): a 200 px nav rail, a 440 px panel docked next to it with four tabs, the timeline card under the panel, map controls at the top right, and the legend with the scale bar at the bottom right.
 
-1. **Time pill** (top of the map): date and clock of the operating point plus the simulated seconds. Click it to choose the operating point; changing it removes the cut.
-2. **Nav rail, Escenarios**: "Apagón 25F" opens the 25F corridor cut (`feb2025-1500`, `R239`); a custom cut shows as "Corte ..." while it is active; "Escenario nuevo" removes the cut. "Fuentes y supuestos" opens the sources and every engine assumption in the panel; "Ayuda" opens what the map draws (section 5). "Validación" is not built yet.
+1. **Nav rail, Escenarios**: a two-level tree. A scenario is a cut: "Apagón 25F" (`R239`), the current custom cut ("Corte ...", only while it is active) and "Escenario nuevo" (no cut). Each scenario lists the four operating conditions with their name and date ("Mediodía solar", "1 nov 2026 · 13:00"); the selected background marks the active condition of the active scenario. Clicking an inactive scenario opens and expands it ("Apagón 25F" at `feb2025-1500`, the others at the current point); clicking the active one folds or unfolds it; clicking a condition opens that scenario at that hour, keeping the cut. Every cut is in the cache for all four points, so any scenario runs under any condition. If the tree does not fit, it scrolls and "Ayuda" stays at the bottom. Code: `web/src/cascade/Scenarios.tsx`; the names and date lines come from `conditionName` and `conditionDate` in `text.ts`.
+2. **Nav rail, other items**: "Fuentes y supuestos" opens the sources and every engine assumption in the panel; "Ayuda" opens what the map draws (section 5). "Validación" is not built yet.
 3. **Tab Red**: size of the whole IDE Energía grid (km of lines, substations, installed MW, km by voltage band) and the detail of the substation you clicked (kV, zone, generation, demand, people, connected lines with their loading; a click on one of those lines cuts it). Line colour shows voltage.
 4. **Click a line** on the map to take it out of service. The panel switches to **Simulación** and line colour switches to load.
 5. **Tab Simulación**: people without supply and their share of the country, lost load, lost generation, the lowest island frequency (or "apagón"), and the numbered event history. Every figure is read at the current second of the timeline, so it grows as the cascade plays (section 5.1). A click on an event jumps to it. The "N supuestos en esta simulación" row opens the assumptions.
@@ -146,17 +146,17 @@ Layout (Paper "Design v5", `docs/design.md` section 3.2): a 200 px nav rail, a 4
 
 | Element | Meaning |
 |---|---|
-| Line colour, Red tab | Voltage: 500 kV near-white, 154 to 345 kV orange, 100 to 110 kV blue, 44 to 69 kV steel blue, medium voltage gray |
-| Line colour, Simulación tab | Loading at the current second: under 50 % gray, 50 to 75 % light gray, 75 to 100 % pale red, over 100 % red and thicker |
+| Line colour, Red tab | Voltage, in cold colors that get brighter with kV: 500 kV white, 154 to 345 kV light cyan, 100 to 110 kV blue, 44 to 69 kV deep blue, medium voltage gray |
+| Line colour, Simulación tab | Loading at the current second, as a traffic light: under 50 % green, 50 to 75 % yellow, 75 to 100 % orange, over 100 % red and thicker. Red is always failure |
 | Near-black line with a faint outline | "sin tensión": both ends are without supply |
-| Dashed gray line | "fuera": cut by you or tripped by overload (over 120 %) |
+| Dashed gray line | "fuera": cut by you or tripped by overload (over 120 %). Drawn above the live lines, so a cut line stays visible next to a parallel overloaded one |
 | Line width | Always voltage: 500 kV, 154 to 345 kV, lower |
 | Moving white dots | Direction of flow. Only lines with 60 MW or more |
-| Substation dot | Light gray = with supply (larger: 500 kV), near-black with an outline = without supply |
+| Substation dot | Light gray = with supply (larger: 500 kV), red with a dark outline = without supply |
 | Cream disc or column | Demand of the substation (off by default) |
 | Numbered pins | Events, the same numbers as the history and the timeline |
 
-The map legend, the "Ayuda" view and the layers share the constants in `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `LOAD_BANDS`, `DEAD_LINE`, `OPEN_LINE`), so they cannot drift apart. The panel's "Líneas por tensión" card uses `VOLTAGE_BANDS` in `networkSummary.ts`, which counts the whole IDE Energía grid rather than the 273-line model.
+The map legend, the "Ayuda" view and the layers share the constants in `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `LOAD_BANDS`, `DEAD_LINE`, `OPEN_LINE`, `FAULT`), so they cannot drift apart. The panel's "Líneas por tensión" card uses `VOLTAGE_BANDS` in `networkSummary.ts`, which takes its labels, kV limits and colors from `VOLTAGE_TIERS` and counts the whole IDE Energía grid rather than the 273-line model. The other countries' lines and substations (`web/src/map/regional.ts`) read the same `VOLTAGE_TIERS` and `NODE_COLOR`; in the load view their lines are neutral gray (`REGIONAL_NO_LOAD`) because they carry no load.
 
 Not drawn: generation per plant, transformers, voltage and reactive power, networks below 66 kV, and the 1,930 original map lines of mapas 1 and 2.
 
@@ -212,7 +212,8 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/public/cache/network-<year>.json` | The 188 substations and 273 lines |
 | `web/public/cache/<point>/buses.json` | Generation, demand, people per substation |
 | `web/public/cache/<point>/baseline.json` and `<line id>.json` | One timeline per cut: events, frames, frequency curves, summary |
-| `web/src/cascade/CascadeApp.tsx` | Design v5 shell: state, animation loop (clock, layers, HTML overlays), rail, panel, time pill, controls |
+| `web/src/cascade/CascadeApp.tsx` | Design v5 shell: state, animation loop (clock, layers, HTML overlays), rail, panel, controls |
+| `web/src/cascade/Scenarios.tsx` | Escenarios tree in the rail (Design v6): scenarios by cut, operating conditions under each |
 | `web/src/cascade/simulation.ts` | Reads a timeline at second t: dark set, impact, island frequency, event markers and their map places |
 | `web/src/cascade/layers.ts` | deck.gl layers and colour constants |
 | `web/src/cascade/NetworkPanel.tsx`, `SimulationPanel.tsx` | Tabs Red and Simulación |
@@ -304,11 +305,11 @@ Without a session, mapa 3 reads only the static cache (`web/public/cache/`) and 
 | Mode | Network and buses | Timeline | Point |
 |---|---|---|---|
 | No session (`/`) | `cache/network-<year>.json`, `cache/<point>/buses.json` | `cache/<point>/<cut>.json` | Time pill |
-| Session (`/?sesion=<sid>`) | `GET /api/v1/sessions/{sid}/network` | `GET /api/v1/sessions/{sid}/state` (the shared sandbox cut) | Pinned by the session; the time pill is disabled |
+| Session (`/?sesion=<sid>`) | `GET /api/v1/sessions/{sid}/network` | `GET /api/v1/sessions/{sid}/state` (the shared sandbox cut) | Pinned by the session; the conditions in the rail tree are disabled |
 
 **Entering and sharing.** Without a session the only visible addition to the Design v5 shell is the rail item **Sesión compartida** (above Ayuda). It opens a panel view with **Crear sesión** (`POST /sessions`) and **Unirse** (paste the id or the link, then **Unirse** or **Cancelar**); creating or joining from there opens the **Datos** tab. In a session the same view shows the id, **Copiar enlace** (`<origin>/?sesion=<sid>`) and **Salir**, and the panel head shows a session strip under the crumbs: `Sesión <first 6 chars>`, the revision (`rev. N`), the live mode and **Copiar enlace** (**Copiado** for 1.5 s). The live mode is **en vivo** (SSE stream `GET /{sid}/events`) or **sondeo** (no `EventSource`, or the stream gave up: `GET /{sid}` every 2 s with `If-None-Match`). The id lives only in the URL (`?sesion=`), so a bare `/` never rejoins a session or calls `/api`; **Salir** removes it. A session that no longer exists (404) is forgotten and the map falls back to the cache. When the `dataset_revision` changes the page refetches the session, the network and the state; run activity (`run_created`, `run_updated`) refetches only the session document. When refetches overlap (`web/src/session/loader.ts`), the network and state of the newest full refetch are always applied, and a session document only when no newer document read started, so a run event during a dataset refresh no longer drops the new network.
 
-**Cuts in a session.** A click on a line (on the map or in Red) calls `POST /{sid}/cut` with that line: it opens for everyone in the session and stays open until someone repairs it. **Simulación** starts with the card **Líneas abiertas en la sesión · N**, which lists the open lines with **Reparar** (`POST /{sid}/repair {lines}`) and **Reparar todo** (`{all: true}`) and shows the notice the API returns; the impact card names every open line after `Corte:`. The session pins the operating point and owns the cut, so the time pill select is disabled (no chevron, tooltip "La sesión fija su punto de operación") and the rail scenarios **Apagón 25F** and **Escenario nuevo** are disabled with a tooltip. The URL keeps `?sesion=` and drops `cut`.
+**Cuts in a session.** A click on a line (on the map or in Red) calls `POST /{sid}/cut` with that line: it opens for everyone in the session and stays open until someone repairs it. **Simulación** starts with the card **Líneas abiertas en la sesión · N**, which lists the open lines with **Reparar** (`POST /{sid}/repair {lines}`) and **Reparar todo** (`{all: true}`) and shows the notice the API returns; the impact card names every open line after `Corte:`. The session pins the operating point and owns the cut, so the Escenarios tree in the rail is locked (`ScenarioTree` with `locked`): scenario rows only fold and unfold, and every condition except the session's point is disabled with the tooltip "En una sesión el punto está fijo; corta y repara líneas en el mapa y en Simulación.". The active scenario follows the session's open lines: "Corte ..." names all of them, "Apagón 25F" when `R239` is the only one, "Escenario nuevo" when none is open. The URL keeps `?sesion=` and drops `cut`.
 
 **Tabs in a session:** **Red**, **Simulación** and **Datos**. The two placeholder tabs (Qué lo habría evitado, Validación) are hidden in a session so the three tabs fit the 440 px panel; without a session the tabs are main's four and there is no Datos tab.
 

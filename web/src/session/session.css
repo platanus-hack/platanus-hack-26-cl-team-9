@@ -43,7 +43,5 @@
 .shell .data-filter input { flex: 1; }
 
 /* ---- Controls a session pins ---- */
-.shell .scenario[aria-disabled="true"] { color: var(--faint); cursor: default; }
-.shell .scenario[aria-disabled="true"]:hover { color: var(--faint); }
-.shell .time-pill:has(select:disabled) { cursor: default; }
-.shell .time-pill select:disabled { cursor: default; }
+.shell .condition[aria-disabled="true"] { cursor: default; }
+.shell .condition[aria-disabled="true"] .cond-name, .shell .condition[aria-disabled="true"]:hover .cond-name { color: var(--faint); }

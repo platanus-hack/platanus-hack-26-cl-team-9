@@ -11,7 +11,7 @@ Last updated: 2026-11-21. The map draws the transmission networks of Argentina, 
 | Outlines | `data/scripts/build_latam_outlines.sh` (geoBoundaries ADM0) |
 | Domain (pure) | `domain/regional.py`: schema, `parse_kv_levels`, `tech_from_text`, `normalise`, `feature_collections`, `manifest_entry`; port `RegionalGridSource` in `domain/ports.py` |
 | Adapters | `infrastructure/sources/regional/`: `epe_brasil.py`, `osinergmin_peru.py`, `energia_argentina.py`, `osm_overpass.py`; wiring in `infrastructure/container.py` (`regional_use_case`) |
-| Frontend | `web/src/map/regional.ts` (loader, layers `regional-*`, tooltip), legend block in `web/src/cascade/Legend.tsx` |
+| Frontend | `web/src/map/regional.ts` (loader, layers `regional-*`, tooltip), legend block in `web/src/cascade/Legend.tsx`. Lines and substations reuse Chile's tokens from `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `NODE_COLOR`) at full opacity; in the Simulación (load) view the lines are neutral gray `REGIONAL_NO_LOAD` (#767B80), outside the load ramp, because they carry no load |
 | Reduction (pure) | `domain/regional_reduction.py` (`reduce_bundle`, `feature_collections`, `manifest_entry`) |
 | Tests | `backend/tests/unit/test_regional.py`, `backend/tests/validation/test_regional_data.py` (skips without the data), `web/src/map/regional.test.ts` |
 

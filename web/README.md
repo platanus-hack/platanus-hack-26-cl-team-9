@@ -47,7 +47,7 @@ Mapa 3 is the main map and opens at `/` (also `?mapa=3`). Mapas 1 and 2 are **de
 
 Full guide, actors and legend: [`docs/mapa3.md`](../docs/mapa3.md). Minimum dataset: [`docs/minimum-dataset.md`](../docs/minimum-dataset.md).
 
-The interface follows the Paper "Design v5" frames (`docs/design.md` section 3.2): nav rail with scenarios, a docked panel with the Red and Simulación tabs, a timeline card with numbered events and island frequencies, a time pill, and a legend that switches between voltage and load. Usage: `docs/mapa3.md` section 4.
+The interface follows the Paper "Design v5" frames (`docs/design.md` section 3.2) with the Design v6 changes (section 3.3): a nav rail whose Escenarios tree lists each scenario (a cut) with its operating conditions, a docked panel with the Red and Simulación tabs, a timeline card with numbered events and island frequencies, and a legend that switches between voltage (cold colors) and load (green, yellow, orange, red). Usage: `docs/mapa3.md` section 4.
 
 Click a line to cut it and replay the cascade computed by the engine (`docs/engine.md`). It reads precomputed files from `web/public/cache/`, which is committed (the deployed image has no Python). After changing the engine or the data, regenerate and commit it:
 

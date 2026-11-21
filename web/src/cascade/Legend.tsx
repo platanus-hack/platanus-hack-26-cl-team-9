@@ -1,5 +1,5 @@
 import type { ViewMode } from "../map/baseMap";
-import { DEAD_LINE, DEMAND_COLOR, LOAD_BANDS, MIN_FLOW_MW, MW_TO_METERS, NODE_COLOR, OPEN_LINE, VOLTAGE_TIERS } from "./layers";
+import { DEAD_LINE, DEMAND_COLOR, FAULT, LOAD_BANDS, MIN_FLOW_MW, MW_TO_METERS, NODE_COLOR, OPEN_LINE, VOLTAGE_TIERS } from "./layers";
 import type { BusState, Index, Network } from "./types";
 import { TECH_COLORS } from "../map/layers";
 import type { RegionalGrid } from "../map/regional";
@@ -13,9 +13,9 @@ export function HelpPanel({ network, buses, mode, regional }: { network: Network
     <div className="prose">
       <p>Red reducida del Sistema Eléctrico Nacional: {network.nodes.length} subestaciones y {network.lines.length} líneas. Cada línea une dos subestaciones en línea recta y agrupa los circuitos en paralelo y los transformadores.</p>
       <h3>Cómo se usa</h3>
-      <p>Haz clic en una línea para sacarla de servicio: el motor calcula la cascada y la línea de tiempo la reproduce. Haz clic en una subestación para ver su detalle en la pestaña Red. La hora del punto de operación se cambia en el reloj de arriba.</p>
+      <p>Haz clic en una línea para sacarla de servicio: el motor calcula la cascada y la línea de tiempo la reproduce. Haz clic en una subestación para ver su detalle en la pestaña Red. La condición de operación (fecha y hora) se elige bajo cada escenario, en Escenarios.</p>
       <h3>Color de las líneas</h3>
-      <p>En Red el color indica la tensión. En Simulación indica qué parte de su capacidad usa la línea en ese segundo. El grosor siempre indica la tensión.</p>
+      <p>En Red el color indica la tensión: tonos fríos, más claros a mayor tensión. En Simulación indica qué parte de su capacidad usa la línea en ese segundo, de verde a naranja. El rojo siempre es falla. El grosor siempre indica la tensión.</p>
       {VOLTAGE_TIERS.map((t) => <Row key={t.label} swatch={<Bar color={t.color} height={t.width + 1} />} label={t.label} />)}
       {LOAD_BANDS.map((b) => <Row key={b.label} swatch={<Bar color={b.color} />} label={`${b.label} de su capacidad${b.upTo === Infinity ? " (sobrecarga, más gruesa)" : ""}`} />)}
       <Row swatch={<Bar color={DEAD_LINE} outline />} label="Sin tensión: sus dos extremos quedaron sin suministro" />
@@ -24,7 +24,7 @@ export function HelpPanel({ network, buses, mode, regional }: { network: Network
       <Row swatch={<span className="dot" />} label={`Puntos blancos que se mueven en el sentido del flujo, solo en líneas con ${MIN_FLOW_MW} MW o más. Se apagan en el botón de capas.`} />
       <h3>Subestaciones</h3>
       <Row swatch={<span className="dot big" style={{ background: NODE_COLOR }} />} label="Con suministro (más grande: 500 kV)" />
-      <Row swatch={<span className="dot big" style={{ background: DEAD_LINE, outline: "1px solid #FFFFFF40" }} />} label="Sin suministro: su isla se apagó" />
+      <Row swatch={<span className="dot big" style={{ background: FAULT }} />} label="Sin suministro: su isla se apagó" />
       <h3>Demanda</h3>
       <Row swatch={mode === "3d" ? <span className="col" style={{ background: DEMAND_COLOR }} /> : <span className="dot big" style={{ background: DEMAND_COLOR, opacity: 0.5 }} />}
         label={mode === "3d"
@@ -72,8 +72,8 @@ function RegionalLegend({ regional }: { regional: RegionalGrid }) {
   return (
     <>
       <h3>Otras redes de Latinoamérica</h3>
-      <p>Red de contexto, atenuada: solo se dibuja, no se simula. Reducida como la de Chile: una barra por subestación, las líneas en paralelo se funden en una y se dibujan rectas entre dos subestaciones. Desde 66 kV; los puntos grandes son la generación de cada subestación (color por tecnología).</p>
-      {regional.countries.map((c) => <Row key={c.country} swatch={<span className="dot big" style={{ background: "#94a3b8" }} />} label={`${c.name}: ${c.counts.lines} líneas y ${c.counts.substations} subestaciones (de ${c.raw_counts.lines} y ${c.raw_counts.substations} en la fuente); ${c.plant_count} centrales en ${c.counts.plants} puntos`} />)}
+      <p>Red de contexto: solo se dibuja, no se simula. Usa los mismos colores, grosores y subestaciones que la de Chile; en Simulación sus líneas quedan en gris porque no tienen flujo calculado. Reducida como la de Chile: una barra por subestación, las líneas en paralelo se funden en una y se dibujan rectas entre dos subestaciones. Desde 66 kV; los puntos grandes son la generación de cada subestación (color por tecnología).</p>
+      {regional.countries.map((c) => <Row key={c.country} swatch={<span className="dot big" style={{ background: NODE_COLOR }} />} label={`${c.name}: ${c.counts.lines} líneas y ${c.counts.substations} subestaciones (de ${c.raw_counts.lines} y ${c.raw_counts.substations} en la fuente); ${c.plant_count} centrales en ${c.counts.plants} puntos`} />)}
       {Object.entries(TECH_COLORS).map(([tech, c]) => <Row key={tech} swatch={<span className="dot big" style={{ background: css([c[0], c[1], c[2], 160]) }} />} label={tech} />)}
       <p className="meta">Fuentes: {[...sources.values()].map((s) => `${s.attribution} (${s.license})`).join("; ")}.</p>
     </>

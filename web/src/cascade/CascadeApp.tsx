@@ -8,12 +8,13 @@ import { HelpPanel, SourcesPanel } from "./Legend";
 import { MapLegend } from "./MapLegend";
 import { MapOverlays, type LocatedMarker } from "./MapOverlays";
 import { NetworkPanel } from "./NetworkPanel";
+import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SimulationPanel } from "./SimulationPanel";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
 import type { BusState, Index, Network, Timeline } from "./types";
-import { Chevron, Icon, TipLayer, Wordmark } from "./ui";
+import { Icon, TipLayer, Wordmark } from "./ui";
 import { DataPanel } from "../session/DataPanel";
 import { SessionBar } from "../session/SessionBar";
 import { SessionCut } from "../session/SessionCut";
@@ -29,8 +30,6 @@ const TABS: [Tab | "avoid" | "validation", string][] = [["red", "Red"], ["sim", 
 const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"]];
 const SOON = "Todavía no está en la app: el motor aún no calcula esta vista.";
 const PINNED = "En una sesión el punto está fijo; corta y repara líneas en el mapa y en Simulación.";
-// The 25F reference case: the 500 kV corridor cut at the February 2025 15:00 operating point (web/README.md deep link).
-const CASE_25F = { point: "feb2025-1500", cut: "R239" };
 const FLOW_PERIOD_S = 3.0;
 const FLOW_CYCLE = 1 + 2 / 3;
 
@@ -89,7 +88,7 @@ export function CascadeApp() {
   }, [located, states]);
 
   const [regional, setRegional] = useState<RegionalGrid | null>(null);
-  const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional) : []), [regional]);
+  const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional, colorMode) : []), [regional, colorMode]);
 
   const live = useRef({ network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers, cutLine });
   live.current = { network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers, cutLine };
@@ -264,18 +263,15 @@ export function CascadeApp() {
     setT(time);
   }
 
-  function openScenario(next: { point: string; cut: string | null }) {
+  function openScenario(next: ScenarioChoice) {
     setNode(null);
     setPointId(next.point);
     setCut(next.cut);
     chooseTab("sim");
   }
 
-  const is25F = !s.sid && pointId === CASE_25F.point && cut === CASE_25F.cut;
-  const pinned = s.sid ? { "aria-disabled": "true" as const, "data-tip": PINNED } : {};
   const tabs: [Tab | "avoid" | "validation", string][] = s.sid ? SESSION_TABS : TABS;
   const sourceNote = hasLabels ? "Mapa base: Mapbox" : "Contorno: data/processed/chile.geojson";
-  const c = clock(point?.snapshot, t);
 
   return (
     <div className="shell">
@@ -290,11 +286,7 @@ export function CascadeApp() {
           <Icon><path d="M1.5 3.5l4-1.5 5 2 4-1.5v10l-4 1.5-5-2-4 1.5z M5.5 2v10 M10.5 4v10" /></Icon><span>Mapa</span>
         </button>
         <div className="rail-item static"><Icon><path d="M2 13.5h12M4 11V7M8 11V3M12 11V8" /></Icon><span>Escenarios</span></div>
-        <div className="scenarios">
-          <button className={is25F ? "scenario on" : "scenario"} {...pinned} onClick={() => !s.sid && openScenario(CASE_25F)}><span>Apagón 25F</span><span className="year">2025</span></button>
-          {cuts.length > 0 && !is25F && network && <button className="scenario on" title={cuts.map((id) => lineName(network, id)).join(", ")}><span className="ellipsis">Corte {cuts.map((id) => lineName(network, id).replace(/ \(.*\)$/, "")).join(", ")}</span><span className="year">{point?.year}</span></button>}
-          <button className={cuts.length ? "scenario muted" : "scenario on"} {...pinned} onClick={() => !s.sid && openScenario({ point: pointId, cut: null })}><span>Escenario nuevo</span></button>
-        </div>
+        <ScenarioTree points={index?.points ?? []} pointId={pointId} cuts={cuts} network={network} open={openScenario} locked={s.sid ? PINNED : undefined} />
         <button className="rail-item" aria-disabled="true" data-tip={SOON}><Icon><path d="M3 8.5l3 3 7-7" /></Icon><span>Validación</span></button>
         <button className={view === "sources" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "sources" ? "tabs" : "sources")}>
           <Icon><ellipse cx="8" cy="4" rx="5.5" ry="2" /><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" /></Icon><span>Fuentes y supuestos</span>
@@ -352,17 +344,8 @@ export function CascadeApp() {
         </div>
       </section>
 
-      <TimelineCard timeline={cuts.length ? timeline : null} markers={markers} t={t} clock={c.tenths} islands={cuts.length ? islands : []} playing={playing} speed={speed}
+      <TimelineCard timeline={cuts.length ? timeline : null} markers={markers} t={t} clock={clock(point?.snapshot, t).tenths} islands={cuts.length ? islands : []} playing={playing} speed={speed}
         setPlaying={setPlaying} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />
-
-      <label className="time-pill" title={s.sid ? "La sesión fija su punto de operación" : point?.label}>
-        <span className="date">{c.date}</span>
-        <span className="hms">{c.hms} <span>{c.zone}</span></span>
-        {!s.sid && <span className="pill-chevron"><Chevron /></span>}
-        <select aria-label="Punto de operación" value={pointId} disabled={!!s.sid} onChange={(e) => openScenario({ point: e.target.value, cut: null })}>
-          {index?.points.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-        </select>
-      </label>
 
       <div className="map-controls">
         <button className={layersOpen ? "ctl on" : "ctl"} aria-label="Capas y vista" aria-expanded={layersOpen} onClick={() => setLayersOpen(!layersOpen)}>

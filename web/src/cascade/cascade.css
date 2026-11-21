@@ -1,5 +1,6 @@
 /* Mapa 3 in the Paper "Design v5" shell (docs/design.md sections 2 and 3.2). Square corners everywhere except round map
-   symbols and event markers. Faces come from the --font-sans / --font-mono tokens in styles.css; nothing here names a font. */
+   symbols and event markers. The rail's Escenarios tree follows Design v6 (section 3.3). Faces come from the --font-sans,
+   --font-condensed and --font-mono tokens in styles.css; nothing here names a font. */
 .shell {
   --bg: #1f2022; --sidebar: #18191b; --surface: #1e1f21; --glass: #1e1f21f7; --card: #27282b; --selected: #2a2b2e;
   --border: #ffffff14; --border-strong: #ffffff1a; --fg: #ffffff; --fg-2: #e6e6e8; --fg-3: #d0d1d4; --muted: #a1a2a6;
@@ -31,12 +32,26 @@
 .shell .rail-item.faint { color: var(--faint); }
 .shell .rail-item.faint.on, .shell .rail-item.faint:hover { color: var(--fg); }
 .shell .rail-spacer { flex: 1; }
-.shell .scenarios { display: flex; flex-direction: column; gap: 2px; margin-left: 17px; padding-left: 12px; border-left: 1px solid var(--border-strong); flex-shrink: 0; }
-.shell .scenario { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 28px; padding: 0 8px; background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; min-width: 0; }
+/* Escenarios tree (Design v6): scenario rows with a 12 px disclosure slot, conditions hanging from a nested guide line.
+   When the rail is short the tree scrolls without visible chrome and "Ayuda" stays pinned at the bottom. */
+.shell .scenarios { display: flex; flex-direction: column; gap: 2px; flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; margin-left: 17px; padding-left: 4px; border-left: 1px solid var(--border-strong); }
+.shell .scenarios::-webkit-scrollbar { display: none; }
+.shell .scenario { display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; flex-shrink: 0; padding: 0 8px 0 0; background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; min-width: 0; }
+.shell .scenario.faint { color: var(--faint); }
+.shell .scenario.on { color: var(--fg); font-weight: 500; }
 .shell .scenario:hover { color: var(--fg); }
-.shell .scenario.on { background: #ffffff0d; color: var(--fg); }
-.shell .scenario.muted { color: var(--faint); }
-.shell .scenario .year { color: var(--faint); font-size: 12px; flex-shrink: 0; }
+.shell .scenario > .ellipsis { flex: 1 1 0; }
+.shell .disclosure { display: flex; align-items: center; justify-content: center; width: 12px; height: 12px; flex-shrink: 0; color: var(--faint); }
+.shell .scenario.on .disclosure { color: var(--fg-3); }
+.shell .scenario .year { color: var(--faint); font-size: 12px; font-weight: 400; flex-shrink: 0; }
+.shell .conditions { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; margin-left: 5px; padding-left: 12px; border-left: 1px solid var(--border-strong); }
+.shell .condition { display: flex; flex-direction: column; flex-shrink: 0; width: 100%; min-width: 0; padding: 6px 8px; background: none; border: 0; text-align: left; cursor: pointer; }
+.shell .condition.on { background: var(--selected); }
+.shell .cond-name { color: var(--muted); font-size: 13px; line-height: 16px; }
+.shell .condition:hover .cond-name, .shell .condition.on .cond-name { color: var(--fg); }
+.shell .condition.on .cond-name { font-weight: 500; }
+.shell .cond-date { color: var(--muted); font: 12px/16px var(--font-condensed); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shell .scenario:focus-visible, .shell .condition:focus-visible { outline: 1px solid var(--fg-3); outline-offset: -1px; }
 .shell .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- Panel ---- */
@@ -135,7 +150,7 @@
 .shell .readout em { font-style: normal; color: #c9cbcf; }
 .shell .readout em.fault { color: var(--fault); }
 .shell .speed { position: relative; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; flex-shrink: 0; background: #2e2f33; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
-.shell .speed select, .shell .legend-mode select, .shell .time-pill select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.shell .speed select, .shell .legend-mode select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .shell .timeline-row { display: flex; align-items: flex-end; gap: 10px; margin: 0; }
 .shell .play { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; padding: 0; margin-bottom: 10px; background: var(--fg); border: 0; border-radius: 0; cursor: pointer; }
 .shell .play:disabled { opacity: 0.35; cursor: default; }
@@ -159,13 +174,7 @@
 .shell .timeline-right .ref { color: var(--faint); font-size: 12px; line-height: 16px; white-space: nowrap; }
 .shell .timeline-right .pos { color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap; }
 
-/* ---- Time pill, map controls, legend, scale ---- */
-.shell .time-pill { position: absolute; z-index: 2; top: var(--gap); left: calc(var(--panel-x) + var(--panel-w) + 118px); width: 160px; display: flex; flex-direction: column; align-items: center; padding: 8px 0; background: var(--surface); border: 1px solid var(--border-strong); cursor: pointer; }
-.shell .time-pill:hover { border-color: #ffffff33; }
-.shell .time-pill .date { color: var(--fg-2); font-size: 13px; line-height: 16px; }
-.shell .time-pill .hms { color: var(--fg); font: 600 14px/18px var(--font-mono); font-variant-numeric: tabular-nums; }
-.shell .time-pill .hms span { color: var(--muted); font-weight: 400; }
-.shell .pill-chevron { position: absolute; right: 10px; top: 50%; display: flex; transform: translateY(-50%); }
+/* ---- Map controls, legend, scale ---- */
 .shell .map-controls { position: absolute; z-index: 3; top: var(--gap); right: var(--gap); width: 36px; display: flex; flex-direction: column; gap: 4px; }
 .shell .ctl { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; background: var(--surface); border: 1px solid var(--border-strong); cursor: pointer; }
 .shell .ctl:hover, .shell .ctl.on { background: var(--selected); }
@@ -191,6 +200,7 @@
 .shell .legend-mode { position: relative; display: flex; align-items: center; gap: 4px; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
 .shell .samples { display: flex; flex-wrap: wrap; gap: 10px; }
 .shell .sample { display: flex; flex-direction: column; gap: 8px; width: 82px; flex-shrink: 0; color: var(--fg-2); font-size: 12px; line-height: 16px; }
+.shell .sample .swatch-slot { display: flex; align-items: center; height: 6px; }
 .shell .sample .swatch { display: block; width: 28px; height: 3px; flex: none; }
 .shell .sample.absent .swatch, .shell .sample.absent svg { opacity: 0.4; }
 .shell .sample.absent > span:last-child { color: var(--muted); }
@@ -222,11 +232,6 @@
 .shell .pin-label b { color: var(--fg); font-size: 13px; font-weight: 600; line-height: 18px; }
 .shell .pin-label span { color: var(--muted); font-size: 12px; line-height: 16px; }
 .shell .flip .pin-label { left: auto; right: 28px; }
-
-/* Narrow screens: the time pill moves next to the map controls so it never covers the panel. */
-@media (max-width: 1100px) {
-  .shell .time-pill { left: auto; right: 60px; }
-}
 
 /* Mapbox logo and attribution: bottom-left of the visible map, right of the timeline card. */
 .shell .mapboxgl-ctrl-bottom-left { left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); }
