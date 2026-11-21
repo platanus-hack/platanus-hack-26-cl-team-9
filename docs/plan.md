@@ -146,7 +146,7 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 
 ## 10. First hour for an agent starting from scratch
 
-1. Read `idea.md`, `cyber.md`, `stack.md`, `datasets.md`, then this file. Check `git log` and `git status`.
+1. Read `AGENTS.md`, then `idea.md`, `cyber.md`, `stack.md`, `datasets.md`, then this file, then the newest `CHANGELOG.md` entries. Check `git log` and `git status`. Run `git config core.hooksPath scripts/hooks` once.
 2. Ask the team for answers to section 9, at minimum items 1, 4 and 6, and who is working on which workstream, so work is not duplicated.
 3. Commit docs if they are not committed yet (with the team's agreement).
 4. Do Phase 0. Then start your workstream.

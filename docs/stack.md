@@ -28,7 +28,8 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 | API | FastAPI (REST; WebSocket optional for live combinations) | Backlog | Needed only for combinations not in the cache |
 | Precompute | Script that runs every single-element failure for every scenario x defences x behaviour and writes static JSON | Backlog | MVP ships hand-written files in `web/public/cache/` in the same format |
 | Tests | Vitest (frontend logic) | MVP | pytest (engine, validation, provenance) is backlog |
-| CI | GitHub Actions | Backlog | Would generate the validation table from the tests |
+| CI | GitHub Actions | Lint: done. Rest: backlog | `.github/workflows/lint.yml` runs ruff and requires a `CHANGELOG.md` change in each pull request. Generating the validation table from the tests is still backlog |
+| Lint and agent tooling | ruff (Python), eslint/prettier (frontend, once installed), git and Claude Code hooks | Done | Single entry point `scripts/lint.sh`; rules and hooks in `AGENTS.md` |
 | Hosting | Static frontend plus fixtures; deploy from a personal mirror (see README of the template) | MVP | Platforms like Vercel cannot access the org repo |
 | LLM | Not in the core | Backlog (P2) | Narration uses fixed templates so every sentence is reproducible. An optional chat that calls the simulator is P2 |
 
@@ -249,6 +250,7 @@ MVP: Vitest tests for frontend logic (playback clock, narration templates, layer
 
 ## 9. Conventions
 
+- Agent and contributor workflow is in `AGENTS.md`: read the docs before every plan and change, lint every change (`scripts/lint.sh`), and add a `CHANGELOG.md` entry with every commit. Enable the git hook once per clone with `git config core.hooksPath scripts/hooks`.
 - Real, small commits during the event. Do not bulk-import generated data or code written before the event.
 - UI strings and narration in Spanish; code, comments and docs in English.
 - Never fit parameters by hand without declaring it in the YAML (`is_assumption: true` plus the reason).
