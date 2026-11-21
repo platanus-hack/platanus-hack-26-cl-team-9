@@ -72,7 +72,7 @@ def test_waiters_beyond_the_cap_get_409_at_once():
     assert len(locks) == 0
 
 
-def test_the_default_cap_is_ten_waiters():
+def test_the_default_cap_is_five_waiters():
     from cascadasen.infrastructure.settings import Settings
 
-    assert SessionLocks(1.0).max_waiters == 10 == Settings(_env_file=None).session_lock_max_waiters
+    assert SessionLocks(1.0).max_waiters == 5 == Settings(_env_file=None).session_lock_max_waiters

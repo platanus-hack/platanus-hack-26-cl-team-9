@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(api): lower the per-session waiter cap to 5
+- **Changed:** `SessionLocks` and `session_lock_max_waiters` (`CASCADASEN_SESSION_LOCK_MAX_WAITERS`) default to 5 waiters instead of 10. The 409 text in `session_routes.ERRORS`, the agent spec description, `docs/sessions-api.md` and `docs/stack.md` say 5; the spec is regenerated.
+- **Why:** Review pass 3: each waiter blocks one of AnyIO's 40 sync workers for up to 10 s, so with 10 four busy sessions could stall every sync route, including the health check. The web and MCP clients now retry the busy 409, so a small cap no longer leaves a browser on a stale network.
+- **Agents:** One busy session holds at most 6 workers. Raise the cap only together with the AnyIO thread limit.
+- **Files:** `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`.
 ## 2026-11-21 · feat(web): session mode with select and double-click cut after merging PR #60
 - **Changed:** Merged upstream/main at e0c3088 (PR #60: click selects, double click cuts, `SelectionCard`, "Reponer línea", keyed timeline loads). Session mode is re-applied on main's shell: a double click or **Sacar de servicio** calls `POST /{sid}/cut`; `restore(lines?)` repairs through `POST /{sid}/repair` in a session (the selection card repairs the selected open line, the impact card and **Reparar todo** repair every open line).
 - **Changed:** `SimulationPanel` takes `cuts: string[]` again ("Corte:" lists every open line; the button reads "Reponer líneas" when more than one is open). The session timeline is stored as `loaded = {key: "session"}` and a session state cancels a pending cache load. The map `onClick` calls `live.current.cutLine`, and the Datos pick mode runs before click interpretation.

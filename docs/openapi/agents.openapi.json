@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Sub50 agent API",
-    "description": "Endpoints an external agent needs to run strategic experiments on Sub50, a simulator of\nblackouts in the Chilean national grid (SEN). Public base URL: `https://sub50.cl`.\n\n**Ids.** The network has buses `B###` and lines `R###` (`GET /api/v1/sim/network`). Event targets\nalso accept an area (`A06`), a zone (`NG`), a corridor (`A06-A07/500`), a defence function\n(`pdce_zn`) or a real substation id (`SE...`). Event types, policies, objectives and templates come\nfrom `GET /api/v1/sim/catalog`. A run is identified by the `run_id` returned on creation.\n\n**Runs.** Runs in `global-runs` work on the default dataset. Every run is persisted for 24 hours\nafter its last command and rebuilt from its recipe when the server no longer holds it. Session\nendpoints (tags `sessions`, `session-network`, `session-sandbox`, `session-runs`) carry the\nsession id in the path and work on that session's private copy of the dataset; create a session\nfirst and pass its id to every session call.\n\n**One request at a time.** A session serves one request at a time in a backend process (the SSE\nstream excepted); a request waits up to 10 s for the one before it and then gets 409 with\n`Retry-After: 1`; retry it. When 10 requests already wait on the session, the 409 comes at once.\n\n**Notice.** Every scenario is hypothetical and simulated: Sub50 models the consequence of an\nevent on the grid, never the attack technique. The catalog and every run summary carry a\n`notice` field saying so.\n\nErrors return `{\"detail\": ...}`; messages inside `detail` are in Spanish.\n",
+    "description": "Endpoints an external agent needs to run strategic experiments on Sub50, a simulator of\nblackouts in the Chilean national grid (SEN). Public base URL: `https://sub50.cl`.\n\n**Ids.** The network has buses `B###` and lines `R###` (`GET /api/v1/sim/network`). Event targets\nalso accept an area (`A06`), a zone (`NG`), a corridor (`A06-A07/500`), a defence function\n(`pdce_zn`) or a real substation id (`SE...`). Event types, policies, objectives and templates come\nfrom `GET /api/v1/sim/catalog`. A run is identified by the `run_id` returned on creation.\n\n**Runs.** Runs in `global-runs` work on the default dataset. Every run is persisted for 24 hours\nafter its last command and rebuilt from its recipe when the server no longer holds it. Session\nendpoints (tags `sessions`, `session-network`, `session-sandbox`, `session-runs`) carry the\nsession id in the path and work on that session's private copy of the dataset; create a session\nfirst and pass its id to every session call.\n\n**One request at a time.** A session serves one request at a time in a backend process (the SSE\nstream excepted); a request waits up to 10 s for the one before it and then gets 409 with\n`Retry-After: 1`; retry it. When 5 requests already wait on the session, the 409 comes at once.\n\n**Notice.** Every scenario is hypothetical and simulated: Sub50 models the consequence of an\nevent on the grid, never the attack technique. The catalog and every run summary carry a\n`notice` field saying so.\n\nErrors return `{\"detail\": ...}`; messages inside `detail` are in Spanish.\n",
     "version": "1.0.0"
   },
   "paths": {
@@ -863,7 +863,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -923,7 +923,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1039,7 +1039,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1128,7 +1128,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1244,7 +1244,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1394,7 +1394,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1532,7 +1532,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1668,7 +1668,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1818,7 +1818,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1956,7 +1956,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2092,7 +2092,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2242,7 +2242,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2380,7 +2380,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2516,7 +2516,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2666,7 +2666,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2804,7 +2804,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2940,7 +2940,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3076,7 +3076,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3165,7 +3165,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3260,7 +3260,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3353,7 +3353,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3462,7 +3462,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3581,7 +3581,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3700,7 +3700,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3819,7 +3819,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3928,7 +3928,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4011,7 +4011,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4094,7 +4094,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4177,7 +4177,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 5 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
