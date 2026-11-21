@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · ci: add ruff and changelog check workflow
+
+- **Changed:** `.github/workflows/lint.yml` runs `ruff check` and `ruff format --check` on `backend/` with ruff 0.17.6, the version in `uv.lock`. On pull requests it fails when `CHANGELOG.md` did not change.
+- **Why:** Enforce lint and the changelog remotely, not only on machines that have the hooks enabled.
+- **Agents:** The workflow has not run on GitHub yet. Check its first run.
+- **Files:** `.github/workflows/lint.yml`.
+
 ## 2026-11-21 · chore(lint): add shared lint script and git pre-commit hook
 
 - **Changed:** `scripts/lint.sh --fix|--check FILE...` runs ruff on Python files and eslint/prettier on `frontend/` files once those tools are installed. It skips every other file. `scripts/hooks/pre-commit` lints the staged files and requires a staged `CHANGELOG.md`. Merge commits are exempt; `SKIP_CHANGELOG=1` covers exceptions.
