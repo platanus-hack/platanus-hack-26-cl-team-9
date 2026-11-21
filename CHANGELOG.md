@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · docs(design): add the Design v5 page and its polish rules
+
+- **Changed:** `docs/design.md` section 1 lists the Paper page "Design v5" (copies of the three v4 frames with the council's fixes applied) as the current reference for the map and the simulation, and marks Design v4 as superseded. New section 3.2 records the v5 rules: grid and panel edges, type scale, small-text contrast, the `--color-fault` token, one event marker style, timeline geometry with a shared frequency scale, legend behaviour, map callouts and wording.
+- **Why:** A three-round council review of Design v4 (Claude Opus 5.5, GPT 6.2 Sol, Gemini 4 Neon, Claude Fable 5.2) found layout bugs (V2 nav and panel off-grid, a double-stacked timeline track), contrast failures (12px faint text on cards, white digits on red at 3.09:1) and inconsistencies between frames. All four reviewers were satisfied with v5 (final scores 9.0, 9.2, 9.0, 8.7 out of 10).
+- **Agents:** Build the map and simulation UI from Design v5, not v4. The Paper file has a new token `--color-fault` #FF5A48; digits on filled red use #18191B. The V1 km headline now equals the sum of the voltage rows (34.555); the mockup numbers remain invented (section 5). Still open: 500 kV near-white vs magenta, gray vs cream city labels, and whether Valentina's 0 to 2px corners and docked panels (section 2) extend to the whole app, which would require another pass on v5's rounded floating panel.
+- **Files:** `docs/design.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · docs(design): record Valentina's Battle Page review
 
 - **Changed:** `docs/design.md` section 2 gets six rules from Valentina's review: Geist Sans only with tabular figures, 0 to 2px corners, panels docked to the nav rail and artboard edges, the event panel as an incident sheet, red and blue as the only battle colors, and effect-based wording.

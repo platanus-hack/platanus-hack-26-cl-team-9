@@ -13,7 +13,8 @@ All mockups are in the team's Paper file "Platanus Hack": https://app.paper.desi
 | Design v2 (Claude) | Same 6 screens x 3 variations in the Electricity Maps style, plus tower-level views Z1-Z3 (Nueva Pan de Azucar, a selected tower, a tower fault) | Current reference for screens. Frame 6C was blocked by a Paper sync error; check it exists |
 | Design v1 / v2 (Gemini) | Gemini's variations; v2 has 5 "control center" options on charcoal grays | Alternatives, not chosen |
 | Design v3 | The 5 zoom levels from all of Chile down to S/E Calama (section 4), in the variant A interface | Reference for the zoom levels |
-| Design v4 | Felipe's review of v3 applied to 3 frames: V1 Red, V2 Simulación en curso, V3 Después del corte (section 3.1) | Current reference for the map and the simulation |
+| Design v4 | Felipe's review of v3 applied to 3 frames: V1 Red, V2 Simulación en curso, V3 Después del corte (section 3.1) | Superseded by Design v5 |
+| Design v5 | Copies of the 3 v4 frames with the council polish pass applied (section 3.2) | Current reference for the map and the simulation |
 | Logo Ideas | 20 black and white logo options, 1000 x 1000 (section 6) | Option 01 (Subscript) chosen, in `project-logo.png` |
 | Battle Page | Ideas for a "Batalla" tab that shows the attacker vs defender agent game | In progress; see the open decision in `plan.md` section 9 |
 | Vacía (borrar) | Empty page created by mistake | Delete by hand (Paper's API cannot delete pages) |
@@ -61,6 +62,19 @@ The colorimetry was checked in OKLCH on 2026-11-21. Problems it fixed: 66 kV out
 - **The timeline** shows the frequency of each island as a small curve above the track, the played part of the track in white, and the event markers on it.
 - **Assumptions live in context**: a "N supuestos en esta simulación" row in the panel and the info icon next to each number. The nav rail no longer has "Referencia / Metodología / Supuestos"; it has one "Fuentes y supuestos" item, and under "Escenarios" it lists the active and recent scenarios.
 - The simulation map images were made by recoloring the v3 N1 SVG with a throwaway script (not in the repo). The event times and numbers are invented for the mockup, as in section 5.
+
+### 3.2 Design v5 polish rules (council review of 2026-11-21)
+
+- **Grid:** nav rail 200 px; panel and timeline card at x 212, both 440 px wide; panel at y 12 and as tall as its content (max 742 px); timeline 122 px tall at bottom 12 in every frame. Panel content starts 24 px from the panel edge (header, tabs, cards, rows, source line).
+- **Type:** "Chile" 16/20 600; card titles 14/20 600; values 16/20 600 tabular; 12 px secondary text on cards uses muted #A1A2A6, never faint #8A8B90 (4.3:1 fails AA there). Info icons are 14 px with stroke #8A8B90.
+- **Red:** token `--color-fault` #FF5A48. Digits on a filled red badge or pin are #18191B, because white on #FF5A48 is 3.09:1.
+- **Event markers:** one style on the panel, timeline and map: 20 px circles with 11 px 600 digits; the current event is 24 px with a 2 px white ring and no halo.
+- **Timeline:** 24 px side padding (same edge as the panel content); one 4 px, 290 px rail (gray base, white played part) with markers at their true times (x = t x 36.25 px for 8 s) and a 2 px ring in the card color so close markers stay apart; play button and "x / 8 s" centered on the rail. A dashed 50 Hz reference runs the full width, labeled "50 Hz" in the right column. Frequency curves share one vertical scale in every frame (y = 11 - 4 x (Hz - 50) in a 22 px band) and end above the current marker. The readout names each island with units ("Norte 51,18 Hz · Centro-sur 48,21 Hz"). The date lives only in the time pill, which shows seconds.
+- **Legends:** the load legend always lists the same six items in a 3 x 2 grid; absent items keep a 40 % swatch and a #A1A2A6 label at full opacity. "sin tensión" is a near-black line with a #FFFFFF40 outline. The voltage legend lists only the tiers drawn at the current zoom (country view: 500 kV and 220–345 kV, with a footer saying the panel counts from 154 kV).
+- **Map callouts:** only the current event gets the full tooltip, placed off the affected area with a 1 px #D0D1D4 leader to its pin; island labels are plain map text on the ocean side; captions over busy map areas sit on a #1E1F21 backing.
+- **Wording:** "personas sin suministro", "carga perdida" and "Centro-sur" everywhere; map tooltip titles reuse the history row's wording.
+- The nav shows the Sub50 wordmark (section 6) instead of the bolt.
+- Still open: 500 kV near-white vs magenta (section 3) and gray vs cream city labels.
 
 ## 4. Zoom levels
 
