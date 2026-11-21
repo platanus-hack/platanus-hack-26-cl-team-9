@@ -256,16 +256,18 @@ def _settle_islands(s: _State, islands: list[list[int]], t: float) -> None:
         gen, load = float(s.gen[island].sum()), float(s.load[island].sum())
         if key in s.results or (gen < 0.5 and load < 0.5):
             continue
-        s.events.append(
-            {
-                "t": round(t, 2),
-                "type": "island_formed",
-                "ids": [],
-                "text_key": "island_formed",
-                "params": {"buses": len(island), "gen_mw": round(gen), "load_mw": round(load)},
-            }
-        )
+        formed = {
+            "t": round(t, 2),
+            "type": "island_formed",
+            "ids": [],
+            "text_key": "island_formed",
+            "params": {"buses": len(island), "gen_mw": round(gen), "load_mw": round(load)},
+        }
+        s.events.append(formed)
+        curves_before = len(s.curves)
         s.results[key] = _settle_island(s, island, gen, load, t)
+        if len(s.curves) > curves_before:  # this island was simulated: tell the chart which curve is its own
+            formed["params"]["curve"] = f"I{len(s.curves)}"
 
 
 def _info(

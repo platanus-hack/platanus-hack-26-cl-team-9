@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers } from "./layers";
+import { FrequencyChart } from "./FrequencyChart";
 import { CascadeLegend } from "./Legend";
 import { NetworkPanel } from "./NetworkPanel";
 import { formatPeople, lineName, narrate } from "./text";
@@ -144,7 +145,7 @@ export function CascadeApp() {
           {tab === "sim" && <>
             <p className="muted">Haz clic en una línea del mapa para cortarla y mira cómo se propaga la falla. Haz clic en una subestación para ver su detalle en Red.</p>
             {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
-            {timeline && network && <Results timeline={timeline} network={network} events={visibleEvents} cut={cut} />}
+            {timeline && network && <Results timeline={timeline} network={network} events={visibleEvents} cut={cut} now={frame?.t ?? 0} />}
           </>}
           {tab === "legend" && network && <CascadeLegend network={network} buses={buses} mode={mode} />}
           {tab === "assumptions" && <ul className="assumptions">{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>}
@@ -176,7 +177,7 @@ function TimelineCard(p: { timeline: Timeline | null; stage: number; playing: bo
   );
 }
 
-function Results(p: { timeline: Timeline; network: Network; events: Timeline["events"]; cut: string | null }) {
+function Results(p: { timeline: Timeline; network: Network; events: Timeline["events"]; cut: string | null; now: number }) {
   const s = p.timeline.summary;
   const pct = s.load_total_mw ? Math.round((s.load_shed_mw / s.load_total_mw) * 100) : 0;
   return (
@@ -189,24 +190,8 @@ function Results(p: { timeline: Timeline; network: Network; events: Timeline["ev
       </div>
       {p.timeline.truncated && <p className="note warn">La cascada llegó al tope de 20 etapas.</p>}
       <ol className="events">{p.events.map((e, i) => <li key={i}><span className="t">{e.t.toFixed(1)} s</span> {narrate(e, p.network)}</li>)}</ol>
-      <FrequencyChart curves={p.timeline.frequency_hz} />
+      <FrequencyChart curves={p.timeline.frequency_hz} events={p.timeline.events} now={p.now} />
     </section>
   );
 }
 
-function FrequencyChart({ curves }: { curves: Timeline["frequency_hz"] }) {
-  const entries = Object.entries(curves);
-  if (!entries.length) return <p className="muted">Sin desbalance de potencia: la frecuencia se mantiene en 50 Hz.</p>;
-  const tMax = Math.max(...entries.flatMap(([, c]) => c.map((p) => p[0])), 1);
-  const x = (t: number) => (t / tMax) * 300, y = (f: number) => 80 - ((f - 47) / 4) * 80;
-  return (
-    <figure>
-      <svg viewBox="0 0 300 80" className="chart">
-        <line x1="0" x2="300" y1={y(50)} y2={y(50)} stroke="#475569" strokeDasharray="3 3" />
-        <line x1="0" x2="300" y1={y(47.5)} y2={y(47.5)} stroke="#ef4444" strokeDasharray="3 3" />
-        {entries.map(([id, c], i) => <polyline key={id} fill="none" stroke={["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399"][i % 4]} strokeWidth="1.2" points={c.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ")} />)}
-      </svg>
-      <figcaption className="muted">Frecuencia por isla (47–51 Hz). Línea roja: 47,5 Hz, límite de apagón.</figcaption>
-    </figure>
-  );
-}

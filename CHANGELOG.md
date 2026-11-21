@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(web): readable frequency chart for the islands (#38)
+
+- **Changed:** The frequency chart of the Simulación tab now has labelled axes (Hz and seconds), a shaded blackout zone under 47,5 Hz, the 50 Hz line, a cursor at the stage shown on the map, a cross where an island blacks out, and a legend per island ("Isla A · 105 subestaciones, le sobran 1.397 MW: sube hasta 50,56 Hz y ahí se queda"). With no imbalance it draws the whole grid at 50 Hz instead of an empty chart. Event text says "subestaciones" instead of "barras", and "La red sigue conectada" instead of "Se forma una isla de 188 barras" when the island is the whole grid. Code in `web/src/cascade/FrequencyChart.tsx` and `frequency.ts` (+ tests).
+- **Why:** The old chart had no legend and users could not tell what each line was or what an island is.
+- **Agents:** The engine now tags each simulated island with its curve key (`island_formed` event, `params.curve`, `_settle_islands` in `engine.py`, test `test_every_frequency_curve_is_tagged_on_its_island`). The committed cache is older and has no tags: the web pairs islands with curves by order and trusts the pairing only when start time and direction agree (`inferredIslands`); otherwise the legend shows the outcome without the island size. A regenerated cache carries the tags (see `docs/escenarios.md` section 6 before regenerating). The chart treats a curve shorter than 19.5 s as a collapse (horizon 20 s).
+- **Files:** `web/src/cascade/FrequencyChart.tsx`, `frequency.ts`, `text.ts`, `CascadeApp.tsx`, `web/src/styles.css`, `backend/src/cascadasen/domain/cascade/engine.py`.
+
 ## 2026-11-21 · feat(web): add the Sub50 favicon
 - **Changed:** New `web/public/favicon.svg` (763 bytes): the logo's subscript "5" and power-button "0" in black on a white 32 x 32 tile. `web/index.html` links it with `<link rel="icon" type="image/svg+xml">`.
 - **Why:** The site had no favicon; the full "sub50" wordmark from the Paper "Logo" page is unreadable at tab size.

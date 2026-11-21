@@ -64,9 +64,15 @@ describe("cascade narration", () => {
     expect(narrate({ ...cut, text_key: "line_overload_open" }, network)).toContain("supera el 120%");
   });
 
+  it("says the grid is still whole when the island has every substation, and calls smaller ones islands", () => {
+    const whole = { t: 0, type: "island_formed", ids: [], text_key: "island_formed", params: { buses: 2, gen_mw: 100, load_mw: 100 } };
+    expect(narrate(whole, network)).toBe("La red sigue conectada: 2 subestaciones, 100 MW de generación y 100 MW de demanda.");
+    expect(narrate({ ...whole, params: { ...whole.params, buses: 1 } }, network)).toContain("Se forma una isla de 1 subestaciones");
+  });
+
   it("explains why an island goes dark", () => {
     const e = { t: 1, type: "island_blackout", ids: [], text_key: "island_blackout", params: { buses: 3, load_mw: 58, reason: "no_inertia", min_hz: null } };
-    expect(narrate(e, network)).toBe("Apagón en una isla de 3 barras (58 MW): no tiene inercia sincrónica.");
+    expect(narrate(e, network)).toBe("Apagón en una isla de 3 subestaciones (58 MW): no tiene inercia sincrónica.");
   });
 
   it("writes people in millions", () => {

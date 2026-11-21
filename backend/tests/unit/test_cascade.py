@@ -346,3 +346,18 @@ def test_cascade_parameters_carry_provenance(tmp_path):
     (tmp_path / "bad.yaml").write_text("frequency:\n  f0_hz: 50.0\n", encoding="utf-8")
     with pytest.raises(ParameterError):
         load_params("bad", tmp_path)
+
+
+def test_every_frequency_curve_is_tagged_on_its_island():
+    """The chart needs to know which island each curve belongs to; the balance of the island must match the curve direction."""
+    net, op = load_network_and_point(PROCESSED, "feb2025-1500")
+    line = next(ln for ln in net.lines if ln.id == "R239")
+    timeline = run_cascade_workflow(net, op, [line.id])
+    tagged = {e["params"]["curve"]: e["params"] for e in timeline["events"] if e["type"] == "island_formed" and "curve" in e["params"]}
+    assert set(tagged) == set(timeline["frequency_hz"])
+    for key, p in tagged.items():
+        values = [f for _, f in timeline["frequency_hz"][key]]
+        if p["load_mw"] > p["gen_mw"]:
+            assert min(values) < 50.0  # a deficit pulls the frequency down
+        else:
+            assert max(values) > 50.0  # a surplus pushes it up

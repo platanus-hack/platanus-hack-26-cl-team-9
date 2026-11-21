@@ -19,9 +19,12 @@ export function narrate(event: Event, network: Network): string {
   switch (event.text_key) {
     case "line_cut": return `Se corta la línea ${names}.`;
     case "line_overload_open": return `${names} supera el 120% de su capacidad y se abre.`;
-    case "island_formed": return `Se forma una isla de ${p.buses} barras con ${p.gen_mw} MW de generación y ${p.load_mw} MW de demanda.`;
+    case "island_formed":
+      return Number(p.buses) >= network.nodes.length
+        ? `La red sigue conectada: ${p.buses} subestaciones, ${p.gen_mw} MW de generación y ${p.load_mw} MW de demanda.`
+        : `Se forma una isla de ${p.buses} subestaciones con ${p.gen_mw} MW de generación y ${p.load_mw} MW de demanda.`;
     case "load_shed": return `Desconexión automática de carga en ${ZONES[String(p.zone)] ?? p.zone}, escalón ${p.step}: ${p.mw} MW.`;
-    case "island_blackout": return `Apagón en una isla de ${p.buses} barras (${p.load_mw} MW): ${REASONS[String(p.reason)] ?? p.reason}${p.min_hz != null ? ` (mínimo ${p.min_hz} Hz)` : ""}.`;
+    case "island_blackout": return `Apagón en una isla de ${p.buses} subestaciones (${p.load_mw} MW): ${REASONS[String(p.reason)] ?? p.reason}${p.min_hz != null ? ` (mínimo ${p.min_hz} Hz)` : ""}.`;
     case "island_stable": return `La isla se estabiliza (frecuencia mínima ${p.min_hz} Hz).`;
     default: return event.text_key;
   }
