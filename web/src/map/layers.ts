@@ -29,8 +29,10 @@ const METERS_PER_MW = 120;
 const METERS_PER_KV = 30;
 
 /** Flat 2D base (outline, lines) with the grid elements standing in 3D on top. */
-export function buildGridLayers(grid: GridData) {
-  return [_outlineLayer(grid.outlineUrl), _linesLayer(grid.lines), _substationsLayer(grid.substations), _generationLayer(grid.generation)];
+// The outline is only needed on the offline base map; Mapbox already draws land and borders.
+export function buildGridLayers(grid: GridData, { withOutline = true } = {}) {
+  const gridLayers = [_linesLayer(grid.lines), _substationsLayer(grid.substations), _generationLayer(grid.generation)];
+  return withOutline ? [_outlineLayer(grid.outlineUrl), ...gridLayers] : gridLayers;
 }
 
 export function kvColor(kv: number | null): Rgb {

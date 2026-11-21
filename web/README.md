@@ -24,13 +24,29 @@ Checks an agent should run before committing: `npx tsc --noEmit`, `npm test` and
 
 To stop a dev server started in the background: `pkill -f "vite"`.
 
+## Two maps
+
+| URL | Map | Needs internet |
+|---|---|---|
+| `http://localhost:5173/` | deck.gl with the light Chile outline | No |
+| `http://localhost:5173/?mapa=2` | Mapbox vector basemap (Standard, night) with the same grid layers on top | Yes, to load the tiles |
+
+`?mapa=2` reads a public Mapbox token from `web/.env.local` (git-ignored):
+
+```bash
+cp .env.example .env.local   # then set VITE_MAPBOX_TOKEN=pk....
+```
+
+Restart `npm run dev` after changing it. Without a token, `?mapa=2` falls back to the offline map. Restrict the token by URL in the Mapbox account: Vite puts it in the browser bundle.
+
 ## How it is built
 
 | File | Role |
 |---|---|
 | `src/App.tsx` | Full-screen map plus the floating right panel |
 | `src/Legend.tsx` | Right panel: what each colour and height means |
-| `src/map/chileMap.ts` | Creates the deck.gl `Deck`, the camera and tooltips |
+| `src/map/chileMap.ts` | Offline map: creates the deck.gl `Deck`, the camera and tooltips |
+| `src/map/mapboxMap.ts` | `?mapa=2`: Mapbox basemap with deck.gl on top (`MapboxOverlay`) |
 | `src/map/gridData.ts` | Loads the GeoJSON files and aggregates plants per substation |
 | `src/map/layers.ts` | deck.gl layers and colour tables (the legend reads the same tables) |
 
