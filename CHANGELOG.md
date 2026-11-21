@@ -2,6 +2,14 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(assistant): tool schemas and in-process transport over the MCP tools
+
+- **Changed:** `mcp/specs.py` builds JSON Schemas from the signatures of `Sub50Tools` (no `title`, `T | None` collapsed, defaults dropped) for an LLM that calls tools directly. `infrastructure/inprocess.py` adds `InProcessTransport` and `in_process_client(app, client_ip)`: an httpx client that enters the same FastAPI app through ASGI from a worker thread, presenting the caller's IP as the peer. `INSTRUCTIONS` moved from `mcp/server.py` to `mcp/tools.py` (the assistant imports it without the optional `mcp` SDK; `server.py` still exposes it).
+- **Changed:** `httpx` is now a main dependency (`mcp/client.py` runs in production); the `mcp` extra holds only `mcp>=2.0`. `uv.lock` updated.
+- **Why:** The in-app assistant reuses the MCP tools through the real routes, so validation, errors and per-IP rate limits all apply without a network hop or a loopback port shared by every user.
+- **Agents:** `in_process_client` must be used from a sync (`def`) route or a thread, because it calls `anyio.from_thread.run`. It sends `Accept-Encoding: identity` so the GZip middleware does not compress the internal bodies.
+- **Files:** `backend/src/cascadasen/{mcp/specs.py,mcp/tools.py,mcp/server.py,infrastructure/inprocess.py}`, `backend/pyproject.toml`, `backend/uv.lock`, `backend/tests/unit/test_tool_specs.py`.
+
 ## 2026-11-21 · feat(assistant): tool-chat port and Bedrock Converse adapter
 
 - **Changed:** `domain/ports.py` gets `ToolSpec`, `ToolCall`, `AssistantTurn`, `ToolChatError` and the `ToolChatModel` port (provider-neutral messages: `user`, `assistant` with `tool_calls`, `tool` with `tool_call_id`, `ok`, `result`). `infrastructure/llm_tools.py` implements it for Bedrock Converse (`ConverseToolChat`, `tool_chat(settings)`); it reuses `make_client` and returns `None` unless `CASCADASEN_LLM_ENABLED` and `CASCADASEN_LLM_PROVIDER=bedrock-converse`. New settings `assistant_max_steps`, `assistant_deadline_s`, `assistant_call_timeout_s`, `assistant_history_messages`, `rate_assistant_per_minute`.

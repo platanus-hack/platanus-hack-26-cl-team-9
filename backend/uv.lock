@@ -171,6 +171,7 @@ source = { editable = "." }
 dependencies = [
     { name = "boto3" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "networkx" },
     { name = "numpy" },
     { name = "openpyxl" },
@@ -185,7 +186,6 @@ llm = [
     { name = "anthropic", extra = ["bedrock"] },
 ]
 mcp = [
-    { name = "httpx" },
     { name = "mcp" },
 ]
 
@@ -203,7 +203,7 @@ requires-dist = [
     { name = "anthropic", extras = ["bedrock"], marker = "extra == 'llm'", specifier = ">=1.0.0" },
     { name = "boto3", specifier = ">=1.40" },
     { name = "fastapi", specifier = ">=0.165.0" },
-    { name = "httpx", marker = "extra == 'mcp'", specifier = ">=0.28" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.0" },
     { name = "networkx", specifier = ">=3.7" },
     { name = "numpy", specifier = ">=2.5.5" },
