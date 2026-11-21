@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): city labels become metadata, not drawn (#20)
+
+- **Changed:** The city labels of #19 are no longer drawn. The list moved to `web/src/cascade/cities.ts` (`CITIES`) as data only.
+- **Why:** Mapbox already labels these cities, so each name showed twice.
+- **Agents:** Nothing imports `CITIES` yet. Use it for search, camera jumps or a breadcrumb. The "city labels" entry below is superseded: those labels are gone from the screen.
+- **Files:** `web/src/cascade/layers.ts`, `web/src/cascade/cities.ts`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(web): city labels in mapa 3 (#18)
 
 - **Changed:** Six reference cities (Arica, Antofagasta, Calama, Santiago, Concepción, Puerto Montt) drawn as a cream dot plus a text label, in deck.gl (`CITIES` in `web/src/cascade/layers.ts`), on top of the grid layers.
