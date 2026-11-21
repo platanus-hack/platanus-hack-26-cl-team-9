@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
-import type { Impact, IslandFrequency } from "./simulation";
+import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
 import { hz, int, lineName, narrate, pct, secs } from "./text";
 import type { Network, Timeline } from "./types";
 import { Chevron, Info } from "./ui";
 
 interface Props {
   network: Network; timeline: Timeline; cuts: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
-  seek(t: number): void; openSources(): void; source: string;
+  seek(t: number): void; openSources(): void; restore(): void; source: string;
 }
 
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
@@ -31,7 +31,7 @@ function EmptyCard() {
   return (
     <div className="card empty">
       <h3>Escenario nuevo</h3>
-      <p>Haz clic en una línea del mapa para sacarla de servicio. El motor calcula la cascada: líneas que se sobrecargan, islas que se separan, cortes automáticos de carga y apagones.</p>
+      <p>Haz doble clic en una línea del mapa para sacarla de servicio, o haz clic para ver su detalle y usa Sacar de servicio. El motor calcula la cascada: líneas que se sobrecargan, islas que se separan, cortes automáticos de carga y apagones.</p>
       <p className="meta">Sin cortes, el sistema opera normal en este punto de operación.</p>
     </div>
   );
@@ -42,13 +42,21 @@ function ImpactCard(p: Props) {
   const collapsed = p.islands.some((i) => i.collapsed);
   const hzValue = collapsed ? null : lowest?.hz ?? 50;
   const fault = collapsed || (hzValue != null && hzValue < 49);
+  const withstands = withstandsAt(p.timeline, p.t);
   return (
     <div className="card impact">
+      {withstands ? (
+        <div className="withstands">
+          <div className="card-head"><div className="title"><h3>El sistema resiste este corte</h3><Info tip="Resultado final del motor Sub50 para este corte: nadie queda sin suministro y no hay cortes automáticos de carga." /></div></div>
+          <p>Nadie queda sin suministro y no se pierde carga.</p>
+        </div>
+      ) : <>
       <div className="card-head">
         <div className="title"><h3>Personas sin suministro</h3><Info tip="Personas asignadas a las subestaciones que pierden suministro, calculadas por el motor Sub50. Los cortes automáticos de carga en islas que sobreviven se reparten en el tiempo según los MW cortados; al final la cifra es la del motor." /></div>
         <div className="title"><span className="share">{pct(p.impact.share)} del país</span><Info tip={`Sobre ${int(p.totalPeople)} personas asignadas a las subestaciones del modelo.`} /></div>
       </div>
       <div className="people">{int(p.impact.people)}</div>
+      </>}
       <div className="mini-figures ruled">
         <div><div className="value-row"><b>{int(p.impact.lostLoadMw)} <small>MW</small></b><Info tip="Demanda desconectada: islas apagadas y cortes automáticos de carga (EDAC). Flujo DC del motor Sub50." /></div><span>carga perdida</span></div>
         <div><div className="value-row"><b>{int(p.impact.lostGenMw)} <small>MW</small></b><Info tip="Generación en las subestaciones que quedaron sin tensión. El motor no modela desconexiones de centrales por frecuencia o tensión." /></div><span>generación perdida</span></div>
@@ -60,7 +68,10 @@ function ImpactCard(p: Props) {
           <span>{p.islands.length > 1 ? `frecuencia ${lowest?.name.toLowerCase() ?? "más baja"}` : "frecuencia"}</span>
         </div>
       </div>
-      <p className="meta cut-name">Corte: {p.cuts.map((id) => lineName(p.network, id)).join(", ")}</p>
+      <div className="cut-row">
+        <p className="meta cut-name">Corte: {p.cuts.map((id) => lineName(p.network, id)).join(", ")}</p>
+        <button className="secondary-btn" onClick={() => p.restore()}>{p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea"}</button>
+      </div>
     </div>
   );
 }
@@ -70,7 +81,15 @@ function History(p: Props) {
   const visible = events.filter((e) => e.t <= p.t + 1e-9).length;
   const current = visible - 1;
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { ref.current?.querySelector(".event.current")?.scrollIntoView({ block: "nearest" }); }, [current]);
+  // Keep the current event in view by scrolling this card only: scrollIntoView also scrolled the panel and hid the cards above.
+  useEffect(() => {
+    const card = ref.current, row = card?.querySelector(".event.current");
+    if (!card || !row) return;
+    const c = card.getBoundingClientRect(), r = row.getBoundingClientRect();
+    const head = 40; // the sticky card head covers the top of the list
+    if (r.bottom > c.bottom) card.scrollTop += r.bottom - c.bottom + 8;
+    else if (r.top < c.top + head) card.scrollTop -= c.top + head - r.top;
+  }, [current]);
   return (
     <div className="card history" ref={ref}>
       <div className="card-head pad"><div className="title"><h3>Historial de eventos</h3></div><span className="unit">{visible} de {events.length}</span></div>

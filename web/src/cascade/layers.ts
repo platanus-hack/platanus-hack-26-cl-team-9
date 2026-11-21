@@ -48,7 +48,7 @@ export function loadColor(state: EdgeState | undefined): string {
 export interface Toggles { flow: boolean; demand: boolean }
 export interface View {
   network: Network; buses: Record<string, BusState>; frame: Frame; time: number; colorMode: ColorMode;
-  selectedNode: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[];
+  selectedNode: string | null; selectedLine: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[];
 }
 
 /** Flat network on the basemap; optional moving dots for the flow and demand as columns (3D) or discs (2D). */
@@ -76,8 +76,14 @@ export function buildCascadeLayers(v: View): Layer[] {
   };
   const color = (l: NetLine) => hex(v.colorMode === "voltage" ? tierOf(l.kv).color : loadColor(v.frame.edges[l.id]));
   const trigger = [v.frame, v.colorMode];
+  const selected = v.selectedLine ? v.network.lines.find((l) => l.id === v.selectedLine) : undefined;
   return [
     ...(v.regional ?? []),
+    // Selected line: a white halo under the line, so its own colour (voltage, load or dashed) still reads inside.
+    ...(selected ? [new PathLayer<NetLine>({
+      id: "selection", data: selectionData(selected), widthUnits: "pixels", getPath: (l) => [pos(l.a), pos(l.b)], capRounded: true,
+      getColor: [255, 255, 255, 72], getWidth: (l) => tierOf(l.kv).width + 8, // faint enough that gray "fuera" dashes still read on it
+    })] : []),
     new PathLayer<NetLine>({
       id: "lines-dead-outline", data: dead, widthUnits: "pixels", getPath: (l) => [pos(l.a), pos(l.b)],
       getColor: [255, 255, 255, 64], getWidth: (l) => tierOf(l.kv).width + 2, updateTriggers: { getWidth: trigger },
@@ -145,6 +151,10 @@ function dashes(lines: NetLine[], pos: (id: string) => [number, number], zoom: n
   }
   return out;
 }
+
+/** One stable array per line, so selecting a line does not make deck.gl rebuild the halo's attributes every tick. */
+const selectionCache = new WeakMap<NetLine, NetLine[]>();
+const selectionData = (l: NetLine) => selectionCache.get(l) ?? selectionCache.set(l, [l]).get(l)!;
 
 const DOT_COUNT = 3;
 type Partition = { live: NetLine[]; dead: NetLine[]; open: NetLine[]; dashes: Map<number, { line: NetLine; path: [number, number][] }[]> };

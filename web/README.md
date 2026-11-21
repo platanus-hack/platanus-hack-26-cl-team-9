@@ -49,7 +49,7 @@ Full guide, actors and legend: [`docs/mapa3.md`](../docs/mapa3.md). Minimum data
 
 The interface follows the Paper "Design v5" frames (`docs/design.md` section 3.2) with the Design v6 changes (section 3.3): a nav rail whose Escenarios tree lists each scenario (a cut) with its operating conditions, a docked panel with the Red and Simulación tabs, a timeline card with numbered events and island frequencies, and a legend that switches between voltage (cold colors) and load (green, yellow, orange, red). Usage: `docs/mapa3.md` section 4.
 
-Click a line to cut it and replay the cascade computed by the engine (`docs/engine.md`). It reads precomputed files from `web/public/cache/`, which is committed (the deployed image has no Python). After changing the engine or the data, regenerate and commit it:
+Click a line or substation to see its detail; double click a line (or use "Sacar de servicio" in its card) to cut it and replay the cascade computed by the engine (`docs/engine.md`). It reads precomputed files from `web/public/cache/`, which is committed (the deployed image has no Python). After changing the engine or the data, regenerate and commit it:
 
 ```bash
 cd backend && uv run cascadasen-cache      # about 23 MB, 4 hours x 273 cuts, takes a few seconds
