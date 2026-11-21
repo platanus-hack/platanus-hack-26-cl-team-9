@@ -30,8 +30,21 @@ digital:
     unreliable_detect_p: 0.1
     unreliable_detect_p_tasked: 0.6
     external_notice_p: 0.7
+    freq_noise_hz: 0.01
   is_assumption: true
   note: "Supervision quality at uncertainty level 1; level 2 doubles noise and false alarms, level 0 is perfect information"
+
+physics_alarms:
+  value:
+    band_low_hz: 49.0
+    band_high_hz: 51.0
+    high_rocof_hz_s: 1.0
+    low_inertia_mws: 31000.0
+  is_assumption: true
+  note: >-
+    What supervision flags to the agents (docs/agents.md 1.2): operating band 49.0-51.0 Hz (assumption; the
+    first EDAC step is 49.0 Hz, [4]); initial RoCoF of 1 Hz/s (assumption; the 25F reached about 2 Hz/s, [4]);
+    island inertia below the 31,000 MWs floor of the secure base case (data/scripts/build_baseline_opf.py)
 
 effects:
   value:

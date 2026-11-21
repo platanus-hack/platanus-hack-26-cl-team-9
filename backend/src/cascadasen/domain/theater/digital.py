@@ -12,6 +12,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from cascadasen.domain.cascade.frequency import F0
 from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.state import Alarm, AreaObs, ObservedState, RealState
 
@@ -74,8 +75,19 @@ class _Observer:
                 self.alarms.append(Alarm(a, "comms_lost"))
             elif not d.observable(floor):
                 self.alarms.append(Alarm(a, "telemetry_lost"))
+            g = self.real.grid
             return AreaObs(
-                a, served, load, energized, d.delay, d.comms, d.telemetry, d.manual_ops, d.segmented
+                a,
+                served,
+                load,
+                energized,
+                d.delay,
+                d.comms,
+                d.telemetry,
+                d.manual_ops,
+                d.segmented,
+                g.freq_hz.get(a),
+                g.rocof_hz_s.get(a, 0.0),
             )
         if not d.observable(floor):
             self.alarms.append(Alarm(a, "comms_lost" if d.comms == "down" else "telemetry_lost"))
@@ -89,9 +101,36 @@ class _Observer:
             served, energized = base * (1 + d.bias), True
         share = 1.0 if d.manual_ops else max(d.telemetry, floor)
         noise = self.rng.gauss(0.0, cfg["base_noise"] * self.uncertainty / share) if served > 0 else 0.0
+        freq, rocof = self.frequency(a, lag, d.reliable, energized, share)
         return AreaObs(
-            a, max(0.0, served * (1 + noise)), load, energized, lag, d.comms, share, d.manual_ops, d.segmented
+            a,
+            max(0.0, served * (1 + noise)),
+            load,
+            energized,
+            lag,
+            d.comms,
+            share,
+            d.manual_ops,
+            d.segmented,
+            freq,
+            rocof,
         )
+
+    def frequency(
+        self, a: str, lag: int, reliable: bool, energized: bool | None, share: float
+    ) -> tuple[float | None, float | None]:
+        """Frequency and RoCoF as supervision shows them. Stale data shows the steady state before the
+        event (f0); unreliable data looks normal (f0, the hardest case); fresh data carries noise."""
+        if energized is False:
+            return None, None
+        if lag > 0 or not reliable:
+            return F0, 0.0
+        g = self.real.grid
+        f, r = g.freq_hz.get(a), g.rocof_hz_s.get(a, 0.0)
+        if f is None:
+            return None, None
+        sd = self.cfg.get("freq_noise_hz", 0.0) * self.uncertainty / share
+        return f + (self.rng.gauss(0.0, sd) if sd > 0 else 0.0), r
 
     def physical_alarms(self, areas: list[AreaObs]) -> list[tuple[str, str | None]]:
         by_area = {o.area: o for o in areas}
@@ -113,12 +152,37 @@ class _Observer:
         lt = self.real.last_transient
         if lt and lt.get("cycle") == self.real.cycle:
             for isl in lt.get("islands", []):
+                where = next((x for x in isl["nodes"] if by_area[x].served_mw is not None), isl["nodes"][0])
                 if isl["load_shed_mw"] > 0 or isl["result"] in ("blackout", "uncertain"):
-                    where = next(
-                        (x for x in isl["nodes"] if by_area[x].served_mw is not None), isl["nodes"][0]
-                    )
                     self.alarms.append(Alarm(where, "frequency_event"))
+                if isl["result"] == "uncertain" and by_area[where].served_mw is not None:
+                    self.alarms.append(Alarm(where, "voltage_limited"))
+        self.band_alarms(areas)
         return corridors
+
+    def band_alarms(self, areas: list[AreaObs]) -> None:
+        """docs/agents.md 1.2: observed frequency outside the operating band, a steep initial RoCoF, and an
+        island whose inertia fell below the floor after losing synchronous units (one alarm per island)."""
+        cfg, g = self.cfg, self.real.grid
+        lo, hi = cfg.get("band_low_hz", 49.0), cfg.get("band_high_hz", 51.0)
+        for o in areas:
+            if o.freq_hz is not None and not lo <= o.freq_hz <= hi:
+                self.alarms.append(Alarm(o.area, "frequency_out_of_band"))
+            if o.rocof_hz_s is not None and abs(o.rocof_hz_s) >= cfg.get("high_rocof_hz_s", 1.0):
+                self.alarms.append(Alarm(o.area, "high_rocof"))
+        floor = cfg.get("low_inertia_mws", 0.0)
+        if floor <= 0:
+            return
+        seen = {o.area for o in areas if o.served_mw is not None and self.real.digital[o.area].reliable}
+        for isl in g.islands():
+            here = [
+                a for a in self.network.order if a in seen and set(self.network.areas[a].buses) & set(isl)
+            ]
+            if not here:
+                continue
+            now, plan = float(g.inertia[isl].sum()), float(g.plan_inertia[isl].sum())
+            if now < floor and now < 0.9 * plan:
+                self.alarms.append(Alarm(here[0], "low_inertia"))
 
     def self_checks(self) -> None:
         """Defence and control self-checks, dependency notices and integrity detection."""

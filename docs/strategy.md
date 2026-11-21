@@ -27,7 +27,7 @@ Primary user (decided 2026-11-21): the operations, continuity and cybersecurity 
 
 | System | Contents | Implemented in |
 |---|---|---|
-| Physical environment | Generation, transmission, load, island frequency, defences | `backend/src/cascadasen/domain/simulation/` |
+| Physical environment | Generation, transmission, load, island frequency, defences | `backend/src/cascadasen/domain/cascade/` (188 buses, `engine.md`) through `domain/theater/grid.py` |
 | Digital environment | Supervision, telemetry, communications, data integrity, remote control | `domain/theater/digital.py` |
 | Adversarial force | One agent with an abstract objective that adapts | `domain/agents/adversary.py` |
 | Defensive force | Agents that detect, decide, coordinate, contain and recover | `domain/agents/` |
@@ -57,7 +57,7 @@ Each **operating area** is the set of buses inside a latitude band (`domain/thea
 | A12 | Araucanía | -38.2 to -39.7 | Temuco, Ciruelos |
 | A13 | Los Ríos–Los Lagos | south of -39.7 | Valdivia, Pichirropulli, Puerto Montt |
 
-The A06–A07 boundary separates Nueva Maitencillo from Nueva Pan de Azúcar: the 25F corridor (V2). Each area lists the real node ids it covers (`aggregates`), so the frontend can map a click on any substation to its area. Demand per area, dispatch and inertia come from operating points in `params/operating_points.yaml`; every value there carries a source or `is_assumption: true`.
+The A06–A07 boundary separates Nueva Maitencillo from Nueva Pan de Azúcar: the 25F corridor (V2). Each area lists the real node ids it covers (`aggregates`), so the frontend can map a click on any substation to its area. Demand per bus comes from `data/processed/operating_points.json`, dispatch and inertia from the secure base case `data/processed/baseline_opf.json` (`engine.md`); engine parameters are in `domain/cascade/params/cascade.yaml` with a source or `is_assumption: true`.
 
 ## 3. Three states
 
@@ -88,7 +88,7 @@ Restoration in the theatre is an operational abstraction: an area recovers a sha
 
 ## 5. Agents
 
-Every agent has its own mission, limited information, a set of capabilities, limited resources, decision rules, memory, success criteria, and permissions. Each holds a different representation of the state of the infrastructure.
+Every agent has its own mission, limited information, a set of capabilities, limited resources, decision rules, memory, success criteria, and permissions. Each holds a different representation of the state of the infrastructure. What the agents know about the physics (operating band 49.0–51.0 Hz, RoCoF, inertia, voltage-limited islands) and how Stabilisation acts on it is in [`agents.md`](agents.md).
 
 | Agent | Mission | Sees | Can do | Cannot do |
 |---|---|---|---|---|

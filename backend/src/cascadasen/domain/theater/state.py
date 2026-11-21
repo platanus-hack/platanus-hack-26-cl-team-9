@@ -102,6 +102,10 @@ class AreaObs:
     telemetry: float
     manual_ops: bool
     segmented: bool
+    freq_hz: float | None = (
+        None  # frequency after the last transient as supervision shows it (docs/agents.md 1)
+    )
+    rocof_hz_s: float | None = None  # initial df/dt of the last transient as supervision shows it
 
 
 @dataclass(frozen=True)
@@ -139,6 +143,8 @@ class ObservedState:
                     "telemetry": round(a.telemetry, 2),
                     "manual_ops": a.manual_ops,
                     "segmented": a.segmented,
+                    "freq_hz": None if a.freq_hz is None else round(a.freq_hz, 3),
+                    "rocof_hz_s": None if a.rocof_hz_s is None else round(a.rocof_hz_s, 3),
                 }
                 for a in self.areas
             },
