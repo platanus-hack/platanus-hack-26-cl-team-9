@@ -55,7 +55,7 @@ Click a line to cut it and replay the cascade computed by the engine (`docs/engi
 cd backend && uv run cascadasen-cache      # about 23 MB, 4 hours x 273 cuts, takes a few seconds
 ```
 
-Session mode: `?sesion=<sid>` (or **Crear sesión** in the panel) opens a shared, editable copy of the network served by the backend; the **Datos** tab edits buses, lines, generators, loads and datacenters, and every client of the session sees the changes live (SSE, with a 2 s polling fallback). Guide: [`docs/mapa3.md`](../docs/mapa3.md) section 11, API: [`docs/sessions-api.md`](../docs/sessions-api.md). The browser calls `/api`, which `npm run dev` proxies to `VITE_API_TARGET` (default `http://localhost:8000`, start it with `cd backend && uv run cascadasen-api`; docker compose sets `http://backend:8000`). Without `?sesion=` the app makes no `/api` request and needs no backend.
+Session mode: `?sesion=<sid>` (or the **Sesión compartida** rail item) opens a shared, editable copy of the network served by the backend; the **Datos** tab edits buses, lines, generators, loads and datacenters, and every client of the session sees the changes live (SSE, with a 2 s polling fallback). Guide: [`docs/mapa3.md`](../docs/mapa3.md) section 11, API: [`docs/sessions-api.md`](../docs/sessions-api.md). The browser calls `/api`, which `npm run dev` proxies to `VITE_API_TARGET` (default `http://localhost:8000`, start it with `cd backend && uv run cascadasen-api`; docker compose sets `http://backend:8000`). Without `?sesion=` the app makes no `/api` request and needs no backend.
 
 Deep links: `?mapa=3&point=feb2025-1500&cut=R239` opens the 25F corridor cut. It uses Mapbox when `VITE_MAPBOX_TOKEN` is set and the offline outline otherwise.
 
@@ -74,7 +74,7 @@ Mapa 3 keeps the camera near Chile (`maxBounds` lon -110 to -35, lat -62 to -5, 
 | `src/map/gridData.ts` | Loads the GeoJSON files and aggregates plants per substation |
 | `src/map/layers.ts` | deck.gl layers and colour tables (the legend reads the same tables) |
 | `src/session/sessionApi.ts` | Sessions API client: typed calls, `ApiError`, `sessionIdFrom`, `subscribe` (SSE or polling) |
-| `src/session/useSession.ts`, `SessionBar.tsx`, `DataPanel.tsx` | Session state, the session bar and the **Datos** tab of mapa 3 |
+| `src/session/useSession.ts`, `loader.ts`, `SessionBar.tsx`, `SessionCut.tsx`, `DataPanel.tsx`, `session.css` | Session state and refetch, the **Sesión compartida** view and panel-head strip, the open lines in **Simulación**, the **Datos** tab, and their styles |
 | `src/session/geo.ts` | Nearest bus of at least 220 kV (great-circle distance only, no physics) |
 
 Data files are imported with Vite `?url` from `../data/processed/`, so they are bundled into the build and the deployed site works offline:

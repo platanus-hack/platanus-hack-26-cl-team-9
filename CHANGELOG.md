@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): session mode in the Design v5 shell
+- **Changed:** Session mode is wired into main's Design v5 `CascadeApp.tsx`: a rail item **Sesión compartida** (view with **Crear sesión** / **Unirse**, or the id, **Copiar enlace** and **Salir**), a panel-head strip in a session (`Sesión <id>`, `rev. N`, **en vivo** / **sondeo**, **Copiar enlace**), tabs **Red**, **Simulación**, **Datos** in a session (placeholder tabs hidden), line clicks through `POST /{sid}/cut`, and **Elegir en el mapa** pick mode.
+- **Changed:** New `web/src/session/SessionCut.tsx` (**Líneas abiertas en la sesión · N**, **Reparar**, **Reparar todo**) above `SimulationPanel`, whose prop `cut` became `cuts: string[]`. In a session the time pill select and the rail scenarios are disabled with a tooltip and the URL drops `cut`.
+- **Changed:** New `web/src/session/session.css` (imported after `cascade.css`): rules under `.shell`, radius 0, cascade.css tokens only, `.tag` / `.btn`. `SessionBar.tsx` takes `{ s, compact? }`; `DataPanel.tsx` only changed class names (`badge`→`tag`, `subtabs`→`seg`, `stats`→`figures`, `link`→`text-btn`, `muted`→`meta`).
+- **Why:** User task 1 (PR #50 brief): PR #45 rebuilt the shell, so session mode goes into the new one instead of restoring the old shell. Without `?sesion=` the app is main's plus one rail item and makes no `/api` request.
+- **Agents:** Never use `.badge` for session labels (`.shell .badge` is the event marker). `web/src/styles.css` holds no session rules. Docs: `docs/mapa3.md` section 11 and `web/README.md` describe the new labels. Verification: `npx vitest run` 28 passed (7 files); `npm run build` ok; Vite proxy smoke test (backend on :18731, `VITE_API_TARGET`, vite on :15731): `POST /api/v1/sessions` 201 with `session_id`, `/network` 200, `/cut` and `/repair` ok, `/` serves the app; both processes stopped.
+- **Files:** `web/src/cascade/{CascadeApp,SimulationPanel}.tsx`, `web/src/session/{SessionBar,SessionCut,DataPanel}.tsx`, `web/src/session/session.css`, `docs/mapa3.md`, `web/README.md`.
 ## 2026-11-21 · feat(api): typed response models in the agent spec
 
 - **Changed:** `api/agent_openapi.py` adds `AgentOut` (`extra="allow"`), `ok(model, code=200)` (a `responses=` entry whose description is the model's first docstring line) and a pass in `agent_openapi()` that keeps only the `$ref` of every 2xx JSON schema.

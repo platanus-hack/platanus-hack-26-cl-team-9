@@ -5,7 +5,7 @@ import type { Network, Timeline } from "./types";
 import { Chevron, Info } from "./ui";
 
 interface Props {
-  network: Network; timeline: Timeline; cut: string | null; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
+  network: Network; timeline: Timeline; cuts: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
   seek(t: number): void; openSources(): void; source: string;
 }
 
@@ -14,8 +14,8 @@ export function SimulationPanel(p: Props) {
   const assumptions = p.timeline.assumptions.length;
   return (
     <>
-      {p.cut ? <ImpactCard {...p} /> : <EmptyCard />}
-      {p.cut && <History {...p} />}
+      {p.cuts.length > 0 ? <ImpactCard {...p} /> : <EmptyCard />}
+      {p.cuts.length > 0 && <History {...p} />}
       {p.timeline.truncated && <p className="note">La cascada llegó al tope de 20 etapas: el resultado puede ser mayor.</p>}
       <button className="assumptions-row" onClick={p.openSources}>
         <Info tip="Supuestos del motor que afectan esta simulación. Ábrelos para ver cada uno." />
@@ -60,7 +60,7 @@ function ImpactCard(p: Props) {
           <span>{p.islands.length > 1 ? `frecuencia ${lowest?.name.toLowerCase() ?? "más baja"}` : "frecuencia"}</span>
         </div>
       </div>
-      <p className="meta cut-name">Corte: {lineName(p.network, p.cut!)}</p>
+      <p className="meta cut-name">Corte: {p.cuts.map((id) => lineName(p.network, id)).join(", ")}</p>
     </div>
   );
 }
