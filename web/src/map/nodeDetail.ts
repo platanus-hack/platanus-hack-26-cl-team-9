@@ -76,16 +76,33 @@ function _placeNear(popup: HTMLElement, container: HTMLElement, x: number, y: nu
   popup.style.top = `${top}px`;
 }
 
+/** Why: the minimum to judge a node (size, supply, people, links) is always visible; the rest of the dictionary sits behind one button. */
 function _card(n: NodeRecord, close: () => void): HTMLElement[] {
+  const extra = _el("div", "", "extra");
+  extra.hidden = true;
+  extra.append(
+    _section("Ficha", _rows(_fichaRows(n))),
+    _section("Almacenamiento", _storage(n)),
+    _section("Población por comuna", _population(n)),
+    _section(`Líneas conectadas · ${n.lines.length}`, _lines(n)),
+    _section("Modelo eléctrico (PyPSA-CL)", _model(n)),
+  );
+  const toggle = _el("button", "Ver todos los datos", "more");
+  toggle.onclick = () => { extra.hidden = !extra.hidden; toggle.textContent = extra.hidden ? "Ver todos los datos" : "Ocultar datos"; };
   return [
     _header(n, close),
-    _section("Ficha", _rows(_fichaRows(n))),
+    _section("Resumen", _rows(_summaryRows(n))),
     _section(`Generación · ${formatNumber(n.generation_mw, 1)} MW`, _generation(n)),
-    _section("Almacenamiento", _storage(n)),
-    _section("Población abastecida", _population(n)),
-    _section(`Líneas conectadas · ${n.lines.length}`, _lines(n)),
     _section("Demanda y despacho simulado", _operating(n)),
-    _section("Modelo eléctrico (PyPSA-CL)", _model(n)),
+    toggle,
+    extra,
+  ];
+}
+
+function _summaryRows(n: NodeRecord): [string, string][] {
+  return [
+    ["Personas atendidas", formatNumber(n.served_population)],
+    ["Líneas conectadas", String(n.degree)],
   ];
 }
 

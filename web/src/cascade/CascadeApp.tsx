@@ -63,7 +63,10 @@ export function CascadeApp() {
       const e = tl?.frames[s]?.edges[id];
       return `${lineName(net, id)}\n${e ? `${e.flow_mw} MW · ${Math.round(e.loading * 100)}% de su capacidad` : "sin flujo"}\nClic para cortar`;
     }
-    return (info.object as { name?: string }).name ?? null;
+    const node = info.object as { id: string; name: string; kv: number };
+    const b = view.current.buses[node.id];
+    const dark = tl?.frames[s]?.dark.includes(node.id);
+    return `${node.name}\n${node.kv} kV${b ? ` · ${Math.round(b.load_mw)} MW · ${formatPeople(b.people)} personas` : ""}${dark ? "\nSin energía" : ""}`;
   }
 
   function _animate() {
