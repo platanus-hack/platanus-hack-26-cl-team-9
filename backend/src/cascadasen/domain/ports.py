@@ -6,7 +6,8 @@ class that satisfies `GridDataSource`; nothing in domain or application changes.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass
+from typing import Any, Protocol, runtime_checkable
 
 from cascadasen.domain.model import GridSnapshot, SourceBundle, SourceInfo
 
@@ -46,6 +47,42 @@ class CommanderAdvisor(Protocol):
     (unavailable, invalid, refused): the commander then falls back to its rules."""
 
     def choose(self, context: dict, options: list[dict], capacity: int) -> dict | None: ...
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    """One tool the model may call: name, description and a JSON Schema for its arguments."""
+
+    name: str
+    description: str
+    schema: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class AssistantTurn:
+    """What the model answered: text and/or tool calls (an empty `tool_calls` ends the exchange)."""
+
+    text: str
+    tool_calls: tuple[ToolCall, ...] = ()
+
+
+class ToolChatError(RuntimeError):
+    """The model could not answer (unavailable, no tool support, refused). The message is shown as is."""
+
+
+class ToolChatModel(Protocol):
+    """An LLM that can call tools (docs/assistant.md). Messages are provider-neutral dicts:
+    `{"role": "user", "text"}`, `{"role": "assistant", "text", "tool_calls": [{"id", "name",
+    "arguments"}]}` and `{"role": "tool", "tool_call_id", "ok", "result"}`. Raises `ToolChatError`."""
+
+    def turn(self, system: str, messages: list[dict[str, Any]], tools: list[ToolSpec]) -> AssistantTurn: ...
 
 
 class ConflictError(RuntimeError):

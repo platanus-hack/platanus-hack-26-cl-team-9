@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(assistant): tool-chat port and Bedrock Converse adapter
+
+- **Changed:** `domain/ports.py` gets `ToolSpec`, `ToolCall`, `AssistantTurn`, `ToolChatError` and the `ToolChatModel` port (provider-neutral messages: `user`, `assistant` with `tool_calls`, `tool` with `tool_call_id`, `ok`, `result`). `infrastructure/llm_tools.py` implements it for Bedrock Converse (`ConverseToolChat`, `tool_chat(settings)`); it reuses `make_client` and returns `None` unless `CASCADASEN_LLM_ENABLED` and `CASCADASEN_LLM_PROVIDER=bedrock-converse`. New settings `assistant_max_steps`, `assistant_deadline_s`, `assistant_call_timeout_s`, `assistant_history_messages`, `rate_assistant_per_minute`.
+- **Why:** First step of the in-app natural-language assistant (user decision: bedrock-converse only, JSON response with the tool trace). The port keeps `application/` free of any provider.
+- **Agents:** Errors from Bedrock become `ToolChatError` with a fixed Spanish message and no provider detail. Nothing is wired to the API yet.
+- **Files:** `backend/src/cascadasen/{domain/ports.py,infrastructure/llm_tools.py,infrastructure/settings.py}`, `backend/tests/unit/test_llm_tools.py`.
+
 ## 2026-11-21 · docs(mcp): guide for the MCP server and links from the agent docs
 
 - **Changed:** New `docs/mcp.md` (run, layout, tools, guardrails, how to add a tool). `docs/openapi.md`, `docs/stack.md` and `docs/agents.md` now point to it instead of saying the MCP server is future; `backend/README.md` has the run and `claude mcp add` commands; `AGENTS.md` section 1 lists `docs/mcp.md` in the read order.
