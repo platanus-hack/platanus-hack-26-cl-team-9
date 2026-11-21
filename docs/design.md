@@ -30,6 +30,12 @@ Copy the visual language of Electricity Maps (app.electricitymaps.com) closely. 
 - **Text:** sentence case. No all-caps eyebrow labels. No filler or hint text that does not carry information.
 - **Numbers:** tabular figures, and an info icon next to each number that opens its source (`stack.md` section 5.3).
 - **UI language:** Spanish. Do not show "SEN" as a product name; the product is Sub50.
+- **Type (Valentina's review, 2026-11-21):** Geist Sans only. No Inter and no mono face: numbers, timers and code use Geist with tabular figures (`font-variant-numeric: tabular-nums`). Applied to every artboard of the Battle Page; the other pages still mix Inter and Geist Mono.
+- **Corners (Valentina's review, 2026-11-21):** 0 to 2px on containers, tables, buttons and tags; no pills or large radii, because critical-infrastructure tools should read as precise. Applied to the Battle Page at 2px. The file's `--radius-*` tokens (3 to 16px) and the layout bullet above ("rounded floating panel", "time pill") are not updated yet; the team must decide whether the rule covers the whole app.
+- **Docked modules (Valentina's review, 2026-11-21):** panels over the map dock to the nav rail and the artboard edges instead of floating, share one 20px inner margin, and separate sections with 1px dividers, like a mission console. No tilted or offset elements: cards in a hand sit on one horizontal line. Applied to B1 (HUD and event log) and B5 (cards); B11 has the same floating HUD and log and is not changed yet.
+- **Event panel as an incident sheet (same review):** the last-move panel reads as a contingency report with three labeled rows: element out of service, effect on the system, critical variables. Applied to B1.
+- **Two sides, two colors (same review):** the battle uses only red `#EF6A5A` (attacker, failure, lost load) and blue `#5AB0FF` (defender, recovery) plus neutrals. No green deltas, no light-blue labels, no tinted badges. Context and cost figures (MWh, US$) stay white. Code blocks are one neutral color with no syntax highlighting. Move notation marks ("!!", "!", "?!") are bold white, not colored. Applied to B4, B7 and B10.
+- **Wording (same review):** people are never "a favor del atacante". The battle simulates agents and the consequences of their moves, so figures describe effects, for example "personas en riesgo de quedar sin luz" (`cyber.md` section 8).
 
 ## 3. Color
 

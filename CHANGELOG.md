@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · docs(design): record Valentina's Battle Page review
+
+- **Changed:** `docs/design.md` section 2 gets six rules from Valentina's review: Geist Sans only with tabular figures, 0 to 2px corners, panels docked to the nav rail and artboard edges, the event panel as an incident sheet, red and blue as the only battle colors, and effect-based wording.
+- **Why:** Valentina reviewed the Battle Page design; the rules are already applied to the Battle Page artboards each bullet names.
+- **Agents:** The corner and docking rules cover the Battle Page only. Whether they extend to the whole app is an open team decision: the "rounded floating panel" layout bullet and the `--radius-*` tokens are unchanged. B11 (floating HUD and log) and B7 (green and yellow move notation) are not updated yet.
+- **Files:** `docs/design.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · docs(health): document the health index and flag stale 25F figures
 
 - **Changed:** New `docs/health.md` (rule, metrics with limits and sources, 25F against `feb2025-0300`, cautions). `architecture.md` lists the command and `health.yaml`. `engine.md`, `mapa3.md` and `minimum-dataset.md` carry a note that cutting R239 at `feb2025-1500` now gives 1,972 MW lost and 3.8 M people with `voltage_limited`, not 7,872 MW and 15.2 M.
