@@ -16,7 +16,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 from fastapi.routing import RouteContext, iter_route_contexts
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 AGENT: dict[str, Any] = {"x-sub50-agent": True}  # openapi_extra of every agent route
 SPEC_URL = "/api/v1/agents/openapi.json"
@@ -72,6 +72,18 @@ class ErrorResponse(BaseModel):
     )
 
 
+class AgentOut(BaseModel):
+    """Documented shape of a response; routes return their dict unchanged."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+def ok(model: type[BaseModel], code: int = 200) -> dict[int | str, dict[str, Any]]:
+    """`responses=` entry for the success body: documents `model` without validating the response
+    (a `response_model=` would validate and reorder it)."""
+    return {code: {"model": model, "description": (model.__doc__ or "").strip().splitlines()[0]}}
+
+
 def errors(codes: dict[int, str]) -> dict[int | str, dict[str, Any]]:
     """`responses=` entry: each status code with its one-line description and `ErrorResponse`."""
     return {code: {"model": ErrorResponse, "description": text} for code, text in codes.items()}
@@ -89,13 +101,22 @@ def agent_routes(app: FastAPI) -> list[RouteContext]:
 def agent_openapi(app: FastAPI) -> dict[str, Any]:
     routes = agent_routes(app)
     used = {tag for r in routes for tag in r.tags or ()}
-    return get_openapi(
+    spec = get_openapi(
         title=TITLE,
         version=VERSION,
         description=DESCRIPTION,
         routes=routes,
         tags=[{"name": name, "description": text} for name, text in TAGS.items() if name in used],
     )
+    # an `ok()` model next to the inferred dict[str, Any] gives $ref plus type/additionalProperties/title
+    # siblings; keep only the $ref so clients see the documented model
+    for ops in spec["paths"].values():
+        for op in ops.values():
+            for code, resp in op.get("responses", {}).items():
+                schema = resp.get("content", {}).get("application/json", {}).get("schema", {})
+                if code.startswith("2") and "$ref" in schema:
+                    resp["content"]["application/json"]["schema"] = {"$ref": schema["$ref"]}
+    return spec
 
 
 def mount(app: FastAPI) -> None:

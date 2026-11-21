@@ -1,4 +1,4 @@
-"""Request models of the sessions API (docs/sessions-api.md). Bounds mirror the overlay validation
+"""Request and response models of the sessions API (docs/sessions-api.md). Bounds mirror the overlay validation
 in domain/cascade/overlay.py; the overlay re-checks everything that depends on the network."""
 
 from __future__ import annotations
@@ -6,6 +6,9 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from cascadasen.api.agent_openapi import AgentOut
+from cascadasen.api.simulation_schemas import TheaterNetworkOut
 
 Tech = Literal["hidro", "termica", "bioenergia", "geotermica", "solar", "eolica"]
 LoadKind = Literal["datacenter", "consumo"]
@@ -186,3 +189,70 @@ class ActionIn(_Body):
         description="Name of the external agent, recorded in the audit log.",
         examples=["bot-1"],
     )
+
+
+# ------------------------------------------------------------------ responses (documentation only)
+class SessionDocOut(AgentOut):
+    """Session document."""
+
+    session_id: str = Field(description="Session id; goes in the path of every session call.")
+    label: str | None = Field(description="Optional label given on creation.")
+    point: str = Field(description="Operating point the session is pinned to.")
+    revision: int = Field(description="Bumped by every change, run activity included.")
+    dataset_revision: int = Field(
+        description="Bumped only by edits, reset, cut and repair; use it for If-Match."
+    )
+    overlay: dict[str, Any] = Field(description="The session's edits over the base dataset.")
+    open_lines: list[str] = Field(description="Lines open in the sandbox cut.")
+    runs: dict[str, dict[str, Any]] = Field(
+        description="Run id -> created_at, dataset_revision, cycle, status."
+    )
+    created_at: str = Field(description="ISO 8601 creation time.")
+    updated_at: str = Field(description="ISO 8601 time of the last change.")
+    last_op: dict[str, Any] = Field(description="Last change: op, ids, by, revision, dataset_revision.")
+    share_path: str = Field(description="Browser link path, /?sesion=<sid>.")
+    expires_at: str = Field(description="ISO 8601 expiry, 24 h after the last change.")
+
+
+class SessionWarningOut(AgentOut):
+    """A warning about the edited network."""
+
+    code: str = Field(description="isolated_bus, unbalanced_island or no_sync_to_redispatch.")
+    ids: list[str] = Field(description="Buses the warning is about.")
+    message: str = Field(description="Spanish message.")
+
+
+class EditOut(AgentOut):
+    """Result of an edit: element id, revisions, warnings and redispatch."""
+
+    id: str | None = Field(None, description="Id of the element added, changed or deleted; absent on reset.")
+    revision: int = Field(description="Session revision after the edit.")
+    dataset_revision: int = Field(description="Dataset revision after the edit (also the ETag).")
+    warnings: list[SessionWarningOut] = Field(description="Warnings about the edited network.")
+    balance: list[dict[str, Any]] = Field(description="Redispatch per island (an assumption).")
+
+
+class SessionNetworkOut(TheaterNetworkOut):
+    """The session's edited 188-bus network."""
+
+    session_id: str = Field(description="Session id.")
+    revision: int = Field(description="Session revision.")
+    dataset_revision: int = Field(description="Dataset revision (also the ETag); send it as If-Match.")
+    out_of_service: dict[str, list[str]] = Field(description="Buses and lines out of service.")
+    loads: list[dict[str, Any]] = Field(description="Loads and datacenters added by the session.")
+    generators: list[dict[str, Any]] = Field(description="Generators added by the session.")
+    warnings: list[SessionWarningOut] = Field(description="Warnings about the edited network.")
+    balance: list[dict[str, Any]] = Field(description="Redispatch per island (an assumption).")
+    baseline: dict[str, Any] = Field(description="Loading, overloads, islands and load shed with no cut.")
+
+
+class CutStateOut(AgentOut):
+    """Sandbox state: open lines and the cascade timeline."""
+
+    revision: int = Field(description="Session revision.")
+    dataset_revision: int = Field(description="Dataset revision (also the ETag).")
+    open_lines: list[str] = Field(description="Lines open in the sandbox.")
+    timeline: dict[str, Any] = Field(
+        description="Cascade timeline with the open lines (the baseline when none)."
+    )
+    notice: str = Field(description="Every scenario is hypothetical and simulated.")

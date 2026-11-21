@@ -1,6 +1,7 @@
 """Strategic runs over HTTP (docs/stack.md 7.1) on the toy grid."""
 
 import pytest
+from fastapi.routing import iter_route_contexts
 from fastapi.testclient import TestClient
 
 from cascadasen.api.app import create_app
@@ -131,3 +132,31 @@ def test_an_evicted_run_is_served_rebuilt(toy_snapshot, toy_network, toy_world):
     run = state.json()["run"]
     assert run["rebuilt"] is True and run["trace_matches"] is True and run["cycle"] == 2
     assert client.get(f"/api/v1/sim/runs/{a}/trace").json()["head"] == head
+
+
+def _documented(app, operation_id: str):
+    """The model a route documents for its success body (agent_openapi.ok)."""
+    route = next(
+        r for r in iter_route_contexts(app.routes) if getattr(r, "operation_id", None) == operation_id
+    )
+    return route.responses[route.status_code or 200]["model"]
+
+
+def test_responses_match_the_documented_models(client):
+    rid = client.post("/api/v1/sim/runs", json={"seed": 11, "horizon": 6}).json()["run_id"]
+    r = f"/api/v1/sim/runs/{rid}"
+    for op, method, url, body in [
+        ("global_get_network", "get", "/api/v1/sim/network", None),
+        ("get_catalog", "get", "/api/v1/sim/catalog", None),
+        ("global_get_run", "get", r, None),
+        ("global_inject_run_event", "post", f"{r}/events", {"type": "D1_telemetry_loss", "target": "T1"}),
+        ("global_step_run", "post", f"{r}/step", {"cycles": 2}),
+        ("global_get_run", "get", r, None),
+        ("global_get_run_snapshots", "get", f"{r}/snapshots", None),
+        ("global_get_run_trace", "get", f"{r}/trace", None),
+        ("global_get_run_report", "get", f"{r}/report", None),
+        ("global_get_run_after_action", "get", f"{r}/after_action", None),
+    ]:
+        resp = client.request(method, url, json=body)
+        assert resp.status_code == 200, (op, resp.text)
+        _documented(client.app, op).model_validate(resp.json())

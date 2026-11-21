@@ -8,17 +8,26 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 
-from cascadasen.api.agent_openapi import AGENT, errors
+from cascadasen.api.agent_openapi import AGENT, errors, ok
 from cascadasen.api.limits import client_ip
 from cascadasen.api.simulation_schemas import (
+    AfterActionOut,
     CampaignIn,
+    CatalogOut,
     EventIn,
     NetworkOut,
     ReplayIn,
     RunCreate,
+    RunEventOut,
+    RunReportOut,
+    RunSnapshotsOut,
+    RunStateOut,
+    RunStepOut,
     RunSummary,
+    RunTraceOut,
     SimulateRequest,
     StepIn,
+    TheaterNetworkOut,
 )
 from cascadasen.application.run_campaign import CampaignNotFoundError, CampaignSpec
 from cascadasen.application.run_experiment import RunCache, RunConflictError, RunNotFoundError, run_config
@@ -99,7 +108,8 @@ def network(sim: Sim) -> dict[str, Any]:
         "people), `areas`, `corridors` and `defenses`. Call it before creating a run or injecting an "
         "event to pick valid targets. Read only."
     ),
-    responses=errors(
+    responses=ok(TheaterNetworkOut)
+    | errors(
         {
             404: "Unknown operating point; `detail.valid` lists the valid ones.",
             422: "Invalid query parameter.",
@@ -180,6 +190,7 @@ def run_call(fn, *args, **kwargs) -> Any:
         "target kinds they accept), defensive `actions`, `policies` A/B/C, adversary `objectives`, "
         "missions and experiment `templates`. Call it once before creating runs. Read only."
     ),
+    responses=ok(CatalogOut),
     openapi_extra=AGENT,
 )
 def sim_catalog(sim: Sim) -> dict[str, Any]:
@@ -226,7 +237,7 @@ def create_run(sim: Sim, body: RunCreate) -> dict[str, Any]:
         "state, decisions, grid frame, areas, crews, metrics), the resource ledger and the metric "
         "series of every cycle so far. Read only."
     ),
-    responses=errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
+    responses=ok(RunStateOut) | errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
     openapi_extra=AGENT,
 )
 def get_run(sim: Sim, run_id: RunId) -> dict[str, Any]:
@@ -244,7 +255,8 @@ def get_run(sim: Sim, run_id: RunId) -> dict[str, Any]:
         "response echoes `resolved_target` and `area`. The event is logged with `source: user` and "
         "takes effect when the run is stepped."
     ),
-    responses=errors(
+    responses=ok(RunEventOut)
+    | errors(
         {
             404: "Unknown run_id or target.",
             409: "The run has finished; replay it instead.",
@@ -268,7 +280,7 @@ def inject_event(sim: Sim, run_id: RunId, body: EventIn) -> dict[str, Any]:
         "Runs `cycles` cycles (1 to 72) and returns one snapshot per cycle. Queued events apply in "
         "the first one. A finished run returns no new snapshots."
     ),
-    responses=errors({404: "Unknown run_id.", 422: "`cycles` outside 1-72.", **TOO_MANY}),
+    responses=ok(RunStepOut) | errors({404: "Unknown run_id.", 422: "`cycles` outside 1-72.", **TOO_MANY}),
     dependencies=RATE_LIMITED,
     openapi_extra=AGENT,
 )
@@ -314,7 +326,7 @@ def replay_run(sim: Sim, run_id: RunId, body: ReplayIn) -> dict[str, Any]:
         "Returns the run summary and the cycle snapshots from index `start`. Use it to read a "
         "replay, which computes all its cycles at once. Read only."
     ),
-    responses=errors({404: "Unknown run_id.", 422: "`start` is not an integer."}),
+    responses=ok(RunSnapshotsOut) | errors({404: "Unknown run_id.", 422: "`start` is not an integer."}),
     openapi_extra=AGENT,
 )
 def run_snapshots(
@@ -334,7 +346,7 @@ def run_snapshots(
         "Returns the audit log (each entry chained by hash), whether the chain `verified`, its "
         "`head` hash and the `recipe` (config and injected events) that rebuilds the run. Read only."
     ),
-    responses=errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
+    responses=ok(RunTraceOut) | errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
     openapi_extra=AGENT,
 )
 def run_trace(sim: Sim, run_id: RunId) -> dict[str, Any]:
@@ -350,7 +362,7 @@ def run_trace(sim: Sim, run_id: RunId) -> dict[str, Any]:
         "Returns the indicators, indices, the consequence card (level L0-L3, people affected, "
         "unserved MWh, cost) and the after-action keys. Works on running and finished runs. Read only."
     ),
-    responses=errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
+    responses=ok(RunReportOut) | errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
     openapi_extra=AGENT,
 )
 def run_report(sim: Sim, run_id: RunId) -> dict[str, Any]:
@@ -407,7 +419,7 @@ def narrative() -> dict[str, Any]:
         "Returns the after-action review built from fixed Spanish templates (deterministic). With "
         "the server's LLM adapter enabled it adds a `narrative`. Read only."
     ),
-    responses=errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
+    responses=ok(AfterActionOut) | errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
     openapi_extra=AGENT,
 )
 def run_after_action(sim: Sim, run_id: RunId) -> dict[str, Any]:

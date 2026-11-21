@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(api): typed response models in the agent spec
+
+- **Changed:** `api/agent_openapi.py` adds `AgentOut` (`extra="allow"`), `ok(model, code=200)` (a `responses=` entry whose description is the model's first docstring line) and a pass in `agent_openapi()` that keeps only the `$ref` of every 2xx JSON schema.
+- **Changed:** New documentation-only models: `TheaterNetworkOut`, `CatalogOut`, `RunStateOut`, `RunEventOut`, `RunStepOut`, `RunActionOut`, `RunSnapshotsOut`, `RunTraceOut`, `RunReportOut`, `AfterActionOut`, `SessionRunOut(RunSummary)` in `simulation_schemas.py`; `SessionDocOut`, `SessionWarningOut`, `EditOut`, `SessionNetworkOut(TheaterNetworkOut)`, `CutStateOut` in `session_schemas.py`. Every agent route with an empty 2xx schema now declares one with `responses=ok(M) | <errors>`.
+- **Why:** User task 4 (PR #50 brief): the future MCP wrapper needs output schemas. `response_model=` would validate and reorder bodies and `response_model=None` changes NaN handling, so routes keep their inferred `dict[str, Any]` and bodies are byte-for-byte unchanged.
+- **Agents:** New agent routes document their body with `ok()` (docs/openapi.md convention 6). `test_every_success_response_names_its_model` fails when a 2xx body is not a bare `$ref` to a model with properties; `test_responses_match_the_documented_models` (in `test_sessions_api.py` and `test_runs_api.py`) validates real toy-world responses against the declared models, so a removed required key breaks it. Verification: `uv run pytest` 285 passed, 2 skipped, 1 failed (only the Bedrock test); `ruff check` and `ruff format --check` clean; agent spec regenerated.
+- **Files:** `backend/src/cascadasen/api/{agent_openapi,simulation_schemas,session_schemas,simulation_routes,session_routes}.py`, `backend/tests/integration/{test_agent_openapi,test_sessions_api,test_runs_api}.py`, `docs/openapi.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · feat(api): serve one request at a time per session
 
 - **Changed:** New `SessionLocks` in `api/limits.py` (one `threading.Lock` per session id, refcounted, so idle sessions leave no entry), on `app.state.session_locks`. Every `{sid}` route of `api/session_routes.py` holds it around its `session_call` through `serial(request, sid)`: get/delete session, reset, network, the 12 element routes, cut, repair, state and every `/runs` route. `GET /{sid}/events` (SSE) and `POST /sessions` do not take it. Rate limits and the repair 422 check run before the wait.

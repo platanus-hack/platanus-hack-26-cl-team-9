@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from fastapi.routing import iter_route_contexts
 from fastapi.testclient import TestClient
 
 from cascadasen.api.app import create_app
@@ -354,3 +355,67 @@ def test_a_request_that_cannot_get_the_lock_gets_409(app, client):
     assert busy.headers["Retry-After"] == "1"
     assert client.post(f"{BASE}/{sid}/cut", json={"lines": ["R1"]}).status_code == 200
     assert len(app.state.session_locks) == 0
+
+
+def _documented(app, operation_id: str):
+    """The model a route documents for its success body (agent_openapi.ok)."""
+    route = next(
+        r for r in iter_route_contexts(app.routes) if getattr(r, "operation_id", None) == operation_id
+    )
+    return route.responses[route.status_code or 200]["model"]
+
+
+def test_responses_match_the_documented_models(app, client):
+    calls = [("create_session", "post", BASE, {})]
+    r = client.post(BASE, json={})
+    sid = r.json()["session_id"]
+    s = f"{BASE}/{sid}"
+    calls += [
+        ("get_session", "get", s, None),
+        ("get_session_network", "get", f"{s}/network", None),
+        ("add_bus", "post", f"{s}/buses", {"name": "SE Nueva", "lat": -31.1, "lon": -71.0, "kv": 220}),
+        ("update_bus", "patch", f"{s}/buses/B006", {"name": "SE Otra"}),
+        ("add_line", "post", f"{s}/lines", {"a": "B006", "b": "B002", "kv": 220, "capacity_mw": 300}),
+        ("update_line", "patch", f"{s}/lines/U001", {"capacity_mw": 400}),
+        ("add_load", "post", f"{s}/loads", DC),
+        ("update_load", "patch", f"{s}/loads/D001", {"mw": 90}),
+        ("add_generator", "post", f"{s}/generators", {"bus": "B006", "mw": 50, "tech": "solar"}),
+        ("update_generator", "patch", f"{s}/generators/G001", {"mw": 40}),
+        ("delete_generator", "delete", f"{s}/generators/G001", None),
+        ("delete_load", "delete", f"{s}/loads/D001", None),
+        ("delete_line", "delete", f"{s}/lines/U001", None),
+        ("delete_bus", "delete", f"{s}/buses/B006", None),
+        ("reset_session", "post", f"{s}/reset", None),
+        ("cut_lines", "post", f"{s}/cut", {"lines": ["R1"]}),
+        ("get_cut_state", "get", f"{s}/state", None),
+        ("repair_lines", "post", f"{s}/repair", {"all": True}),
+    ]
+    for op, method, url, body in calls[1:]:
+        r = client.request(method, url, json=body)
+        assert r.status_code < 300, (op, r.text)
+        _documented(app, op).model_validate(r.json())
+    _documented(app, "create_session").model_validate(client.post(BASE, json={}).json())
+    run = client.post(f"{s}/runs", json={"seed": 3, "horizon": 8})
+    _documented(app, "create_run").model_validate(run.json())
+    rid = run.json()["run_id"]
+    t = f"{s}/runs/{rid}"
+    for op, method, url, body in [
+        ("get_run", "get", t, None),
+        ("inject_run_event", "post", f"{t}/events", {"type": "C3_transmission_opening", "target": "T2-T3"}),
+        ("step_run", "post", f"{t}/step", {"cycles": 1}),
+        (
+            "submit_run_action",
+            "post",
+            f"{t}/actions",
+            {"action": "restore_element", "target": "T2-T3", "role": "operations"},
+        ),
+        ("get_run", "get", t, None),
+        ("replay_run", "post", f"{t}/replay", {"policy": "A"}),
+        ("get_run_snapshots", "get", f"{t}/snapshots", None),
+        ("get_run_trace", "get", f"{t}/trace", None),
+        ("get_run_report", "get", f"{t}/report", None),
+        ("get_run_after_action", "get", f"{t}/after_action", None),
+    ]:
+        r = client.request(method, url, json=body)
+        assert r.status_code < 300, (op, r.text)
+        _documented(app, op).model_validate(r.json())
