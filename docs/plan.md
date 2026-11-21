@@ -136,7 +136,7 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 1. Who does which workstream beyond what `docs/tasks.md` already assigns (nobody is listed for the engine and validation yet), and does anyone know power systems or deck.gl? If nobody is strong on maps, a schematic SVG map is the fallback (less realism, less time).
 2. Plan A (PowerFactory export by an outside contact): allowed by the organisers? Ask in writing before 10:00 Saturday, or drop it.
 3. Startup or just win? If startup, the primary user becomes the battery developer and "what would have prevented it" becomes the product, which would need validating willingness to pay.
-4. Final node count (10-14) and node list.
+4. Final node count (10-14) and node list. Proposed default (2026-11-21, pending confirmation): 13 operating areas by latitude band, listed in `strategy.md` section 2.1 and `backend/src/cascadasen/domain/simulation/params/network.yaml`.
 5. Which ambition upgrades from `idea.md` section 6 enter the plan, if any.
 6. Copy the downloaded plant files and scripts into `data/` of this repo (recommended) or leave them to be regenerated.
 7. Mirror repo for deployment: whose personal GitHub account.

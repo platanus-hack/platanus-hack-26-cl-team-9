@@ -2,6 +2,21 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(strategy): add strategic experimentation layer and its API contract
+
+- **Changed:** New `docs/strategy.md` covers:
+  - the thesis: losing the capacity to understand and coordinate is the main risk;
+  - five interacting systems and 13 operating areas reduced from the real SEN;
+  - real, observed and estimated state, and two clocks;
+  - six defensive agents and an adaptive adversary;
+  - the strategic cycle, deterministic validator and hash-chained audit;
+  - policies A/B/C, modes I-III, indicators and three experimental indices, and the flagship experiment.
+
+  `cyber.md` section 8 gains item 7 (adaptive adversary rules) and a pointer to `strategy.md`. `stack.md` section 7 now documents `/api/v1/simulate` and the new section 7.1 (`/api/v1/sim/*`). `plan.md` section 9 item 4 records the proposed 13-area node list.
+- **Why:** Ricardo reframed CascadaSEN: it simulates whether a utility keeps its mission when it loses the capacity to understand its own state, not attacks. The task is backend only; another teammate builds the frontend against this API.
+- **Agents:** Read `strategy.md` after `cyber.md`. The adversary acts only through abstract events at area or function level, and no output ranks elements or areas. The LLM never decides or plays the adversary. Primary user: utility operations and continuity teams, with Mode II (adaptive adversary) first. The framing, item 7 and the node list are pending team confirmation. The implementation lands on branch `feat/strategic-sim-api`.
+- **Files:** `docs/strategy.md`, `docs/cyber.md`, `docs/stack.md`, `docs/plan.md`.
+
 ## 2026-11-21 · feat(docker): add docker compose stack for backend and web
 - **Changed:** `docker-compose.yml` runs `backend` (FastAPI, :8000) and `web` (Vite dev server with npm, :5173). `backend/Dockerfile` installs from `uv.lock`. `web/Dockerfile` uses `npm ci`; compose bind-mounts `./web` and `./data` because the app imports `../data/processed`. Optional `data-build` profile rebuilds `data/processed`. Host ports are configurable with `WEB_PORT` and `BACKEND_PORT`. Root `.gitignore` also ignores `node_modules/`, `dist/`, `.env.local`, `.DS_Store` and `.playwright-mcp/`.
 - **Why:** Run and simulate the whole project locally with only Docker installed.

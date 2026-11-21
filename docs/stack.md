@@ -217,11 +217,11 @@ These fields support the scenario classes in `cyber.md` section 4. All are optio
 - `consequence_level`: `L0` absorbed, `L1` contained, `L2` regional blackout, `L3` national blackout.
 - `failure_cost_usd` = `unserved_energy_mwh` x 1,000 x 8.79 US$/kWh [19]. The value is a regulatory valuation and depends on the assumed duration.
 
-## 7. API (backlog)
+## 7. API
 
-Not needed for the frontend MVPs. The frontend reads fixtures only, which also gives the offline behaviour in section 9.
+The backend serves everything under `/api/v1` (FastAPI, `backend/src/cascadasen/api/`); the live schema is at `/docs`. The frontend can still work from fixtures only, which also gives the offline behaviour in section 9.
 
-`POST /simulate`
+`POST /api/v1/simulate` runs one physical contingency on the reduced network (`strategy.md` section 2.1) and returns a `timeline.json` (section 6). `elements_out` accepts corridor ids, area ids (`A01`-`A13`) or real snapshot node ids (`SE…`), resolved to the area that contains them.
 
 | Field | Type | Rule | On failure |
 |---|---|---|---|
@@ -239,6 +239,27 @@ Not needed for the frontend MVPs. The frontend reads fixtures only, which also g
 - Computation over 2 s: HTTP 503 `reason: timeout`; the frontend shows the nearest cached result or "not available".
 - Parameter files failing to load at startup: fatal, ERROR naming the file and field. A parameter without a source is rejected at startup.
 - Frontend without API: works from the cache only; combinations disabled with a discreet notice.
+
+### 7.1 Strategic experimentation API
+
+Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON, and narration comes as `rationale_key` + `params` (Spanish templates in the frontend).
+
+| Method and path | Purpose |
+|---|---|
+| `GET /sim/network` | Areas and corridors of the reduced network: `id`, `name`, `lon`/`lat`, `zone`, `aggregates` (real node ids). These are the selectable targets |
+| `GET /sim/catalog` | Event types, defensive COAs, policies A/B/C, adversary objectives, missions, experiment templates |
+| `POST /sim/runs` | Create a run: `template`, `policy`, `adversary` `{objective, budget, adaptive}`, `uncertainty`, `seed`, `horizon`, `capabilities`, `initial_events`, `auto_run` |
+| `POST /sim/runs/{id}/events` | Select a node and trigger an event: `{type, target, params}`, applied at the next cycle and logged with `source: user` |
+| `POST /sim/runs/{id}/step` | Advance `n` cycles; returns one snapshot per cycle |
+| `POST /sim/runs/{id}/replay` | New run with the same seed and injected events, and another policy or capabilities |
+| `GET /sim/runs/{id}` | Real, observed and per-agent estimated state, resources, live indicators |
+| `GET /sim/runs/{id}/trace` | Hash-chained audit log and the replay recipe |
+| `GET /sim/runs/{id}/report` | Indicators, indices, consequence card (L0-L3, people, unserved MWh, cost) and after-action keys |
+| `POST /sim/campaigns`, `GET /sim/campaigns/{id}` | Campaign matrix (modes I, II, III): comparison table, Decisional Fragility Index, Adaptation Index |
+
+- `target` accepts an area id or any real snapshot node id. The response echoes `resolved_target`, so a click on a substation of the frontend map works directly.
+- Errors: 404 unknown run, element or template; 422 invalid input; 409 event injected into a finished run.
+- Runs live in memory (the most recent 100 are kept). Any run can be rebuilt from its recipe (`GET /sim/runs/{id}/trace`).
 
 ## 8. Testing and CI
 
