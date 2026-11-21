@@ -109,7 +109,7 @@ cmd_apply() {
   tf_init
 
   # 1. ECR first, so the images exist before the ECS service starts.
-  terraform -chdir="$INFRA_DIR" apply -input=false \
+  terraform -chdir="$INFRA_DIR" apply -input=false -auto-approve \
     -target=aws_ecr_repository.backend -target=aws_ecr_repository.web -var "image_tag=$tag"
 
   # 2. Build and push both images.

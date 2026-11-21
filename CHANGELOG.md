@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(infra): auto-approve the targeted ECR apply in deploy.sh
+- **Changed:** The ECR-only `terraform apply -target` in `deploy.sh apply` now passes `-auto-approve`.
+- **Why:** The step prompted for `yes`, so a non-interactive `apply` hung. The user already approved the plan that includes the ECR repos.
+- **Agents:** The full apply still uses the saved `tfplan` and needs no prompt. Run `plan` and get approval before `apply`.
+- **Files:** `infrastructure/deploy.sh`.
 ## 2026-11-21 · docs(tasks): add animation, city and adversarial agent tasks
 
 - **Changed:** `docs/tasks.md` gains animations with audio on attacked infrastructure, an affected people counter, city lights, a clickable city component (population, % dependent on electricity, deaths rising with blackout time) and an adversarial agents backlog item (attacker and resilience agents plus APIs, owner Ricardo).
