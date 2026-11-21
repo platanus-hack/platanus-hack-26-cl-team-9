@@ -13,6 +13,7 @@ from cascadasen.application.assistant import (
 from cascadasen.domain.ports import AssistantTurn, ToolCall, ToolChatError, ToolSpec
 from cascadasen.infrastructure.document_store import MemoryDocumentStore
 from cascadasen.mcp.client import Sub50Client, ToolError
+from cascadasen.mcp.state import McpState
 from cascadasen.mcp.toolbox import SessionTools
 from cascadasen.mcp.tools import Sub50Tools
 
@@ -171,10 +172,35 @@ def test_session_tools_reject_unknown_and_excluded_tools_and_cap_step_cycles():
         def cut_lines(self, lines: list[str]):
             raise ToolError("sin sesión")
 
-    box = SessionTools(Tools(Sub50Client(base_url="http://x")))
+    box = SessionTools(Tools(Sub50Client(base_url="http://x"), McpState(SID)))
     assert box.run(call("end_session")) == (False, {"error": "Herramienta desconocida: end_session"})
     assert box.run(call("nada"))[0] is False
     assert box.run(call("step", cycles=500)) == (True, {"cycles": 24}) and seen["cycles"] == 24
     assert box.run(call("cut_lines", lines=["R1"])) == (False, {"error": "sin sesión"})
     assert box.run(call("cut_lines", otra=1))[1]["error"].startswith("Argumentos inválidos")
     assert "end_session" not in {s.name for s in box.specs()}
+
+
+def test_the_first_tool_that_needs_a_session_opens_one_and_says_so():
+    started = []
+
+    class Tools(Sub50Tools):
+        def start_session(self, point: str | None = None, label: str | None = None):
+            started.append(1)
+            self.state.session_id = SID
+            return {"session_id": SID}
+
+        def describe_network(self, focus: str | None = None):
+            return {"areas": []}
+
+        def list_options(self):
+            return {"templates": []}
+
+    box = SessionTools(Tools(Sub50Client(base_url="http://x")))
+    assert box.run(call("list_options")) == (True, {"templates": []})  # needs no session
+    assert not started
+    ok, first = box.run(call("describe_network"))
+    assert ok and "automáticamente" in first["nota"] and started == [1]
+    ok, second = box.run(call("describe_network"))
+    assert ok and "nota" not in second and started == [1]
+    assert box.context()["session_id"] == SID

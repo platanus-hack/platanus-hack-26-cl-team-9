@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(assistant): open a session on first use and stop asking the user to call tools
+
+- **Changed:** `SessionTools.run` (`mcp/toolbox.py`) opens a session the first time a tool that needs one is called with none active (all but `start_session`, `join_session`, `list_options`) and adds `nota` to that result. The assistant's system prompt says the user cannot run tools, so the model must call them itself.
+- **Why:** With Qwen on Bedrock the model called `add_datacenter` first, got "No hay sesión activa" and told the user to run `start_session`, which they cannot. The MCP server is unchanged: there the client's model handles it.
+- **Agents:** Auto-created sessions count against the session-creation limit (10 per hour per IP). `docs/assistant.md` section 3 says it.
+- **Files:** `backend/src/cascadasen/{mcp/toolbox.py,api/assistant_routes.py}`, `backend/tests/{unit/test_assistant.py,integration/test_assistant_api.py}`, `docs/assistant.md`.
+
 ## 2026-11-21 · fix(assistant): log the AWS error behind a model failure
 
 - **Changed:** `ConverseToolChat.turn` logs the model id and, for an AWS error, its code and message (`describe`), instead of only the exception name. The client still gets the fixed Spanish text.

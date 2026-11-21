@@ -134,3 +134,14 @@ def test_session_write_limits_count_against_the_caller_not_a_shared_loopback(mak
     out = TestClient(app).post(CHAT, json={"message": "agrega cuatro"}).json()
     assert [t["ok"] for t in out["tool_calls"][1:]] == [True, True, False, False]
     assert "espera" in out["tool_calls"][3]["result"]["error"]
+
+
+def test_a_tool_that_needs_a_session_opens_it_without_the_user(make_app):
+    model = ScriptedModel(
+        calls(("add_datacenter", {"bus": "B002", "mw": 100, "name": "DC Toy"})), AssistantTurn("Agregado.")
+    )
+    client = TestClient(make_app(model))
+    out = client.post(CHAT, json={"message": "agrega un datacenter"}).json()
+    assert out["tool_calls"][0]["ok"] is True and "automáticamente" in out["tool_calls"][0]["result"]["nota"]
+    sid = out["session_id"]
+    assert sid and client.get(f"/api/v1/sessions/{sid}/network").json()["loads"][0]["name"] == "DC Toy"

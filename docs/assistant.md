@@ -50,6 +50,7 @@ curl -s -X POST localhost:8000/api/v1/assistant/chat -H 'content-type: applicati
 - A conversation is the document `assistant/<cid>.json` in the `DocumentStore` (memory, file or S3 like sessions, same 24 h TTL). It holds the messages in a provider-neutral format and the active `session_id` and `run_id`, so any backend instance continues it. Writes are conditional: if two messages of one conversation run at once, the second gets 409. The conversation id is a capability, like the session id.
 - Tools run through `in_process_client`: an httpx client that enters the same FastAPI app by ASGI from the worker thread, with `X-Sub50-Agent: asistente`. The real routes validate, answer errors and enforce rate limits, keyed on the caller's IP (the transport presents it as the peer address), not on a shared loopback address. A chat message that makes many writes can therefore hit 429 inside a tool; the model sees the error and says so.
 - Tool results are cut to 8 KB before they go back to the model. History is trimmed to the last 30 messages, starting at a user turn so no tool result loses its call.
+- The user cannot run tools, so the first tool call that needs a session opens one automatically (its result carries a `nota`); this counts against the creation limit. The prompt tells the model never to ask the user to call a tool.
 - `end_session` is not offered (the web has its own delete button) and `step` is capped at 24 cycles per call.
 
 ## 4. Guardrails

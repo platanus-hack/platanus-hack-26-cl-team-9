@@ -13,6 +13,7 @@ from cascadasen.mcp.tools import Sub50Tools
 log = logging.getLogger(__name__)
 
 EXCLUDED = frozenset({"end_session"})  # destructive: the web has its own delete button
+NO_SESSION_NEEDED = frozenset({"start_session", "join_session", "list_options"})
 MAX_STEP_CYCLES = 24  # a step of many cycles can outlast the request deadline
 
 
@@ -32,7 +33,16 @@ class SessionTools:
         if call.name == "step" and isinstance(args.get("cycles"), int):
             args["cycles"] = min(args["cycles"], MAX_STEP_CYCLES)
         try:
-            return True, getattr(self.tools, call.name)(**args)
+            started = call.name not in NO_SESSION_NEEDED and self.tools.state.session_id is None
+            if started:  # the user cannot call start_session: open one the first time a tool needs it
+                self.tools.start_session()
+            result = getattr(self.tools, call.name)(**args)
+            if started:
+                result = {
+                    **result,
+                    "nota": "Se creó una sesión nueva automáticamente para esta conversación.",
+                }
+            return True, result
         except ToolError as exc:
             return False, {"error": str(exc)}
         except TypeError:
