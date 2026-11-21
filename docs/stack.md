@@ -20,7 +20,7 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 | Layer | Choice | Status | Notes |
 |---|---|---|---|
 | Frontend | React + Vite + TypeScript | MVP | Decided earlier |
-| Map and 3D-style layers | deck.gl standalone (`MapView`, pitch ~50 degrees) by default; optional Mapbox vector basemap with deck.gl on top (`MapboxOverlay`) | Done (both) | Default map (`/`) has no tile server: Chile's outline is a local GeoJSON, so it works offline. `?mapa=2` adds Mapbox (merged in #6): needs internet and `VITE_MAPBOX_TOKEN` in `web/.env.local`, and falls back to the offline map without a token. The zoom-level designs in `design.md` section 4 assume the Mapbox basemap. Which map the demo uses is open (`plan.md` section 9) |
+| Map and 3D-style layers | deck.gl; Mapbox basemap when `VITE_MAPBOX_TOKEN` is set, offline Chile outline otherwise (`createBaseMap`) | Done | The main map (`/`, also `?mapa=3`) is mapa 3, the cascade viewer (`docs/mapa3.md`), with a 2D / 3D toggle (`?vista=2d`) and city labels. `?mapa=1` (offline deck.gl map) and `?mapa=2` (Mapbox) are deprecated and kept as reference. The strategic theatre's operation mode is specified for this map (`mapa3.md` section 10) |
 | Chile outline | Local simplified GeoJSON (Natural Earth admin-1 or IDE Chile/BCN, simplified with mapshaper) | MVP | Continental Chile only; see `datasets.md` |
 | State | Zustand | MVP | Holds one playback clock `t` that drives all animations |
 | Charts | uPlot | MVP | Frequency curve synchronised with `t`, read from fixture data |

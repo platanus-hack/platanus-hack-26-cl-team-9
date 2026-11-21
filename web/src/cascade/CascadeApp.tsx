@@ -1,6 +1,6 @@
 import type { PickingInfo } from "@deck.gl/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createBaseMap, type BaseMap } from "../map/baseMap";
+import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers } from "./layers";
 import { CascadeLegend } from "./Legend";
@@ -24,14 +24,16 @@ export function CascadeApp() {
   const [cut, setCut] = useState<string | null>(params.get("cut"));
   const [stage, setStage] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [mode, setMode] = useState<ViewMode>(params.get("vista") === "2d" ? "2d" : "3d");
   const [error, setError] = useState<string | null>(null);
-  const view = useRef({ network, buses, timeline, stage, cut });
-  view.current = { network, buses, timeline, stage, cut };
+  const view = useRef({ network, buses, timeline, stage, cut, mode });
+  view.current = { network, buses, timeline, stage, cut, mode };
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
   useEffect(() => { _loadPoint(); }, [pointId, index]);
   useEffect(() => { _loadTimeline(); }, [pointId, cut, network]);
   useEffect(() => _mountMap(), []);
+  useEffect(() => { baseMap.current?.setMode(mode); }, [mode]);
   useEffect(() => _animate(), []);
   useEffect(() => _autoplay(), [playing, timeline]);
 
@@ -52,6 +54,7 @@ export function CascadeApp() {
       getTooltip: (info: PickingInfo) => _tooltip(info),
     });
     baseMap.current = map;
+    map.setMode(view.current.mode);
     return () => map.dispose();
   }
 
@@ -76,7 +79,7 @@ export function CascadeApp() {
       const frame = v.timeline?.frames[Math.min(v.stage, (v.timeline?.frames.length ?? 1) - 1)];
       if (v.network && frame) {
         const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
-        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.cut }));
+        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.cut, mode: v.mode }));
       }
       raf = requestAnimationFrame(tick);
     };
@@ -99,6 +102,9 @@ export function CascadeApp() {
   return (
     <div className="layout">
       <div className="map" ref={mapRef} />
+      <div className="view-toggle" role="group" aria-label="Vista del mapa">
+        {(["2d", "3d"] as const).map((m) => <button key={m} className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>{m.toUpperCase()}</button>)}
+      </div>
       <div className="panels wide">
         <h1>CascadaSEN</h1>
         {error && <p className="note warn">{error}</p>}

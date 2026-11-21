@@ -1,6 +1,6 @@
 # Mapa 3: cascade viewer
 
-Mapa 3 (`?mapa=3`) shows what happens to Chile's SEN when you cut a transmission line. You click a line, the engine (`docs/engine.md`) computes the cascade, and the map replays it stage by stage: lines that overload and open, islands that form, substations that go dark, and the frequency of each island.
+Mapa 3 is the main map of the app (`/`, also `?mapa=3`). Mapas 1 and 2 (`?mapa=1`, `?mapa=2`) are deprecated and kept as reference. Mapa 3 shows what happens to Chile's SEN when you cut a transmission line. You click a line, the engine (`docs/engine.md`) computes the cascade, and the map replays it stage by stage: lines that overload and open, islands that form, substations that go dark, and the frequency of each island.
 
 UI strings are Spanish. This document is English. Every claim is tagged EVIDENCE (read from code, data or engine output) or ASSUMPTION (a modelling choice, not verified against the real system).
 
@@ -115,7 +115,7 @@ The cache (about 23 MB, 4 hours x 273 cuts) is git-ignored and must be generated
 
 | URL | Opens |
 |---|---|
-| `http://localhost:5173/?mapa=3` | Base case, Nov 2026 13:00 |
+| `http://localhost:5173/` | Base case, Nov 2026 13:00 (same as `?mapa=3`) |
 | `/?mapa=3&point=feb2025-1500` | Pick the hour: `feb2025-1500`, `feb2025-0300`, `nov2026-1300`, `nov2026-2000` |
 | `/?mapa=3&point=feb2025-1500&cut=R239` | The 25F corridor cut, already playing |
 
@@ -262,7 +262,7 @@ interface TheaterSnapshot {                         // one per 5-min cycle: POST
 }
 ```
 
-**How the two clocks fit.** The player moves cycle by cycle (5 min) and draws `grid` with the existing layers. When `transient` is not null, the viewer can replay that cascade inside the cycle with the same code as a cut (`frames`, `events`, `frequency_hz`). An area overlay can colour areas by `observability` and `posture`. Crews are drawn at `lon`/`lat` and move toward `target_bus` until `arrival`.
+**How the two clocks fit.** The operation mode belongs in the main map (`/`). The player moves cycle by cycle (5 min) and draws `grid` with the existing layers: `buildCascadeLayers({ network, buses, frame: snapshot.grid, time, selected, mode })`, with the same `mode` (`"2d" | "3d"`, `?vista=2d`) as the cut viewer. In 2D the demand is drawn as discs, in 3D as columns; `snapshot.grid.buses` gives the served MW per bus to scale them. When `transient` is not null, the viewer can replay that cascade inside the cycle with the same code as a cut (`frames`, `events`, `frequency_hz`). An area overlay can colour areas by `observability` and `posture`. Crews are drawn at `lon`/`lat` and move toward `target_bus` until `arrival`.
 
 **Offline index** (`cache/theater/index.json`): `{points, runs: [{file, point, template, policy, seed, adversary}], notice}`. Each run file holds `{run, recipe, snapshots, report, after_action, trace_head}`.
 
