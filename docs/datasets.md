@@ -6,19 +6,44 @@ Last updated: 2026-11-21. Status labels: **verified** (opened or downloaded and 
 
 | Dataset | Needed for | Source | Status |
 |---|---|---|---|
-| Power plants (location, MW, technology) | Generator columns, node generation | IDE Energia MapServer layers 1-6 | **Verified, downloaded** (1,193 operating SEN plants, 37,964 MW installed) |
-| Transmission lines (geometry, kV, length, circuits, name) | Line layer, network edges | IDE Energia layer 10 | **Verified (fields), not downloaded** |
-| Substations | Nodes | IDE Energia layer 8 | Layer exists, fields not checked, not downloaded |
-| Energy storage (batteries) | "What would have prevented it" | IDE Energia layer 9 | Layer exists, fields not checked, not downloaded |
-| Line reactance and thermal limit | Power flow, overload rule | Not in IDE Energia or Infotecnica | **Missing**. See section 4 |
-| Scenario generation and demand per node | Scenarios | CEN operation base Oct 2026 (zip) | Zip opens; content of the spreadsheets not checked |
+| Power plants (location, MW, technology) | Generator columns, node generation | IDE Energia MapServer layers 1-6 | **In pipeline** (1,193 operating SEN plants, 37,963 MW) |
+| Transmission lines (geometry, kV, length, circuits, name) | Line layer, network edges | IDE Energia layer 10 | **In pipeline** (1,128 lines; end points inferred, see section 0) |
+| Substations | Nodes | IDE Energia layer 8 + CEN Infotecnica | **In pipeline** (1,217 located; joined to CEN by `ID_SUBEST` = Infotecnica `id`) |
+| Official line sections with end points | Topology | CEN Infotecnica `/v1/tramos/` | **In pipeline** (1,944 sections; 1,895 with both ends resolved) |
+| Energy storage (batteries) | "What would have prevented it" | IDE Energia layer 9 + PyPSA-CL StorageUnits | **In pipeline** (91 + 244 records) |
+| Line reactance and thermal limit | Power flow, overload rule | PyPSA-CL `Topology.xlsx` (Ministerio de Energia) | **Found**: 323 lines with r, x (pu and ohm) and s_nom (MVA); attached to 151 line edges |
+| Scenario generation and demand per node | Scenarios | CEN operation base Oct 2026 (zip); PyPSA-CL `Loads.xlsx` (139 MB, demand by bus) | Not downloaded |
 | 25F figures for validation | Tests | CEN and university reports | **Verified** (see `plan.md` section 5) |
-| Chile outline / regions | Base map | Natural Earth admin-1 or IDE Chile / BCN | Not downloaded |
-| Population per region / commune | "People without power" | INE Census 2024 | Not downloaded |
-| Commune centroids / main cities | City lights | INE / BCN or a manual list of ~25 cities | Not downloaded |
-| Plant -> node assignment | Network build | Own work | Not done |
+| Comuna and region outlines | Base map | INE Censo 2024 FeatureServer layer 11 | **In pipeline** (345 comunas, simplified to 1.2 MB) |
+| Population per commune | "People without power" | INE Censo 2024 layers 11 and 2 | **In pipeline** (18,480,372 people; urban census zones for allocation) |
+| Plant -> node assignment | Network build | PyPSA-CL generator bus, then substation name, then nearest | **Done** (1,073 by declared model bus) |
+| Comuna -> substation (service areas) | People affected per node | Own rule on INE census zones | **Done**, flagged as assumption |
 
-Nothing from this project is committed to the repo yet. The downloaded files live outside it (see section 2.3) and can be regenerated with the scripts in the appendices.
+The pipeline that downloads, unifies and validates all of this lives in `backend/` (see `backend/README.md`). Section 0 summarises what it does. Sections 2-5 are the original research notes; where they conflict with section 0, section 0 is current.
+
+## 0. Unified pipeline (2026-11-21)
+
+`cascadasen-build` downloads every source into `data/raw/<source>/` (git-ignored cache), unifies them into one graph and writes `data/processed/`. `cascadasen-api` serves it. The test map lives at `/map`, and a self-contained copy is written to `data/processed/atlas_sen.html`.
+
+How the sources are joined:
+1. **Substations**: IDE Energia supplies the coordinates. IDE `ID_SUBEST` equals the Infotecnica substation `id` (1,163 of 1,170 have the same name). Infotecnica busbars add voltage levels. CEN-only substations take coordinates from the PyPSA-CL bus with the same name when one exists.
+2. **Lines**: the IDE layer has no from/to fields. Each line end goes to a substation by distance plus a match with the line name ("A - B 220KV"). Taps (TAP OFF) split the host line. 94% of these edges have names that agree with both ends.
+3. **Official topology**: each Infotecnica section declares its two ends as a bay (`Paño: PA S/E X B1/PA005L0089SE001L0089`, where the trailing code contains the substation code), a tap or a structure point. 1,124 sections confirm an IDE edge. 735 have no public geometry and are added as dashed straight segments.
+4. **Electrical parameters**: PyPSA-CL lines attach to edges joining the same sites at the same voltage. Values describe the whole corridor (`corridor_edges` says how many parallel lines share it). Example: Nueva Maitencillo - Nueva Pan de Azucar 500 kV: 216 km, 2,210 MVA, X = 12.7 ohm.
+5. **Population**: each urban census zone goes to its nearest delivery substation (zonal, or national at 220 kV or less, excluding plants, taps and switching stations). The rural remainder of each comuna is split among the delivery substations inside it. This is an assumption, not the real feeder map.
+
+Validation (18 checks, all passing on the current build; `GET /api/v1/validation`):
+- Coverage: 16/16 regions, SEN from -18.4 to -43.1 degrees latitude, 99.3% of substations sit inside the comuna polygon their IDE code names.
+- Connectivity: 11/11 corridors of the 500 kV backbone, a continuous path from Chapiquina to Quellon, 99.3% of SEN MW and 98.2% of the population in the main grid (the rest is Aysen and Magallanes, separate systems).
+- 25F: removing Nueva Maitencillo - Nueva Pan de Azucar 500 kV alone does not split the grid. The north separates only when both 220 kV circuits around Punta Colorada and the coastal 110 kV path (Maitencillo - Algarrobo - Incahuasi - Las Companias) also open. This is a test in `backend/tests/validation/`.
+
+Data quirks found while unifying:
+- The IDE storage layer has no geometry. The pipeline rebuilds it from `COORD_ESTE/COORD_NORT/HUSO` (sub-10 m error checked against the substation layer).
+- Two Magallanes substations (Cabo Negro, Vientos Patagonicos) carry `SIST_ELECT = SEN`. The pipeline relabels regions 11 and 12 as SEA and SEM.
+- Infotecnica tap names repeat across regions ("TAP RIO HUASCO" exists in Atacama and Maule). The pipeline keys taps by name and voltage, and rejects straight segments longer than plausible for their voltage.
+- Several names use an en dash ("CUMBRE – NUEVA CARDONES"). It must be replaced before folding to ASCII.
+- The census FeatureServer ignores `maxAllowableOffset` for GeoJSON (32 MB of comuna polygons). The adapter simplifies the polygons itself.
+- Three public "concesiones de distribucion" FeatureServers that appear in searches are not Chilean (Dominican Republic and Ecuador). No public GIS layer of Chilean distribution concessions was found.
 
 ## 2. Power plants (downloaded)
 
@@ -125,7 +150,11 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 | 16 | CEN, Annex E of the 2026 ancillary services report (xlsx, defences) | https://www.coordinador.cl/wp-content/uploads/2025/12/2025.12.23-Anexo-E.-Control-de-Contingencias.xlsx | Verified by earlier research |
 | 18 | CEN, ancillary services proposal 2026 | https://www.coordinador.cl/wp-content/uploads/2026/06/Informe-Propuesta-SSCC-2026_20260327.pdf | Verified by earlier research |
 | 19 | CNE failure cost, 8.79 US$/kWh for the SEN | https://www.cne.cl/wp-content/uploads/2026/03/Res.-Ext.-N112-comunica-CFCD-y-CFLD.pdf | Verified |
-| 29 | INE Census 2024 | https://censo2024.ine.gob.cl/resultados/ | Page verified; figures not extracted |
+| 29 | INE Census 2024 | https://censo2024.ine.gob.cl/resultados/ | Page verified |
+| 30 | INE Censo 2024 FeatureServer (behind visualizador.ine.gob.cl) | https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/Censo2024_v2/FeatureServer | Verified, in pipeline (layer 11 comunas, layer 2 census zones) |
+| 31 | CEN Infotecnica: substations, busbars, lines, sections, plants | https://api-infotecnica.coordinador.cl/v1/tramos/ (also `/subestaciones/`, `/barras/`, `/lineas/`, `/centrales/`) | Verified, in pipeline |
+| 32 | PyPSA-CL model inputs, Ministerio de Energia (public SharePoint folder; licence not stated) | https://minenergia-my.sharepoint.com/:f:/g/personal/mparedes_minenergia_cl/IgCWD1vzVNdFSZGLq9yAvae7AWiPl3JViAfaI602hsQZTQ0?e=SH5uDd | Verified: `Topology.xlsx` in pipeline; `Loads.xlsx` (demand by bus, 139 MB) not used yet |
+| 33 | Mapa de Vulnerabilidad Energetica (IDE Energia): comunas with households without electricity | https://ide-energia.minenergia.cl/server/rest/services/MAPA_VULNERABILIDAD/Mapa_de_Vulnerabilidad_Energetica/MapServer | Verified, not used |
 | - | Article by CEN engineers on the 25F protection sequence | https://www.pacw.org/chilean-grid-blackout-of-february-2025 | Read by the evaluator |
 | - | Andes (similar hackathon project, click-to-fail) | https://github.com/aleetreny/Encode | Verified |
 | - | COSMIC (MATLAB dynamic cascade simulator) | https://github.com/ecotillasanchez/cosmic | Verified |

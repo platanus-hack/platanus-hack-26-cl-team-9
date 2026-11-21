@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atlas de la Red SEN</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control-room board. Chile runs as a tall map on the left; a condensed instrument panel on the right reads like a substation legend. Single dark look by choice (night grid map). */
+:root {
+  color-scheme: dark;
+  --bg: #0a0f16;
+  --land: #121a25;
+  --land-edge: #243246;
+  --panel: #0e141d;
+  --panel-2: #141c28;
+  --rule: #223042;
+  --fg: #dde5ee;
+  --muted: #8796a8;
+  --faint: #5d6c80;
+  --accent: #f4b740;
+  --select: #ffffff;
+  --ok: #57c78a;
+  --warn: #e7a33c;
+  --bad: #ef6a5a;
+  --kv500: #ffd166;
+  --kv345: #ff8fd8;
+  --kv220: #ff7a45;
+  --kv154: #c38bff;
+  --kv110: #3fc1c9;
+  --kv66: #5b8def;
+  --kvlow: #6f7d90;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Barlow Semi Condensed", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --step--1: 0.78rem;
+  --step-0: 0.9rem;
+  --step-1: 1.05rem;
+  --step-2: 1.4rem;
+  --step-3: 2.05rem;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: var(--step-0); line-height: 1.4; }
+.app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
+.map-wrap { position: relative; min-width: 0; min-height: 0; background: var(--bg); }
+#map { position: absolute; inset: 0; }
+.panel {
+  min-width: 0; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--rule);
+  padding-block: 18px 28px; padding-left: 20px; padding-right: max(20px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px;
+}
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 62% auto; overflow-y: auto; }
+  .panel { border-left: 0; border-top: 1px solid var(--rule); overflow: visible;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
+h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--step-3); line-height: 0.95; letter-spacing: 0.01em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+h1 span { color: var(--accent); }
+.lede { color: var(--muted); margin: 6px 0 0; max-width: 60ch; }
+.mode { font-family: var(--font-data); font-size: var(--step--1); color: var(--faint); margin-top: 6px; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: var(--step-1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+section { min-width: 0; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.stat { background: var(--panel-2); padding: 9px 10px; min-width: 0; }
+.stat b { display: block; font-family: var(--font-data); font-weight: 500; font-size: var(--step-1); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.stat small { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.search { position: relative; }
+.search input { width: 100%; box-sizing: border-box; background: var(--panel-2); color: var(--fg); border: 1px solid var(--rule); border-radius: 3px; padding: 9px 10px; font: inherit; }
+input:focus-visible, button:focus-visible, label:focus-within, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.results { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; background: var(--panel-2); border: 1px solid var(--rule); max-height: 280px; overflow-y: auto; }
+.results button { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: none; border: 0; color: var(--fg); padding: 7px 10px; font: inherit; cursor: pointer; }
+.results button:hover, .results button.active { background: var(--rule); }
+.results em { color: var(--muted); font-style: normal; font-family: var(--font-data); font-size: var(--step--1); white-space: nowrap; }
+.toggles { display: grid; gap: 2px; }
+.toggle { display: flex; align-items: center; gap: 10px; padding: 4px; cursor: pointer; border-radius: 3px; }
+.toggle:hover { background: var(--panel-2); }
+.toggle input { accent-color: var(--accent); margin: 0; }
+.toggle .sw { width: 26px; height: 0; border-top: 3px solid currentColor; flex: none; }
+.toggle .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: none; margin: 0 8px; }
+.toggle .lbl { flex: 1; min-width: 0; }
+.toggle .n { font-family: var(--font-data); font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.seg { display: flex; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+.seg button { flex: 1; background: var(--panel-2); color: var(--muted); border: 0; padding: 6px 4px; font: inherit; font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--rule); color: var(--fg); }
+.seg-label { font-size: var(--step--1); color: var(--faint); margin: 2px 0 4px; }
+.detail { background: var(--panel-2); border: 1px solid var(--rule); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.detail .kicker { font-family: var(--font-data); font-size: var(--step--1); color: var(--muted); letter-spacing: 0.04em; }
+.detail h3 { font-family: var(--font-display); font-size: var(--step-2); font-weight: 600; line-height: 1; margin: 0; text-wrap: balance; }
+.kvs { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; }
+.kvs dt { color: var(--muted); }
+.kvs dd { margin: 0; font-family: var(--font-data); font-size: var(--step--1); overflow-wrap: anywhere; }
+.list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.list button { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 8px; text-align: left; background: none; border: 0; color: var(--fg); padding: 5px 2px; font: inherit; cursor: pointer; border-bottom: 1px solid var(--rule); }
+.list button:hover { background: var(--panel); }
+.list i { width: 10px; height: 3px; display: block; }
+.list span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list em { font-style: normal; font-family: var(--font-data); font-size: var(--step--1); color: var(--muted); white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--font-data); font-size: var(--step--1); padding: 2px 7px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); }
+.chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.chip.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+.bars { display: flex; flex-direction: column; gap: 4px; }
+.bar { display: grid; grid-template-columns: 84px minmax(0, 1fr) 70px; align-items: center; gap: 8px; font-size: var(--step--1); }
+.bar .track { height: 6px; background: var(--panel); }
+.bar .fill { height: 100%; }
+.bar em { font-style: normal; font-family: var(--font-data); text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.btn { background: var(--panel); color: var(--fg); border: 1px solid var(--rule); border-radius: 3px; padding: 7px 10px; font: inherit; font-size: var(--step--1); letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn.danger { border-color: color-mix(in srgb, var(--bad) 55%, transparent); color: var(--bad); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.hint { color: var(--faint); font-size: var(--step--1); margin: 0; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; }
+td.num, th.num { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.zone-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+details.check { border-bottom: 1px solid var(--rule); }
+details.check summary { list-style: none; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; padding: 6px 0; cursor: pointer; }
+details.check summary::-webkit-details-marker { display: none; }
+details.check .st { font-family: var(--font-data); font-size: 0.7rem; text-transform: uppercase; padding-top: 2px; }
+details.check .st.ok { color: var(--ok); } details.check .st.warn { color: var(--warn); } details.check .st.fail { color: var(--bad); }
+details.check .val { display: block; font-family: var(--font-data); font-size: var(--step--1); color: var(--muted); }
+details.check .more { padding: 0 0 8px 52px; color: var(--muted); font-size: var(--step--1); }
+details.check .more ul { margin: 4px 0 0; padding-left: 16px; max-height: 140px; overflow-y: auto; }
+.notes { color: var(--muted); font-size: var(--step--1); display: flex; flex-direction: column; gap: 6px; margin: 0; padding-left: 16px; }
+.notes a { color: var(--fg); }
+.mapbtn { position: absolute; z-index: 3; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); display: flex; gap: 6px; flex-wrap: wrap; }
+.mapbtn button { background: color-mix(in srgb, var(--panel) 88%, transparent); color: var(--fg); border: 1px solid var(--rule); border-radius: 3px; padding: 6px 10px; font: inherit; font-size: var(--step--1); letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; }
+.mapbtn button:hover { border-color: var(--muted); }
+.cutbar { position: absolute; z-index: 3; left: max(12px, env(safe-area-inset-left, 0px)); right: 12px; bottom: calc(30px + env(safe-area-inset-bottom, 0px)); max-width: 520px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid color-mix(in srgb, var(--bad) 50%, transparent); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.cutbar b { font-family: var(--font-display); font-size: var(--step-1); letter-spacing: 0.03em; }
+.scale-note { position: absolute; z-index: 3; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); font-family: var(--font-data); font-size: 11px; color: var(--faint); pointer-events: none; }
+.tip { position: fixed; z-index: 10; pointer-events: none; background: var(--panel-2); border: 1px solid var(--rule); padding: 8px 10px; max-width: 300px; font-size: var(--step--1); line-height: 1.35; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
+.tip b { font-family: var(--font-display); font-size: var(--step-1); font-weight: 600; display: block; }
+.tip span { color: var(--muted); font-family: var(--font-data); }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-family: var(--font-data); text-align: center; padding: 20px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="map-wrap">
+    <div id="map" role="img" aria-label="Mapa de la red de transmisión eléctrica de Chile"></div>
+    <div class="loading" id="loading">cargando red…</div>
+    <div class="mapbtn">
+      <button type="button" id="btn-reset">Ver todo el SEN</button>
+      <button type="button" id="btn-clear" hidden>Quitar selección</button>
+    </div>
+    <div class="cutbar" id="cutbar" hidden></div>
+    <div class="scale-note" id="scale-note"></div>
+  </div>
+
+  <aside class="panel" aria-label="Panel de la red">
+    <header>
+      <h1>Atlas de la <span>Red SEN</span></h1>
+      <p class="lede">Subestaciones, líneas, centrales y zonas abastecidas del Sistema Eléctrico Nacional, unificadas desde cuatro fuentes públicas.</p>
+      <div class="mode" id="mode"></div>
+    </header>
+
+    <section class="stats" id="stats" aria-label="Resumen"></section>
+
+    <section>
+      <h2>Buscar subestación</h2>
+      <div class="search">
+        <input id="q" type="search" placeholder="Polpaico, Charrúa, Kimal…" autocomplete="off" aria-label="Buscar subestación">
+        <div class="results" id="results" hidden></div>
+      </div>
+    </section>
+
+    <section id="detail-wrap" hidden><div class="detail" id="detail"></div></section>
+
+    <section>
+      <h2>Representación</h2>
+      <div class="seg-label">Grosor de líneas</div>
+      <div class="seg" role="group" aria-label="Grosor de líneas" data-group="lineMode">
+        <button type="button" data-v="kv" aria-pressed="true">Tensión</button>
+        <button type="button" data-v="mva" aria-pressed="false">Capacidad MVA</button>
+      </div>
+      <div class="seg-label">Tamaño de subestaciones</div>
+      <div class="seg" role="group" aria-label="Tamaño de subestaciones" data-group="nodeMode">
+        <button type="button" data-v="kv" aria-pressed="true">Tensión</button>
+        <button type="button" data-v="gen" aria-pressed="false">Generación</button>
+        <button type="button" data-v="pop" aria-pressed="false">Población</button>
+      </div>
+      <div class="seg-label">Color de comunas</div>
+      <div class="seg" role="group" aria-label="Color de comunas" data-group="zoneMode">
+        <button type="button" data-v="macro" aria-pressed="true">Zona</button>
+        <button type="button" data-v="node" aria-pressed="false">S/E que abastece</button>
+        <button type="button" data-v="pop" aria-pressed="false">Población</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Líneas por tensión</h2>
+      <div class="toggles" id="kv-toggles"></div>
+    </section>
+
+    <section>
+      <h2>Capas</h2>
+      <div class="toggles" id="layer-toggles"></div>
+    </section>
+
+    <section>
+      <h2>Zonas eléctricas</h2>
+      <div class="table-wrap"><table id="zones-table"></table></div>
+      <h2 style="margin-top:14px">Enlaces entre zonas</h2>
+      <div class="table-wrap"><table id="links-table"></table></div>
+      <p class="hint" style="margin-top:6px">MVA: suma de capacidades de corredor conocidas en PyPSA-CL para las líneas que cruzan el límite.</p>
+    </section>
+
+    <section>
+      <h2>Validación de los datos</h2>
+      <div class="chips" id="val-summary" style="margin-bottom:6px"></div>
+      <div id="checks"></div>
+    </section>
+
+    <section>
+      <h2>Fuentes</h2>
+      <ul class="notes" id="sources"></ul>
+    </section>
+
+    <section>
+      <h2>Supuestos</h2>
+      <ul class="notes" id="assumptions"></ul>
+    </section>
+  </aside>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script src="https://unpkg.com/deck.gl@9.1.14/dist.min.js"></script>
+<script id="sen-embed" type="application/json">null</script>
+<script>
+(async () => {
+  const EMBED = JSON.parse(document.getElementById("sen-embed").textContent);
+  const API = (window.SEN_API_BASE || "") + "/api/v1";
+  const loadingEl = document.getElementById("loading");
+  const css = getComputedStyle(document.documentElement);
+  const hex = (name) => { const v = css.getPropertyValue(name).trim().replace("#", ""); return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)]; };
+  const fmt = new Intl.NumberFormat("es-CL");
+  const fmt1 = new Intl.NumberFormat("es-CL", { maximumFractionDigits: 1 });
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const short = (n) => String(n || "").replace(/^S\/E /, "");
+
+  // ---------- data access: remote API or embedded snapshot ----------
+  async function getJSON(path) {
+    const r = await fetch(API + path);
+    if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
+    return r.json();
+  }
+  let D;
+  try {
+    if (EMBED) D = EMBED;
+    else {
+      const [stats, validation, zones, sources, assumptions, ...layers] = await Promise.all([
+        getJSON("/stats"), getJSON("/validation"), getJSON("/zones"), getJSON("/sources"), getJSON("/assumptions"),
+        ...["substations", "taps", "lines", "plants", "storage", "comunas"].map((l) => getJSON(`/geo/${l}.geojson`)),
+      ]);
+      D = { stats, validation, zones, sources, assumptions, geo: { substations: layers[0], taps: layers[1], lines: layers[2], plants: layers[3], storage: layers[4], comunas: layers[5] } };
+    }
+  } catch (err) {
+    loadingEl.textContent = `No se pudo cargar la red desde la API (${err.message}). ¿Está corriendo cascadasen-api y existe el snapshot?`;
+    return;
+  }
+  document.getElementById("mode").textContent = EMBED ? `datos embebidos · snapshot ${D.stats.built_at}` : `API en vivo ${location.origin}${API} · snapshot ${D.stats.built_at}`;
+
+  // ---------- model ----------
+  const KV = [
+    { key: "500", label: "500 kV", test: (k) => k >= 500, color: hex("--kv500"), width: 3.2 },
+    { key: "345", label: "345 kV", test: (k) => k >= 300 && k < 500, color: hex("--kv345"), width: 2.6 },
+    { key: "220", label: "220 kV", test: (k) => k >= 200 && k < 300, color: hex("--kv220"), width: 2.0 },
+    { key: "154", label: "154 kV", test: (k) => k >= 130 && k < 200, color: hex("--kv154"), width: 1.6 },
+    { key: "110", label: "110 kV", test: (k) => k >= 100 && k < 130, color: hex("--kv110"), width: 1.3 },
+    { key: "66", label: "66 kV", test: (k) => k >= 60 && k < 100, color: hex("--kv66"), width: 1.0 },
+    { key: "low", label: "< 66 kV", test: (k) => k < 60, color: hex("--kvlow"), width: 0.8 },
+  ];
+  const kvClass = (kv) => KV.find((c) => c.test(kv ?? 0)) || KV[KV.length - 1];
+  const TECH = {
+    solar: { label: "Solar", color: [247, 208, 70] }, eolica: { label: "Eólica", color: [127, 214, 255] },
+    hidro: { label: "Hidro", color: [64, 120, 255] }, termica: { label: "Térmica", color: [214, 110, 80] },
+    bioenergia: { label: "Bioenergía", color: [123, 191, 90] }, geotermica: { label: "Geotérmica", color: [227, 107, 208] },
+  };
+  const REGION = { "15": "Arica y Parinacota", "01": "Tarapacá", "02": "Antofagasta", "03": "Atacama", "04": "Coquimbo", "05": "Valparaíso", "13": "Metropolitana", "06": "O'Higgins", "07": "Maule", "16": "Ñuble", "08": "Biobío", "09": "La Araucanía", "14": "Los Ríos", "10": "Los Lagos", "11": "Aysén", "12": "Magallanes" };
+  const SEGMENT = { NACIONAL: "Transmisión nacional", ZONAL: "Transmisión zonal", DEDICADO: "Dedicada", "S/I": "Sin información", "NO APLICA": "No aplica" };
+  const zones = D.zones.zones;
+  const zoneById = Object.fromEntries(zones.map((z) => [z.id, z]));
+
+  const nodes = [...D.geo.substations.features, ...D.geo.taps.features].map((f) => ({ ...f.properties, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }));
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const edges = D.geo.lines.features.map((f) => ({ ...f.properties, path: f.geometry.coordinates, cls: f.properties.kind === "line" ? kvClass(f.properties.kv) : null }));
+  const edgeById = new Map(edges.map((e) => [e.id, e]));
+  const lines = edges.filter((e) => e.kind === "line");
+  const plants = D.geo.plants.features.map((f) => ({ ...f.properties, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }));
+  const storage = D.geo.storage.features.map((f) => ({ ...f.properties, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }));
+  const comunas = D.geo.comunas;
+  const incident = new Map();
+  for (const e of edges) for (const id of [e.source, e.target]) { if (!incident.has(id)) incident.set(id, []); incident.get(id).push(e); }
+  const group = (arr, key) => { const m = new Map(); for (const x of arr) { const k = x[key]; if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; };
+  const plantsByNode = group(plants, "node");
+  const storageByNode = group(storage, "node");
+  const siteMembers = group(nodes, "site");
+  const servedByNode = new Map();
+  for (const f of comunas.features) for (const [nid, share] of f.properties.served_by || []) { if (!servedByNode.has(nid)) servedByNode.set(nid, []); servedByNode.get(nid).push({ f, share }); }
+  const maxMva = Math.max(1, ...lines.map((e) => e.s_nom_mva || 0));
+
+  // ---------- local implementations (embedded mode) ----------
+  const Local = {
+    nodeDetail(id) {
+      const n = nodeById.get(id);
+      const members = siteMembers.get(n.site) || [n];
+      const connections = (incident.get(id) || []).map((e) => { const other = e.source === id ? e.target : e.source; return { ...e, neighbor: other, neighbor_name: nodeById.get(other)?.name || other }; });
+      const pl = members.flatMap((m) => plantsByNode.get(m.id) || []);
+      const gen = {}; for (const p of pl) if (p.operating) gen[p.tech] = (gen[p.tech] || 0) + p.mw;
+      return { ...n, connections, plants: pl, generation_by_tech_mw: gen, storage: members.flatMap((m) => storageByNode.get(m.id) || []),
+        served_comunas: (servedByNode.get(id) || []).map(({ f, share }) => ({ cut: f.properties.cut, name: f.properties.name, population: Math.round(f.properties.population * share), share_of_comuna: share })).sort((a, b) => b.population - a.population),
+        macro_zone_name: zoneById[n.macro_zone]?.name, ids: {} };
+    },
+    edgeDetail(id) { const e = edgeById.get(id); return { ...e, coords: e.path, electrical: e.s_nom_mva || e.x_ohm ? { s_nom_mva: e.s_nom_mva, x_ohm: e.x_ohm, r_ohm: e.r_ohm, source: "pypsa_cl" } : null, ids: {} }; },
+    islands(remove) {
+      const removed = new Set(remove);
+      const adj = new Map();
+      for (const e of edges) { if (removed.has(e.id) || removed.has(e.source) || removed.has(e.target)) continue; for (const [a, b] of [[e.source, e.target], [e.target, e.source]]) { if (!adj.has(a)) adj.set(a, []); adj.get(a).push(b); } }
+      const seen = new Map(); const comps = [];
+      for (const n of nodes) { if (removed.has(n.id) || seen.has(n.id)) continue; const c = []; const st = [n.id]; seen.set(n.id, comps.length);
+        while (st.length) { const x = st.pop(); c.push(x); for (const y of adj.get(x) || []) if (!seen.has(y)) { seen.set(y, comps.length); st.push(y); } } comps.push(c); }
+      const mainIds = new Set(nodes.filter((n) => n.in_main_grid).map((n) => n.id));
+      const rel = comps.filter((c) => c.some((x) => mainIds.has(x))).sort((a, b) => b.length - a.length);
+      const islands = rel.map((c, k) => { const ns = c.map((x) => nodeById.get(x)); const gen = ns.reduce((s, n) => s + (n.generation_mw || 0), 0); const pop = ns.reduce((s, n) => s + (n.served_population || 0), 0);
+        return { id: k, nodes: ns.length, generation_mw: gen, served_population: pop, state: k === 0 ? "red principal" : gen <= 0 ? "sin generación: sin suministro" : "isla con generación: puede sobrevivir", node_ids: k ? c : [], sample: ns.sort((a, b) => (b.kv || 0) - (a.kv || 0)).slice(0, 6).map((n) => n.name) }; });
+      return { removed: remove, islands, new_islands: Math.max(0, islands.length - 1), population_without_supply: islands.slice(1).filter((i) => i.generation_mw <= 0).reduce((s, i) => s + i.served_population, 0), note: "Conectividad calculada en el navegador sobre las líneas con trazado." };
+    },
+  };
+  const Api = EMBED ? {
+    nodeDetail: async (id) => Local.nodeDetail(id), edgeDetail: async (id) => Local.edgeDetail(id), islands: async (r) => Local.islands(r),
+  } : {
+    nodeDetail: (id) => getJSON(`/nodes/${encodeURIComponent(id)}`),
+    edgeDetail: (id) => getJSON(`/edges/${encodeURIComponent(id)}`),
+    islands: async (remove) => { const r = await fetch(`${API}/graph/islands`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remove }) }); if (!r.ok) throw new Error(await r.text()); return r.json(); },
+  };
+
+  // ---------- state ----------
+  const state = {
+    kv: Object.fromEntries(KV.map((c) => [c.key, true])),
+    layers: { substations: true, taps: false, colocated: false, plants: false, storage: false, comunas: true, schematic: true },
+    lineMode: "kv", nodeMode: "kv", zoneMode: "macro",
+    selected: null, cut: [], cutResult: null,
+  };
+
+  // ---------- panel: stats ----------
+  const st = D.stats;
+  const stat = (v, l) => `<div class="stat"><b>${v}</b><small>${l}</small></div>`;
+  document.getElementById("stats").innerHTML = [
+    stat(fmt.format(st.nodes_by_kind?.substation ?? 0), "subestaciones"),
+    stat(fmt.format(st.line_edges), "tramos de línea"),
+    stat(fmt.format(st.line_km), "km de líneas"),
+    stat(fmt.format(Math.round(st.mw_operating_sen)), "MW instalados SEN"),
+    stat(fmt.format(st.population_assigned), "habitantes asignados"),
+    stat(`${fmt.format(st.largest_component_nodes)}`, "nodos en red principal"),
+  ].join("");
+
+  // ---------- panel: toggles ----------
+  const kvEl = document.getElementById("kv-toggles");
+  kvEl.innerHTML = KV.map((c) => { const ls = lines.filter((e) => e.cls === c); const km = ls.reduce((s, e) => s + (e.length_km || 0), 0);
+    return `<label class="toggle" style="color:rgb(${c.color})"><input type="checkbox" id="kv-${c.key}" data-kv="${c.key}" checked><span class="sw"></span><span class="lbl" style="color:var(--fg)">${c.label}</span><span class="n">${ls.length} · ${fmt.format(Math.round(km))} km</span></label>`; }).join("");
+  kvEl.addEventListener("change", (ev) => { const k = ev.target.dataset.kv; if (k) { state.kv[k] = ev.target.checked; render(); } });
+  const schematicN = lines.filter((e) => (e.geometry_source || "").startsWith("recta")).length;
+  const LAYERS = [
+    { key: "comunas", label: "Comunas abastecidas", color: "var(--kv110)", n: comunas.features.length },
+    { key: "substations", label: "Subestaciones", color: "var(--fg)", n: D.geo.substations.features.length },
+    { key: "schematic", label: "Tramos CEN sin trazado (rectas)", color: "var(--muted)", n: schematicN },
+    { key: "taps", label: "Derivaciones y uniones", color: "var(--accent)", n: D.geo.taps.features.length },
+    { key: "colocated", label: "Acoples entre S/E contiguas", color: "var(--faint)", n: edges.filter((e) => e.kind === "colocated").length },
+    { key: "plants", label: "Centrales generadoras", color: "rgb(247,208,70)", n: plants.length },
+    { key: "storage", label: "Baterías y almacenamiento", color: "rgb(87,199,138)", n: storage.length },
+  ];
+  const layerEl = document.getElementById("layer-toggles");
+  layerEl.innerHTML = LAYERS.map((l) => `<label class="toggle"><input type="checkbox" id="layer-${l.key}" data-layer="${l.key}" ${state.layers[l.key] ? "checked" : ""}><span class="dot" style="color:${l.color}"></span><span class="lbl">${l.label}</span><span class="n">${fmt.format(l.n)}</span></label>`).join("");
+  layerEl.addEventListener("change", (ev) => { const k = ev.target.dataset.layer; if (k) { state.layers[k] = ev.target.checked; render(); } });
+  document.querySelectorAll(".seg[data-group]").forEach((g) => g.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-v]"); if (!b) return;
+    state[g.dataset.group] = b.dataset.v;
+    g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    if (g.dataset.group === "zoneMode" && !state.layers.comunas) { state.layers.comunas = true; document.getElementById("layer-comunas").checked = true; }
+    render();
+  }));
+
+  // ---------- panel: zones ----------
+  const zrgb = (z) => `rgb(${z.color.join(",")})`;
+  document.getElementById("zones-table").innerHTML = `<thead><tr><th>Zona</th><th class="num">Habitantes</th><th class="num">MW</th><th class="num">S/E</th></tr></thead><tbody>${
+    zones.map((z) => `<tr><td><span class="zone-dot" style="background:${zrgb(z)}"></span>${esc(z.name)}</td><td class="num">${fmt.format(z.population)}</td><td class="num">${fmt.format(Math.round(z.generation_mw))}</td><td class="num">${z.substations}</td></tr>`).join("")}</tbody>`;
+  document.getElementById("links-table").innerHTML = `<thead><tr><th>Enlace</th><th class="num">Líneas</th><th>kV</th><th class="num">MVA</th></tr></thead><tbody>${
+    D.zones.links.map((l) => `<tr><td>${esc(l.zone_names.join(" ↔ "))}</td><td class="num">${l.lines}</td><td>${l.kv.map((k) => fmt.format(k)).join(", ")}</td><td class="num">${l.lines_with_capacity ? fmt.format(Math.round(l.s_nom_mva_known)) : "—"}</td></tr>`).join("")}</tbody>`;
+
+  // ---------- panel: validation, sources, assumptions ----------
+  const vs = D.validation.summary || {};
+  document.getElementById("val-summary").innerHTML = `<span class="chip ok">${vs.ok || 0} ok</span><span class="chip warn">${vs.warn || 0} advertencias</span><span class="chip bad">${vs.fail || 0} fallas</span>`;
+  document.getElementById("checks").innerHTML = D.validation.checks.map((c) => `<details class="check"><summary><span class="st ${c.status}">${c.status}</span><span>${esc(c.title)}<span class="val">${esc(c.value)} · esperado ${esc(c.expected)}</span></span></summary><div class="more">${esc(c.detail)}${c.items?.length ? `<ul>${c.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : ""}</div></details>`).join("");
+  document.getElementById("sources").innerHTML = D.sources.map((s) => `<li><b>${esc(s.name)}</b> · ${esc(s.publisher)}. Aporta: ${esc(s.provides.join(", "))}. ${fmt.format(s.records)} registros. <a href="${esc(s.url)}" target="_blank" rel="noopener">fuente</a>${s.notes ? `<br>${esc(s.notes)}` : ""}</li>`).join("");
+  document.getElementById("assumptions").innerHTML = D.assumptions.map((a) => `<li>${esc(a)}</li>`).join("");
+
+  // ---------- search ----------
+  const qEl = document.getElementById("q"); const resEl = document.getElementById("results");
+  const norm = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+  const searchable = nodes.filter((n) => n.kind === "substation").map((n) => ({ n, key: norm(n.name) }));
+  let activeIdx = -1;
+  const showResults = () => {
+    const q = norm(qEl.value.trim()); if (q.length < 2) { resEl.hidden = true; return; }
+    const hits = searchable.filter((s) => s.key.includes(q)).sort((a, b) => (b.n.kv || 0) - (a.n.kv || 0)).slice(0, 30);
+    resEl.innerHTML = hits.length ? hits.map((h, i) => `<button type="button" data-id="${h.n.id}" class="${i === activeIdx ? "active" : ""}"><span>${esc(short(h.n.name))}</span><em>${h.n.kv ?? "?"} kV · ${REGION[h.n.region_code] || ""}</em></button>`).join("") : `<div class="hint" style="padding:8px 10px">Sin resultados</div>`;
+    resEl.hidden = false;
+  };
+  qEl.addEventListener("input", () => { activeIdx = -1; showResults(); });
+  qEl.addEventListener("keydown", (ev) => { const btns = [...resEl.querySelectorAll("button")];
+    if (ev.key === "ArrowDown") { activeIdx = Math.min(btns.length - 1, activeIdx + 1); showResults(); ev.preventDefault(); }
+    else if (ev.key === "ArrowUp") { activeIdx = Math.max(0, activeIdx - 1); showResults(); ev.preventDefault(); }
+    else if (ev.key === "Enter" && btns.length) btns[Math.max(0, activeIdx)].click();
+    else if (ev.key === "Escape") resEl.hidden = true; });
+  resEl.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-id]"); if (!b) return; resEl.hidden = true; qEl.value = ""; select({ type: "node", id: b.dataset.id }, true); });
+  document.addEventListener("click", (ev) => { if (!ev.target.closest(".search")) resEl.hidden = true; });
+
+  // ---------- selection & detail ----------
+  const detailWrap = document.getElementById("detail-wrap"); const detailEl = document.getElementById("detail"); const btnClear = document.getElementById("btn-clear");
+  btnClear.addEventListener("click", () => select(null));
+  let selToken = 0;
+  async function select(sel, fly) {
+    state.selected = sel; btnClear.hidden = !sel;
+    if (!sel) { detailWrap.hidden = true; render(); return; }
+    detailWrap.hidden = false; detailEl.innerHTML = `<div class="hint">cargando…</div>`;
+    render();
+    const token = ++selToken;
+    try {
+      const d = sel.type === "node" ? await Api.nodeDetail(sel.id) : await Api.edgeDetail(sel.id);
+      if (token !== selToken) return;
+      sel.type === "node" ? renderNode(d, fly) : renderEdge(d, fly);
+    } catch (err) { detailEl.innerHTML = `<div class="hint">No se pudo cargar el detalle: ${esc(err.message)}</div>`; }
+  }
+  const bars = (obj, colorOf, unit) => { const tot = Object.values(obj).reduce((a, b) => a + b, 0) || 1;
+    return `<div class="bars">${Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="bar"><span>${esc(TECH[k]?.label || k)}</span><div class="track"><div class="fill" style="width:${(100 * v / tot).toFixed(1)}%;background:rgb(${colorOf(k)})"></div></div><em>${fmt1.format(v)} ${unit}</em></div>`).join("")}</div>`; };
+  function renderNode(n, fly) {
+    const kind = n.kind === "substation" ? (SEGMENT[n.segment] || n.segment || "Subestación") : n.kind === "tap" ? "Derivación" : n.kind === "junction" ? "Unión de líneas" : "Extremo sin S/E";
+    const conns = (n.connections || []).slice().sort((a, b) => (b.kv || 0) - (a.kv || 0));
+    const totalGen = Object.values(n.generation_by_tech_mw || {}).reduce((a, b) => a + b, 0);
+    const served = n.served_comunas || [];
+    let html = `<div class="kicker">${esc(kind.toUpperCase())} · ${esc(n.id)}</div><h3>${esc(short(n.name))}</h3>
+      <dl class="kvs">
+        <dt>Tensión</dt><dd>${n.kv ?? "s/i"} kV${n.kv_levels?.length > 1 ? ` (barras: ${n.kv_levels.join(" / ")})` : ""}</dd>
+        ${n.owner ? `<dt>Propietario</dt><dd>${esc(n.owner)}</dd>` : ""}
+        ${n.region_code ? `<dt>Región</dt><dd>${esc(REGION[n.region_code] || n.region_code)}</dd>` : ""}
+        ${n.macro_zone_name ? `<dt>Zona eléctrica</dt><dd>${esc(n.macro_zone_name)}</dd>` : ""}
+        <dt>Sistema</dt><dd>${esc(n.system || "SEN")} · ${n.in_main_grid ? "red principal" : "fuera de la red principal"}</dd>
+        <dt>Ubicación</dt><dd>${n.lat?.toFixed(4)}, ${n.lon?.toFixed(4)} · ${esc(n.location_source || "")}</dd>
+        ${n.ids?.cen_code ? `<dt>Código CEN</dt><dd>${esc(n.ids.cen_code)} (id ${n.ids.cen_id})</dd>` : ""}
+        ${n.ids?.model_buses ? `<dt>Barras PyPSA-CL</dt><dd>${esc(n.ids.model_buses.join(", "))}</dd>` : ""}
+      </dl>
+      <div class="chips">${n.delivers ? `<span class="chip ok">entrega a distribución</span>` : ""}${totalGen ? `<span class="chip">${fmt.format(Math.round(totalGen))} MW conectados</span>` : ""}${n.served_population ? `<span class="chip">≈${fmt.format(n.served_population)} hab</span>` : ""}</div>`;
+    html += `<div><h2>Conexiones (${conns.length})</h2><div class="list">${conns.map((c) => { const col = c.kind === "line" ? `rgb(${kvClass(c.kv).color})` : "var(--faint)";
+      const cap = c.s_nom_mva ? ` · ${fmt.format(Math.round(c.s_nom_mva))} MVA${c.corridor_edges > 1 ? ` /${c.corridor_edges}` : ""}` : "";
+      return `<button type="button" data-node="${esc(c.neighbor)}" data-edge="${esc(c.id)}"><i style="background:${col}"></i><span title="${esc(c.name)}">${esc(short(c.neighbor_name))}</span><em>${c.kind === "line" ? `${c.kv ?? "?"} kV · ${fmt1.format(c.length_km || 0)} km${cap}` : "acople"}</em></button>`; }).join("") || `<span class="hint">Sin líneas en las fuentes públicas</span>`}</div></div>`;
+    if (totalGen) html += `<div><h2>Generación conectada · ${fmt.format(Math.round(totalGen))} MW</h2>${bars(n.generation_by_tech_mw, (k) => TECH[k]?.color || [150, 150, 150], "MW")}<p class="hint" style="margin-top:6px">${(n.plants || []).length} centrales en este sitio. Conexión según barra declarada en PyPSA-CL, nombre o cercanía.</p></div>`;
+    if ((n.storage || []).length) html += `<div class="chips"><span class="chip ok">${n.storage.length} registros de almacenamiento</span></div>`;
+    if (served.length) html += `<div><h2>Abastece a · ≈${fmt.format(n.served_population)} hab</h2><div class="list">${served.slice(0, 50).map((c) => `<button type="button" data-comuna="${esc(c.cut)}"><i style="background:var(--kv110)"></i><span>${esc(c.name)}</span><em>${c.share_of_comuna < 1 ? Math.round(c.share_of_comuna * 100) + "% · " : ""}${fmt.format(c.population)}</em></button>`).join("")}</div></div>`;
+    html += `<div class="row"><button type="button" class="btn danger" id="btn-cut-node">${state.cut.includes(n.id) ? "Quitar del corte" : "Simular falla de esta S/E"}</button></div>`;
+    detailEl.innerHTML = html;
+    detailEl.querySelectorAll("[data-node]").forEach((b) => b.addEventListener("click", () => select({ type: "node", id: b.dataset.node }, true)));
+    document.getElementById("btn-cut-node").addEventListener("click", () => toggleCut(n.id));
+    if (fly && n.lon != null) flyTo(n.lon, n.lat, Math.max(view.zoom, 8));
+  }
+  function renderEdge(e, fly) {
+    const a = nodeById.get(e.source), b = nodeById.get(e.target);
+    const el = e.electrical;
+    const tramos = e.ids?.cen_tramos || [];
+    detailEl.innerHTML = `<div class="kicker">${e.kind === "line" ? "LÍNEA" : "ACOPLE SUPUESTO"} · ${esc(e.id)}</div><h3>${esc(e.name)}</h3>
+      <dl class="kvs">
+        ${e.kind === "line" ? `<dt>Tensión</dt><dd>${e.kv ?? "s/i"} kV</dd><dt>Longitud</dt><dd>${fmt1.format(e.length_km || 0)} km</dd><dt>Segmento</dt><dd>${esc(SEGMENT[e.segment] || e.segment || "s/i")}</dd><dt>Propietario</dt><dd>${esc(e.owner || "s/i")}</dd>` : ""}
+        <dt>Topología</dt><dd>${esc(e.topology_source)}</dd>
+        <dt>Trazado</dt><dd>${esc(e.geometry_source || "sin trazado")}</dd>
+        ${el ? `<dt>Capacidad</dt><dd>${el.s_nom_mva ? fmt.format(Math.round(el.s_nom_mva)) + " MVA" + (e.corridor_edges > 1 ? ` (corredor compartido por ${e.corridor_edges} líneas)` : "") : "s/i"}</dd><dt>Reactancia</dt><dd>${el.x_ohm != null ? fmt1.format(el.x_ohm) + " Ω" : "s/i"}${el.r_ohm != null ? ` · R ${fmt1.format(el.r_ohm)} Ω` : ""}</dd>${el.note ? `<dt>Nota</dt><dd>${esc(el.note)}</dd>` : ""}` : `<dt>Parámetros</dt><dd>sin datos eléctricos públicos</dd>`}
+        ${tramos.length ? `<dt>Tramos CEN</dt><dd>${tramos.map((t) => esc(t.cen_tramo)).slice(0, 4).join("<br>")}${tramos.length > 4 ? `<br>+${tramos.length - 4}` : ""}</dd>` : ""}
+      </dl>
+      <div><h2>Extremos</h2><div class="list">
+        ${[a, b].map((x, i) => `<button type="button" data-node="${esc(x?.id || (i ? e.target : e.source))}"><i style="background:var(--fg)"></i><span>${esc(short(x?.name || (i ? e.target_name : e.source_name)))}</span><em>${x?.kv ?? ""} kV</em></button>`).join("")}
+      </div></div>
+      <div class="row"><button type="button" class="btn danger" id="btn-cut-edge">${state.cut.includes(e.id) ? "Quitar del corte" : "Simular corte de esta línea"}</button></div>`;
+    detailEl.querySelectorAll("[data-node]").forEach((x) => x.addEventListener("click", () => select({ type: "node", id: x.dataset.node }, true)));
+    document.getElementById("btn-cut-edge").addEventListener("click", () => toggleCut(e.id));
+    if (fly && e.coords?.length) { const xs = e.coords.map((p) => p[0]), ys = e.coords.map((p) => p[1]); flyTo((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2, 7.2); }
+  }
+
+  // ---------- cut simulation (connectivity) ----------
+  const cutbar = document.getElementById("cutbar");
+  async function toggleCut(id) {
+    state.cut = state.cut.includes(id) ? state.cut.filter((x) => x !== id) : [...state.cut, id];
+    if (!state.cut.length) { state.cutResult = null; cutbar.hidden = true; render(); if (state.selected) select(state.selected); return; }
+    try { state.cutResult = await Api.islands(state.cut); } catch (err) { cutbar.hidden = false; cutbar.innerHTML = `<span class="hint">Error: ${esc(err.message)}</span>`; return; }
+    const r = state.cutResult;
+    const names = state.cut.map((x) => short(edgeById.get(x)?.name || nodeById.get(x)?.name || x));
+    const isl = r.islands.slice(1);
+    cutbar.hidden = false;
+    cutbar.innerHTML = `<b>Corte: ${esc(names.join(" + "))}</b>
+      <span>${r.new_islands ? `${r.new_islands} isla(s) nueva(s). ${fmt.format(r.population_without_supply)} habitantes quedan en islas sin generación.` : "La red sigue conectada: hay caminos alternativos."}</span>
+      ${isl.slice(0, 4).map((i) => `<span class="hint">· ${i.nodes} nodos, ${fmt.format(Math.round(i.generation_mw))} MW, ${fmt.format(i.served_population)} hab: ${esc(i.state)}</span>`).join("")}
+      <span class="hint">${esc(r.note)}</span>
+      <div class="row"><button type="button" class="btn" id="btn-cut-reset">Restaurar red</button></div>`;
+    document.getElementById("btn-cut-reset").addEventListener("click", () => { state.cut = []; state.cutResult = null; cutbar.hidden = true; render(); if (state.selected) select(state.selected); });
+    render();
+    if (state.selected) select(state.selected);
+  }
+
+  // ---------- map ----------
+  loadingEl.remove();
+  const mapEl = document.getElementById("map");
+  const fitHome = () => {
+    const width = mapEl.clientWidth || 800, height = mapEl.clientHeight || 700;
+    const vp = new deck.WebMercatorViewport({ width, height }).fitBounds([[-75.5, -43.8], [-66.5, -17.4]], { padding: Math.min(40, height / 12) });
+    return { longitude: vp.longitude, latitude: vp.latitude, zoom: vp.zoom, pitch: 0, bearing: 0 };
+  };
+  let view = fitHome();
+  const deckgl = new deck.Deck({
+    parent: mapEl, views: new deck.MapView({ repeat: false }), initialViewState: view,
+    controller: { doubleClickZoom: true, touchRotate: false, dragRotate: false },
+    onViewStateChange: ({ viewState }) => { view = viewState; deckgl.setProps({ viewState }); updateScale(); scheduleRender(); },
+    getCursor: ({ isHovering }) => (isHovering ? "pointer" : "grab"),
+    onHover: (info) => showTip(info),
+    onClick: (info) => {
+      const o = info.object; if (!o) { select(null); return; }
+      const id = info.layer.id;
+      if (id.startsWith("lines") || id === "colocated") select({ type: "edge", id: o.id });
+      else if (id === "nodes" || id === "taps") select({ type: "node", id: o.id });
+      else if (id === "plants" || id === "storage") { if (o.node) select({ type: "node", id: o.node }); }
+      else if (id === "comunas" && o.properties.main_node) select({ type: "node", id: o.properties.main_node }, true);
+    },
+  });
+  let raf = 0; const scheduleRender = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); };
+  function flyTo(lon, lat, zoom) { view = { ...view, longitude: lon, latitude: lat, zoom, transitionDuration: 900, transitionInterpolator: new deck.FlyToInterpolator() }; deckgl.setProps({ viewState: view }); }
+  document.getElementById("btn-reset").addEventListener("click", () => { view = { ...fitHome(), transitionDuration: 900, transitionInterpolator: new deck.FlyToInterpolator() }; deckgl.setProps({ viewState: view }); });
+  function updateScale() { const m = (40075016 * Math.cos((view.latitude * Math.PI) / 180)) / (512 * 2 ** view.zoom); const km = (m * 100) / 1000; document.getElementById("scale-note").textContent = `100 px ≈ ${km >= 10 ? Math.round(km) : km.toFixed(1)} km · zoom ${view.zoom.toFixed(1)}`; }
+  updateScale(); window.addEventListener("resize", updateScale);
+
+  const tip = document.getElementById("tip");
+  function showTip(info) {
+    const o = info.object; if (!o) { tip.hidden = true; return; }
+    const id = info.layer.id; let html = "";
+    if (id === "nodes" || id === "taps") html = `<b>${esc(short(o.name))}</b><span>${o.kv ?? "s/i"} kV · ${esc(SEGMENT[o.segment] || o.kind)} · ${o.degree} conexiones${o.generation_mw ? `<br>${fmt.format(Math.round(o.generation_mw))} MW generación` : ""}${o.served_population ? `<br>≈${fmt.format(o.served_population)} hab abastecidos` : ""}</span>`;
+    else if (id.startsWith("lines")) html = `<b>${esc(o.name)}</b><span>${o.kv ?? "?"} kV · ${fmt1.format(o.length_km || 0)} km${o.s_nom_mva ? ` · ${fmt.format(Math.round(o.s_nom_mva))} MVA${o.corridor_edges > 1 ? ` (corredor de ${o.corridor_edges})` : ""}` : ""}<br>${esc(short(o.source_name))} → ${esc(short(o.target_name))}${(o.geometry_source || "").startsWith("recta") ? "<br>trazado esquemático (recta)" : ""}</span>`;
+    else if (id === "colocated") html = `<b>Acople supuesto</b><span>${esc(o.name)}</span>`;
+    else if (id === "plants") html = `<b>${esc(o.name)}</b><span>${esc(TECH[o.tech]?.label || o.tech)} · ${fmt1.format(o.mw)} MW<br>→ ${esc(short(o.node_name))} (${esc(o.connection_method)})</span>`;
+    else if (id === "storage") html = `<b>${esc(o.name)}</b><span>${o.mw ? fmt1.format(o.mw) + " MW · " : ""}${esc(o.equipment || "")}</span>`;
+    else if (id === "comunas") { const p = o.properties; const ns = (p.served_by || []).slice(0, 3).map(([nid, sh]) => `${esc(short(nodeById.get(nid)?.name || nid))} ${Math.round(sh * 100)}%`).join(", ");
+      html = `<b>${esc(p.name)}</b><span>${fmt.format(p.population)} hab · ${esc(zoneById[p.macro_zone]?.name || "")}${ns ? `<br>abastecida desde ${ns}` : ""}</span>`; }
+    if (!html) { tip.hidden = true; return; }
+    tip.innerHTML = html; tip.hidden = false;
+    const r = mapEl.getBoundingClientRect();
+    tip.style.left = `${Math.min(r.left + info.x + 14, window.innerWidth - tip.offsetWidth - 8)}px`;
+    tip.style.top = `${Math.min(r.top + info.y + 14, window.innerHeight - tip.offsetHeight - 8)}px`;
+  }
+
+  const LAND_EDGE = hex("--land-edge"), SELECT = hex("--select"), ACCENT = hex("--accent"), FG = hex("--fg"), MUTED = hex("--muted"), BAD = hex("--bad"), WARN = hex("--warn"), KV110 = hex("--kv110");
+  const hashColor = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; const hue = h % 360, c = 0.46, x = c * (1 - Math.abs(((hue / 60) % 2) - 1)), m0 = 0.2;
+    const [r, g, b] = hue < 60 ? [c, x, 0] : hue < 120 ? [x, c, 0] : hue < 180 ? [0, c, x] : hue < 240 ? [0, x, c] : hue < 300 ? [x, 0, c] : [c, 0, x]; return [r, g, b].map((v) => Math.round((v + m0) * 255)); };
+  const popColor = (p) => { const t = Math.max(0, Math.min(1, (Math.log10(Math.max(p, 300)) - 2.5) / 3.3)); return [Math.round(25 + 60 * t), Math.round(45 + 140 * t), Math.round(70 + 130 * t)]; };
+
+  function selectionSets() {
+    const hiNodes = new Set(), hiEdges = new Set(); const s = state.selected;
+    if (!s) return { hiNodes, hiEdges, active: false };
+    if (s.type === "node") { const n = nodeById.get(s.id); for (const m of (n && siteMembers.get(n.site)) || [{ id: s.id }]) { hiNodes.add(m.id); for (const e of incident.get(m.id) || []) { hiEdges.add(e.id); hiNodes.add(e.source); hiNodes.add(e.target); } } }
+    else { const e = edgeById.get(s.id); if (e) { hiEdges.add(e.id); hiNodes.add(e.source); hiNodes.add(e.target); } }
+    return { hiNodes, hiEdges, active: true };
+  }
+
+  function render() {
+    const { hiNodes, hiEdges, active } = selectionSets();
+    const z = view.zoom;
+    const selNode = state.selected?.type === "node" ? nodeById.get(state.selected.id) : null;
+    const servedSet = new Set(); if (selNode) for (const m of siteMembers.get(selNode.site) || [selNode]) for (const x of servedByNode.get(m.id) || []) servedSet.add(x.f.properties.cut);
+    const cut = new Set(state.cut);
+    const islandOf = new Map(); const darkComunas = new Set();
+    if (state.cutResult) for (const isl of state.cutResult.islands.slice(1)) for (const nid of isl.node_ids) { islandOf.set(nid, isl.generation_mw > 0 ? "alive" : "dark"); }
+    if (state.cutResult) for (const [nid, st2] of islandOf) if (st2 === "dark") for (const x of servedByNode.get(nid) || []) darkComunas.add(x.f.properties.cut);
+    const trig = [state.selected?.id, state.cut.join(","), state.zoneMode, state.nodeMode, state.lineMode];
+    const layers = [];
+    if (state.layers.comunas) layers.push(new deck.GeoJsonLayer({
+      id: "comunas", data: comunas, filled: true, stroked: true, pickable: true,
+      getFillColor: (f) => { const p = f.properties;
+        if (darkComunas.size && darkComunas.has(p.cut)) return [...BAD, 150];
+        let c = state.zoneMode === "macro" ? (zoneById[p.macro_zone]?.color || [70, 80, 90]) : state.zoneMode === "pop" ? popColor(p.population) : (p.main_node ? hashColor(p.main_node) : [60, 66, 74]);
+        let a = state.zoneMode === "pop" ? 170 : 90;
+        if (active && selNode) { if (servedSet.has(p.cut)) { c = ACCENT; a = 170; } else a = 22; }
+        return [...c, a]; },
+      getLineColor: [...LAND_EDGE, 220], lineWidthMinPixels: 0.5, updateTriggers: { getFillColor: trig },
+    }));
+    else layers.push(new deck.GeoJsonLayer({ id: "land", data: comunas, filled: true, stroked: false, getFillColor: [18, 26, 37, 255] }));
+    if (state.layers.colocated) layers.push(new deck.PathLayer({ id: "colocated", data: edges.filter((e) => e.kind === "colocated"), getPath: (e) => e.path, getColor: [...MUTED, 220], getWidth: 2, widthUnits: "pixels", pickable: true }));
+    const visLines = lines.filter((e) => state.kv[e.cls.key] && (state.layers.schematic || !(e.geometry_source || "").startsWith("recta")));
+    const ws = Math.max(0.8, Math.min(2.2, (z - 3) / 3));
+    const widthOf = (e) => state.lineMode === "mva" ? (e.s_nom_mva ? 1 + 9 * Math.sqrt(e.s_nom_mva / maxMva) : 0.6) * ws : e.cls.width * ws;
+    const colorOf = (e) => { if (cut.has(e.id)) return [...BAD, 255];
+      const schematic = (e.geometry_source || "").startsWith("recta");
+      const base = state.lineMode === "mva" && !e.s_nom_mva ? [...e.cls.color, 70] : [...e.cls.color, schematic ? 120 : 230];
+      if (active) return hiEdges.has(e.id) ? [...e.cls.color, 255] : [...e.cls.color, 40];
+      return base; };
+    layers.push(new deck.PathLayer({ id: "lines-halo", data: visLines.filter((e) => (e.kv || 0) >= 200), getPath: (e) => e.path,
+      getColor: (e) => [...e.cls.color, active ? (hiEdges.has(e.id) ? 70 : 0) : 32], getWidth: (e) => widthOf(e) * 3, widthUnits: "pixels", capRounded: true, jointRounded: true, updateTriggers: { getColor: trig, getWidth: [ws, ...trig] } }));
+    layers.push(new deck.PathLayer({ id: "lines", data: visLines, pickable: true, autoHighlight: true, highlightColor: [...SELECT, 255], getPath: (e) => e.path,
+      getColor: colorOf, getWidth: (e) => (cut.has(e.id) ? widthOf(e) * 2 + 2 : active && hiEdges.has(e.id) ? widthOf(e) * 1.8 : widthOf(e)),
+      getDashArray: (e) => ((e.geometry_source || "").startsWith("recta") ? [4, 3] : [0, 0]), dashJustified: true,
+      extensions: deck.PathStyleExtension ? [new deck.PathStyleExtension({ dash: true })] : [],
+      widthUnits: "pixels", capRounded: true, jointRounded: true, updateTriggers: { getColor: trig, getWidth: [ws, ...trig] } }));
+    if (state.layers.plants) layers.push(new deck.ScatterplotLayer({ id: "plants", data: plants, pickable: true, radiusUnits: "pixels", stroked: false,
+      getPosition: (p) => [p.lon, p.lat], getRadius: (p) => Math.max(1.6, Math.sqrt(p.mw || 1) * 0.55) * Math.max(0.8, (z - 3) / 2.5),
+      getFillColor: (p) => [...(TECH[p.tech]?.color || [150, 150, 150]), active ? (hiNodes.has(p.node) ? 240 : 40) : p.operating ? 190 : 60],
+      updateTriggers: { getRadius: [Math.round(z * 2)], getFillColor: trig } }));
+    if (state.layers.storage) layers.push(new deck.ScatterplotLayer({ id: "storage", data: storage, pickable: true, radiusUnits: "pixels", getPosition: (b) => [b.lon, b.lat],
+      getRadius: (b) => 3 + Math.sqrt(b.mw || 4) * 0.35, stroked: true, filled: false, getLineColor: [87, 199, 138, 255], lineWidthMinPixels: 1.5 }));
+    if (state.layers.taps) layers.push(new deck.ScatterplotLayer({ id: "taps", data: nodes.filter((n) => n.kind !== "substation"), pickable: true, radiusUnits: "pixels",
+      getPosition: (n) => [n.lon, n.lat], getRadius: 3.2, stroked: true, filled: false, getLineColor: (n) => (n.kind === "dangling" ? [...BAD, 255] : [...ACCENT, 255]), lineWidthMinPixels: 1.3 }));
+    if (state.layers.substations) {
+      const subs = nodes.filter((n) => n.kind === "substation");
+      const scaleZ = Math.max(0.75, Math.min(1.8, (z - 3) / 2.6));
+      const radiusOf = (n) => { let base;
+        if (state.nodeMode === "gen") base = n.generation_mw > 0 ? 1.5 + Math.sqrt(n.generation_mw) * 0.28 : 1.2;
+        else if (state.nodeMode === "pop") base = n.served_population > 0 ? 1.5 + Math.sqrt(n.served_population) * 0.012 : 1.2;
+        else base = n.kv >= 500 ? 4.4 : n.kv >= 200 ? 3.1 : n.kv >= 100 ? 2.2 : 1.6;
+        const s = base * scaleZ; return active && hiNodes.has(n.id) ? s * 1.5 : s; };
+      layers.push(new deck.ScatterplotLayer({ id: "nodes", data: subs, pickable: true, autoHighlight: true, highlightColor: [...ACCENT, 255], radiusUnits: "pixels", stroked: true, lineWidthMinPixels: 1,
+        getPosition: (n) => [n.lon, n.lat], getRadius: radiusOf,
+        getFillColor: (n) => { if (cut.has(n.id)) return [...BAD, 255]; const isl = islandOf.get(n.id); if (isl) return isl === "dark" ? [...BAD, 230] : [...WARN, 230];
+          const c = !n.in_main_grid ? MUTED : n.segment === "NACIONAL" ? FG : n.segment === "ZONAL" ? KV110 : [150, 160, 175];
+          return [...c, active ? (hiNodes.has(n.id) ? 255 : 45) : 235]; },
+        getLineColor: (n) => (selNode && n.site === selNode.site ? [...ACCENT, 255] : n.delivers && state.nodeMode === "pop" ? [...KV110, 255] : [10, 15, 22, 220]),
+        updateTriggers: { getRadius: [Math.round(z * 2), ...trig], getFillColor: trig, getLineColor: trig } }));
+      const labelMin = z >= 9 ? 0 : z >= 7.5 ? 110 : z >= 6.2 ? 220 : 500;
+      const labelled = active ? subs.filter((n) => hiNodes.has(n.id)) : subs.filter((n) => (n.kv || 0) >= labelMin && (z >= 7 || n.degree >= 3) && !/^S\/E (CENTRAL|TAP)/.test(n.name));
+      layers.push(new deck.TextLayer({ id: "labels", data: labelled, getPosition: (n) => [n.lon, n.lat], getText: (n) => short(n.name), getSize: (n) => (n.kv >= 500 ? 13 : 11),
+        getColor: (n) => (active ? [...SELECT, 255] : n.kv >= 500 ? [...ACCENT, 255] : [...FG, 200]), getPixelOffset: [8, 0], getTextAnchor: "start", getAlignmentBaseline: "center",
+        fontFamily: "Barlow Semi Condensed, Segoe UI, sans-serif", fontWeight: 500, characterSet: "auto", outlineWidth: 3, outlineColor: [10, 15, 22, 230], fontSettings: { sdf: true },
+        updateTriggers: { getColor: trig } }));
+    }
+    deckgl.setProps({ layers });
+  }
+  render();
+  const h = location.hash.replace("#", ""); if (h && nodeById.has(h)) select({ type: "node", id: h }, true);
+})();
+</script>
+</body>
+</html>
