@@ -256,6 +256,8 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 | `GET /sim/runs/{id}/trace` | Hash-chained audit log and the replay recipe |
 | `GET /sim/runs/{id}/report` | Indicators, indices, consequence card (L0-L3, people, unserved MWh, cost) and after-action keys |
 | `POST /sim/campaigns`, `GET /sim/campaigns/{id}` | Campaign matrix (modes I, II, III): comparison table, Decisional Fragility Index, Adaptation Index |
+| `GET /sim/runs/{id}/after_action` | After-action review in Spanish, deterministic, from fixed templates |
+| `GET /sim/narrative` | Spanish templates for every `text_key`, `rationale_key`, label and reason code |
 
 - `target` accepts an area id or any real snapshot node id. The response echoes `resolved_target`, so a click on a substation of the frontend map works directly.
 - Errors: 404 unknown run, element or template; 422 invalid input; 409 event injected into a finished run.

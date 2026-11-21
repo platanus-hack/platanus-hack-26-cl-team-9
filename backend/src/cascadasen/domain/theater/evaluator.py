@@ -184,16 +184,17 @@ class Evaluator:
         for m in s:
             if m.demand_mw and m.served_mw / m.demand_mw >= mission_threshold:
                 resistance = max(resistance, m.demand_mw - m.served_mw)
-        recover = None
-        if self.onset is not None:
-            for m in s:
-                if (
-                    m.cycle > self.onset
-                    and m.served_mw >= 0.99 * m.demand_mw
-                    and m.observability >= observability_threshold
-                ):
-                    recover = m.cycle - self.onset
-                    break
+
+        def healthy(m: CycleMetrics) -> bool:
+            return m.served_mw >= 0.99 * m.demand_mw and m.observability >= observability_threshold
+
+        # recoverability: from the worst cycle (lowest continuity) until essential capability is back
+        worst = min(s, key=lambda m: (m.served_mw / m.demand_mw if m.demand_mw else 1.0, m.cycle))
+        recover = (
+            0
+            if healthy(worst)
+            else next((m.cycle - worst.cycle for m in s if m.cycle > worst.cycle and healthy(m)), None)
+        )
         ttu = None if self.onset is None or self.understood_at is None else self.understood_at - self.onset
         return {
             "experimental": True,

@@ -70,3 +70,21 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
   - Experiment design lives in `params/theater.yaml` and `params/templates.yaml`.
 - `domain/agents/`: C2, ISR, Operations, Stabilisation, Logistics, Auditor and the adaptive Adversary. They are deterministic and seeded. Views (`base.py`) never carry the real state, which a test checks.
 - `application/run_experiment.py`: `RunManager` (in-memory LRU of 100 runs; replay re-injects events at their cycles, so an unchanged replay gives the same trace hash) and the catalog. Endpoints are under `/api/v1/sim/*` (`docs/stack.md` 7.1).
+- `domain/theater/narrative.py` and `params/narrative_es.yaml`: Spanish templates for every key the API returns, plus the deterministic after-action review (`TemplateInterpreter`, behind the `Interpreter` port in `domain/ports.py`). An LLM-backed interpreter can implement the same port later; it would explain, never decide.
+- `uv run cascadasen-sim-fixtures [--out DIR]` writes offline fixtures (network, catalog, narration, two 25F timelines, one flagship run per policy, a flagship campaign) to `data/processed/sim/`. The files are generated: regenerate them, do not edit them.
+
+### Validation cases (`docs/plan.md` section 5)
+
+| Case | What | Target | Status |
+|---|---|---|---|
+| V1 | 25F flow split on A06-A07 | 1,800 / 314 MW within 15 % | passes (220 kV reactance calibrated on it) |
+| V2 | Opening the 25F corridor forms the two islands | A01-A06 and A07-A13 | passes |
+| V3a | 25F with the north defence scheme at 0.23 s, per code | maintains; min 48.5 ± 0.3 Hz; shed 1,467.8 MW ± 20 % | passes (48.53 Hz, 1,681 MW) |
+| V3b | No defence scheme, per code | maintains; shed 2,040.7 MW ± 20 % | passes (1,674 MW) |
+| V4 | 25F as it happened | blackout; 47.5 Hz at 4.6 ± 1 s | passes (3.95 s) |
+| V5 | North after separation | ~51.3 ± 0.3 Hz | passes (51.23 Hz) |
+| V6 | Seven north 500 kV segments | CEN classification | skipped: reference table not in the repo |
+| V7 | Low demand 2026, loss of 3,000 MW | maintains; ≥ 48.1 Hz; ~-2 Hz/s | passes (48.38 Hz, -2.08 Hz/s) |
+| V8 | As V7 with step 3 inactive | blackout | passes |
+| V9 | Polpaico frequency curve | RMSE 0-5 s | skipped: digitised curve not in the repo |
+| V10 | 103 MW lost in Norte Grande at midday | L0 or L1 | passes (L0) |

@@ -85,3 +85,19 @@ def test_unknown_run_and_event_errors(client):
         ).status_code
         == 404
     )
+
+
+def test_narrative_and_after_action(client):
+    nar = client.get("/api/v1/sim/narrative").json()
+    assert nar["notice"].startswith("Escenario hipotético") and "rationale" in nar
+    rid = client.post(
+        "/api/v1/sim/runs",
+        json={
+            "horizon": 4,
+            "auto_run": True,
+            "initial_events": [{"type": "D4_comms_loss", "target": "T2", "cycle": 1}],
+        },
+    ).json()["run_id"]
+    aar = client.get(f"/api/v1/sim/runs/{rid}/after_action").json()
+    assert aar["summary"][0].startswith("La organización mantuvo el")
+    assert any("Pérdida de comunicaciones en T2" in line for c in aar["timeline"] for line in c["lines"])

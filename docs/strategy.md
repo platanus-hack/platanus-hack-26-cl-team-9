@@ -145,7 +145,7 @@ All indicators are **experimental proposals, not standards**. Outputs label them
 | Response capacity | How many defensive actions were executed correctly? | executed and effective COAs / proposed COAs |
 | Resistance | How much damage was contained without losing the mission? | largest load loss (MW) while MC stayed above the mission threshold |
 | Operational reserve | What resources were left? | mean of remaining/initial per resource pool, at the end and the minimum over the run |
-| Recoverability | How long until essential capability was back? | cycles from onset until `S_k ≥ 0.99 D_k` and observability ≥ 0.9 |
+| Recoverability | How long until essential capability was back? | cycles from the worst cycle (lowest `S_k / D_k`) until `S_k ≥ 0.99 D_k` and observability ≥ 0.9 again |
 | Coordination effectiveness | How many conflicts, delays and contradictions? | counts of conflicting proposals, detection-to-decision delay (cycles), and decisions reversed within 2 cycles |
 | Wrong decisions | — | COAs executed in areas with no real effect (for example segmenting an area that only had false alarms) |
 

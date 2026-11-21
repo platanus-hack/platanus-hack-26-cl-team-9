@@ -12,6 +12,7 @@ from collections import OrderedDict
 from dataclasses import replace
 from typing import Any
 
+from cascadasen.domain.ports import Interpreter
 from cascadasen.domain.simulation.defenses import defense_sets
 from cascadasen.domain.simulation.grid import Physics, operating_points
 from cascadasen.domain.simulation.network import ReducedNetwork
@@ -19,6 +20,7 @@ from cascadasen.domain.simulation.timeline import NOTICE
 from cascadasen.domain.theater.catalog import ACTIONS, EVENTS, OBJECTIVES
 from cascadasen.domain.theater.config import theater_config
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunConfig, Simulation
+from cascadasen.domain.theater.narrative import TemplateInterpreter
 
 MAX_RUNS = 100
 
@@ -28,9 +30,16 @@ class RunNotFoundError(KeyError):
 
 
 class RunManager:
-    def __init__(self, network: ReducedNetwork, physics: Physics, max_runs: int = MAX_RUNS) -> None:
+    def __init__(
+        self,
+        network: ReducedNetwork,
+        physics: Physics,
+        max_runs: int = MAX_RUNS,
+        interpreter: Interpreter | None = None,
+    ) -> None:
         self.network, self.physics, self.max_runs = network, physics, max_runs
         self.runs: OrderedDict[str, Simulation] = OrderedDict()
+        self.interpreter = interpreter or TemplateInterpreter()
 
     # --------------------------------------------------------------- store
 
@@ -122,6 +131,10 @@ class RunManager:
 
     def report(self, run_id: str) -> dict[str, Any]:
         return {"run_id": run_id, **self.get(run_id).report()}
+
+    def after_action(self, run_id: str) -> dict[str, Any]:
+        sim = self.get(run_id)
+        return {"run_id": run_id, **self.interpreter.after_action(sim.report(), sim.snapshots)}
 
 
 def catalog(network: ReducedNetwork) -> dict[str, Any]:

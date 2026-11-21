@@ -17,6 +17,7 @@ dependencies = [
 [project.scripts]
 cascadasen-api = "cascadasen.api.app:run"
 cascadasen-build = "cascadasen.cli:main"
+cascadasen-sim-fixtures = "cascadasen.sim_fixtures:main"
 
 [dependency-groups]
 dev = ["httpx>=0.28.1", "mypy>=2.4.1", "pytest>=9.2.0", "pytest-cov", "ruff"]

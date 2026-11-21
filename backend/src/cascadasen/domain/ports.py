@@ -30,3 +30,10 @@ class ContractExporter(Protocol):
     """Writes derived artefacts (e.g. the frontend network.json contract)."""
 
     def export(self, snapshot: GridSnapshot) -> list[str]: ...
+
+
+class Interpreter(Protocol):
+    """Explains a finished run (docs/strategy.md 10). The default is template-based and
+    deterministic; an LLM-backed adapter may implement it, but never decides or computes."""
+
+    def after_action(self, report: dict, snapshots: list[dict]) -> dict: ...

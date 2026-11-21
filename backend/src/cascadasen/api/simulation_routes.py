@@ -23,6 +23,7 @@ from cascadasen.application.run_experiment import RunNotFoundError, run_config
 from cascadasen.application.simulate import SimulateCommand, SimulationInputError, SimulationTimeoutError
 from cascadasen.application.simulation_service import SimulationService
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunFinishedError, RunInputError
+from cascadasen.domain.theater.narrative import templates
 
 router = APIRouter(prefix="/api/v1")
 
@@ -196,3 +197,21 @@ def create_campaign(sim: Sim, body: CampaignIn) -> dict[str, Any]:
 @router.get("/sim/campaigns/{campaign_id}", tags=["experimentos"], summary="Resultado de una campaña")
 def get_campaign(sim: Sim, campaign_id: str) -> dict[str, Any]:
     return run_call(sim.campaigns.get, campaign_id)
+
+
+@router.get(
+    "/sim/narrative",
+    tags=["experimentos"],
+    summary="Plantillas de narración en español para text_key, rationale_key y etiquetas",
+)
+def narrative() -> dict[str, Any]:
+    return templates()
+
+
+@router.get(
+    "/sim/runs/{run_id}/after_action",
+    tags=["experimentos"],
+    summary="Informe posterior a la acción en español (determinista, desde plantillas)",
+)
+def run_after_action(sim: Sim, run_id: str) -> dict[str, Any]:
+    return run_call(sim.runs.after_action, run_id)
