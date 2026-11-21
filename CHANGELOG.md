@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): keep the network of a refresh that a run event overtakes
+- **Changed:** New `web/src/session/loader.ts`: `createLoader(api, apply)` returns `{load, loadDoc, cancel}`. A full load applies network and state when it is the newest full load, and its session document only when no newer document read started. `useSession.ts` uses it (the `seq`/`docSeq` refs are gone; `leave()` calls `cancel()`); the `Session` interface is unchanged.
+- **Why:** Review finding (PR #50, user task 3): a run event (`loadDoc`) during a dataset refresh made `load` return early and drop the new network and state, so the screen kept the old dataset.
+- **Agents:** `web/src/session/loader.test.ts` covers the race with deferred promises (document read during a full load, two overlapping loads, cancel). Verification: `npx vitest run` 31 passed (8 files); `npm run build` ok.
+- **Files:** `web/src/session/{loader,loader.test,useSession}.ts`, `docs/mapa3.md`.
 ## 2026-11-21 · feat(web): session mode in the Design v5 shell
 - **Changed:** Session mode is wired into main's Design v5 `CascadeApp.tsx`: a rail item **Sesión compartida** (view with **Crear sesión** / **Unirse**, or the id, **Copiar enlace** and **Salir**), a panel-head strip in a session (`Sesión <id>`, `rev. N`, **en vivo** / **sondeo**, **Copiar enlace**), tabs **Red**, **Simulación**, **Datos** in a session (placeholder tabs hidden), line clicks through `POST /{sid}/cut`, and **Elegir en el mapa** pick mode.
 - **Changed:** New `web/src/session/SessionCut.tsx` (**Líneas abiertas en la sesión · N**, **Reparar**, **Reparar todo**) above `SimulationPanel`, whose prop `cut` became `cuts: string[]`. In a session the time pill select and the rail scenarios are disabled with a tooltip and the URL drops `cut`.

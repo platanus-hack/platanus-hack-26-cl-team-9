@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionNetwork } from "../cascade/types";
+import { createLoader } from "./loader";
 import { ApiError, createSession, getNetwork, getSession, getState, sessionIdFrom, subscribe, type CutState, type LiveMode, type SessionDoc } from "./sessionApi";
 
 const KEY = "sub50_session";
@@ -13,6 +14,7 @@ export interface Session {
 /**
  * Shared session of mapa 3: id from ?sesion= or localStorage, data from the API. A revision event that changed the
  * dataset (dataset_revision) refetches session, network and state; run activity refetches only the session document.
+ * `createLoader` (loader.ts) decides which of overlapping refetches reaches the screen.
  */
 export function useSession(): Session {
   const [sid, setSid] = useState(() => sessionIdFrom(location.search, localStorage.getItem(KEY)));
@@ -23,26 +25,17 @@ export function useSession(): Session {
   const [error, setError] = useState<string | null>(null);
   const loaded = useRef(-1);  // revision of the session on screen
   const data = useRef(-1);    // dataset_revision of the network on screen
-  const seq = useRef(0);      // only the newest full refresh is applied
-  const docSeq = useRef(0);   // only the newest document read is applied
-  const load = useCallback(async (id: string) => {
-    const mine = ++seq.current, mineDoc = ++docSeq.current;
-    const [doc, net, st] = await Promise.all([getSession(id), getNetwork(id), getState(id)]);
-    if (mine !== seq.current || mineDoc !== docSeq.current) return;
-    loaded.current = doc.revision; data.current = net.dataset_revision;
-    setSession(doc); setNetwork(net); setState(st);
-  }, []);
-  const loadDoc = useCallback(async (id: string) => {
-    const mine = ++docSeq.current;
-    const doc = await getSession(id);
-    if (mine !== docSeq.current) return;
-    loaded.current = doc.revision;
-    setSession(doc);
-  }, []);
+  const loader = useRef<ReturnType<typeof createLoader> | null>(null);
+  loader.current ??= createLoader({ getSession, getNetwork, getState }, {
+    doc: (doc) => { loaded.current = doc.revision; setSession(doc); },
+    data: (net, st) => { data.current = net.dataset_revision; setNetwork(net); setState(st); },
+  });
+  const load = useCallback((id: string) => loader.current!.load(id), []);
+  const loadDoc = useCallback((id: string) => loader.current!.loadDoc(id), []);
   const leave = useCallback(() => {
     localStorage.removeItem(KEY);
     _setUrl(null);
-    seq.current++; docSeq.current++; loaded.current = -1; data.current = -1;
+    loader.current!.cancel(); loaded.current = -1; data.current = -1;
     setSid(null); setSession(null); setNetwork(null); setState(null); setLive(null);
   }, []);
   useEffect(() => {
