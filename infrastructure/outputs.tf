@@ -23,3 +23,7 @@ output "ecs_cluster_name" {
 output "ecs_service_name" {
   value = aws_ecs_service.app.name
 }
+output "route53_name_servers" {
+  description = "Name servers of the sub50.cl zone. Set them as NS records at the .cl registrar."
+  value       = aws_route53_zone.main.name_servers
+}

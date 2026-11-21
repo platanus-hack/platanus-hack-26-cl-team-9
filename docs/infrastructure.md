@@ -51,14 +51,18 @@ infrastructure/deploy.sh apply   # ECR, build and push images, full apply, print
 - `plan` creates only the state bucket in AWS.
 
 ## Add a domain with Route 53 and ACM
-No Route 53 or ACM resources exist yet. To use a domain, create the certificates and set variables in `infrastructure/terraform.tfvars` (git-ignored, example in `terraform.tfvars.example`):
+The Terraform stack creates the Route 53 hosted zone `sub50.cl` (`infrastructure/route53.tf`) and nothing else for DNS: no records, no ACM certificate, no alias. The domain is not registered by this stack.
+
+NS delegation: after `apply`, read `terraform -chdir=infrastructure output route53_name_servers` and set those four name servers for `sub50.cl` at the .cl registrar. Until then the zone does not resolve publicly.
+
+To use the domain, create the certificates and set variables in `infrastructure/terraform.tfvars` (git-ignored, example in `terraform.tfvars.example`):
 - `domain_name` and `cloudfront_certificate_arn` (ACM certificate in `us-east-1`) add the alias and certificate to CloudFront.
 - `origin_https = true` and `alb_certificate_arn` make the ALB production listener HTTPS :443 and CloudFront use `https-only`.
-- Then add an alias record in Route 53 pointing to the distribution.
+- Then add an alias record in the `sub50.cl` zone pointing to the distribution.
 
 ## Backlog
 No issue numbers yet: `scripts/issue.sh` does not exist in the repo and the fork has issues disabled. Create these in the team tracker:
-- Route 53 and ACM domain for CloudFront.
+- ACM certificates and the alias record for `sub50.cl` on CloudFront (the zone exists).
 - CloudFront origin secret header, so the ALB rejects requests that do not come from this distribution (the prefix list allows any CloudFront distribution).
 - Multi-task high availability.
 - Load data from S3 instead of baking it into the image.
