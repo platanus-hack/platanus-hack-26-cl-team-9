@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · chore(project): align oneliner and project page with the description
+
+- **Changed:** `project-oneliner-spanish` in `platanus-hack-project.jsonc` now condenses `project-description-spanish` into one line: the agent first simulation plus its purpose (finding the most fragile points). `project-description.md` reuses the description's wording ("agent first", "en vivo la infraestructura crítica", "con datos públicos", "conectarse a nuestra API") and keeps its headings and bullets.
+- **Why:** The three submission texts said the same thing with slightly different wording.
+- **Agents:** `project-description-spanish` is the source text. Change the oneliner and `project-description.md` along with it.
+- **Files:** `platanus-hack-project.jsonc`, `project-description.md`.
+
 ## 2026-11-21 · chore(project): set Sub50 deploy URL
 
 - **Changed:** `deploy-url` in `platanus-hack-project.jsonc` is now `https://sub50.cl`.
