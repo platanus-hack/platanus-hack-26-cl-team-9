@@ -250,7 +250,7 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 
 | Method and path | Purpose |
 |---|---|
-| `GET /sim/network` | Areas and corridors of the reduced network: `id`, `name`, `lon`/`lat`, `zone`, `aggregates` (real node ids). These are the selectable targets |
+| `GET /sim/network?point=` | The mapa 3 network of a point (`nodes` `B###`, `lines` `R###`, same shape as `web/public/cache/network-<year>.json`, plus `area` per node and `corridor` per line), `buses` (gen, load, people), `areas` (`buses`, `anchor_bus`, `lat`/`lon`), `corridors` (`lines`) and `defenses`. The 13-area network of `POST /simulate` moved to `GET /simulate/network` |
 | `GET /sim/catalog` | Event types, defensive COAs, policies A/B/C, adversary objectives, missions, experiment templates |
 | `POST /sim/runs` | Create a run: `template`, `policy`, `adversary` `{objective, budget, adaptive}`, `uncertainty`, `seed` (optional: omitted means a fresh random seed, returned in the summary and recorded in the recipe), `horizon`, `capabilities`, `initial_events`, `auto_run`, `stochastic` (default true), `llm_commander` (default false; needs the server's LLM adapter, else rules) |
 | `POST /sim/runs/{id}/events` | Select a node and trigger an event: `{type, target, params}`, applied at the next cycle and logged with `source: user` |
@@ -263,10 +263,11 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 | `GET /sim/runs/{id}/after_action` | After-action review in Spanish from fixed templates; with the LLM adapter enabled it adds `narrative` (`interpreter: llm`) |
 | `GET /sim/narrative` | Spanish templates for every `text_key`, `rationale_key`, label and reason code |
 
-- `target` accepts an area id or any real snapshot node id. The response echoes `resolved_target`, so a click on a substation of the frontend map works directly.
+- `POST /sim/runs` takes `point` (mapa 3 operating point; alias `operating_point`). `target` accepts an area, zone, corridor, `B###`, `R###` or real `SE...` id; the response echoes `resolved_target` (a bus id for a substation), so a click on mapa 3 works directly.
+- Each cycle snapshot (`/step`, `GET /runs/{id}`) carries, besides `real`/`observed`/`estimated`/`decisions`: `grid` (mapa 3 `Frame`: `edges`, `dark`, `islands`, plus `buses` served MW), `transient` (a full mapa 3 `Timeline` when a physical event ran a cascade in that cycle, else null), `areas` (`observability` 0-1, `posture` normal/manual/segmented, active `effects` with source) and `crews` (`position`, `bus`, `lon`/`lat`, `target`, `target_bus`, `arrival`, `status`). Contract and viewer notes: `docs/mapa3.md` section 10.
 - Errors: 404 unknown run, element or template; 422 invalid input; 409 event injected into a finished run.
 - Runs live in memory (the most recent 100 are kept). Any run can be rebuilt from its recipe (`GET /sim/runs/{id}/trace`). An unchanged replay gives the same trace hash.
-- Campaign body: `mode` (`diagnostic`, `adversarial`, `capability`), `templates`, `policies`, `seeds` (up to 10), `uncertainty_levels`, `adversary_variants` (`none`, `static`, `adaptive`), `capability_variants` (`[{id, capabilities}]`, the first one is the baseline), `horizon`, `objective`, `budget`, `random_seeds` (1-10: draw fresh seeds instead of `seeds`, returned in `spec.seeds` and shared by every cell). Each table row adds `spread` (p10/p50/p90 of mission continuity and recoverability across seeds). It runs synchronously and is capped at 240 runs (422 above).
+- Campaign body: `mode` (`diagnostic`, `adversarial`, `capability`), `templates`, `policies`, `seeds` (up to 10), `uncertainty_levels`, `adversary_variants` (`none`, `static`, `adaptive`), `capability_variants` (`[{id, capabilities}]`, the first one is the baseline), `horizon`, `objective`, `budget`, `point`, `random_seeds` (1-10: draw fresh seeds instead of `seeds`, returned in `spec.seeds` and shared by every cell). Each table row adds `spread` (p10/p50/p90 of mission continuity and recoverability across seeds). It runs synchronously and is capped at 240 runs (422 above).
 
 ## 8. Testing and CI
 

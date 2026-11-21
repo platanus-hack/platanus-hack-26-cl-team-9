@@ -62,7 +62,7 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
   - Modules: DC power flow (`powerflow.py`), weak-link cascade (`engine.py`), island swing-equation frequency with EDAC, extreme-contingency shedding, battery and over-frequency curtailment (`frequency.py`), consequence card L0-L3 (`consequence.py`) and the `timeline.json` contract (`timeline.py`).
   - Every parameter in `params/*.yaml` carries a `source` or `is_assumption: true`, and the loader rejects bare numbers. Calibrated values say which validation case they were fit on.
 - `application/simulate.py`: `POST /api/v1/simulate`. `application/simulation_service.py` is the facade the routes use.
-- `GET /api/v1/sim/network`: areas and corridors with the real node and line ids they aggregate. A substation id from the map (`SE…`) is a valid target everywhere.
+- `GET /api/v1/sim/network?point=`: the mapa 3 network (`B###`, `R###`) with the theatre's areas, corridors and defences. Any area, corridor, `B###`, `R###` or `SE…` id is a valid user target. The strategic theatre runs on this network and the mapa 3 cascade engine (`domain/theater/{areas,grid}.py`).
 - Validation cases: `tests/validation/test_engine_cases.py` runs V1-V5, V7, V8 and V10 on the real snapshot. V6 and V9 are skipped until their reference data is in the repo.
 - `domain/theater/`: strategic layer (`docs/strategy.md`).
   - State and supervision: real vs observed state (`state.py`), and the digital engine for missing, stale or unreliable supervision and false alarms (`digital.py`).
@@ -74,7 +74,7 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
 - `application/run_experiment.py`: `RunManager` (in-memory LRU of 100 runs; replay re-injects events at their cycles, so an unchanged replay gives the same trace hash) and the catalog. Endpoints are under `/api/v1/sim/*` (`docs/stack.md` 7.1).
 - `domain/theater/narrative.py` and `params/narrative_es.yaml`: Spanish templates for every key the API returns, plus the deterministic after-action review (`TemplateInterpreter`, behind the `Interpreter` port in `domain/ports.py`). An LLM-backed interpreter can implement the same port later; it would explain, never decide.
 - Optional LLM (off by default): `uv sync --extra llm`, then `CASCADASEN_LLM_ENABLED=true` plus Anthropic credentials (`ANTHROPIC_API_KEY` or an `ant auth login` profile). Runs created with `"llm_commander": true` let the LLM pick C2's actions among validated ones; `after_action` adds a narrative. Settings: `CASCADASEN_LLM_MODEL` (default `claude-opus-5-5`), `CASCADASEN_LLM_EFFORT` (default `low`), `CASCADASEN_LLM_TIMEOUT_S`. Every failure falls back to the deterministic path.
-- `uv run cascadasen-sim-fixtures [--out DIR]` writes offline fixtures (network, catalog, narration, two 25F timelines, one flagship run per policy, a flagship campaign) to `data/processed/sim/`. The files are generated: regenerate them, do not edit them.
+- `uv run cascadasen-sim-fixtures [--point ID] [--seed N] [--no-campaign] [--out DIR]` writes the offline theatre cache for mapa 3 to `web/public/cache/theater/` (git-ignored): `index.json`, networks, one flagship run per policy and point, and a campaign per point. The files are generated: regenerate them, do not edit them.
 
 ### Validation cases (`docs/plan.md` section 5)
 

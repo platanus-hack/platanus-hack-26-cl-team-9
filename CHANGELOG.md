@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(theater): document the theatre on the mapa 3 network
+
+- **Changed:** `strategy.md` 2.1 (areas = groups of the 188 mapa 3 buses, corridors, EDAC defence functions, mapa 3 points), `stack.md` 7.1 (`/sim/network?point=`, `point`, snapshot `grid`/`transient`/`areas`/`crews`, `/simulate/network`, campaign `point`), `mapa3.md` new section 10 (operation-mode contract with TS types for the frontend), `plan.md` 9 item 4 (node decision), `backend/README.md`.
+- **Why:** The frontend teammate builds the operation mode on mapa 3 against this contract.
+- **Agents:** `mapa3.md` section 10 is the frontend contract; keep it in sync with `cycle._snapshot` and `SimulationService.theater_network`.
+- **Files:** `docs/strategy.md`, `docs/stack.md`, `docs/mapa3.md`, `docs/plan.md`, `backend/README.md`.
+
 ## 2026-11-21 · feat(theater): offline theatre cache for mapa 3
 
 - **Changed:** `cascadasen-sim-fixtures` now writes `web/public/cache/theater/` (git-ignored, next to the mapa 3 cut cache): `index.json`, `catalog.json`, `narrative_es.json`, `network-<point>.json`, `<point>/flagship_observability-<A|B|C>-s<seed>.json` (recipe, snapshots, report, after-action) and `campaign-<point>.json`, for `nov2026-1300` and `feb2025-1500` by default. Campaigns accept `point` (`CampaignSpec.point`, `POST /sim/campaigns`).

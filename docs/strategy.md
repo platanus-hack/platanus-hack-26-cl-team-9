@@ -37,7 +37,9 @@ They are not run independently. A digital event degrades what supervision shows;
 
 ### 2.1 Network: 13 operating areas
 
-The theatre runs on a reduced trunk network built from the real SEN snapshot (`data/processed/grid_snapshot.json`). Each **operating area** aggregates every main-grid node inside a latitude band. Aysén (SEA) and Magallanes (SEM) are separate systems and are left out. Corridors join areas; parallel 500 kV and lower-voltage lines stay as separate corridors (`stack.md` section 4.1). The bands are in `domain/simulation/params/network.yaml`.
+**Updated 2026-11-21: the theatre runs on the mapa 3 network** (`docs/mapa3.md`, `docs/engine.md`): 188 buses `B###` (one per substation) and 273 lines `R###` from `domain/cascade/network.py`, with the operating points of mapa 3 (`feb2025-1500`, `feb2025-0300`, `nov2026-1300`, `nov2026-2000`; default `nov2026-1300`). Physics is the mapa 3 cascade engine (`run_cascade_state`), so dark buses, open lines and flows are exactly what the viewer draws (`domain/theater/grid.py`).
+
+Each **operating area** is the set of buses inside a latitude band (`domain/theater/areas.py`; bands in `domain/simulation/params/network.yaml`). A **corridor** is the set of `R###` lines crossing the boundary between two areas (`A06-A07`). **Defence functions** are the two EDAC zones of the CEN 25F tables: `edac:norte_grande` (A01-A03) and `edac:centro_sur` (A04-A13); the north defence scheme (PDCE) is not in the mapa 3 engine. Agents and the adversary reason by area; the adversary never names a bus or a line. Users may target any area, zone, corridor, `B###`, `R###` or real `SE...` id; it resolves to its bus, line, corridor or area.
 
 | Area | Name | Band (lat) | Anchors |
 |---|---|---|---|
