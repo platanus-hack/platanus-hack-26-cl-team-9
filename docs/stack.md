@@ -1,0 +1,215 @@
+# Stack and architecture
+
+Status: decided in the planning session of 2026-11-21. Nothing below is implemented yet; the repo only contains the Platanus template files and `docs/`.
+
+## 1. Decisions
+
+| Layer | Choice | Notes |
+|---|---|---|
+| Frontend | React + Vite + TypeScript | Decided earlier |
+| Map and 3D-style layers | deck.gl standalone (`MapView`, pitch ~50 degrees) | No MapLibre and no tile server. Chile's outline is a local GeoJSON, so the demo works offline. Add MapLibre only if street-level zoom is wanted later |
+| Chile outline | Local simplified GeoJSON (Natural Earth admin-1 or IDE Chile/BCN, simplified with mapshaper) | Continental Chile only; see `datasets.md` |
+| State | Zustand | Holds one playback clock `t` that drives all animations |
+| Charts | uPlot | Frequency curve synchronised with `t` |
+| Simulation engine | Python 3.11, numpy, networkx | One-equation-per-island frequency model; DC power flow solved with numpy. pandapower only if the full official network arrives (Plan A, optional) |
+| API | FastAPI (REST; WebSocket optional for live combinations) | Needed only for combinations not in the cache |
+| Precompute | Script that runs every single-element failure for every scenario x defences x behaviour and writes static JSON | Frontend answers single clicks from this cache, so the demo works without the API |
+| Tests | pytest (engine, validation, provenance), Vitest (critical frontend logic) | |
+| CI | GitHub Actions | Generates the validation table from the tests |
+| Hosting | Static frontend plus cache; deploy from a personal mirror (see README of the template) | Platforms like Vercel cannot access the org repo |
+| LLM | Not in the core | Narration uses fixed templates so every sentence is reproducible. An optional chat that calls the simulator is P2 |
+
+## 2. Architecture
+
+```
+datasets (public APIs) --scripts--> data/processed/network.json
+                                         |
+                                         v
+        engine (Python) --simulate()--> timeline.json (events + frames + summary + provenance)
+              |                                  |
+              | build_cache.py                   | POST /simulate (combinations only)
+              v                                  v
+        web/public/cache/*.json  ------>  frontend player (reads timeline, renders from clock t)
+```
+
+Principles:
+- The engine is the only place with physics. The frontend never computes physics, so there are no two implementations to diverge.
+- The frontend is a pure function of (`network.json`, `timeline.json`, clock `t`). Play, pause, scrub and speed come for free.
+- The contract (section 6) is frozen in hour 0 so frontend and engine can be built in parallel. The frontend develops against a hand-written fake timeline until the engine is ready.
+- Every parameter has a source or an explicit `assumption` flag. A test fails if one has neither.
+
+## 3. Proposed repository layout (not created yet)
+
+```
+docs/                 this documentation
+engine/               Python package: network loader, cascade, frequency model, narration keys
+  tests/              unit tests, validation tests, provenance test
+  params/             YAML parameters with sources
+data/
+  scripts/            download and build scripts (see datasets.md appendix)
+  raw/                downloaded layers (git-ignored if large)
+  processed/          network.json, centrales_sen.geojson, chile.geojson
+web/                  Vite app
+  public/cache/       precomputed timelines
+scripts/build_cache.py
+.github/workflows/    CI
+```
+
+## 4. Simulation model
+
+Seed values below come from the team's earlier research of the CEN reports. The ones marked (verified) were re-checked against the reports by the independent evaluator; the rest were not independently re-checked and the engineer should confirm them in the cited source before relying on them. [n] refers to `datasets.md` section 7.
+
+### 4.1 Network
+Graph of about 10-14 nodes along the north-south trunk (Norte Grande, Atacama, Coquimbo, Valparaiso, Metropolitana, centre, Biobio, south, plus 2-3 southern nodes). Each corridor between nodes aggregates its 500 kV and 220 kV lines with an equivalent reactance and capacity. Parallel lines at different voltages stay as separate edges because that is how the 25F cascade happened [4]. Each node has generation and demand for the chosen scenario.
+
+### 4.2 Power flow
+DC power flow (flow proportional to angle difference over reactance), solved per island with numpy.
+
+### 4.3 Cascade rules
+1. Open the failed elements chosen by the user.
+2. Detect islands (connected components, networkx).
+3. Compute each island's initial imbalance: generation minus load, plus the flow that crossed the boundary.
+4. Run the island frequency model (4.4). An island that collapses loses all its load.
+5. DC flow on surviving islands. Per iteration open only the corridor with the highest relative loading above 120% of capacity (parameter); ties open together.
+6. Distribute remaining imbalance among synchronous generators in proportion to available reserve.
+7. Automatic under-frequency load shedding (EDAC) applies per zone with the amounts of each zone, proportional across buses with positive load. Exclude buses with net negative load (distributed generation larger than demand).
+8. Overloads in the first ~2 s are labelled "separation through a weak link" (the 25F mechanism [4]). Later overloads are labelled "thermal overload, needs operator action" and do not trip anything in the default mode.
+9. Cap at 20 iterations; if reached, return `truncated: true`.
+
+### 4.4 Island frequency model
+Aggregated swing equation, 10 ms step, 20 s horizon:
+
+```
+(2*E_i / f0) * df/dt = P_gen(t) + P_reserve(t) + P_bat(t) - P_load(t) - dP_load(f)
+dP_load(f) = (D_pct_per_Hz / 100) * P_load * (f - f0),   D_pct_per_Hz in [1, 2]  (assumption)
+```
+
+Seed values (25F, centre-south):
+- Kinetic energy E: 11.72 and 22.46 GVAs for the two islands [4] Table 4-1. When a synchronous unit trips, subtract its inertia (without this the model gives 1.69 Hz/s for a 3,000 MW loss with 44.3 GVAs, while the CEN reports about 2 Hz/s [14]).
+- Initial imbalance: 2,114 MW (net flow lost across the boundary [4]).
+- Link between the two areas before separation: P_link = 314 MW for t < t_sep, 0 after. t_sep = 1.566 s as it happened, 0.23 s with the north defence scheme [4].
+- Primary reserve: first-order, capped at the published reserve (267.99 + 22.07 MW in the centre-south on 25F [4] Table 4-1). Time constant and D are calibrated only on case V3a.
+- EDAC by low frequency: steps from [4] Table 3-10 (25F) or [14] Table 1 and the Annex E spreadsheet [16] (2026), each with threshold and effectiveness factor.
+- EDAC for extreme contingency: 671.55 MW in the centre-south, threshold 49.5 Hz, gradients -0.9 / -1.2 / -1.9 Hz/s [4] Table 3-11.
+- Blackout threshold: 47.5 Hz (NTSyCS art. 3-10, per [4]).
+- Island with surplus: automatic generation shedding and renewable curtailment (in case 1 of [4] the control reduced 1,922.3 MW).
+- Mode "as it happened": the 25F events with their times. Use the corrected generation figures: about 1,971 MW of generation disconnected in the centre-south, and 737.34 MW of unidentified disconnected generation had to be added to the CEN model to match measured frequency (verified [4]). The older "about 1,000 MW" figure in earlier drafts is superseded; do not use it.
+
+### 4.5 Batteries and "what would have prevented it"
+- `P_bat(t) = min(P_max, P_max * (t - t_d) / t_r)` for `t > t_d`. Defaults t_d = 200 ms, t_r = 300 ms; sensitivity with t_d = 500 ms [18].
+- Size batteries per island, not per location (the model has no position inside an island).
+- Existing storage counts as generation without frequency response (conservative assumption).
+- Output a curve "MW needed vs t_d", found by binary search on P_max.
+- Minimal combinations: enumerate the 25F failure events (2^5 = 32 cases) and report the minimal set that changes the outcome.
+- Islands with no synchronous generation and under 200 MW (parameter) are reported as "local cut", not as cascade blackout.
+
+### 4.6 Island result categories
+
+| Result | Meaning |
+|---|---|
+| Maintains | Frequency model says the island balances |
+| Blackout | Frequency falls below the trip limit |
+| Uncertain: outside what the model evaluates | Pre-failure flow on the lost north 500 kV corridor exceeds the validity range of the CEN north defence scheme (1,600 MW north-to-south, 1,000 MW south-to-north [4]; 1,700 MW per [6]); voltage may dominate there |
+| Not modelled | The case needs something the model lacks (e.g. an island without defence data) |
+
+The 25F replica is the declared exception: it reports the frequency result because a published reference exists. An optional overvoltage flag (low-demand scenario, load shed above ~2,300 MW) adds "overvoltage risk (not modelled)".
+
+## 5. Frontend design
+
+### 5.1 Layout
+Chile is long and narrow. Put the map in a tall left panel (about 40% of the width), with panels on the right: headline counter, event chain, frequency chart, validation table, selectors. The camera follows the cascade north to south and uses fly-to transitions.
+
+### 5.2 deck.gl layers and animations
+
+| Element | Layer | Animation |
+|---|---|---|
+| Chile outline | `GeoJsonLayer` | None; dark night style |
+| Generators | `ColumnLayer` (height = MW, colour = technology) | Column drops to zero when the plant trips |
+| Cities | `ColumnLayer` or `ScatterplotLayer` (glow) | Wave of darkness: each city goes out according to time since its island collapsed |
+| Transmission lines | two stacked `PathLayer`s (halo + core), colour by voltage | Red and pulsing when overloaded; dashed when open |
+| Power flow | `TripsLayer` | Particles move along lines; they reroute when a line is cut |
+| Cut | `ScatterplotLayer` | Expanding ring and flash at the cut |
+| Substations / nodes | `ScatterplotLayer` + `TextLayer` | Colour by island |
+| Camera | `viewState` transitions | Fly to the failure, then to the two islands |
+
+Render the 1,193 plants aggregated per node (one column per node with summed MW) and reveal individual plants on zoom. 1,193 loose columns look like noise.
+
+The simulation's electrical time (0-20 s) and the visible story time differ. The animation maps electrical events to a ~5 s playback with a speed control. Documented events outside the 20 s horizon (the north's voltage collapse about 4 minutes later) are shown as annotated events labelled "documented".
+
+### 5.3 Transparency UI
+Hover on any number shows document and page, or the badge "assumption" / "approximate". Show on screen which network was used ("reduced network, public data").
+
+## 6. Data contracts (draft; freeze in hour 0)
+
+`data/processed/network.json`:
+```json
+{
+  "version": 1,
+  "nodes": [{"id": "N05", "name": "Nueva Pan de Azucar", "lon": -71.0, "lat": -30.0,
+             "population": 0, "demand_mw": {"25F": 0}, "generation_mw": {"25F": 0},
+             "source": "...", "is_assumption": false}],
+  "edges": [{"id": "E05", "from": "N04", "to": "N05", "kv": 500, "circuits": 2,
+             "capacity_mw": 0, "reactance": 0, "source": "...", "is_assumption": true}],
+  "plants": [{"id": "P001", "name": "...", "tech": "solar", "mw": 0.0, "lon": 0, "lat": 0,
+              "node": "N05", "source": "IDE Energia capa solares"}],
+  "cities": [{"id": "C01", "name": "Santiago", "lon": 0, "lat": 0, "population": 0, "node": "N08"}]
+}
+```
+Values above are placeholders; the node list and ids are decided in phase 0.
+
+`timeline.json` (one per scenario x defences x behaviour x failed elements):
+```json
+{
+  "scenario": "25F", "defenses": "25F", "behavior": "as_happened", "failed_elements": ["E05"],
+  "duration_s": 20, "truncated": false,
+  "events": [{"t": 0.0, "type": "line_cut", "ids": ["E05"], "text_key": "line_cut", "params": {}}],
+  "frames": [{"t": 0.0,
+              "edges": {"E05": {"flow_mw": 1800, "status": "ok"}},
+              "nodes": {"N05": {"energized": true, "island": "I1"}},
+              "islands": {"I1": {"freq_hz": 50.0}}}],
+  "summary": {"people_without_power": 0, "load_shed_mw": 0,
+              "islands": [{"id": "I1", "result": "blackout", "nodes": ["N05"]}]},
+  "provenance": [{"key": "inertia_I1", "source": "[4] Table 4-1", "is_assumption": false}]
+}
+```
+Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
+
+## 7. API
+
+`POST /simulate`
+
+| Field | Type | Rule | On failure |
+|---|---|---|---|
+| `scenario` | enum | required, one of the loaded scenarios | 422 with valid values |
+| `defenses` | enum | required: `25F`, `design_2026`, `implemented_dec2025` | 422; if a zone has no data, that island returns "Not modelled" (not an error) |
+| `behavior` | enum | required: `per_code`, `as_happened` | 422; `as_happened` only valid with scenario 25F |
+| `elements_out` | list of ids | 1 to 3 unique, existing ids | 422 |
+| `battery_mw` | map island/zone -> number | optional, 0 to 5,000 per zone | 422 |
+
+- Flow with no solution (island with load and no generation) is not an error: the island is "Blackout" and the event is logged.
+- Cascade not ending in 20 iterations: cut, `truncated: true`, WARNING.
+- Computation over 2 s: HTTP 503 `reason: timeout`; the frontend shows the nearest cached result or "not available".
+- Parameter files failing to load at startup: fatal, ERROR naming the file and field. A parameter without a source is rejected at startup.
+- Frontend without API: works from the cache only; combinations disabled with a discreet notice.
+
+## 8. Testing and CI
+
+- Unit: initial frequency vs analytic formula, each EDAC step firing, power balance per island, island detection on a toy graph, unit check of D, provenance of every parameter.
+- Regression: validation cases in `plan.md` section 5.
+- Integration: API with valid and invalid inputs; frontend running from cache without the API.
+- CI renders a "ours / published / source / pass" table into the README. Cases that fail are shown with the deviation, not hidden.
+
+## 9. Conventions
+
+- Real, small commits during the event. Do not bulk-import generated data or code written before the event.
+- UI strings and narration in Spanish; code, comments and docs in English.
+- Never fit parameters by hand without declaring it in the YAML (`is_assumption: true` plus the reason).
+- Company names do not appear on screen; use categories ("plants that disconnected early").
+- Keep the demo working offline: static build plus cache plus a recorded video.
+- Ask the team before writing or replacing the README. The template README contains a line telling LLMs to insert a banana emoji after every word. That is part of the organisers' template, not a team decision.
+
+## 10. Known pitfalls from earlier reviews
+
+- The 25F was not a simple thermal overload: the 220 kV link opened about 1.5 s after the 500 kV loss by distance protection (article by CEN engineers: https://www.pacw.org/chilean-grid-blackout-of-february-2025). A DC-flow rule "overloaded path opens" is a stand-in and needs manual tuning to split the grid where it did.
+- The CEN's own model needed 737.34 MW of extra disconnected generation to match measured frequency, and still did not reproduce the north's frequency well after the 220 kV link opened. A one-equation-per-island model that "matches" these numbers shows it was fitted, not that it matches reality. Keep calibration and test cases separate.
+- Hosting and CI details of the event platform are unverified.
