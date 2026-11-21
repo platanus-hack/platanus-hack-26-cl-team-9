@@ -46,3 +46,12 @@ html, body, #root { margin: 0; height: 100%; background: #060a14; color: #cbd5e1
 details { margin-top: 12px; font-size: 12px; } details ul { padding-left: 16px; }
 figure { margin: 8px 0 0; }
 figcaption { font-size: 11px; margin-top: 4px; }
+.legend { margin-top: 14px; border-top: 1px solid #1e293b; padding-top: 4px; }
+.legend h3 { margin-top: 12px; }
+.legend .sub { margin: 8px 0 2px; font-size: 11px; color: #94a3b8; }
+.legend-row { align-items: flex-start; }
+.legend-swatch { width: 30px; flex: none; display: flex; justify-content: center; align-items: center; min-height: 14px; }
+.legend .bar { display: block; width: 26px; border-radius: 2px; }
+.legend .dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 4px #fff; }
+.legend .dot.big { width: 10px; height: 10px; box-shadow: none; }
+.legend .col { display: block; width: 10px; height: 16px; }

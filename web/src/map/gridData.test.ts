@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { aggregatePlantsByNode, type Substation } from "./gridData";
 import { describeTopology, formatNumber } from "./nodeDetail";
 import { formatPeople, narrate } from "../cascade/text";
+import { LOADING_BANDS, loadingColor } from "../cascade/layers";
 import type { Network } from "../cascade/types";
 
 const SUBS: Substation[] = [
@@ -71,5 +72,21 @@ describe("cascade narration", () => {
   it("writes people in millions", () => {
     expect(formatPeople(15200000)).toContain("millones");
     expect(formatPeople(158000)).not.toContain("millones");
+  });
+});
+
+describe("cascade colours", () => {
+  it("colours a line by its loading, in the same bands the legend shows", () => {
+    const edge = (loading: number) => ({ flow_mw: 100, status: "ok" as const, loading });
+    expect(loadingColor(edge(0.5))).toEqual(LOADING_BANDS[0].color);
+    expect(loadingColor(edge(0.6))).toEqual(LOADING_BANDS[0].color);
+    expect(loadingColor(edge(0.75))).toEqual(LOADING_BANDS[1].color);
+    expect(loadingColor(edge(0.95))).toEqual(LOADING_BANDS[2].color);
+    expect(loadingColor(edge(1.3))).toEqual(LOADING_BANDS[3].color);
+  });
+
+  it("draws open lines and missing flows differently from loaded ones", () => {
+    expect(loadingColor({ flow_mw: 0, status: "open", loading: 0 })).not.toEqual(LOADING_BANDS[0].color);
+    expect(loadingColor(undefined)[3]).toBeLessThan(200);
   });
 });

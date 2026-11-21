@@ -1,5 +1,7 @@
 # Cascade engine
 
+Viewer guide and actor reference: [`mapa3.md`](mapa3.md).
+
 Status: implemented in `backend/src/cascadasen/domain/cascade/`, 11 unit tests in `backend/tests/unit/test_cascade.py`. It follows `stack.md` section 4 with one change: the network is the 188-bus reduction of PyPSA-CL, not 10-14 aggregated nodes.
 
 ## What it does

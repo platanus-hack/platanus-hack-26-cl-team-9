@@ -1,21 +1,37 @@
 import type { Layer } from "@deck.gl/core";
 import { TripsLayer } from "@deck.gl/geo-layers";
 import { ColumnLayer, PathLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { RECTANGLE_BASE } from "../map/shapes";
 import type { BusState, EdgeState, Frame, NetLine, NetNode, Network } from "./types";
 
 type Rgba = [number, number, number, number];
 
+// One source for the colours: the map and the legend read these.
+export const LOADING_BANDS: { upTo: number; color: Rgba; label: string }[] = [
+  { upTo: 0.6, color: [52, 211, 153, 220], label: "Hasta 60% de su capacidad" },
+  { upTo: 0.9, color: [250, 204, 21, 230], label: "60% a 90%" },
+  { upTo: 1.0, color: [249, 115, 22, 240], label: "90% a 100%" },
+  { upTo: Infinity, color: [239, 68, 68, 255], label: "Sobre 100% (sobrecarga)" },
+];
+export const OPEN_COLOR: Rgba = [239, 68, 68, 200];
+export const NO_FLOW_COLOR: Rgba = [90, 100, 120, 120];
+export const SELECTED_COLOR: Rgba = [255, 255, 255, 255];
+export const WIDTH_BY_KV: { minKv: number; width: number; label: string }[] = [
+  { minKv: 500, width: 4, label: "500 kV" },
+  { minKv: 220, width: 2.5, label: "220 a 499 kV" },
+  { minKv: 0, width: 1.5, label: "Menos de 220 kV" },
+];
+export const COLUMN_COLOR: Rgba = [96, 165, 250, 230];
+export const MW_TO_METERS = 90;      // column height per MW of demand, exaggerated to read at country scale
+export const MIN_FLOW_MW = 60;       // flows below this draw no moving dots
+
 export function loadingColor(state: EdgeState | undefined): Rgba {
-  if (!state) return [90, 100, 120, 120];
-  if (state.status === "open") return [239, 68, 68, 200];
-  const r = state.loading;
-  if (r > 1.0) return [239, 68, 68, 255];
-  if (r > 0.9) return [249, 115, 22, 240];
-  if (r > 0.6) return [250, 204, 21, 230];
-  return [52, 211, 153, 220];
+  if (!state) return NO_FLOW_COLOR;
+  if (state.status === "open") return OPEN_COLOR;
+  return LOADING_BANDS.find((b) => state.loading <= b.upTo)!.color;
 }
 
-const lineWidth = (l: NetLine) => (l.kv >= 500 ? 4 : l.kv >= 220 ? 2.5 : 1.5);
+const lineWidth = (l: NetLine) => WIDTH_BY_KV.find((w) => l.kv >= w.minKv)!.width;
 
 export interface View { network: Network; buses: Record<string, BusState>; frame: Frame; time: number; selected: string | null }
 
@@ -27,7 +43,7 @@ export function buildCascadeLayers(v: View): Layer[] {
   return [
     new PathLayer<NetLine>({
       id: "lines", data: v.network.lines, pickable: true, widthUnits: "pixels", capRounded: true,
-      getPath: (l) => [pos(l.a), pos(l.b)], getColor: (l) => l.id === v.selected ? [255, 255, 255, 255] : loadingColor(v.frame.edges[l.id]),
+      getPath: (l) => [pos(l.a), pos(l.b)], getColor: (l) => l.id === v.selected ? SELECTED_COLOR : loadingColor(v.frame.edges[l.id]),
       getWidth: (l) => (v.frame.edges[l.id]?.status === "open" ? 1.5 : lineWidth(l)),
       updateTriggers: { getColor: [v.frame, v.selected], getWidth: [v.frame] },
     }),
@@ -37,9 +53,9 @@ export function buildCascadeLayers(v: View): Layer[] {
     }),
     new ColumnLayer<NetNode>({
       id: "load", data: v.network.nodes.filter((n) => (v.buses[n.id]?.load_mw ?? 0) > 20), pickable: true, extruded: true,
-      diskResolution: 10, radiusUnits: "pixels", radius: 4, getPosition: (n) => [n.lon, n.lat],
-      getElevation: (n) => (dark.has(n.id) ? 0 : v.buses[n.id].load_mw) * 90,
-      getFillColor: (n) => (dark.has(n.id) ? [0, 0, 0, 0] : [96, 165, 250, 230]),
+      vertices: RECTANGLE_BASE, diskResolution: 4, radiusUnits: "pixels", radius: 4, getPosition: (n) => [n.lon, n.lat],
+      getElevation: (n) => (dark.has(n.id) ? 0 : v.buses[n.id].load_mw) * MW_TO_METERS,
+      getFillColor: (n) => (dark.has(n.id) ? [0, 0, 0, 0] : COLUMN_COLOR),
       updateTriggers: { getElevation: [v.frame], getFillColor: [v.frame] },
     }),
     new ScatterplotLayer<NetNode>({
@@ -51,7 +67,6 @@ export function buildCascadeLayers(v: View): Layer[] {
 }
 
 const DOT_COUNT = 3;
-const MIN_FLOW_MW = 60;
 
 function flowTrips(v: View, pos: (id: string) => [number, number]) {
   const trips: { path: [number, number][]; timestamps: number[]; color: Rgba }[] = [];

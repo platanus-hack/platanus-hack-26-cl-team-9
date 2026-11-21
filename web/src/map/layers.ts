@@ -1,5 +1,6 @@
 import { ColumnLayer, GeoJsonLayer, PathLayer } from "@deck.gl/layers";
 import type { GenerationNode, GridData, Line, Substation } from "./gridData";
+import { RECTANGLE_BASE, SQUARE_BASE } from "./shapes";
 
 export type Rgb = [number, number, number];
 
@@ -72,7 +73,7 @@ function _substationsLayer(substations: Substation[]) {
     data: substations,
     pickable: true,
     extruded: true,
-    diskResolution: 6,
+    vertices: SQUARE_BASE, diskResolution: 4,
     radiusUnits: "pixels",
     radius: 2.5,
     getPosition: (d) => d.position,
@@ -87,7 +88,7 @@ function _generationLayer(nodes: GenerationNode[]) {
     data: nodes,
     pickable: true,
     extruded: true,
-    diskResolution: 12,
+    vertices: RECTANGLE_BASE, diskResolution: 4,
     radiusUnits: "pixels",
     radius: 4,
     getPosition: (d) => d.position,

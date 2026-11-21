@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createBaseMap, type BaseMap } from "../map/baseMap";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers } from "./layers";
+import { CascadeLegend } from "./Legend";
 import { formatPeople, lineName, narrate } from "./text";
 import type { BusState, Index, Network, Timeline } from "./types";
 
@@ -103,9 +104,10 @@ export function CascadeApp() {
             {index?.points.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </label>
-        <p className="muted">Haz clic en una línea para cortarla. Líneas: verde bajo 60% de su capacidad, amarillo hasta 90%, naranja hasta 100%, rojo sobre 100% o abierta. Columnas azules: demanda.</p>
+        <p className="muted">Haz clic en una línea para cortarla y mira cómo se propaga la falla. Usa Reproducir o la barra para recorrer las etapas.</p>
         {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
         {timeline && network && <Results timeline={timeline} network={network} stage={stage} setStage={(s) => { setPlaying(false); setStage(s); }} playing={playing} setPlaying={setPlaying} events={visibleEvents} cut={cut} />}
+        {network && <CascadeLegend network={network} buses={buses} />}
         <details><summary>Supuestos del modelo</summary>
           <ul>{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>
         </details>

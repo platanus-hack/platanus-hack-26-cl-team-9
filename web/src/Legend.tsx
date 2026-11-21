@@ -20,10 +20,10 @@ export function Legend() {
       {_kvRows()}
 
       <h3>Subestaciones</h3>
-      <p>Prismas pequeños de seis lados. Mismo color que las líneas, según su tensión. La altura también crece con la tensión.</p>
+      <p>Prismas rectangulares pequeños y cuadrados. Mismo color que las líneas, según su tensión. La altura también crece con la tensión.</p>
 
       <h3>Generación</h3>
-      <p>Columnas redondas más anchas. Una por subestación, con la suma de los MW de las centrales conectadas a ella. La altura es proporcional a los MW. El color es la tecnología con más MW en ese nodo.</p>
+      <p>Prismas rectangulares más anchos. Una por subestación, con la suma de los MW de las centrales conectadas a ella. La altura es proporcional a los MW. El color es la tecnología con más MW en ese nodo.</p>
       {Object.entries(TECH_COLORS).map(([tech, rgb]) => _row(TECH_LABELS[tech] ?? tech, rgb))}
 
       <h3>Escala</h3>
