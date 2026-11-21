@@ -2,7 +2,8 @@ import type { Layer, PickingInfo } from "@deck.gl/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
 import { buildRegionalLayers, loadRegionalGrid, regionalTooltip, type RegionalGrid } from "../map/regional";
-import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
+import { loadBuses, loadDependency, loadIndex, loadNetwork, loadTimeline } from "./api";
+import { HEAT_OPTIONS, heatLayers, loadPopulation, type HeatKind, type PopulationPoint } from "./heat";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { HelpPanel, SourcesPanel } from "./Legend";
 import { MapLegend } from "./MapLegend";
@@ -12,7 +13,7 @@ import { SimulationPanel } from "./SimulationPanel";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
-import type { BusState, Index, Network, Timeline } from "./types";
+import type { BusState, DependencyNode, Index, Network, Timeline } from "./types";
 import { Chevron, Icon, TipLayer, Wordmark } from "./ui";
 import "./cascade.css";
 
@@ -48,6 +49,9 @@ export function CascadeApp() {
   const [mode, setMode] = useState<ViewMode>(params.get("vista") === "3d" ? "3d" : "2d");
   const [toggles, setToggles] = useState<Toggles>({ flow: true, demand: false });
   const [layersOpen, setLayersOpen] = useState(false);
+  const [heat, setHeat] = useState<HeatKind>("none");
+  const [population, setPopulation] = useState<PopulationPoint[] | null>(null);
+  const [dependency, setDependency] = useState<Record<string, DependencyNode> | null>(null);
   const [hasLabels, setHasLabels] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,10 +78,12 @@ export function CascadeApp() {
   const [regional, setRegional] = useState<RegionalGrid | null>(null);
   const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional) : []), [regional]);
 
-  const live = useRef({ network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers });
-  live.current = { network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers };
+  const heatLayerList = useMemo<Layer[]>(() => (network ? heatLayers(heat, { population, dependency, network }) : []), [heat, population, dependency, network]);
+  const live = useRef({ network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList });
+  live.current = { network, buses, frame, colorMode, node, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList };
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
+  useEffect(() => { if (heat === "population" && !population) loadPopulation().then(setPopulation).catch((e) => console.error("No se pudo cargar la población", e)); }, [heat, population]);
   useEffect(() => { loadRegionalGrid().then(setRegional).catch((e) => console.error("No se pudo cargar la red regional", e)); }, []);
   useEffect(() => { _loadPoint(); }, [pointId, index]);
   useEffect(() => { _loadTimeline(); }, [pointId, cut, network]);
@@ -90,6 +96,7 @@ export function CascadeApp() {
     if (!index?.points.some((p) => p.id === pointId)) return;
     const info = index.points.find((p) => p.id === pointId)!;
     Promise.all([loadNetwork(info.year), loadBuses(pointId)]).then(([n, b]) => { setNetwork(n); setBuses(b); setError(null); }).catch((e) => setError(String(e.message)));
+    loadDependency(pointId).then(setDependency).catch(() => setDependency(null)); // optional: older caches do not have it
   }
 
   function _loadTimeline() {
@@ -160,7 +167,7 @@ export function CascadeApp() {
       if (map && v.network && v.frame) {
         const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
         const zoom = map.camera().zoom;
-        map.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame: v.frame, time, colorMode: v.colorMode, selectedNode: v.node, mode: v.mode, zoom, toggles: v.toggles, regional: v.regionalLayers }));
+        map.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame: v.frame, time, colorMode: v.colorMode, selectedNode: v.node, mode: v.mode, zoom, toggles: v.toggles, regional: v.regionalLayers, heat: v.heatLayerList }));
         _placeOverlays(map);
       }
       raf = requestAnimationFrame(tick);
@@ -325,6 +332,11 @@ export function CascadeApp() {
             <h3>Capas</h3>
             <label className="check"><input type="checkbox" checked={toggles.flow} onChange={(e) => setToggles({ ...toggles, flow: e.target.checked })} />Flujo de potencia</label>
             <label className="check"><input type="checkbox" checked={toggles.demand} onChange={(e) => setToggles({ ...toggles, demand: e.target.checked })} />Demanda por subestación</label>
+            <h3>Mapa de calor</h3>
+            {HEAT_OPTIONS.map((o) => (
+              <label className="check" key={o.kind}><input type="radio" name="heat" checked={heat === o.kind} onChange={() => setHeat(o.kind)} />{o.label}</label>
+            ))}
+            {heat !== "none" && <p className="muted heat-hint">{HEAT_OPTIONS.find((o) => o.kind === heat)?.hint}{heat !== "population" && !dependency ? " (Falta dependency.json en la caché de este caso.)" : ""}</p>}
           </div>
         )}
       </div>

@@ -4,6 +4,12 @@ export interface NetNode { id: string; name: string; lon: number; lat: number; k
 export interface NetLine { id: string; a: string; b: string; kv: number; capacity_mw: number; x_pu: number; map_edges: string[]; branches: string[] }
 export interface Network { nodes: NetNode[]; lines: NetLine[] }
 export interface BusState { gen_mw: number; load_mw: number; people: number }
+/** `<point>/dependency.json`, per substation: who it feeds and what dies without backup if it falls (`criticality.py`, `tracing.py`). */
+export interface DependencyNode {
+  degree: number; articulation: boolean; own_load_mw: number; isolated_mw: number; collateral_mw: number; collateral_share: number;
+  collateral_people: number; extra_loading: number; lines_stressed: number; criticality: number; band: "alta" | "media" | "baja" | "ninguna";
+  gen_mw: number; people_fed: number; share_of_people: number;
+}
 export interface EdgeState { flow_mw: number; status: "ok" | "overload" | "open"; loading: number }
 export interface Frame { t: number; edges: Record<string, EdgeState>; dark: string[]; islands: { buses: number; gen_mw: number; load_mw: number }[] }
 export interface Event { t: number; type: string; ids: string[]; text_key: string; params: Record<string, string | number | null> }

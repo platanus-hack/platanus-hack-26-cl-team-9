@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat: heat maps and the dependency and criticality of substations (#54)
+
+- **Changed:** Three heat maps in mapa 3 (layers button, "Mapa de calor"): people served, people that depend on each generator, and criticality of each substation. Data: `data/processed/geo/population.json` (new, 495 substations), and `web/public/cache/<point>/dependency.json` (new, 4 files of about 55 KB). Backend: `cascade/tracing.py` (proportional sharing of the base flow: who feeds whom) and `cascade/criticality.py` (what dies without backup if a substation falls: it is switched off and the cascade answers). New command option `cascadasen-cache --only dependency`, which writes only `dependency.json` and leaves the cuts and the index as they are. Frontend: `web/src/cascade/heat.ts` with deck.gl `HeatmapLayer` (new dependency `@deck.gl/aggregation-layers`).
+- **Why:** The team asked for heat maps on the people each generator serves, and for a measure of a node's importance that is not the number of its lines: degree has a rank correlation of only about 0.4 with the load lost elsewhere.
+- **Agents:** Rule of the score: `min(1, max(collateral_share / 0.25, 0.5 * min(1, extra_loading)))`. The 0.25, 0.5, the 10-point threshold and the band limits are assumptions without a source (constants in `criticality.py`). Proportional sharing is a convention, not a measurement. `people` has the known defect, so people figures are lower bounds. Run `npm install` after pulling (new dependency). The heat maps that need `dependency.json` stay empty and say so on an older cache. Not done: people left without power by comuna in a cut, and combining several failed substations. Details in `docs/dependency.md`.
+- **Files:** `backend/src/cascadasen/domain/cascade/tracing.py`, `criticality.py`, `application/cache_builder.py`, `data/scripts/build_population_heat.py`, `web/src/cascade/heat.ts`, `docs/dependency.md`.
+
 ## 2026-11-21 · docs(pitch): add pitch ideas and project benefits
 - **Changed:** New `docs/pitch_idea.md`: pitch notes (25F losses of US$ 984 millones with source, "wow" moment ideas) and a "Beneficios de este proyecto" section with a short list of 17 benefits followed by a paragraph per benefit, including cost vs resilience trade-offs, best combination for a budget and minimum investment that avoids a national blackout.
 - **Why:** The team needs material for the pitch.

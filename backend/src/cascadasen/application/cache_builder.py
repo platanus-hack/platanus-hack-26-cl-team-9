@@ -7,6 +7,7 @@ Layout under the output folder:
   <point>/buses.json              generation, load and people per bus before the cut
   <point>/baseline.json           the secure base case (no cut)
   <point>/<line id>.json          the cascade for cutting that line
+  <point>/dependency.json         per substation: people it feeds (if it generates) and how critical it is (`--only dependency`)
 """
 
 from __future__ import annotations
@@ -17,12 +18,16 @@ from pathlib import Path
 
 from cascadasen.domain.cascade.engine import ASSUMPTIONS, run_cascade_workflow
 from cascadasen.domain.cascade.network import ReducedNetwork
+from cascadasen.domain.cascade.criticality import criticality_workflow
 from cascadasen.domain.cascade.scenario import load_network_and_point
+from cascadasen.domain.cascade.tracing import dependency_workflow
 
 
-def build_cache_workflow(processed: Path, out: Path, point_ids: list[str] | None = None) -> dict:
+def build_cache_workflow(processed: Path, out: Path, point_ids: list[str] | None = None, only: str = "all") -> dict:
     points = _points(processed, point_ids)
     out.mkdir(parents=True, exist_ok=True)
+    if only == "dependency":  # new files only: the cuts and the index are left as they are
+        return {p["id"]: _build_dependency(processed, out, p) for p in points}
     counts = {p["id"]: _build_point(processed, out, p) for p in points}
     _write(out / "index.json", {"points": points, "assumptions": ASSUMPTIONS})
     return counts
@@ -57,6 +62,20 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
     for line in net.lines:
         _write(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
     return len(net.lines)
+
+
+def _build_dependency(processed: Path, out: Path, point: dict) -> int:
+    """Who feeds whom (proportional sharing of the base flow) and how much dies without backup if a substation falls."""
+    net, op = load_network_and_point(processed, point["id"])
+    fed = {row["bus"]: row for row in dependency_workflow(net, op.gen, op.load, op.people)}
+    nodes = {}
+    for bus, row in criticality_workflow(net, op).items():
+        key = f"B{bus:03d}"
+        nodes[key] = {**row, "gen_mw": round(float(op.gen[bus]), 1), "people_fed": fed.get(key, {}).get("people_fed", 0), "share_of_people": fed.get(key, {}).get("share_of_people", 0.0)}
+    folder = out / point["id"]
+    folder.mkdir(exist_ok=True)
+    _write(folder / "dependency.json", nodes)
+    return len(nodes)
 
 
 def _network_json(net: ReducedNetwork) -> dict:
@@ -100,8 +119,9 @@ def main() -> int:
     parser.add_argument("--processed", type=Path, default=root / "data" / "processed")
     parser.add_argument("--out", type=Path, default=root / "web" / "public" / "cache")
     parser.add_argument("--point", action="append", help="id de un punto de operación (repetible)")
+    parser.add_argument("--only", choices=["all", "dependency"], default="all", help="dependency: solo escribe dependency.json por punto")
     args = parser.parse_args()
-    counts = build_cache_workflow(args.processed, args.out, args.point)
+    counts = build_cache_workflow(args.processed, args.out, args.point, args.only)
     print(json.dumps(counts), "->", args.out)
     return 0
 

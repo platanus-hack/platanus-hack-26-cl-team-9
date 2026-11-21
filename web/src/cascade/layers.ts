@@ -44,7 +44,7 @@ export function loadColor(state: EdgeState | undefined): string {
 export interface Toggles { flow: boolean; demand: boolean }
 export interface View {
   network: Network; buses: Record<string, BusState>; frame: Frame; time: number; colorMode: ColorMode;
-  selectedNode: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[];
+  selectedNode: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[]; heat?: Layer[];
 }
 
 /** Flat network on the basemap; optional moving dots for the flow and demand as columns (3D) or discs (2D). */
@@ -73,6 +73,7 @@ export function buildCascadeLayers(v: View): Layer[] {
   const color = (l: NetLine) => hex(v.colorMode === "voltage" ? tierOf(l.kv).color : loadColor(v.frame.edges[l.id]));
   const trigger = [v.frame, v.colorMode];
   return [
+    ...(v.heat ?? []),
     ...(v.regional ?? []),
     new PathLayer<NetLine>({
       id: "lines-dead-outline", data: dead, widthUnits: "pixels", getPath: (l) => [pos(l.a), pos(l.b)],
