@@ -4,6 +4,7 @@ import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers } from "./layers";
 import { CascadeLegend } from "./Legend";
+import { NetworkPanel } from "./NetworkPanel";
 import { formatPeople, lineName, narrate } from "./text";
 import type { BusState, Index, Network, Timeline } from "./types";
 
@@ -24,6 +25,8 @@ export function CascadeApp() {
   const [cut, setCut] = useState<string | null>(params.get("cut"));
   const [stage, setStage] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [tab, setTab] = useState<"red" | "sim">("red");
+  const [node, setNode] = useState<string | null>(null);
   const [mode, setMode] = useState<ViewMode>(params.get("vista") === "2d" ? "2d" : "3d");
   const [error, setError] = useState<string | null>(null);
   const view = useRef({ network, buses, timeline, stage, cut, mode });
@@ -33,6 +36,7 @@ export function CascadeApp() {
   useEffect(() => { _loadPoint(); }, [pointId, index]);
   useEffect(() => { _loadTimeline(); }, [pointId, cut, network]);
   useEffect(() => _mountMap(), []);
+  useEffect(() => { if (cut) setTab("sim"); }, [cut]);
   useEffect(() => { baseMap.current?.setMode(mode); }, [mode]);
   useEffect(() => _animate(), []);
   useEffect(() => _autoplay(), [playing, timeline]);
@@ -50,7 +54,12 @@ export function CascadeApp() {
 
   function _mountMap() {
     const map = createBaseMap(mapRef.current!, {
-      onClick: (info: PickingInfo) => { if (info.layer?.id === "lines" && info.object) setCut((info.object as { id: string }).id); },
+      onClick: (info: PickingInfo) => {
+        const id = (info.object as { id: string } | undefined)?.id;
+        if (!id) return;
+        if (info.layer?.id === "lines") setCut(id);
+        else if (info.layer?.id === "nodes" || info.layer?.id === "load" || info.layer?.id === "load-2d") { setNode(id); setTab("red"); }
+      },
       getTooltip: (info: PickingInfo) => _tooltip(info),
     });
     baseMap.current = map;
@@ -113,9 +122,15 @@ export function CascadeApp() {
             {index?.points.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </label>
-        <p className="muted">Haz clic en una línea para cortarla y mira cómo se propaga la falla. Usa Reproducir o la barra para recorrer las etapas.</p>
-        {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
-        {timeline && network && <Results timeline={timeline} network={network} stage={stage} setStage={(s) => { setPlaying(false); setStage(s); }} playing={playing} setPlaying={setPlaying} events={visibleEvents} cut={cut} />}
+        <div className="tabs" role="tablist">
+          {([["red", "Red"], ["sim", "Simulación"]] as const).map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{label}</button>)}
+        </div>
+        {tab === "red" && network && <NetworkPanel network={network} buses={buses} frame={timeline?.frames[Math.min(stage, (timeline?.frames.length ?? 1) - 1)]} node={node} line={cut} clearNode={() => setNode(null)} cutLine={(id) => { setNode(null); setCut(id); }} />}
+        {tab === "sim" && <>
+          <p className="muted">Haz clic en una línea para cortarla y mira cómo se propaga la falla. Haz clic en una subestación para ver su detalle en la pestaña Red. Usa Reproducir o la barra para recorrer las etapas.</p>
+          {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
+          {timeline && network && <Results timeline={timeline} network={network} stage={stage} setStage={(s) => { setPlaying(false); setStage(s); }} playing={playing} setPlaying={setPlaying} events={visibleEvents} cut={cut} />}
+        </>}
         {network && <CascadeLegend network={network} buses={buses} mode={mode} />}
         <details><summary>Supuestos del modelo</summary>
           <ul>{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>

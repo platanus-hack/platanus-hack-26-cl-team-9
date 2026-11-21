@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): Red panel with network summary and node detail (#26)
+
+- **Changed:** The right panel of mapa 3 has two tabs, Red and Simulación (the previous results block). Red shows the Paper design: km of lines (34.578), substations (1.220), installed MW (38.203) and km by voltage band, computed in the browser from `data/processed/geo/{lines,substations,plants}.geojson` (`web/src/cascade/networkSummary.ts`; the numbers match the mockup exactly). Clicking a substation (3D bar, 2D disc or node dot) opens its detail in Red: kV, zone, generation, demand, people, and its connected lines with their loading at the current stage; clicking one of those lines cuts it. A cut line also gets a detail card (capacity, flow, loading). Cutting a line switches to Simulación.
+- **Why:** The design has a Red tab; the team asked to visualise each node or line with the data we have.
+- **Agents:** Clicking a line on the map still cuts it (not changed). Node data is the reduced network (188 buses); the summary is the full IDE data (1.220 substations), so the two counts differ on purpose. `people` has the known defect (substations with load and 0 people, for example S/E Mauro). Not built: tabs Qué lo habría evitado and Validación, the nav rail, inertia or sync MW per node (not in the cache), per-plant detail.
+- **Files:** `web/src/cascade/NetworkPanel.tsx`, `networkSummary.ts` (+ test), `CascadeApp.tsx`, `web/src/styles.css`.
+
 ## 2026-11-21 · feat(web): seven more icons for the 2D view (#24)
 
 - **Changed:** Added `plant-hydro`, `plant-gas`, `plant-geothermal`, `plant-biomass`, `grid-tower`, `grid-breaker` and `grid-transformer` (512 px PNG) to the icon folder, and the matching kinds to `IconKind` in `web/src/cascade/icons.ts`. Now 12 icons. All icons live in `web/src/assets/icons/` (moved from `web/public/icons/`, where #23 put the first five) and are imported with `?url` in `icons.ts`, so Vite bundles and hashes them.
