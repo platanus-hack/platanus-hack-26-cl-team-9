@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(theater): offline theatre cache for mapa 3
+
+- **Changed:** `cascadasen-sim-fixtures` now writes `web/public/cache/theater/` (git-ignored, next to the mapa 3 cut cache): `index.json`, `catalog.json`, `narrative_es.json`, `network-<point>.json`, `<point>/flagship_observability-<A|B|C>-s<seed>.json` (recipe, snapshots, report, after-action) and `campaign-<point>.json`, for `nov2026-1300` and `feb2025-1500` by default. Campaigns accept `point` (`CampaignSpec.point`, `POST /sim/campaigns`).
+- **Why:** The live API gives a new random run each time; the demo needs a fallback without a server.
+- **Agents:** Options `--point` (repeatable), `--seed` (default 7), `--no-campaign`, `--out`; `build_theater_cache(..., template=)` for other templates. About 0.9 MB per run. The old 13-area fixtures (`data/processed/sim/`, 25F timelines of `/simulate`) are no longer written.
+- **Files:** `backend/src/cascadasen/sim_fixtures.py`, `application/run_campaign.py`, `api/simulation_{routes,schemas}.py`, `backend/tests/integration/test_theater_cache.py`.
+
 ## 2026-11-21 · refactor(theater): run the strategic theatre on the mapa 3 network
 
 - **Changed:**

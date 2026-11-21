@@ -168,6 +168,7 @@ class CampaignIn(BaseModel):
     horizon: int | None = Field(None, ge=1, le=72)
     objective: str | None = None
     budget: float | None = Field(None, ge=0, le=50)
+    point: str | None = Field(None, description="Punto de operación del mapa 3 para todas las corridas")
     random_seeds: int | None = Field(
         None,
         ge=1,

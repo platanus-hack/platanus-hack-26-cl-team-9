@@ -212,6 +212,7 @@ def create_campaign(sim: Sim, body: CampaignIn) -> dict[str, Any]:
         objective=body.objective,
         budget=body.budget,
         random_seeds=body.random_seeds,
+        point=body.point,
     )
     return run_call(sim.campaigns.run, spec)
 

@@ -53,6 +53,7 @@ class CampaignSpec:
     objective: str | None = None
     budget: float | None = None
     random_seeds: int | None = None  # draw this many fresh seeds instead of `seeds`
+    point: str | None = None  # mapa 3 operating point for every run (default: each template's)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -66,6 +67,7 @@ class CampaignSpec:
             "horizon": self.horizon,
             "objective": self.objective,
             "budget": self.budget,
+            "point": self.point,
         }
 
 
@@ -216,6 +218,7 @@ class CampaignRunner:
                                         horizon=spec.horizon,
                                         adversary=self._adversary(template, adv, spec),
                                         capabilities=caps,
+                                        operating_point=spec.point,
                                     ),
                                     self.physics,
                                     light=True,
