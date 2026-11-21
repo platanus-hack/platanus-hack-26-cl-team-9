@@ -18,6 +18,8 @@ Last updated: 2026-11-21. Status labels: **verified** (opened or downloaded and 
 | Population per commune | "People without power" | INE Censo 2024 layers 11 and 2 | **In pipeline** (18,480,372 people; urban census zones for allocation) |
 | Plant -> node assignment | Network build | PyPSA-CL generator bus, then substation name, then nearest | **Done** (1,073 by declared model bus) |
 | Comuna -> substation (service areas) | People affected per node | Own rule on INE census zones | **Done**, flagged as assumption |
+| Public cyber incidents on the SEN | Cyber scenarios, case V10 (`cyber.md`) | pv magazine articles citing CEN daily reports [34][35] | **Read** (secondary source) |
+| Critical loads (hospitals, water, Metro) with location | Question Q4 in `cyber.md` | None found | **Missing** |
 
 The pipeline that downloads, unifies and validates all of this lives in `backend/` (see `backend/README.md`). Section 0 summarises what it does. Sections 2-5 are the original research notes; where they conflict with section 0, section 0 is current.
 
@@ -155,6 +157,12 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 | 31 | CEN Infotecnica: substations, busbars, lines, sections, plants | https://api-infotecnica.coordinador.cl/v1/tramos/ (also `/subestaciones/`, `/barras/`, `/lineas/`, `/centrales/`) | Verified, in pipeline |
 | 32 | PyPSA-CL model inputs, Ministerio de Energia (public SharePoint folder; licence not stated) | https://minenergia-my.sharepoint.com/:f:/g/personal/mparedes_minenergia_cl/IgCWD1vzVNdFSZGLq9yAvae7AWiPl3JViAfaI602hsQZTQ0?e=SH5uDd | Verified: `Topology.xlsx` in pipeline; `Loads.xlsx` (demand by bus, 139 MB) not used yet |
 | 33 | Mapa de Vulnerabilidad Energetica (IDE Energia): comunas with households without electricity | https://ide-energia.minenergia.cl/server/rest/services/MAPA_VULNERABILIDAD/Mapa_de_Vulnerabilidad_Energetica/MapServer | Verified, not used |
+| 34 | pv magazine, "Chilean solar plant offline for two months following cyberattack" (29 Oct 2026; cites the CEN daily report of 27 Oct 2026) | https://www.pv-magazine.com/2026/10/29/chilean-solar-plant-offline-for-two-months-following-cyberattack/ | Read in this project (secondary source; the CEN reports themselves were not opened) |
+| 35 | pv magazine, "Chilean PV plant hit by cyberattack remains disconnected" (17 Nov 2026; cites the CEN daily report of 14 Nov 2026 and T13) | https://www.pv-magazine.com/2026/11/17/chilean-pv-plant-hit-by-cyberattack-remains-disconnected/ | Read in this project (secondary source) |
+| 36 | Ley 21.663, Framework Cybersecurity Law (BCN) | https://www.bcn.cl/leychile/navegar?idNorma=1202434 | Found; legal text not read. Notification times taken from [35] |
+| 37 | CNE, public consultation on the draft cybersecurity and information-security technical standard for the electricity sector (28 Aug 2026) | https://www.cne.cl/es/prensa/prensa-2026/08-agosto-2026/cne-inicia-consulta-publica-de-proyecto-de-norma-tecnica-de-ciberseguridad-y-seguridad-de-la-informacion-para-el-sector-electrico/print/ | Found via search; status of the final standard unknown |
+| 38 | Idaho National Laboratory, Consequence-driven Cyber-informed Engineering (CCE) | https://www.inl.gov/cce/ | Found via search; not read in full |
+| 39 | MITRE ATT&CK, 2016 Ukraine Electric Power Attack (campaign C0025) | https://attack.mitre.org/campaigns/C0025/ | Found via search. The 2015 and 2016 Ukraine figures in `cyber.md` come from secondary sources and are not verified |
 | - | Article by CEN engineers on the 25F protection sequence | https://www.pacw.org/chilean-grid-blackout-of-february-2025 | Read by the evaluator |
 | - | Andes (similar hackathon project, click-to-fail) | https://github.com/aleetreny/Encode | Verified |
 | - | COSMIC (MATLAB dynamic cascade simulator) | https://github.com/ecotillasanchez/cosmic | Verified |
