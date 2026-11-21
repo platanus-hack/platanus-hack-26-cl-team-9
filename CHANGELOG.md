@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(sessions): correct the production /api note in mapa3
+
+- **Changed:** `docs/mapa3.md` section 11 no longer says the deployed site has no backend behind `/api`. CloudFront and the ALB already route `/api/*` to the backend; until the sessions bucket and task role are applied, the deployed backend keeps sessions in memory (`CASCADASEN_SESSION_STORE` defaults to `memory`) and loses them on restart or deploy.
+- **Why:** Cross-FEAT integration check of feat/shared-sessions: the web doc (FEAT web) contradicted the infra routing in `docs/infrastructure.md` and `infrastructure/alb.tf` (FEAT infra).
+- **Agents:** The note "The deployed static site has no `/api` behind it yet" in the `feat(web): session mode for mapa 3` entry below is wrong; this entry supersedes it. Integration checks on this branch: backend pytest (only the known Bedrock test fails), web vitest + build, lint on all changed files and terraform fmt/validate all pass. `main` gained `92256c6` (agent OpenAPI spec) after this branch forked and the two conflict; the merge step must follow the plan's "Final rebase" steps.
+- **Files:** `docs/mapa3.md`.
+
 ## 2026-11-21 · feat(infra): sessions S3 bucket and ECS task role (validated, not applied)
 
 - **Changed:** New `infrastructure/s3.tf`: bucket `cascadasen-sessions-402909940511` with public access block, SSE `AES256`, `BucketOwnerEnforced` and lifecycle rules on `sessions/` and `runs/` (expire after `var.session_ttl_days`, default 1; abort multipart after 1 day). `iam.tf`: role `cascadasen-task` with inline policy `cascadasen-task-sessions` (Get/Put/Delete on `sessions/*` and `runs/*`, ListBucket on the bucket). `ecs.tf`: `task_role_arn` and backend-only env `CASCADASEN_SESSION_STORE=s3`, `CASCADASEN_SESSION_BUCKET`, `CASCADASEN_AWS_REGION`, `CASCADASEN_VERSION=var.image_tag`. Output `sessions_bucket`; `deploy-role-policy.json` PassRole adds `cascadasen-task`.

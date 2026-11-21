@@ -277,7 +277,7 @@ interface TheaterSnapshot {                         // one per 5-min cycle: POST
 Never shown: the adversary's learned weights or any ranking of areas or elements. Every run carries the notice "Escenario hipotético: se modela el efecto, no el ataque."
 
 ## 11. Session mode: a shared, editable copy of the network
-Without a session, mapa 3 reads only the static cache (`web/public/cache/`) and makes no `/api` request, so it works with no backend. With a session it reads the sessions API (`docs/sessions-api.md`) through `/api`, which the Vite dev server proxies to the backend (`VITE_API_TARGET`, default `http://localhost:8000`; docker compose sets `http://backend:8000`). The deployed static site has no backend behind `/api` yet, so session mode needs the local stack until the sessions bucket and task role are applied (`docs/infrastructure.md`).
+Without a session, mapa 3 reads only the static cache (`web/public/cache/`) and makes no `/api` request, so it works with no backend. With a session it reads the sessions API (`docs/sessions-api.md`) through `/api`, which the Vite dev server proxies to the backend (`VITE_API_TARGET`, default `http://localhost:8000`; docker compose sets `http://backend:8000`). In production CloudFront and the ALB already route `/api/*` to the backend (`docs/infrastructure.md`), but until the sessions bucket and task role are applied the deployed backend keeps sessions in memory (`CASCADASEN_SESSION_STORE` defaults to `memory`), so they are lost on every restart or deploy. Test session mode on the local stack until then.
 
 **Sources.**
 | Mode | Network and buses | Timeline | Point |
