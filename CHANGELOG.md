@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(sessions): agent guide for the sessions API
+
+- **Changed:** New `docs/sessions-api.md` (session concept and the four points, create/join, the rule that every agent endpoint takes `{sid}` in the path, endpoint table with operationIds and codes, curl examples for datacenter/bus/line/generator CRUD, cut, repair, runs, run actions, replay and trace, SSE format and reconnection, polling fallback, ETag/If-Match, limits, 24 h TTL and S3 rounding, error codes, physics rules, notice and guardrails). Linked from `AGENTS.md` section 1 (read-order item 9), `docs/stack.md` new 7.2 "Sessions API" and `docs/agents.md` new 2.4 "External agents". `docs/architecture.md` 2.5 lists `session_routes.py`, `limits.py`, `session_schemas.py`; new 3.3 "A session edit and its live update". `docs/plan.md` section 9 item 14 records the user decisions. Fixed the `ActionIn.target` example (theatre corridors are `A06-A07`, no voltage suffix).
+- **Why:** Shared-sessions plan item 7: agents on other machines must know to pass the session id to every call (user request 5).
+- **Agents:** Every curl path in `docs/sessions-api.md` matches a route of `create_app().openapi()["paths"]`, and the examples were run in order against the real 188-bus world (all 2xx, the queued `restore_element` executed on `A06-A07`, trace verified). External run actions skip C2's choice and vetoes; they are re-validated and spend attention, resources and crews when executed. Update the guide when a session route changes.
+- **Files:** `docs/sessions-api.md`, `AGENTS.md`, `docs/{stack,agents,architecture,plan}.md`, `backend/src/cascadasen/api/session_schemas.py`.
+
 ## 2026-11-21 · feat(api): sessions HTTP API with limits and SSE
 
 - **Changed:** New router `api/session_routes.py` under `/api/v1/sessions`: session create/get (ETag, `If-None-Match` → 304)/delete/reset, `GET /{sid}/network`, POST/PATCH/DELETE for `buses`, `lines`, `loads`, `generators` (`/{sid}/<plural>[/{element_id}]`), sandbox `cut`/`repair`/`state`, nested runs (`/{sid}/runs`, `/{sid}/runs/{rid}` + `events`, `step`, `actions`, `replay`, `snapshots`, `trace`, `report`, `after_action`) and the SSE stream `GET /{sid}/events`. New `api/session_schemas.py` (request models, `extra="forbid"`), `api/limits.py` (`TokenBucket`, `SseSlots`, `client_ip`, `BodyLimitMiddleware` 413 over 64 KB on `/api/v1/sessions*`), `ErrorResponse` in `api/schemas.py`. `create_app(..., sessions=)`, CORS allows PATCH/DELETE and exposes `ETag`; `/admin/reload` also drops the session service.

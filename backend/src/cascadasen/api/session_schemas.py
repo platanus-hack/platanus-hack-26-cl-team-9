@@ -151,7 +151,7 @@ class ActionIn(_Body):
         description="Action id from GET /api/v1/sim/catalog (actions).", examples=["restore_element"]
     )
     target: str = Field(
-        description="Area (T1/A06) or corridor id the action applies to.", examples=["A06-A07/500"]
+        description="Area (A06) or corridor (A06-A07) id the action applies to.", examples=["A06-A07"]
     )
     role: str = Field(
         description="Proposing role; must be one of the action's proposers in the catalog.",

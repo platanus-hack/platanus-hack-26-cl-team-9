@@ -96,7 +96,7 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 
 ### 2.5 API (`api/`)
 
-`app.py` creates the FastAPI app (grid queries, health, admin reload when `CASCADASEN_ADMIN_ENABLED=true`, the `static/map.html` test page) and sets `app.state.settings` and `app.state.store` and includes `simulation_routes.py` (`/api/v1/simulate`, `/api/v1/sim/*`). Schemas are in `schemas.py` and `simulation_schemas.py`. HTTP contract: `stack.md` sections 7 and 7.1. Command: `cascadasen-api`.
+`app.py` creates the FastAPI app (grid queries, health, admin reload when `CASCADASEN_ADMIN_ENABLED=true`, the `static/map.html` test page) and sets `app.state.settings` and `app.state.store` and includes `simulation_routes.py` (`/api/v1/simulate`, `/api/v1/sim/*`) and `session_routes.py` (`/api/v1/sessions/*`, built lazily on `app.state.sessions` from the simulation service). `limits.py` holds the per-process rate limits (`TokenBucket`), SSE slots and the 64 KB `BodyLimitMiddleware` for session routes. Schemas are in `schemas.py` (with the shared `ErrorResponse`), `simulation_schemas.py` and `session_schemas.py`. HTTP contract: `stack.md` sections 7, 7.1 and 7.2, and `sessions-api.md`. Command: `cascadasen-api`.
 
 ## 3. Simulation flows
 
@@ -121,6 +121,17 @@ tick (expire effects, restore, settle frequency)
 ```
 
 There are three states (`strategy.md` section 3). The real state is seen only by the engine, the validator and the evaluator. Agents see the observed state through their role. Each agent keeps its own estimate. A run can be replayed exactly from its recipe: configuration, seed, injected events and recorded LLM picks.
+
+### 3.3 A session edit and its live update (`sessions-api.md`)
+
+```
+client A: POST /sessions/{sid}/loads ─► SessionService.mutate: get doc ─► overlay.add + apply_overlay (validate, rebalance)
+          ─► revision+1, last_op ─► store.put(if_match=etag) (conflict: re-read, ≤ 3 retries, then 409) ─► 201 + ETag
+client B: GET /sessions/{sid}/events (SSE) ─► every 1 s: cached revision; every 5 s: store head (another instance wrote?)
+          ─► event: revision {revision, op, ids, by} ─► B refetches /network and /state
+```
+
+The network view is cached per `(sid, revision)`. Runs created in the session pin the overlay of that moment in their record, so later edits do not change them.
 
 ## 4. Frontend (`web/`)
 

@@ -302,6 +302,21 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 - Runs are persisted: every command writes `runs/<run_id>.json` (`{run_id, recipe, cycle, trace_head, code_version, created_at, updated_at, extra}`) to the document store (`CASCADASEN_SESSION_STORE`: memory, file or s3), with a conditional write on the last etag. Each process keeps at most `CASCADASEN_RUN_CACHE_SIZE` (20) simulations in memory; a run that is not cached (evicted, restarted, or created by another instance) is rebuilt from its recipe and its summary reports `rebuilt: true` and `trace_matches` (rebuilt hash equals the recorded one). A record expires 24 h after its last command. The recipe (`GET /sim/runs/{id}/trace`) holds `config`, `injected`, `llm_choices`, `cycle` and `actions` (external agent actions, with `after_events` to keep the input order). An unchanged replay gives the same trace hash. LLM-commander runs report `trace_matches: false` after a rebuild, because their recorded picks enter the `run_created` entry.
 - Campaign body: `mode` (`diagnostic`, `adversarial`, `capability`), `templates`, `policies`, `seeds` (up to 10), `uncertainty_levels`, `adversary_variants` (`none`, `static`, `adaptive`), `capability_variants` (`[{id, capabilities}]`, the first one is the baseline), `horizon`, `objective`, `budget`, `point`, `random_seeds` (1-10: draw fresh seeds instead of `seeds`, returned in `spec.seeds` and shared by every cell). Each table row adds `spread` (p10/p50/p90 of mission continuity and recoverability across seeds). It runs synchronously and is capped at 240 runs (422 above).
 
+### 7.2 Sessions API
+
+Shared, persistent sessions under `/api/v1/sessions` (`api/session_routes.py`). The guide for agents and other clients, with every route, curl examples, the SSE format, limits and error codes, is `docs/sessions-api.md`; the session document is section 6.2.
+
+| Group | Routes | Notes |
+|---|---|---|
+| Session | `POST /sessions`, `GET`/`DELETE /sessions/{sid}`, `POST /{sid}/reset` | One pinned operating point; `ETag: "<revision>"`, `If-None-Match` → 304; 24 h TTL after the last change |
+| Network | `GET /{sid}/network`; POST, PATCH, DELETE on `/{sid}/buses`, `/lines`, `/loads`, `/generators` | Overlay edits (6.2); `If-Match` → 412; base elements are never deleted (409) |
+| Sandbox | `POST /{sid}/cut`, `POST /{sid}/repair`, `GET /{sid}/state` | Shared `open_lines`, cascade from the edited base case |
+| Runs | `POST /{sid}/runs`, `GET /{sid}/runs/{rid}` and `events`, `step`, `actions`, `replay`, `snapshots`, `trace`, `report`, `after_action` | Same bodies as 7.1; the run pins the session dataset; `actions` queues an external agent's COA |
+| Live | `GET /{sid}/events` | SSE `event: revision`, `: ping` every 15 s, closes after 55 s; not an agent tool |
+
+- Every agent endpoint takes `{sid}` in the path. Agent routes carry `x-sub50-agent`, an explicit `operationId` and English OpenAPI text (`.agents/tasks/openapi-agent-conventions.md`); error details stay in Spanish.
+- Limits (per process): 64 KB bodies (413), creation per client IP, cuts and writes per session (429 with `Retry-After`), 5 SSE streams per session and IP. Knobs are the `CASCADASEN_RATE_*` and `CASCADASEN_SSE_*` settings.
+
 ## 8. Testing and CI
 
 MVP: Vitest tests for frontend logic (playback clock, narration templates, layer mapping, fixture validation against the JSON schema). Everything below is backlog.
