@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(infra): Mapbox token in the web image and deploy-on-main workflow
+- **Changed:** `web.Dockerfile` takes the build argument `VITE_MAPBOX_TOKEN`; `deploy.sh` passes it (public `pk.*` default, overridable). New `deploy.sh deploy` command (no plan step). New `.github/workflows/deploy.yml` runs it on every push to `main` through GitHub OIDC.
+- **Why:** The deployed map showed the offline fallback because Vite inlines the token at build time. The team wants every commit on main deployed.
+- **Agents:** The workflow needs the repository variable `AWS_DEPLOY_ROLE_ARN` and an IAM role plus OIDC provider created by hand; trust policy in `docs/infrastructure.md`. Until then it fails at the credentials step.
+- **Files:** `infrastructure/docker/web.Dockerfile`, `infrastructure/deploy.sh`, `.github/workflows/deploy.yml`, `docs/infrastructure.md`.
 ## 2026-11-21 · feat(web): mapa 3 interface following the Paper design (#28)
 
 - **Changed:** New layout (`.shell` in `styles.css`): a collapsible rail on the left (Sub50, Mapa, Supuestos; the collapsed state is saved in localStorage), a floating panel with the tabs Red, Simulación, Leyenda and Supuestos (the last two used to sit at the bottom of the old right panel), a timeline card at the bottom of the panel (play, scrubber, stage and seconds), the case selector as a pill at the top center of the map, and the 2D/3D toggle plus zoom buttons at the top right. The camera now leaves room on the left, and the Mapbox logo moved to the bottom right. Neutral charcoal colors instead of navy.

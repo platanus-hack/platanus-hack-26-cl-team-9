@@ -6,6 +6,9 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
 COPY data/processed /app/data/processed
+# Vite inlines VITE_* at build time. deploy.sh passes it as a build argument.
+ARG VITE_MAPBOX_TOKEN
+ENV VITE_MAPBOX_TOKEN=$VITE_MAPBOX_TOKEN
 RUN npm run build
 
 FROM nginx:stable-alpine

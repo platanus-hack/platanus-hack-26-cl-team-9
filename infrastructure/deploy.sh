@@ -2,6 +2,7 @@
 # Deploy CascadaSEN to AWS (account 402909940511, us-east-1).
 #   ./deploy.sh plan    check the account, create the state bucket if missing, init, validate, plan
 #   ./deploy.sh apply   create ECR, build and push both images, apply the full plan
+#   ./deploy.sh deploy  same as apply but without a prior plan: used by the GitHub Action on main
 # Credentials come from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY. If unset, they are
 # sourced from KEYS_FILE (default: the team keys file). Nothing prints them.
 set -euo pipefail
@@ -15,9 +16,11 @@ INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$INFRA_DIR/.." && pwd)"
 TAG_FILE="$INFRA_DIR/.deploy-tag"
 export AWS_DEFAULT_REGION="$REGION"
+# Public Mapbox token (pk.*), not a secret. Inlined into the web bundle at build time.
+VITE_MAPBOX_TOKEN="${VITE_MAPBOX_TOKEN:-pk.eyJ1Ijoic2FuaHVlemFmY2UiLCJhIjoiY213cWl1bHo0MGFocTMwczMybzRsajE2MSJ9.GS8Mwgxq4WMPfI3LzNdNng}"
 
 usage() {
-  echo "usage: $0 plan|apply" >&2
+  echo "usage: $0 plan|apply|deploy" >&2
   exit 2
 }
 
@@ -92,51 +95,58 @@ push_image() {
   fi
   # Gzip layers, Docker (non-OCI) media types, no provenance/SBOM: Fargate failed to extract
   # the default containerd-store layers ("wrong diff id").
-  docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+  local build_args=()
+  [[ "$name" == "web" ]] && build_args=(--build-arg "VITE_MAPBOX_TOKEN=$VITE_MAPBOX_TOKEN")
+  docker buildx build --platform linux/amd64 --provenance=false --sbom=false ${build_args[@]+"${build_args[@]}"} \
     --output "type=image,name=$repo_url:$tag,push=true,compression=gzip,force-compression=true,oci-mediatypes=false" \
     -f "$INFRA_DIR/docker/$name.Dockerfile" "$REPO_ROOT"
 }
 
-cmd_apply() {
-  [[ -f "$TAG_FILE" ]] || { echo "No $TAG_FILE. Run '$0 plan' first." >&2; exit 1; }
-  local planned current tag
-  planned="$(cat "$TAG_FILE")"
-  current="$(compute_tag)"
-  if [[ "$(tag_base "$planned")" != "$(tag_base "$current")" ]]; then
-    echo "The tree changed since the plan ($planned -> $current). Run '$0 plan' again." >&2
-    exit 1
-  fi
-  tag="$planned"
-
+# Create ECR, build and push both images, then apply the full configuration.
+rollout() {
+  local tag="$1" mode="$2" registry backend_url web_url
   ensure_state_bucket
   tf_init
-
   # 1. ECR first, so the images exist before the ECS service starts.
   terraform -chdir="$INFRA_DIR" apply -input=false -auto-approve \
     -target=aws_ecr_repository.backend -target=aws_ecr_repository.web -var "image_tag=$tag"
-
   # 2. Build and push both images.
-  local registry backend_url web_url
   backend_url="$(terraform -chdir="$INFRA_DIR" output -raw ecr_backend_url)"
   web_url="$(terraform -chdir="$INFRA_DIR" output -raw ecr_web_url)"
   registry="${backend_url%%/*}"
   aws ecr get-login-password | docker login --username AWS --password-stdin "$registry" >/dev/null
   push_image backend "$backend_url" "$tag"
   push_image web "$web_url" "$tag"
-
-  # 3. Full apply from a fresh plan, shown before it runs.
-  terraform -chdir="$INFRA_DIR" plan -input=false -out=tfplan -var "image_tag=$tag"
-  terraform -chdir="$INFRA_DIR" apply -input=false tfplan
-
+  # 3. Full apply. "apply" shows a fresh plan first; "deploy" applies directly.
+  if [[ "$mode" == "apply" ]]; then
+    terraform -chdir="$INFRA_DIR" plan -input=false -out=tfplan -var "image_tag=$tag"
+    terraform -chdir="$INFRA_DIR" apply -input=false tfplan
+  else
+    terraform -chdir="$INFRA_DIR" apply -input=false -auto-approve -var "image_tag=$tag"
+  fi
   echo "Deployed image tag: $tag"
   echo "URL: $(terraform -chdir="$INFRA_DIR" output -raw cloudfront_url)"
 }
-
+cmd_apply() {
+  [[ -f "$TAG_FILE" ]] || { echo "No $TAG_FILE. Run '$0 plan' first." >&2; exit 1; }
+  local planned current
+  planned="$(cat "$TAG_FILE")"
+  current="$(compute_tag)"
+  if [[ "$(tag_base "$planned")" != "$(tag_base "$current")" ]]; then
+    echo "The tree changed since the plan ($planned -> $current). Run '$0 plan' again." >&2
+    exit 1
+  fi
+  rollout "$planned" apply
+}
+cmd_deploy() {
+  rollout "$(compute_tag)" deploy
+}
 [[ $# -eq 1 ]] || usage
 load_credentials
 check_account
 case "$1" in
   plan) cmd_plan ;;
   apply) cmd_apply ;;
+  deploy) cmd_deploy ;;
   *) usage ;;
 esac
