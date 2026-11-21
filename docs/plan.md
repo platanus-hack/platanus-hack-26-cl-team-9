@@ -1,6 +1,6 @@
 # Plan
 
-Last updated: 2026-11-21. Read `idea.md`, `stack.md` and `datasets.md` first. Hour estimates are rough, made without measurement, for one person per workstream.
+Last updated: 2026-11-21. Read `idea.md`, `cyber.md`, `stack.md` and `datasets.md` first. Hour estimates are rough, made without measurement, for one person per workstream.
 
 ## 0. Situation when this plan was written
 
@@ -11,7 +11,7 @@ Last updated: 2026-11-21. Read `idea.md`, `stack.md` and `datasets.md` first. Ho
 
 ## 1. Goal and definition of done
 
-A working browser demo, offline-capable, that for the 25F scenario shows: click on the 25F line -> animated cascade on the map of Chile -> islands and people without power -> narration -> validation table, plus at least one question no PDF answers. A 2-minute and a 4-minute demo, rehearsed.
+A working browser demo, offline-capable, that for the 25F scenario shows: click on the 25F line -> animated cascade on the map of Chile -> islands and people without power -> narration -> validation table, plus at least one question no PDF answers, preferably a cyber consequence scenario (`cyber.md`). A 2-minute and a 4-minute demo, rehearsed.
 
 Done means: P0 complete, validation tests running in CI, README with the validation table, deploy URL working, fallback video recorded, Platanus metadata filled (section 8).
 
@@ -66,7 +66,7 @@ Event chain from templates in Spanish, frequency chart synchronised with `t`, pe
 Wire the cache and API to the frontend, guided 2-minute demo mode, hover provenance, assumption badges, offline fallback, video. Check: the whole demo runs without internet.
 
 ### Phase 8: "new question" content (B + D)
-At least one of: midday-2026 scenario with 2026 defences; N-2 sweep with the vulnerability map; "what would have prevented it" with batteries. See `idea.md` section 6 for upgrades. Check: judges can see an answer not present in any PDF.
+At least one of: midday-2026 scenario with 2026 defences; N-2 sweep with the vulnerability map; "what would have prevented it" with batteries; a cyber consequence scenario (class C6 in `cyber.md` section 4) with the consequence card and the margin question Q5. See `idea.md` section 6 for upgrades. Check: judges can see an answer not present in any PDF.
 
 ## 4. Timeline (from the earlier plan; adjust to the real clock)
 
@@ -98,17 +98,20 @@ Calibration cases fit parameters; test cases must pass without re-tuning. Do not
 | V7 | United system, low-demand 2026 (7,532.1 MW load, 44.3 GVAs), loss of 3,000 MW synchronous | **Independent test, must pass before demo** | maintains; never below 48.1 Hz; about -2 Hz/s in 500 ms | [14]; the 3,000 MW case is **verified**, details from earlier research |
 | V8 | As V7 with step 3 inactive (4% degradation) | Test | blackout | [14]; earlier research |
 | V9 | Recorded Polpaico frequency curve digitised | P1 | RMSE over 0-5 s reported | [4]; digitise with WebPlotDigitizer |
+| V10 | Loss of 103 MW in Norte Grande at midday (equivalent to the August 2026 Huatacondo cyberattack) | Weak consistency test, P1 | consequence level L0 or L1, no island collapses | [34][35]: no supply loss reported. Weak: plant output at the time unknown, disconnection was requested rather than a sudden trip (`cyber.md` section 7) |
 
 Reasons to keep V6 and V7 in the must-pass set: V1-V5 all come from the same event used to fit the model, so passing them shows the model was fitted, not that it is right. V6 and V7 are the only checks on data the model did not see. V6 is a consistency test, not an equality test; the CEN annual study does not publish the flow or scenario of each case.
+
+Cyber scenarios have no case of their own to validate against. They reuse the physics checked by V1-V8. V7 is their anchor: in that operating point, a simultaneous loss of 3,000 MW or less must not end in a blackout (`cyber.md` section 7).
 
 CI renders "ours / published / source / pass" into the README. A failing case is shown with its deviation.
 
 ## 6. Priorities
 
 - **P0 (no demo without it):** network with sourced parameters, cascade and island frequency model with 25F defences, map with click, islands going dark, counter, narration, 25F replica in both modes, V2-V5 tests, validation table in the README.
-- **P1:** 2026 defences and scenarios, "what would have prevented it", live combinations, V6-V9, CI badge.
-- **P2 / stretch:** ambition upgrades in `idea.md` section 6, Plan A, LLM chat.
-- **Cut:** telecoms, public ranking of dangerous lines, full AC voltage model, full dynamic simulation, live monitoring.
+- **P1:** 2026 defences and scenarios, "what would have prevented it", live combinations, V6-V10, CI badge, cyber scenario classes C1-C6 with consequence levels and the consequence card (`cyber.md` sections 4-5).
+- **P2 / stretch:** ambition upgrades in `idea.md` section 6, Plan A, LLM chat, critical loads (`cyber.md` question Q4).
+- **Cut:** telecoms, public ranking of dangerous lines, full AC voltage model, full dynamic simulation, live monitoring, modelling attack techniques, any optimiser that searches for the worst attack (`cyber.md` section 8).
 
 ## 7. Risks to watch (details in `idea.md` section 8)
 
@@ -139,10 +142,11 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 7. Mirror repo for deployment: whose personal GitHub account.
 8. Real event close time and pitch length (not published in the sources checked).
 9. Whether the team talks to a mentor from the "science" or "data" tracks about power-system modelling, and whether outside consultation is allowed.
+10. Cyber framing (requested by Ricardo on 2026-11-21): does the whole team agree that estimating the consequences of cyberattacks is the main objective of the simulation and of the pitch? Which scenario classes from `cyber.md` section 4 enter P1? What default outage duration is used for unserved energy and cost?
 
 ## 10. First hour for an agent starting from scratch
 
-1. Read `idea.md`, `stack.md`, `datasets.md`, then this file. Check `git log` and `git status`.
+1. Read `AGENTS.md`, then `idea.md`, `cyber.md`, `stack.md`, `datasets.md`, then this file, then the newest `CHANGELOG.md` entries. Check `git log` and `git status`. Run `git config core.hooksPath scripts/hooks` once.
 2. Ask the team for answers to section 9, at minimum items 1, 4 and 6, and who is working on which workstream, so work is not duplicated.
 3. Commit docs if they are not committed yet (with the team's agreement).
 4. Do Phase 0. Then start your workstream.

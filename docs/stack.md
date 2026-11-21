@@ -28,7 +28,8 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 | API | FastAPI (REST; WebSocket optional for live combinations) | Backlog | Needed only for combinations not in the cache |
 | Precompute | Script that runs every single-element failure for every scenario x defences x behaviour and writes static JSON | Backlog | MVP ships hand-written files in `web/public/cache/` in the same format |
 | Tests | Vitest (frontend logic) | MVP | pytest (engine, validation, provenance) is backlog |
-| CI | GitHub Actions | Backlog | Would generate the validation table from the tests |
+| CI | GitHub Actions | Lint: done. Rest: backlog | `.github/workflows/lint.yml` runs ruff and requires a `CHANGELOG.md` change in each pull request. Generating the validation table from the tests is still backlog |
+| Lint and agent tooling | ruff (Python), eslint/prettier (frontend, once installed), git and Claude Code hooks | Done | Single entry point `scripts/lint.sh`; rules and hooks in `AGENTS.md` |
 | Hosting | Static frontend plus fixtures; deploy from a personal mirror (see README of the template) | MVP | Platforms like Vercel cannot access the org repo |
 | LLM | Not in the core | Backlog (P2) | Narration uses fixed templates so every sentence is reproducible. An optional chat that calls the simulator is P2 |
 
@@ -129,6 +130,8 @@ Seed values (25F, centre-south):
 | Uncertain: outside what the model evaluates | Pre-failure flow on the lost north 500 kV corridor exceeds the validity range of the CEN north defence scheme (1,600 MW north-to-south, 1,000 MW south-to-north [4]; 1,700 MW per [6]); voltage may dominate there |
 | Not modelled | The case needs something the model lacks (e.g. an island without defence data) |
 
+Consequence levels L0-L3 (`cyber.md` section 5) aggregate these island results into one headline value per run.
+
 The 25F replica is the declared exception: it reports the frequency result because a published reference exists. An optional overvoltage flag (low-demand scenario, load shed above ~2,300 MW) adds "overvoltage risk (not modelled)".
 
 ## 5. Frontend design
@@ -191,6 +194,28 @@ Values above are placeholders; the node list and ids are decided in phase 0.
 ```
 Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
 
+### 6.1 Optional fields for cyber consequence scenarios (draft)
+
+These fields support the scenario classes in `cyber.md` section 4. All are optional, so files without them, including the MVP fixtures, stay valid.
+
+```json
+{
+  "cause": {"kind": "cyber_effect", "scenario_class": "C6", "label_key": "cyber_hypothetical",
+            "references": ["[34]"]},
+  "group_out": [{"zone": "norte_grande", "tech": "solar", "share": 0.4}],
+  "defenses_disabled": ["pdce_zn"],
+  "summary": {"consequence_level": "L2",
+              "unserved_energy_mwh": 0, "failure_cost_usd": 0,
+              "outage_duration_h": {"value": 0, "is_assumption": true}}
+}
+```
+
+- `cause.kind`: `failure` (default) or `cyber_effect`. When it is `cyber_effect`, the UI shows the notice "Escenario hipotético: se modela el efecto, no el ataque."
+- `group_out` is defined by zone and technology only, never by plant or company (`cyber.md` section 8).
+- New event types: `defense_disabled` (a defence that does not act) and `control_lost` (plants that stay online but give no dispatch or reserve).
+- `consequence_level`: `L0` absorbed, `L1` contained, `L2` regional blackout, `L3` national blackout.
+- `failure_cost_usd` = `unserved_energy_mwh` x 1,000 x 8.79 US$/kWh [19]. The value is a regulatory valuation and depends on the assumed duration.
+
 ## 7. API (backlog)
 
 Not needed for the frontend MVPs. The frontend reads fixtures only, which also gives the offline behaviour in section 9.
@@ -204,6 +229,9 @@ Not needed for the frontend MVPs. The frontend reads fixtures only, which also g
 | `behavior` | enum | required: `per_code`, `as_happened` | 422; `as_happened` only valid with scenario 25F |
 | `elements_out` | list of ids | 1 to 3 unique, existing ids | 422 |
 | `battery_mw` | map island/zone -> number | optional, 0 to 5,000 per zone | 422 |
+| `group_out` | list of {zone, tech, share} | optional; share between 0 and 1; zone and technology must exist (`cyber.md` C2) | 422 |
+| `defenses_disabled` | list of defence ids | optional; ids from the loaded defence set (`cyber.md` C4) | 422 with valid ids |
+| `outage_duration_h` | number | optional, 0 to 2,160 (90 days); flagged as an assumption in the output | 422 |
 
 - Flow with no solution (island with load and no generation) is not an error: the island is "Blackout" and the event is logged.
 - Cascade not ending in 20 iterations: cut, `truncated: true`, WARNING.
@@ -222,6 +250,7 @@ MVP: Vitest tests for frontend logic (playback clock, narration templates, layer
 
 ## 9. Conventions
 
+- Agent and contributor workflow is in `AGENTS.md`: read the docs before every plan and change, lint every change (`scripts/lint.sh`), and add a `CHANGELOG.md` entry with every commit. Enable the git hook once per clone with `git config core.hooksPath scripts/hooks`.
 - Real, small commits during the event. Do not bulk-import generated data or code written before the event.
 - UI strings and narration in Spanish; code, comments and docs in English.
 - Never fit parameters by hand without declaring it in the YAML (`is_assumption: true` plus the reason).

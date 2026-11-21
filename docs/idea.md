@@ -3,15 +3,18 @@
 Working name. Platanus Hack 26 Chile (Santiago, 20-22 Nov 2026), track **Simulations**, team-9.
 Last updated: 2026-11-21. Written so an agent with no prior context can start working.
 
-Read order for a new session: `idea.md` (this file) -> `stack.md` -> `datasets.md` -> `plan.md`.
+Read order for a new session: `idea.md` (this file) -> `cyber.md` -> `stack.md` -> `datasets.md` -> `plan.md`.
 
 ## 1. One-paragraph summary
 
 CascadaSEN is an open, interactive blackout simulator for the Chilean national power grid (SEN), running in the browser. The user clicks a transmission line or a power plant on a map of Chile. Within a second the app shows which zones lose power, how many people are affected, and why, as a chain of events in plain language. It also shows what would have prevented the blackout. The model is validated as code against published results of the 25 February 2025 blackout ("25F") and against the grid operator's yearly defence studies.
 
+The main objective of the simulation is to estimate the consequences of cyberattacks on this critical infrastructure. The user sets the effect of an attack: plants or lines disconnected, defences disabled, control lost. The simulator shows the physical, social and economic consequence and what would have contained it. It models the effect of the attack, not how the attack is done. See `cyber.md`.
+
 ## 2. Why this problem
 
 - On 25 Feb 2025 at 15:16 the whole country, Arica to Chiloe, lost power. One double-circuit 500 kV line between Atacama and Coquimbo (Nueva Maitencillo - Nueva Pan de Azucar) went out of service. The grid split into two islands and neither survived [3][4].
+- 25F started with one unauthorised intervention on a protection device [3]. A cyberattack on control or protection systems can produce the same effect. In August 2026 a cyberattack took a 103 MW solar plant and its battery system in Tarapaca out of service, and they were still disconnected in mid-November [34][35]. No customer outage was reported, but nothing public says what a larger, simultaneous or better-timed attack would do. See `cyber.md` section 2.
 - Nobody can test "what if another line is cut?" in real life. Today only the grid operator (Coordinador Electrico Nacional, CEN) simulates it, with licensed commercial software (DIgSILENT PowerFactory), and publishes results once a year as PDFs of 100+ pages [5][9].
 - People outside the CEN (regulators, academics, consultants, journalists, battery developers) cannot ask "what if" and see the answer.
 - Fit with the track: a simplified digital twin of the national grid. It answers "what would happen if X fails?" on something that cannot be tested for real, and the run teaches something not visible at a glance (which failures are harmless, which take down half the country, what prevents it).
@@ -23,7 +26,9 @@ Source numbers in brackets refer to `datasets.md` section 7.
 ### 3.1 User and decision (hypothesis, no user validated yet)
 
 - Primary user: a technical person outside the CEN who needs to evaluate a grid-security measure without a PowerFactory licence (analyst at the CNE, SEC or Ministry of Energy, academic, consultancy filing comments on CEN reports).
+- Also primary: cybersecurity and continuity teams that must estimate the impact of an incident, such as the CEN cybersecurity area, the national cybersecurity agency (ANCI), and operators designated as operators of vital importance under Ley 21.663, which must keep continuity plans [36].
 - Decision supported: "Which measure should we ask for or prioritise so a double failure does not end in a total blackout: more automatic load shedding, fast-response batteries in one zone, or finishing a pending defence scheme?"
+- Cyber decision supported: "Which defences must keep working, and how much simultaneous generation loss can the grid absorb, so that a cyberattack on generation or control systems stays a local event and does not become a blackout?"
 - Secondary: battery developers (how many MW of fast response an island needs; the model does not say where inside an island), data journalism and education.
 - No user has been interviewed. The team must not claim validated demand in the pitch.
 
@@ -33,7 +38,8 @@ Source numbers in brackets refer to `datasets.md` section 7.
 - Click a line or plant -> "simulate failure". Shift+click adds up to 3 failures.
 - Animated cascade (~5 s of story time): flash at the cut, power flow rerouting, overloaded lines turning red and pulsing, the country splitting into two islands, a wave of darkness as cities go out, generator columns dropping.
 - Side panels: counter of people without power and MW of load shed; chain of events in plain Spanish from fixed templates (no LLM); frequency curve of each island, synchronised with the animation; validation table (our value / published value / source).
-- Selectors: scenario (25F, "midday 2026 with lots of solar", "weekday afternoon", "Sunday"), defence mode ("as on 25F" / "as designed 2026"), behaviour ("everything works to the grid code" / "as it happened on 25F").
+- Selectors: scenario (25F, "midday 2026 with lots of solar", "weekday afternoon", "Sunday"), defence mode ("as on 25F" / "as designed 2026"), behaviour ("everything works to the grid code" / "as it happened on 25F"), cause ("falla" / "efecto de ciberataque", with the scenario classes in `cyber.md` section 4).
+- Consequence card: consequence level L0-L3, people without power, MW shed, unserved energy and cost for an editable duration (`cyber.md` section 5).
 - "What would have prevented it?" tab: minimal set of failures that turned a scare into a blackout, MW of fast batteries per island that avoids the collapse, regulatory value of unserved energy.
 - Every number shows its source (document and page) or is flagged "assumption" / "approximate". The UI is in Spanish.
 
@@ -42,7 +48,7 @@ Source numbers in brackets refer to `datasets.md` section 7.
 1. Hook (15 s): "25 February 2025, 15:16. Chile went dark from Arica to Chiloe. One line was enough."
 2. Click (45 s): click that line in the 25F scenario. Country splits, centre-south goes dark, counter rises, narration explains why. Switch to "everything per grid code": the centre-south holds. The difference was generation that disconnected when it should have ridden through (about 1,971 MW disconnected in the centre-south; the CEN model had to add 737.34 MW of unidentified disconnected generation to match measured frequency [4]).
 3. Validation (20 s): table "ours / published / source".
-4. New question (20 s): "And today? Same cut at midday in 2026 with lots of sun." No PDF answers this.
+4. New question (20 s): "And today? Same cut at midday in 2026 with lots of sun." No PDF answers this. Cyber version of this step: `cyber.md` section 10.
 5. What would have prevented it (20 s).
 
 The 4-minute cut adds a judge clicking anywhere, including a big plant where "nothing serious happens" and the narration explains why. Fallbacks: precomputed JSON cache, recorded video, UI works offline.
@@ -52,12 +58,12 @@ The 4-minute cut adds a judge clicking anywhere, including a big plant where "no
 Priorities are defined in `plan.md`. Short version:
 
 - P0 (no demo without it): public-data network of ~10-14 nodes with sourced parameters, cascade engine plus per-island frequency model with the 25F defences, map with click, islands going dark, people counter, narration, 25F replica in both behaviour modes, first validation cases as tests, validation table in the README.
-- P1: 2026 defences, 2026 scenarios, "what would have prevented it", combined failures live, independent validation cases (see `plan.md` section 5).
+- P1: 2026 defences, 2026 scenarios, "what would have prevented it", combined failures live, independent validation cases (see `plan.md` section 5), cyber scenario classes C1-C6 with the consequence card (`cyber.md`).
 - P2 / stretch: ambition upgrades (section 6), full official network (Plan A), LLM chat that calls the simulator.
 
 ### Out of scope (decided)
 
-Telecommunications, full dynamic simulation like PowerFactory, live monitoring, predicting the human error that started 25F, public ranking of "most dangerous lines" (dual-use risk), full AC voltage model, restoration of service (unless time remains), international interconnections. Voltage is handled by a simplified indicator or flagged "uncertain" (section 5).
+Telecommunications, full dynamic simulation like PowerFactory, live monitoring, predicting the human error that started 25F, public ranking of "most dangerous lines" (dual-use risk), full AC voltage model, restoration of service (unless time remains), international interconnections, modelling how a cyberattack is carried out (intrusion, malware, vulnerabilities, vendors; see `cyber.md` section 8). Voltage is handled by a simplified indicator or flagged "uncertain" (section 5).
 
 ## 5. Honest limits (must stay visible in the product)
 
@@ -65,6 +71,7 @@ Telecommunications, full dynamic simulation like PowerFactory, live monitoring, 
 - It does not predict 25F. The initiating event was an unauthorised intervention on a protection device [3]. The simulator shows that losing that line left the country dependent on every defence working.
 - Frequency is modelled; voltage mostly is not. The CEN's own study says the real limit in the 25F corridor is voltage [6]. The north blacked out about 4 minutes later by voltage collapse [3]. That is shown as a documented event, not a computed one, unless the simplified voltage indicator is built.
 - The team decided (2026-11-21) that technical simplifications are acceptable, including a simplified voltage indicator and synthetic parameters, as long as every simplification is labelled on screen ("assumption", "approximate") and kept apart from validated results. Not all data has to be real.
+- Cyber scenarios are consequence estimates, not validated predictions. There is no public measurement of a cyberattack's consequence on the SEN to test against (`cyber.md` section 7).
 - Parameters that are assumptions: line reactances, load-damping D, reserve time constant, region-to-zone assignment, demand per node in non-25F scenarios.
 
 ## 6. Ambition upgrades (proposed, need a team decision)
@@ -79,7 +86,7 @@ The independent evaluation scored Ambition 3/5 because plant disconnections are 
 6. Defence optimiser: minimum MW of fast batteries or the load-shedding setting that avoids the 25F blackout. A parameter sweep is enough.
 7. Restoration phase (how long until power returns): only if the CEN reports contain enough data to fit it.
 
-Do not build an "attacker finds the minimum cut to black out the country" feature. It adds dual-use risk and no judging value.
+Do not build an "attacker finds the minimum cut to black out the country" feature. It adds dual-use risk and no judging value. The cyber objective does not change this rule: the simulator estimates the consequence of a scenario the user chooses and never searches for the worst attack (`cyber.md` section 8).
 
 ## 7. Hackathon context
 
@@ -98,7 +105,8 @@ Do not build an "attacker finds the minimum cut to black out the country" featur
 | What is genuinely new sits in the "if time" scope | Do not freeze scope until at least one new-question scenario works |
 | Line reactances and thermal limits are not public in the sources checked | Use typical values by voltage level and length, calibrated to the 25F flow split, flagged as assumptions |
 | A similar project exists: "Andes" (https://github.com/aleetreny/Encode), a 24 h hackathon winner with click-to-fail on the Chilean grid using LP dispatch, without frequency, islands or 25F validation. COSMIC (MATLAB) simulates dynamic cascades | Differentiate on frequency dynamics, islands, 25F validation as visible tests, per-number provenance. Be ready to say so to the jury |
-| Dual use (map of "what line blacks out the country") | Zone-level resolution, only failures the CEN already publishes, no public ranking of weak points, language of "failure" not "attack", focus on prevention |
+| Dual use (map of "what line blacks out the country") | Zone-level resolution, only failures the CEN already publishes, no public ranking of weak points, events described by their effect and never by attack technique, focus on prevention (`cyber.md` section 8) |
+| The cyber framing looks like hype because no cyber technique is modelled | State it up front: the method is consequence-driven (CCE [38]). Cite the August 2026 Huatacondo case [34]. Show what separates an attack from a random failure: simultaneity, disabled defences, chosen timing (`cyber.md` section 2) |
 | Live demo failure | Precomputed cache, recorded video, offline mode |
 | No power-systems knowledge on the team | Simple documented models, tests against published numbers, ask a mentor early, declare any outside consultation in the README if the organisers allow it |
 

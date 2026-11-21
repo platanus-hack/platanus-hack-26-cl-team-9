@@ -8,13 +8,14 @@
 * Map with DeckGL. With a dictionary and we so we can check things (Felipe)
 
 
-* New features
+* New features - Vale, Ignacio
 * 3D models - Vale, Ignacio
 * Animations - Vale, Ignacio
 * UI - Vale, Ignacio
-
-
-* Count of how many people are affected by blackouts (economical loss, lifes) considering cities
+* Valores que se mueven en este mercado - Ignacio, vlentina
+* Estimar valores y costos del Apagón del 25F en Chile. El hackeo a la central solar de Chile.
+* Estudiar Digisilent, se supone que es algo similar
+* Count of how many people are affected by blackouts (economical loss, lifes) considering cities - Vale, Ignacio
 * Cities, how much population by area. How is a city or population node affected by blackouts
 
 * The system can be handled or managed by an agent somehow. Agents should be able to simulate scenarios
