@@ -71,6 +71,7 @@ class TheaterConfig:
     templates: dict[str, Template]
     stochastic: dict[str, Any] = field(default_factory=dict)
     crews: dict[str, Any] = field(default_factory=dict)
+    physics_alarms: dict[str, float] = field(default_factory=dict)
     provenance: tuple[Provenance, ...] = field(default=())
 
     def template(self, template_id: str) -> Template:
@@ -113,7 +114,8 @@ def theater_config() -> TheaterConfig:
     return TheaterConfig(
         clock={k: int(x) for k, x in v["clock"].items()},
         resources={k: float(x) for k, x in v["resources"].items()},
-        digital={k: float(x) for k, x in v["digital"].items()},
+        # the digital engine also reads the physical alarm thresholds (docs/agents.md 1.2)
+        digital={k: float(x) for k, x in {**v["digital"], **v.get("physics_alarms", {})}.items()},
         effects=v["effects"],
         actions=v["actions"],
         restoration={k: float(x) for k, x in v["restoration"].items()},
@@ -124,5 +126,6 @@ def theater_config() -> TheaterConfig:
         templates=templates,
         stochastic=v.get("stochastic", {}),
         crews=v.get("crews", {}),
+        physics_alarms={k: float(x) for k, x in v.get("physics_alarms", {}).items()},
         provenance=tuple(collect_provenance(p, "theater") + collect_provenance(t, "templates")),
     )

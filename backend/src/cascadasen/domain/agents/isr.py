@@ -23,7 +23,17 @@ DIGITAL = {
     "external_service": 0.3,
     "defense_fault": 0.4,
 }
-PHYSICAL = {"load_loss": 0.5, "blackout": 0.7, "breaker_open": 0.5, "frequency_event": 0.5}
+PHYSICAL = {
+    "load_loss": 0.5,
+    "blackout": 0.7,
+    "breaker_open": 0.5,
+    "frequency_event": 0.5,
+    # graded physical alarms (docs/agents.md 1.4); voltage_limited is physical evidence, not intent
+    "frequency_out_of_band": 0.4,
+    "high_rocof": 0.3,
+    "low_inertia": 0.2,
+    "voltage_limited": 0.3,
+}
 
 
 def _logit(p: float) -> float:
