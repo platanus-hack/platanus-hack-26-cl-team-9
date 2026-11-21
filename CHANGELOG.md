@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · chore(project): set Sub50 description in project metadata
+
+- **Changed:** `project-description-spanish` in `platanus-hack-project.jsonc` now holds the final team description (one paragraph that opens with the agent-first framing, then the map, blackout propagation and agent API). `project-name` stays "Sub50".
+- **Why:** The hackathon submission reads name and description from this file.
+- **Agents:** Do not rewrite the description without the team's approval. `deploy-url` is still `<FILL THIS>`. `project-oneliner-spanish` and `project-description.md` were not changed.
+- **Files:** `platanus-hack-project.jsonc`.
+
 ## 2026-11-21 · docs: sync docs with the Sub50 name, design sessions and merged work
 
 - **Changed:** New `docs/design.md`: Paper file and pages, Electricity Maps style, voltage and technology palette, 5 zoom levels, data behind the mockups, logo options. Product name Sub50 in titles and summaries (`idea.md`, `AGENTS.md`, `cyber.md`, both READMEs, session hook). `stack.md` now matches the repo (status, Mapbox option, engine base case, real layout, frontend section defers to `design.md`). `plan.md` repo state, submission checklist and open decisions 11-13. `datasets.md` adds the operating points and DC-OPF scripts and sources [40] Mapbox and [41] OpenStreetMap. Backfilled changelog entries for #2, #6, #7, #10 and the Sub50 project-page commit.
