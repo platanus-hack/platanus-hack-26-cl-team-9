@@ -66,7 +66,7 @@ def test_a_message_edits_and_cuts_through_the_real_routes(make_app):
         AssistantTurn("Agregué el datacenter y corté R1."),
     )
     client = TestClient(make_app(model))
-    out = client.post(CHAT, json={"message": "agrega un datacenter y corta R1"}).json()
+    out = client.post(CHAT, json={"message": "agrega un datacenter de 100 MW y corta R1"}).json()
     assert out["reply"].startswith("Agregué") and out["steps"] == 2 and out["truncated"] is None
     assert [t["name"] for t in out["tool_calls"]] == ["start_session", "add_datacenter", "cut_lines"]
     assert all(t["ok"] for t in out["tool_calls"])
@@ -131,7 +131,7 @@ def test_session_write_limits_count_against_the_caller_not_a_shared_loopback(mak
     adds = [("add_datacenter", {"bus": "B002", "mw": 1, "name": f"DC{i}"}) for i in range(4)]
     model = ScriptedModel(calls(("start_session", {}), *adds), AssistantTurn("ok"))
     app = make_app(model, rate_writes_per_minute=2)
-    out = TestClient(app).post(CHAT, json={"message": "agrega cuatro"}).json()
+    out = TestClient(app).post(CHAT, json={"message": "agrega cuatro de 1 MW"}).json()
     assert [t["ok"] for t in out["tool_calls"][1:]] == [True, True, False, False]
     assert "espera" in out["tool_calls"][3]["result"]["error"]
 
@@ -141,7 +141,23 @@ def test_a_tool_that_needs_a_session_opens_it_without_the_user(make_app):
         calls(("add_datacenter", {"bus": "B002", "mw": 100, "name": "DC Toy"})), AssistantTurn("Agregado.")
     )
     client = TestClient(make_app(model))
-    out = client.post(CHAT, json={"message": "agrega un datacenter"}).json()
+    out = client.post(CHAT, json={"message": "agrega un datacenter de 100 MW"}).json()
     assert out["tool_calls"][0]["ok"] is True and "automáticamente" in out["tool_calls"][0]["result"]["nota"]
     sid = out["session_id"]
     assert sid and client.get(f"/api/v1/sessions/{sid}/network").json()["loads"][0]["name"] == "DC Toy"
+
+
+def test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened(make_app):
+    model = ScriptedModel(
+        calls(
+            ("inject_event", {"type": "C3_transmission_opening", "target": "T2-T3"}), ("step", {"cycles": 1})
+        ),
+        calls(("step", {"cycles": 1})),
+        AssistantTurn("listo"),
+    )
+    out = TestClient(make_app(model)).post(CHAT, json={"message": "abre T2-T3 y avanza"}).json()
+    inject, first, second = out["tool_calls"]
+    assert inject["ok"] and "corrida" in inject["result"]["nota"] and out["run_id"]
+    assert [e["type"] for e in first["result"]["events_applied"]] == ["C3_transmission_opening"]
+    assert "warning" not in first["result"]
+    assert second["result"]["events_applied"] == [] and "No se aplicó" in second["result"]["warning"]

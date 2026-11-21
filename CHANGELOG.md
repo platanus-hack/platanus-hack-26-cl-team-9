@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(assistant): guard the tool loop against lost events, invented MW and unkept promises
+
+- **Changed:** `SessionTools` opens an `open_field` run when `inject_event` or `submit_action` arrive with no active run, and refuses `add_datacenter`/`add_generator` with MW the user never wrote (`numbers`, `stated`). `Assistant.loop` adds one hidden nudge when the model promises an action and stops (`announces`, `NUDGE`; hidden turns are left out of `view`), predicts the deadline with the mean call duration, and the trace carries each call's `arguments`. The factory is now `toolbox_for(session_id, run_id, said)`, where `said` is everything the user wrote in the conversation.
+- **Changed:** System prompt as a list of rules: never ask the user to run tools, act in the same turn, numbers and causes only from results, separate new from previous overloads, no tool names in replies, say explicitly that it does not search the worst case, be brief.
+- **Why:** Live bench on Bedrock and the 188-bus network (`docs/assistant.md` section 5). Seen there: an event injected before `start_run` was lost and then reported as applied; 150 and 500 MW invented for "un datacenter en Calama"; "la cortaré" with no cut; a 31 s message.
+- **Agents:** `deepseek.v3.2` passed the whole bench several times and is set in the local `backend/.env` (not committed); Qwen3-Next failed intermittently. The bench script lives outside the repo. Verification: `uv run --extra mcp pytest -q` 298 passed, 2 skipped; lint clean.
+- **Files:** `backend/src/cascadasen/{application/assistant.py,mcp/toolbox.py,api/assistant_routes.py}`, `backend/tests/{unit/test_assistant.py,integration/test_assistant_api.py}`, `docs/assistant.md`.
+
 ## 2026-11-21 · fix(mcp): tool results the model cannot misread
 
 - **Changed:** Edit tools return where the element went (`bus`, `bus_name`, `area`, `area_name`) and the baseline as `newly_overloaded`, `still_overloaded`, `no_longer_overloaded`, `overloaded_now_total` (the edit results no longer carry `overloaded_lines`). `describe_network` lists corridors with their lines, annotates added loads and generators with their area, and with `focus` returns the area totals and its overloaded lines. `step` adds `unserved_mw` and `level_text` per cycle, `events_applied` and a `warning` when no event happened; `run_report` adds `worst_level_text`; `list_options` describes each template (scripted events, adversary, horizon).

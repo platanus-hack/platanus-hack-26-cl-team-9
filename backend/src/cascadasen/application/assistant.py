@@ -8,6 +8,7 @@ instance can continue one. The loop is capped by steps and by a deadline shorter
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import time
 from collections.abc import Callable
@@ -23,6 +24,31 @@ LIMIT_REPLY = {
     "steps": "Llegué al límite de pasos de este mensaje. Dime «continúa» y sigo desde donde quedé.",
     "deadline": "Se acabó el tiempo de este mensaje. Dime «continúa» y sigo desde donde quedé.",
 }
+
+
+NUDGE = (
+    "(Mensaje interno, el usuario no lo ve.) Anunciaste una acción pero no la ejecutaste. Ejecútala "
+    "ahora con las herramientas y luego informa el resultado; no la vuelvas a anunciar."
+)
+# First-person future of the actions the assistant can take ("cortaré", "voy a agregar"). A list, not
+# a suffix rule: "-aré" also ends past forms such as "reparé" or "comparé".
+FUTURE_ACTION = re.compile(
+    r"\b(voy a|vamos a|procedo a|proceder[ée]|cortar[ée]|abrir[ée]|agregar[ée]|añadir[ée]|quitar[ée]|"
+    r"eliminar[ée]|reparar[ée]|crear[ée]|iniciar[ée]|inyectar[ée]|disparar[ée]|avanzar[ée]|ejecutar[ée]|"
+    r"simular[ée]|revisar[ée]|consultar[ée]|buscar[ée]|calcular[ée]|comparar[ée]|repetir[ée]|har[ée])\b",
+    re.IGNORECASE,
+)
+
+
+# Offers that wait for the user ("dime qué quieres y lo haré") are not unkept promises.
+OFFER = re.compile(
+    r"(\bdime\b|\bsi quieres\b|\bsi deseas\b|\bsi prefieres\b|\bcuando (?:me )?indiques\b|¿)", re.I
+)
+
+
+def announces(text: str) -> bool:
+    """The model ended its turn promising an action instead of asking or offering something."""
+    return bool(FUTURE_ACTION.search(text)) and not OFFER.search(text) and not text.rstrip().endswith("?")
 
 
 class ConversationNotFoundError(KeyError):
@@ -62,11 +88,16 @@ def view(doc: dict[str, Any]) -> dict[str, Any]:
     turns = [
         {"role": m["role"], "text": m["text"]}
         for m in doc["messages"]
-        if m["role"] in ("user", "assistant") and m.get("text")
+        if m["role"] in ("user", "assistant") and m.get("text") and not m.get("hidden")
     ]
     calls = {c["id"]: c for m in doc["messages"] for c in m.get("tool_calls", [])}
     trace = [
-        {"name": calls[m["tool_call_id"]]["name"], "ok": m["ok"], "result": m["result"]}
+        {
+            "name": calls[m["tool_call_id"]]["name"],
+            "arguments": calls[m["tool_call_id"]]["arguments"],
+            "ok": m["ok"],
+            "result": m["result"],
+        }
         for m in doc["messages"]
         if m["role"] == "tool" and m["tool_call_id"] in calls
     ]
@@ -111,9 +142,11 @@ class Assistant:
         message: str,
         conversation_id: str | None,
         session_id: str | None,
-        toolbox_for: Callable[[str | None, str | None], ToolBox],
+        toolbox_for: Callable[[str | None, str | None, str], ToolBox],
     ) -> dict[str, Any]:
-        """Run one user message. `toolbox_for(session_id, run_id)` builds the tools of this request."""
+        """Run one user message. `toolbox_for(session_id, run_id, said)` builds the tools of this request;
+        `said` is everything the user wrote in the conversation, so tools can check that values such as
+        megawatts come from the user and not from the model."""
         if session_id is not None and not SESSION_ID.match(session_id):
             raise AssistantInputError("El id de sesión no es válido.")
         if conversation_id is None:
@@ -130,7 +163,10 @@ class Assistant:
             doc, etag = self.load(cid)
         if session_id and session_id != doc.get("session_id"):
             doc["session_id"], doc["run_id"] = session_id, None
-        toolbox = toolbox_for(doc.get("session_id"), doc.get("run_id"))
+        said = "\n".join(
+            [m["text"] for m in doc["messages"] if m["role"] == "user" and not m.get("hidden")] + [message]
+        )
+        toolbox = toolbox_for(doc.get("session_id"), doc.get("run_id"), said)
         messages = trim_history(doc["messages"], self.history)
         messages.append({"role": "user", "text": message})
         start = len(messages) - 1  # this turn's messages, for the trace
@@ -159,11 +195,16 @@ class Assistant:
         }
 
     def loop(self, messages: list[dict[str, Any]], toolbox: ToolBox) -> tuple[str, str | None, int]:
-        started, specs = self.clock(), toolbox.specs()
+        started, specs, nudged, durations = self.clock(), toolbox.specs(), False, []
         for step in range(1, self.max_steps + 1):
-            if self.clock() - started > self.deadline_s:
+            # do not start a model call that would likely end past the deadline (mean of this turn's calls;
+            # the slowest one alone is too pessimistic after a single outlier)
+            expected = sum(durations) / len(durations) if durations else 0.0
+            if self.clock() - started + expected > self.deadline_s:
                 return self.stop(messages, "deadline", step - 1)
+            call_started = self.clock()
             turn = self.model.turn(self.system, messages, specs)
+            durations.append(self.clock() - call_started)
             messages.append(
                 {
                     "role": "assistant",
@@ -174,6 +215,10 @@ class Assistant:
                 }
             )
             if not turn.tool_calls:
+                if not nudged and step < self.max_steps and announces(turn.text):
+                    nudged = True  # it promised an action and stopped: ask once, out of the user's sight
+                    messages.append({"role": "user", "text": NUDGE, "hidden": True})
+                    continue
                 return turn.text, None, step
             for call in turn.tool_calls:
                 ok, result = toolbox.run(call)

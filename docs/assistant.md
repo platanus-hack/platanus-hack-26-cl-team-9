@@ -52,6 +52,11 @@ curl -s -X POST localhost:8000/api/v1/assistant/chat -H 'content-type: applicati
 - Tool results are cut to 8 KB before they go back to the model. History is trimmed to the last 30 messages, starting at a user turn so no tool result loses its call.
 - The user cannot run tools, so the first tool call that needs a session opens one automatically (its result carries a `nota`); this counts against the creation limit. The prompt tells the model never to ask the user to call a tool.
 - `end_session` is not offered (the web has its own delete button) and `step` is capped at 24 cycles per call.
+- `inject_event` or `submit_action` with no active run opens an `open_field` run first (its result says so), because a model that injected before `start_run` lost the event on the retry and then reported it as applied.
+- `add_datacenter` and `add_generator` refuse megawatts the user never wrote in the conversation (`stated` in `mcp/toolbox.py` compares with every number the user typed, also as GW) and tell the model to ask. A model invented 150 and 500 MW for "agrega un datacenter en Calama".
+- If the model ends a turn promising an action ("la cortaré") with no tool call, no question and no offer ("dime…", "si quieres…"), the loop adds one hidden user message telling it to act now (`announces`, `NUDGE`). Hidden messages never appear in `GET /conversations/{cid}`.
+- The deadline is predictive: a model call is not started when the elapsed time plus the mean duration of this message's calls would pass `assistant_deadline_s`.
+- `tool_calls` in the response carries each call's `arguments`.
 
 ## 4. Guardrails
 
@@ -67,4 +72,4 @@ Same as `cyber.md` section 8, `sessions-api.md` section 11 and `mcp.md` section 
 - Streaming (SSE) and the web UI: the response is one JSON document.
 - Other providers (`anthropic`, `bedrock` Messages API).
 - Terraform: the task role has no Bedrock permission and CloudFront keeps its default 30 s origin timeout (`infrastructure/iam.tf`, `cloudfront.tf`).
-- Tried only with a scripted model and the toy world. A run against real Bedrock and the 188-bus network is pending.
+- Live test on 2026-11-21 against Bedrock and the 188-bus network with a bench of 17 turns in 5 conversations (edit and cut, strategic run with report and replay, guardrail, ambiguous requests, harder multi-step and prompt injection). `qwen.qwen3-next-80b-a3b` needed most of the guards above and still failed intermittently; `deepseek.v3.2` passed every check across several passes (the only flags were false negatives of the bench), with 1-19 s per message, and is the model set in the team's local `.env`. Other models that call tools through Converse on the account: `moonshotai.kimi-k2.5`, `zai.glm-5`, `mistral.mistral-large-3-675b-instruct`, `openai.gpt-oss-120b-1:0` (not benchmarked). The bench script is not in the repo.

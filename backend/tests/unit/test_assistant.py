@@ -61,7 +61,7 @@ def make(model, **kw):
 
 def test_plain_answer_without_tools():
     a = make(ScriptedModel(AssistantTurn("hola")))
-    out = a.chat("hola", None, None, lambda s, r: FakeBox())
+    out = a.chat("hola", None, None, lambda s, r, t: FakeBox())
     assert out["reply"] == "hola" and out["tool_calls"] == [] and out["truncated"] is None
     assert out["steps"] == 1 and out["notice"] == "aviso" and len(out["conversation_id"]) == 22
 
@@ -70,13 +70,15 @@ def test_tool_calls_run_and_the_session_is_remembered_across_messages():
     model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("listo"), AssistantTurn("otra vez"))
     a, boxes = make(model), []
 
-    def box(sid, rid):
+    def box(sid, rid, said):
         boxes.append((sid, rid))
         return FakeBox()
 
     first = a.chat("crea una sesión", None, None, box)
     assert first["reply"] == "listo" and first["steps"] == 2
-    assert first["tool_calls"] == [{"name": "start_session", "ok": True, "result": {"ok": "start_session"}}]
+    assert first["tool_calls"] == [
+        {"name": "start_session", "arguments": {}, "ok": True, "result": {"ok": "start_session"}}
+    ]
     assert first["session_id"] == SID
     second = a.chat("sigue", first["conversation_id"], None, box)
     assert boxes == [(None, None), (SID, None)] and second["reply"] == "otra vez"
@@ -86,7 +88,7 @@ def test_tool_calls_run_and_the_session_is_remembered_across_messages():
 
 def test_a_failed_tool_goes_back_to_the_model_and_the_loop_continues():
     model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("no se pudo"))
-    out = make(model).chat("x", None, None, lambda s, r: FakeBox(fail=True))
+    out = make(model).chat("x", None, None, lambda s, r, t: FakeBox(fail=True))
     assert out["tool_calls"][0]["ok"] is False and out["reply"] == "no se pudo"
     assert model.seen[1][-1] == {
         "role": "tool",
@@ -99,36 +101,36 @@ def test_a_failed_tool_goes_back_to_the_model_and_the_loop_continues():
 def test_the_step_cap_ends_the_message_and_keeps_roles_alternating():
     model = ScriptedModel(*[AssistantTurn("", (call(id=f"c{i}"),)) for i in range(3)])
     a = make(model, max_steps=3)
-    out = a.chat("x", None, None, lambda s, r: FakeBox())
+    out = a.chat("x", None, None, lambda s, r, t: FakeBox())
     assert out["truncated"] == "steps" and "continúa" in out["reply"] and out["steps"] == 3
     doc, _ = a.load(out["conversation_id"])
     assert doc["messages"][-1]["role"] == "assistant"
 
 
 def test_the_deadline_stops_before_the_next_model_call():
-    now = iter([0.0, 0.0, 30.0, 30.0, 30.0])
+    now = iter([0.0, 0.0, 0.0, 1.0, 30.0, 30.0, 30.0])
     model = ScriptedModel(AssistantTurn("", (call(),)))
-    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r: FakeBox())
+    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r, t: FakeBox())
     assert out["truncated"] == "deadline" and out["steps"] == 1
 
 
 def test_a_model_failure_keeps_the_turn_and_raises():
     a = make(ScriptedModel(ToolChatError("no disponible"), AssistantTurn("ya")))
     with pytest.raises(ToolChatError):
-        a.chat("primero", None, None, lambda s, r: FakeBox())
+        a.chat("primero", None, None, lambda s, r, t: FakeBox())
     cid = next(k for k in a.store._docs).removeprefix("assistant/").removesuffix(".json")
     doc, _ = a.load(cid)
     assert [m["role"] for m in doc["messages"]] == ["user", "assistant"]
-    assert a.chat("de nuevo", cid, None, lambda s, r: FakeBox())["reply"] == "ya"
+    assert a.chat("de nuevo", cid, None, lambda s, r, t: FakeBox())["reply"] == "ya"
 
 
 def test_unknown_conversation_bad_session_id_and_delete():
     a = make(ScriptedModel(AssistantTurn("hola")))
     with pytest.raises(ConversationNotFoundError):
-        a.chat("x", "nope", None, lambda s, r: FakeBox())
+        a.chat("x", "nope", None, lambda s, r, t: FakeBox())
     with pytest.raises(AssistantInputError):
-        a.chat("x", None, "corto", lambda s, r: FakeBox())
-    cid = a.chat("x", None, SID, lambda s, r: FakeBox())["conversation_id"]
+        a.chat("x", None, "corto", lambda s, r, t: FakeBox())
+    cid = a.chat("x", None, SID, lambda s, r, t: FakeBox())["conversation_id"]
     a.delete(cid)
     with pytest.raises(ConversationNotFoundError):
         a.load(cid)
@@ -136,9 +138,9 @@ def test_unknown_conversation_bad_session_id_and_delete():
 
 def test_a_concurrent_message_loses_with_a_conflict():
     a = make(ScriptedModel(AssistantTurn("uno"), AssistantTurn("dos"), AssistantTurn("tres")))
-    cid = a.chat("x", None, None, lambda s, r: FakeBox())["conversation_id"]
+    cid = a.chat("x", None, None, lambda s, r, t: FakeBox())["conversation_id"]
 
-    def racing(sid, rid):
+    def racing(sid, rid, said):
         a.store.put(f"assistant/{cid}.json", {**a.load(cid)[0], "updated_at": "otro"})  # another writer
         return FakeBox()
 
@@ -204,3 +206,79 @@ def test_the_first_tool_that_needs_a_session_opens_one_and_says_so():
     ok, second = box.run(call("describe_network"))
     assert ok and "nota" not in second and started == [1]
     assert box.context()["session_id"] == SID
+
+
+def test_an_announced_but_unrun_action_gets_one_hidden_nudge():
+    model = ScriptedModel(
+        AssistantTurn("La línea es R007. La cortaré junto con las anteriores."),
+        AssistantTurn("", (call(),)),
+        AssistantTurn("Listo, la corté."),
+    )
+    a = make(model)
+    out = a.chat("corta la línea entre A y B", None, None, lambda s, r, t: FakeBox())
+    assert out["reply"] == "Listo, la corté." and [t["name"] for t in out["tool_calls"]] == ["start_session"]
+    nudge = model.seen[1][-1]
+    assert nudge["role"] == "user" and nudge["hidden"] is True
+    turns = a.load(out["conversation_id"])[0]
+    from cascadasen.application.assistant import view
+
+    assert all("interno" not in t["text"] for t in view(turns)["turns"])  # the user never sees it
+
+
+def test_no_nudge_for_questions_past_tense_or_twice():
+    from cascadasen.application.assistant import announces
+
+    assert announces("Voy a cortar R007.") and announces("Cortaré R007 ahora.")
+    assert not announces("¿Quieres que la corte?") and not announces("Reparé todas las líneas.")
+    assert not announces("Comparé las dos políticas.")
+    model = ScriptedModel(AssistantTurn("Haré el corte."), AssistantTurn("Haré el corte."))
+    out = make(model).chat("x", None, None, lambda s, r, t: FakeBox())
+    assert out["reply"] == "Haré el corte." and out["steps"] == 2  # only one nudge
+
+
+def test_megawatts_must_come_from_the_user():
+    from cascadasen.mcp.toolbox import numbers, stated
+
+    assert numbers("un datacenter de 1.200 MW y otro de 0,5 GW o 120") == {1200.0, 0.5, 120.0}
+    assert stated(120, "agrega 120 MW") and stated(500, "medio GW: 0,5 GW") and not stated(500, "en Calama")
+
+    class Tools(Sub50Tools):
+        def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter"):
+            return {"mw": mw}
+
+    tools = Tools(Sub50Client(base_url="http://x"), McpState(SID))
+    box = SessionTools(tools, said="Agrega un datacenter en Calama")
+    ok, out = box.run(call("add_datacenter", bus="Calama", mw=500))
+    assert not ok and "pregúntale" in out["error"]
+    box = SessionTools(tools, said="Agrega un datacenter en Calama\n300 MW")
+    assert box.run(call("add_datacenter", bus="Calama", mw=300)) == (True, {"mw": 300})
+
+
+def test_the_toolbox_gets_everything_the_user_said():
+    seen = []
+    model = ScriptedModel(AssistantTurn("¿Cuántos MW?"), AssistantTurn("ok"))
+    a = make(model)
+
+    def box(sid, rid, said):
+        seen.append(said)
+        return FakeBox()
+
+    cid = a.chat("datacenter en Calama", None, None, box)["conversation_id"]
+    a.chat("300", cid, None, box)
+    assert seen == ["datacenter en Calama", "datacenter en Calama\n300"]
+
+
+def test_offers_waiting_for_the_user_get_no_nudge():
+    from cascadasen.application.assistant import announces
+
+    assert not announces("Dime tu acción y la ejecutaré inmediatamente.")
+    assert not announces("Si quieres, cortaré otra línea.")
+    assert announces("La línea es R007. La cortaré junto con las anteriores.")
+
+
+def test_a_call_that_would_end_past_the_deadline_is_not_started():
+    # start 0; step 1: check 0, call 0 -> 12 (mean 12); step 2: check 14 + 12 > 25 -> stop
+    now = iter([0.0, 0.0, 0.0, 12.0, 14.0])
+    model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("no debería llegar"))
+    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r, t: FakeBox())
+    assert out["truncated"] == "deadline" and out["steps"] == 1 and len(model.turns) == 1
