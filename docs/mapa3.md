@@ -129,7 +129,7 @@ The 2D | 3D button sits at the top of the map. Both views use the same Mapbox St
 
 Layout: a collapsible rail on the left (button at its bottom), a floating panel with four tabs, and the controls on the map.
 
-1. **Case pill** (top center of the map): choose the operating point. Changing it resets the cut.
+1. **Case pill** (top center of the map): choose a scenario (a base hour, or a reference cut). The list and the details are in `docs/escenarios.md`. Changing it resets the cut.
 2. **Tab Red**: size of the grid (km of lines, substations, installed MW, km by voltage band) and the detail of the substation you clicked (kV, zone, generation, demand, people, connected lines with their loading; a click on one of those lines cuts it).
 3. **Click a line** on the map to cut it. The panel switches to **Simulación**.
 4. **Tab Simulación**: people without power, MW shed and share of demand, cascade stages, the event list (each with its time in seconds) and the frequency chart (one curve per island, red dashed line at 47.5 Hz, the blackout limit). **Volver al caso base** removes the cut.

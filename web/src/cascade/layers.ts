@@ -35,7 +35,7 @@ export function loadingColor(state: EdgeState | undefined): Rgba {
 
 const lineWidth = (l: NetLine) => WIDTH_BY_KV.find((w) => l.kv >= w.minKv)!.width;
 
-export interface View { network: Network; buses: Record<string, BusState>; frame: Frame; time: number; selected: string | null; mode: ViewMode; icons?: IconPoint[] }
+export interface View { network: Network; buses: Record<string, BusState>; frame: Frame; time: number; selected: string[]; mode: ViewMode; icons?: IconPoint[] }
 
 /** Flat network with the load as 3D columns; dots move along each line in the direction of the flow. */
 export function buildCascadeLayers(v: View): Layer[] {
@@ -45,7 +45,7 @@ export function buildCascadeLayers(v: View): Layer[] {
   return [
     new PathLayer<NetLine>({
       id: "lines", data: v.network.lines, pickable: true, widthUnits: "pixels", capRounded: true,
-      getPath: (l) => [pos(l.a), pos(l.b)], getColor: (l) => l.id === v.selected ? SELECTED_COLOR : loadingColor(v.frame.edges[l.id]),
+      getPath: (l) => [pos(l.a), pos(l.b)], getColor: (l) => v.selected.includes(l.id) ? SELECTED_COLOR : loadingColor(v.frame.edges[l.id]),
       getWidth: (l) => (v.frame.edges[l.id]?.status === "open" ? 1.5 : lineWidth(l)),
       updateTriggers: { getColor: [v.frame, v.selected], getWidth: [v.frame] },
     }),

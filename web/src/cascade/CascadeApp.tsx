@@ -92,7 +92,7 @@ export function CascadeApp() {
       const frame = v.timeline?.frames[Math.min(v.stage, (v.timeline?.frames.length ?? 1) - 1)];
       if (v.network && frame) {
         const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
-        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.cut, mode: v.mode }));
+        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.timeline?.failed_elements ?? (v.cut ? [v.cut] : []), mode: v.mode }));
       }
       raf = requestAnimationFrame(tick);
     };
@@ -113,6 +113,8 @@ export function CascadeApp() {
   }, [timeline, stage]);
 
   const scenario = findScenario(pointId, cut);
+  // A cut id is a line, or a named cut such as a whole substation (then the scenario gives the title).
+  const cutTitle = !cut ? "" : network?.lines.some((l) => l.id === cut) ? `Corte: ${lineName(network, cut)}` : scenario?.label ?? cut;
   const lastStage = (timeline?.frames.length ?? 1) - 1;
   function pickScenario(id: string) {
     const next = SCENARIOS.find((x) => x.id === id);
@@ -164,7 +166,7 @@ export function CascadeApp() {
           {tab === "sim" && <>
             <p className="muted">Haz clic en una línea del mapa para cortarla y mira cómo se propaga la falla. Haz clic en una subestación para ver su detalle en Red.</p>
             {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
-            {timeline && network && <Results timeline={timeline} network={network} events={visibleEvents} cut={cut} />}
+            {timeline && network && <Results timeline={timeline} network={network} events={visibleEvents} cut={cut} title={cutTitle} />}
           </>}
           {tab === "legend" && network && <CascadeLegend network={network} buses={buses} mode={mode} />}
           {tab === "assumptions" && <ul className="assumptions">{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>}
@@ -196,12 +198,12 @@ function TimelineCard(p: { timeline: Timeline | null; stage: number; playing: bo
   );
 }
 
-function Results(p: { timeline: Timeline; network: Network; events: Timeline["events"]; cut: string | null }) {
+function Results(p: { timeline: Timeline; network: Network; events: Timeline["events"]; cut: string | null; title: string }) {
   const s = p.timeline.summary;
   const pct = s.load_total_mw ? Math.round((s.load_shed_mw / s.load_total_mw) * 100) : 0;
   return (
     <section className="results">
-      <h2>{p.cut ? `Corte: ${lineName(p.network, p.cut)}` : "Caso base (sin corte)"}</h2>
+      <h2>{p.cut ? p.title : "Caso base (sin corte)"}</h2>
       <div className="stats">
         <div><b>{formatPeople(s.people_without_power)}</b><span>personas sin luz</span></div>
         <div><b>{s.load_shed_mw.toLocaleString("es-CL")} MW</b><span>{pct}% de la demanda</span></div>

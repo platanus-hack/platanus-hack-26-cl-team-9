@@ -7,6 +7,7 @@ Layout under the output folder:
   <point>/buses.json              generation, load and people per bus before the cut
   <point>/baseline.json           the secure base case (no cut)
   <point>/<line id>.json          the cascade for cutting that line
+  <point>/<named cut id>.json     the cascade for a named cut (NAMED_CUTS): a whole substation out of service
 """
 
 from __future__ import annotations
@@ -18,6 +19,20 @@ from pathlib import Path
 from cascadasen.domain.cascade.engine import ASSUMPTIONS, run_cascade_workflow
 from cascadasen.domain.cascade.network import ReducedNetwork
 from cascadasen.domain.cascade.scenario import load_network_and_point
+
+
+# Named cuts: every line of one substation opens at t = 0. The id is the file name and the "cut" id of the web scenarios.
+NAMED_CUTS: dict[str, str] = {
+    "falla-charrua-2010": "S/E CHARRUA",  # analogue of 14 Mar 2010 (docs/escenarios.md); ASSUMPTION: a substation fault = all its lines out
+}
+
+
+def lines_of_substation(net: ReducedNetwork, substation: str) -> list[str]:
+    """Ids of every line that ends at the substation. Raises if the substation does not exist (a typo must not silently cut nothing)."""
+    if substation not in net.index:
+        raise ValueError(f"unknown substation: {substation}")
+    bus = net.index[substation]
+    return sorted(ln.id for ln in net.lines if bus in (ln.a, ln.b))
 
 
 def build_cache_workflow(processed: Path, out: Path, point_ids: list[str] | None = None) -> dict:
@@ -56,6 +71,8 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
     _write(folder / "baseline.json", run_cascade_workflow(net, op, []))
     for line in net.lines:
         _write(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
+    for cut_id, substation in NAMED_CUTS.items():
+        _write(folder / f"{cut_id}.json", run_cascade_workflow(net, op, lines_of_substation(net, substation)))
     return len(net.lines)
 
 

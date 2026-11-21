@@ -17,7 +17,7 @@ export function narrate(event: Event, network: Network): string {
   const p = event.params;
   const names = event.ids.map((id) => lineName(network, id)).join(" y ");
   switch (event.text_key) {
-    case "line_cut": return `Se corta la línea ${names}.`;
+    case "line_cut": return event.ids.length > 3 ? `Se cortan ${event.ids.length} líneas a la vez.` : `Se corta la línea ${names}.`;
     case "line_overload_open": return `${names} supera el 120% de su capacidad y se abre.`;
     case "island_formed": return `Se forma una isla de ${p.buses} barras con ${p.gen_mw} MW de generación y ${p.load_mw} MW de demanda.`;
     case "load_shed": return `Desconexión automática de carga en ${ZONES[String(p.zone)] ?? p.zone}, escalón ${p.step}: ${p.mw} MW.`;

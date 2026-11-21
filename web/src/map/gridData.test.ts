@@ -62,6 +62,7 @@ describe("cascade narration", () => {
     const cut = { t: 0, type: "line_cut", ids: ["R000"], text_key: "line_cut", params: {} };
     expect(narrate(cut, network)).toBe("Se corta la línea A – B (500 kV).");
     expect(narrate({ ...cut, text_key: "line_overload_open" }, network)).toContain("supera el 120%");
+    expect(narrate({ ...cut, ids: ["R000", "R001", "R002", "R003"] }, network)).toBe("Se cortan 4 líneas a la vez.");
   });
 
   it("explains why an island goes dark", () => {
