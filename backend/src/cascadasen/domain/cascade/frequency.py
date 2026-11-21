@@ -128,7 +128,8 @@ def _trigger_edac(island: IslandInput, f: float, dfdt: float, t: float, shed: di
                 done.add((zone, j))
                 mw = step.fraction * island.zone_load_mw.get(zone, 0.0)
                 shed[zone] = shed.get(zone, 0.0) + mw
-                log.append({"t": round(t, 2), "zone": zone, "step": j + 1, "mw": round(mw, 1)})
+                if mw >= 0.5:  # steps with nothing to shed in this island stay out of the narration
+                    log.append({"t": round(t, 2), "zone": zone, "step": j + 1, "mw": round(mw, 1)})
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:

@@ -69,7 +69,8 @@ def _start(net, point, params, cut_ids) -> _State:
         raise ValueError(f"unknown line ids: {sorted(unknown)}")
     state = _State(net, point, params, point.gen.copy(), point.load.copy(), point.sync_mw.copy(), point.inertia_mws.copy(),
                    set(cut_ids), [], [], {}, {}, set())
-    state.events.append({"t": 0.0, "type": "line_cut", "ids": list(cut_ids), "text_key": "line_cut", "params": {}})
+    if cut_ids:
+        state.events.append({"t": 0.0, "type": "line_cut", "ids": list(cut_ids), "text_key": "line_cut", "params": {}})
     return state
 
 

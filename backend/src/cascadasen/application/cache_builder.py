@@ -4,6 +4,7 @@ Why: docs/stack.md answers a click from precomputed files, so the demo works wit
 Layout under the output folder:
   index.json                      points (id, label, year) and the assumptions
   network-<year>.json             reduced network: nodes and lines with ids, coordinates and the map ids behind them
+  <point>/buses.json              generation, load and people per bus before the cut
   <point>/baseline.json           the secure base case (no cut)
   <point>/<line id>.json          the cascade for cutting that line
 """
@@ -38,6 +39,8 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
     _write(out / f"network-{point['year']}.json", _network_json(net))
     folder = out / point["id"]
     folder.mkdir(exist_ok=True)
+    _write(folder / "buses.json", {f"B{i:03d}": {"gen_mw": round(float(op.gen[i]), 1), "load_mw": round(float(op.load[i]), 1),
+                                                  "people": round(float(op.people[i]))} for i in range(net.size)})
     _write(folder / "baseline.json", run_cascade_workflow(net, op, []))
     for line in net.lines:
         _write(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
