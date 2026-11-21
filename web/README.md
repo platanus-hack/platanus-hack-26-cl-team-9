@@ -1,4 +1,4 @@
-# web: CascadaSEN frontend
+# web: Sub50 frontend
 
 Browser app for the demo: a 2D map of Chile with the SEN grid standing in 3D on top (deck.gl). It reads the processed grid files committed in `data/processed/` and contains no physics, as `docs/stack.md` requires. Every number on screen comes from those files.
 
