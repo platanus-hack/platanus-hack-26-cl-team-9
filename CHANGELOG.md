@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · docs(regional): document the sources and the common schema
+
+- **Changed:** New `docs/regional.md`: what is built, the common schema v1, the sources used with their status, and everything found and not used (region-wide datasets, Brazil ONS electrical parameters, Colombia XM API, Dominican Republic and Costa Rica ArcGIS services, Mexico CENACE, and the countries with nothing open). `datasets.md`, `architecture.md`, `stack.md` section 6.2, `idea.md` section 4 and `plan.md` section 9.14 point to it.
+- **Why:** The research was exhaustive by request; the next agent should not repeat it.
+- **Agents:** Status labels are verified / not verified / failed; only what was opened in this project is marked verified. Argentina's official source failed on 2026-11-21. Next candidates with verified sources: Dominican Republic, Costa Rica, Colombia (API only), Mexico (market data only).
+- **Files:** `docs/regional.md`, `docs/datasets.md`, `docs/architecture.md`, `docs/stack.md`, `docs/idea.md`, `docs/plan.md`.
+
 ## 2026-11-21 · feat(web): draw the regional grid as a context layer
 
 - **Changed:** New `web/src/map/regional.ts` loads `data/processed/latam/` (a glob, so the app builds without it) and draws dimmed lines by kV, substations and plants by technology under Chile's layers (`regional-*` ids). Tooltips show the source and "Red de contexto: no se simula". The legend lists countries, counts, licences and attribution. The offline map draws the neighbours' outlines and the camera limits reach Brazil.

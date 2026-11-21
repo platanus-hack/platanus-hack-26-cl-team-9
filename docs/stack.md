@@ -225,6 +225,10 @@ These fields support the scenario classes in `cyber.md` section 4. All are optio
 - `consequence_level`: `L0` absorbed, `L1` contained, `L2` regional blackout, `L3` national blackout.
 - `failure_cost_usd` = `unserved_energy_mwh` x 1,000 x 8.79 US$/kWh [19]. The value is a regulatory valuation and depends on the assumed duration.
 
+### 6.2 Regional context layer (draft)
+
+`data/processed/latam/<ISO3>/{lines,substations,plants}.geojson` with `id`, `country`, `name`, `source`, `source_record`, `is_assumption` and the layer fields (`kv`, `kv_levels`, `circuits`, `length_km`, `status`; `tech`, `mw`, `fuel`), plus `manifest.json` (counts, km per kV, sources with licence and attribution). Full schema and rules in `regional.md` section 2. It is not part of `network.json` and no engine reads it.
+
 ## 7. API
 
 The backend serves everything under `/api/v1` (FastAPI, `backend/src/cascadasen/api/`); the live schema is at `/docs`. The frontend can still work from fixtures only, which also gives the offline behaviour in section 9.
