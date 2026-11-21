@@ -3,7 +3,6 @@ import type { SessionNetwork } from "../cascade/types";
 import { createLoader } from "./loader";
 import { ApiError, createSession, getNetwork, getSession, getState, sessionIdFrom, subscribe, type CutState, type LiveMode, type SessionDoc } from "./sessionApi";
 
-const KEY = "sub50_session";
 export type Edit = (fn: (sid: string, revision: number) => Promise<unknown>) => Promise<boolean>;
 export interface Session {
   sid: string | null; session: SessionDoc | null; network: SessionNetwork | null; state: CutState | null;
@@ -12,12 +11,12 @@ export interface Session {
 }
 
 /**
- * Shared session of mapa 3: id from ?sesion= or localStorage, data from the API. A revision event that changed the
+ * Shared session of mapa 3: id from ?sesion= only (a bare URL never calls /api), data from the API. A revision event that changed the
  * dataset (dataset_revision) refetches session, network and state; run activity refetches only the session document.
  * `createLoader` (loader.ts) decides which of overlapping refetches reaches the screen.
  */
 export function useSession(): Session {
-  const [sid, setSid] = useState(() => sessionIdFrom(location.search, localStorage.getItem(KEY)));
+  const [sid, setSid] = useState(() => sessionIdFrom(location.search));
   const [session, setSession] = useState<SessionDoc | null>(null);
   const [network, setNetwork] = useState<SessionNetwork | null>(null);
   const [state, setState] = useState<CutState | null>(null);
@@ -33,7 +32,6 @@ export function useSession(): Session {
   const load = useCallback((id: string) => loader.current!.load(id), []);
   const loadDoc = useCallback((id: string) => loader.current!.loadDoc(id), []);
   const leave = useCallback(() => {
-    localStorage.removeItem(KEY);
     _setUrl(null);
     loader.current!.cancel(); loaded.current = -1; data.current = -1;
     setSid(null); setSession(null); setNetwork(null); setState(null); setLive(null);
@@ -41,7 +39,6 @@ export function useSession(): Session {
   useEffect(() => {
     if (!sid) return;
     let alive = true;
-    localStorage.setItem(KEY, sid);
     _setUrl(sid);
     load(sid).catch((e) => {
       if (!alive) return;
@@ -61,9 +58,6 @@ export function useSession(): Session {
     if (!sid || !network) return false;
     try {
       await fn(sid, network.dataset_revision);
-      setError(null);
-      await load(sid);
-      return true;
     } catch (e) {
       if (e instanceof ApiError && e.status === 412) {
         setError("Otro cliente cambió la sesión antes que tú. Se recargó: revisa y vuelve a intentarlo.");
@@ -71,6 +65,11 @@ export function useSession(): Session {
       } else setError((e as Error).message);
       return false;
     }
+    // The write landed: report success even if the reload fails, so a form is not resubmitted (the session's own
+    // revision event reloads again).
+    setError(null);
+    await load(sid).catch((e) => setError(`El cambio se guardó, pero no se pudo recargar la sesión: ${(e as Error).message}`));
+    return true;
   }, [sid, network, load]);
   return {
     sid, session, network, state, live, error,
@@ -78,7 +77,7 @@ export function useSession(): Session {
       try { const doc = await createSession(); setError(null); setSid(doc.session_id); } catch (e) { setError((e as Error).message); }
     },
     join: (text) => {
-      const id = sessionIdFrom(`?sesion=${encodeURIComponent(text.match(/sesion=([^&\s]+)/)?.[1] ?? text.trim())}`, null);
+      const id = sessionIdFrom(`?sesion=${encodeURIComponent(text.match(/sesion=([^&\s]+)/)?.[1] ?? text.trim())}`);
       if (id) { setError(null); setSid(id); } else setError("Ese no es un id de sesión (22 caracteres) ni un enlace con ?sesion=.");
     },
     leave,

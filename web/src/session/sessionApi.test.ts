@@ -10,12 +10,11 @@ describe("sessionApi", () => {
   beforeEach(() => { fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock); });
   afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
-  it("takes ?sesion= over the stored id and ignores malformed ids", () => {
-    const other = "zyxwvutsrqponmlkjihgf_";
-    expect(sessionIdFrom(`?sesion=${SID}`, other)).toBe(SID);
-    expect(sessionIdFrom("", other)).toBe(other);
-    expect(sessionIdFrom("?sesion=../x", null)).toBeNull();
-    expect(sessionIdFrom("?point=nov2026-1300", null)).toBeNull();
+  it("takes the session only from ?sesion= and ignores malformed ids", () => {
+    expect(sessionIdFrom(`?sesion=${SID}&point=nov2026-1300`)).toBe(SID);
+    expect(sessionIdFrom("")).toBeNull();
+    expect(sessionIdFrom("?sesion=../x")).toBeNull();
+    expect(sessionIdFrom("?point=nov2026-1300")).toBeNull();
   });
 
   it("sends method, path, body, If-Match and X-Sub50-Agent", async () => {

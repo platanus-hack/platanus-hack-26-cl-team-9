@@ -31,7 +31,7 @@ export function DataPanel(p: { network: SessionNetwork; edit: Edit; pick: Pick; 
           <div className="figure"><b>{fmt(n.baseline.load_shed_mw)} MW</b><span>desconectados sin corte</span></div>
         </div>
         {n.balance.map((b, i) => <p key={i} className="meta"><span className="tag assumption">supuesto (sesión)</span> Redespacho de {fmt(b.redispatch_mw)} MW en {Object.keys(b.buses).length} barras. {b.rule}</p>)}
-        {n.warnings.map((w, i) => <p key={i} className="note">{w.message}</p>)}
+        {n.warnings.map((w, i) => <p key={i} className="note warn">{w.message}</p>)}
       </div>
       {p.picking && <p className="meta">Haz clic en el mapa para elegir la ubicación.</p>}
       <div className="seg" role="tablist">

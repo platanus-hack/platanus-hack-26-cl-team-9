@@ -25,6 +25,7 @@
 .shell .data-panel > .meta { margin: 4px 0; }
 .shell .data-panel .figures { display: flex; }
 .shell .data-panel .figure b { font-size: 18px; line-height: 24px; }
+.shell .note.warn { background: var(--selected); color: var(--fg-2); }  /* overlay warnings: red is for faults */
 .shell .data-panel h4 { margin: 12px 0 4px; color: var(--fg); font-size: 13px; font-weight: 600; line-height: 16px; }
 .shell .data-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
 .shell .data-form label { display: flex; flex-direction: column; gap: 2px; color: var(--muted); font-size: 11px; line-height: 14px; }

@@ -24,7 +24,7 @@ SID=$(curl -s -X POST "$API/sessions" -H 'Content-Type: application/json' \
 curl -s "$API/sessions/$SID" | jq '{revision, point, share_path, expires_at}'
 ```
 
-The body is optional; `{"point": "feb2025-1500"}` pins another point. The response carries `share_path: "/?sesion=<sid>"`. The browser opens a session from `?sesion=<sid>` in the URL and remembers it in localStorage (`sub50_session`). The server sets no cookie. To join from another machine, use the same `sid`.
+The body is optional; `{"point": "feb2025-1500"}` pins another point. The response carries `share_path: "/?sesion=<sid>"`. The browser opens a session only from `?sesion=<sid>` in the URL and stores the id nowhere else. The server sets no cookie. To join from another machine, use the same `sid`.
 
 ## 3. The session id goes in the path
 

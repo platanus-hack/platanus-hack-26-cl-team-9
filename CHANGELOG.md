@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): open a session only from ?sesion=, keep a landed edit, neutral overlay warnings
+- **Changed:** `useSession` no longer reads or writes `localStorage.sub50_session`; `sessionIdFrom(search)` takes the id only from `?sesion=`, so a bare `/` never calls `/api` (the URL still keeps `?sesion=` while in a session).
+- **Changed:** `edit()` returns true once the write succeeded; a failed reload after it (for example a busy 409) shows "El cambio se guardó, pero no se pudo recargar la sesión: …" instead of failing the edit, so a form is not resubmitted into a duplicate element.
+- **Changed:** Overlay warnings in **Datos** use `.note.warn` (neutral, `--selected` / `--fg-2` in `session.css`) instead of v5's red `.note`.
+- **Why:** Review of PR #50: the localStorage fallback broke the user's "no /api calls without ?sesion=" rule and `web/README.md`; a reload failure after a successful add invited duplicates; design.md reserves red for faults.
+- **Agents:** Do not reintroduce a stored session id; sharing and reload both rely on the URL. The "no /api without ?sesion=" check (with and without an old `sub50_session` key) belongs in the browser E2E step.
+- **Files:** `web/src/session/{useSession,sessionApi,sessionApi.test}.ts`, `web/src/session/{DataPanel.tsx,session.css}`, `docs/{mapa3,sessions-api}.md`.
+
 ## 2026-11-21 · fix(api): cap the waiters per session and retry the busy 409 in the MCP client
 - **Changed:** `SessionLocks(timeout_s, max_waiters=4)` (`api/limits.py`): when one request holds a session and 4 already wait, a further request gets the busy 409 (`Retry-After: 1`) at once instead of waiting. New setting `session_lock_max_waiters` (`CASCADASEN_SESSION_LOCK_MAX_WAITERS`, default 4).
 - **Changed:** `Sub50Client.request` (`mcp/client.py`) retries a 409 that carries `Retry-After` once, for GET and non-GET, after that wait (capped at 5 s, `sleep` injectable); a 409 without it keeps the old rule (non-GET retried at once).

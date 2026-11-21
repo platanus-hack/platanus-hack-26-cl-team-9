@@ -20,11 +20,11 @@ export class ApiError extends Error {
   constructor(public status: number, public detail: unknown) { super(errorText(status, detail)); }
 }
 
-/** `?sesion=` wins over the id remembered in localStorage; anything that is not a session id is ignored. */
-export function sessionIdFrom(search: string, stored: string | null): string | null {
-  const fromUrl = new URLSearchParams(search).get("sesion");
-  for (const id of [fromUrl, stored]) if (id && SID.test(id)) return id;
-  return null;
+/** The session id in `?sesion=`, the only place a session comes from (no URL, no session, no `/api` call); anything
+ * that is not a session id is ignored. */
+export function sessionIdFrom(search: string): string | null {
+  const id = new URLSearchParams(search).get("sesion");
+  return id && SID.test(id) ? id : null;
 }
 async function call<T>(method: string, path: string, opts: { body?: unknown; ifMatch?: number } = {}): Promise<T> {
   const headers: Record<string, string> = { "X-Sub50-Agent": AGENT };
