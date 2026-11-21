@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(mcp): MCP server with 23 curated tools over the agent API
+
+- **Changed:** New package `cascadasen/mcp/` (client, state, digest, tools, server). Tools: session (`start_session`, `join_session`, `end_session`, `list_options`, `describe_network`), network edits (`add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network`), sandbox (`cut_lines`, `repair_lines`, `get_grid_state`) and runs (`start_run`, `inject_event`, `step`, `submit_action`, `run_status`, `run_report`, `after_action`, `replay`). Results are compact summaries with the scenario `notice`.
+- **Why:** Simulations driven only by natural language. User decisions: only the MCP server (the LLM lives in the client), stdio transport calling the API over HTTP (`SUB50_API_URL`), curated tools instead of 1:1 with the OpenAPI.
+- **Agents:** No API route changed, so the agent spec is not regenerated. Edits send no `If-Match` (operations do not overwrite each other); a 409 is retried once. No tool ranks or searches cuts (`cyber.md` section 8): a test guards the tool names and another checks each tool's operationIds against `docs/openapi/agents.openapi.json`. Not done: remote HTTP transport and API authentication. Verification: `uv run --extra mcp pytest -q` 258 passed, 2 skipped, 1 failed (only the Bedrock test); smoke test on the real 188-bus API.
+- **Files:** `backend/src/cascadasen/mcp/*`, `backend/tests/{unit/test_mcp_tools.py,integration/test_mcp_server.py}`.
+
 ## 2026-11-21 · build(mcp): optional mcp extra and cascadasen-mcp entry point
 
 - **Changed:** `pyproject.toml` gets the optional extra `mcp = ["mcp>=2.0", "httpx>=0.28"]` and the script `cascadasen-mcp = "cascadasen.mcp.server:main"`; `uv.lock` is updated.
