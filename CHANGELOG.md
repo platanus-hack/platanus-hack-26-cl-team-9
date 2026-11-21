@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · docs: Plan 2.0, agentic integration (#36)
+
+- **Changed:** New `docs/plan-2.0.md`: an agent that understands the network, edits nodes, runs simulations and proposes fixes, plus a table panel for engineers. One mechanism (the change set) feeds the agent and the panel. It answers the question about lines: flows are computed by the DC flow; cable capacity and topology are changes proposed by the agent and approved by a person. `plan.md` points to it.
+- **Why:** The team asked for a 2.0 plan with three agent components and a table panel to group and edit nodes.
+- **Agents:** It is a proposal, nothing is built. It lists ten gaps (G1 to G10) that block it, among them: generation per bus and carrier, a runtime OPF (needs `scipy`, not in the dependencies), demand as a function of population, the `people` defect, and the stale cache. Section 10 has the decisions to ask the team before building. EVIDENCE measured for the plan: one cascade takes 29 ms and the N-1 sweep of 273 cuts takes 2.0 s.
+- **Files:** `docs/plan-2.0.md`, `docs/plan.md`.
+
 ## 2026-11-21 · feat(web): add the Sub50 favicon
 - **Changed:** New `web/public/favicon.svg` (763 bytes): the logo's subscript "5" and power-button "0" in black on a white 32 x 32 tile. `web/index.html` links it with `<link rel="icon" type="image/svg+xml">`.
 - **Why:** The site had no favicon; the full "sub50" wordmark from the Paper "Logo" page is unreadable at tab size.

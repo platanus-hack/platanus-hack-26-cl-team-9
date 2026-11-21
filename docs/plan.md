@@ -1,6 +1,6 @@
 # Plan
 
-Last updated: 2026-11-21. Read `idea.md`, `cyber.md`, `stack.md`, `design.md` and `datasets.md` first. Hour estimates are rough, made without measurement, for one person per workstream.
+Last updated: 2026-11-21. Read `idea.md`, `cyber.md`, `stack.md`, `design.md` and `datasets.md` first. Hour estimates are rough, made without measurement, for one person per workstream. Part 2.0 (an agent that edits and tests the network) is in .
 
 ## 0. Situation when this plan was written
 
