@@ -2,6 +2,8 @@
 
 The agents ("bots") of the strategic theatre are described in `strategy.md` section 5: missions, views and permissions. This document covers what they know about the physics and how they act on it. The physics is the 188-bus cascade engine (`engine.md`); parameters for both live in YAML with provenance.
 
+External agents that drive runs over HTTP (not the bots below) use the agent-only OpenAPI spec: `GET /api/v1/agents/openapi.json`, versioned in `docs/openapi/agents.openapi.json`; conventions in `openapi.md`.
+
 Code: `domain/agents/` (agents), `domain/theater/digital.py` (what supervision shows), `domain/theater/grid.py` (per-area physical readings), `domain/theater/params/theater.yaml` → `physics_alarms` (thresholds). Tests: `backend/tests/unit/test_physical_bots.py`.
 
 ## 1. Physical contract

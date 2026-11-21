@@ -5,9 +5,10 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 
+from cascadasen.api.agent_openapi import AGENT, errors
 from cascadasen.api.simulation_schemas import (
     CampaignIn,
     EventIn,
@@ -53,6 +54,13 @@ def get_simulation(request: Request) -> SimulationService:
 
 
 Sim = Annotated[SimulationService, Depends(get_simulation)]
+RunId = Annotated[
+    str,
+    Path(
+        description="Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+        examples=["3f2a9c1b7d4e"],
+    ),
+]
 
 
 def input_error(exc: SimulationInputError) -> HTTPException:
@@ -71,10 +79,33 @@ def network(sim: Sim) -> dict[str, Any]:
 
 @router.get(
     "/sim/network",
-    tags=["experimentos"],
-    summary="Red del mapa 3 (barras B###, líneas R###) con áreas, corredores y defensas del teatro",
+    tags=["global-runs"],
+    operation_id="global_get_network",
+    summary="Read the default 188-bus network with its areas, corridors and defences",
+    description=(
+        "Returns the mapa 3 network of the default dataset at one operating point: `nodes` (buses "
+        "`B###` with their `area`), `lines` (`R###` with their `corridor`), `buses` (generation, load, "
+        "people), `areas`, `corridors` and `defenses`. Call it before creating a run or injecting an "
+        "event to pick valid targets. Read only."
+    ),
+    responses=errors(
+        {
+            404: "Unknown operating point; `detail.valid` lists the valid ones.",
+            422: "Invalid query parameter.",
+        }
+    ),
+    openapi_extra=AGENT,
 )
-def theater_network(sim: Sim, point: str | None = None) -> dict[str, Any]:
+def theater_network(
+    sim: Sim,
+    point: Annotated[
+        str | None,
+        Query(
+            description="Operating point id; omitted means the reference point. Valid ids are in the 404 body.",
+            examples=["nov2026-1300"],
+        ),
+    ] = None,
+) -> dict[str, Any]:
     try:
         return sim.theater_network(point)
     except KeyError as exc:
@@ -129,7 +160,16 @@ def run_call(fn, *args, **kwargs) -> Any:
 
 
 @router.get(
-    "/sim/catalog", tags=["experimentos"], summary="Eventos, acciones, políticas, objetivos y plantillas"
+    "/sim/catalog",
+    tags=["catalog"],
+    operation_id="get_catalog",
+    summary="List event types, actions, policies, objectives and experiment templates",
+    description=(
+        "Returns every choice an agent can make: `events` (type ids for `inject_run_event` and the "
+        "target kinds they accept), defensive `actions`, `policies` A/B/C, adversary `objectives`, "
+        "missions and experiment `templates`. Call it once before creating runs. Read only."
+    ),
+    openapi_extra=AGENT,
 )
 def sim_catalog(sim: Sim) -> dict[str, Any]:
     return sim.catalog()
@@ -139,8 +179,22 @@ def sim_catalog(sim: Sim) -> dict[str, Any]:
     "/sim/runs",
     response_model=RunSummary,
     status_code=201,
-    tags=["experimentos"],
-    summary="Crear una corrida del teatro de operaciones",
+    tags=["global-runs"],
+    operation_id="global_create_run",
+    summary="Create a strategic run over the default dataset",
+    description=(
+        "Creates a run of the strategic theatre from a template (`GET /api/v1/sim/catalog` → "
+        "`templates`) with a policy, an optional adversary, uncertainty, seed and initial events. "
+        "Returns the run summary with its `run_id`, used by every other run call. With `auto_run` "
+        "the run is played to the end before returning. The run lives in server memory."
+    ),
+    responses=errors(
+        {
+            404: "Unknown template or event target.",
+            422: "Invalid input (policy, operating point, horizon, adversary, capabilities, event type).",
+        }
+    ),
+    openapi_extra=AGENT,
 )
 def create_run(sim: Sim, body: RunCreate) -> dict[str, Any]:
     data = body.model_dump(exclude={"auto_run"})
@@ -149,23 +203,59 @@ def create_run(sim: Sim, body: RunCreate) -> dict[str, Any]:
 
 
 @router.get(
-    "/sim/runs/{run_id}", tags=["experimentos"], summary="Estado real, observado y estimado por agente"
+    "/sim/runs/{run_id}",
+    tags=["global-runs"],
+    operation_id="global_get_run",
+    summary="Read a run's latest state",
+    description=(
+        "Returns the run summary, the latest cycle snapshot (real, observed and per-agent estimated "
+        "state, decisions, grid frame, areas, crews, metrics), the resource ledger and the metric "
+        "series of every cycle so far. Read only."
+    ),
+    responses=errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
+    openapi_extra=AGENT,
 )
-def get_run(sim: Sim, run_id: str) -> dict[str, Any]:
+def get_run(sim: Sim, run_id: RunId) -> dict[str, Any]:
     return run_call(sim.runs.state, run_id)
 
 
 @router.post(
     "/sim/runs/{run_id}/events",
-    tags=["experimentos"],
-    summary="Seleccionar un nodo y disparar un evento (se aplica en el próximo ciclo)",
+    tags=["global-runs"],
+    operation_id="global_inject_run_event",
+    summary="Trigger an event on a target; it applies at the next cycle",
+    description=(
+        "Queues an event (`type` from `GET /api/v1/sim/catalog` → `events`) on a target: area, zone, "
+        "corridor, bus `B###`, line `R###`, defence function or real substation id `SE...`. The "
+        "response echoes `resolved_target` and `area`. The event is logged with `source: user` and "
+        "takes effect when the run is stepped."
+    ),
+    responses=errors(
+        {
+            404: "Unknown run_id or target.",
+            409: "The run has finished; replay it instead.",
+            422: "Invalid event type or body.",
+        }
+    ),
+    openapi_extra=AGENT,
 )
-def inject_event(sim: Sim, run_id: str, body: EventIn) -> dict[str, Any]:
+def inject_event(sim: Sim, run_id: RunId, body: EventIn) -> dict[str, Any]:
     return run_call(sim.runs.inject, run_id, body.type, body.target, body.params, body.cause)
 
 
-@router.post("/sim/runs/{run_id}/step", tags=["experimentos"], summary="Avanzar n ciclos de 5 minutos")
-def step_run(sim: Sim, run_id: str, body: StepIn) -> dict[str, Any]:
+@router.post(
+    "/sim/runs/{run_id}/step",
+    tags=["global-runs"],
+    operation_id="global_step_run",
+    summary="Advance a run by n cycles of 5 minutes",
+    description=(
+        "Runs `cycles` cycles (1 to 72) and returns one snapshot per cycle. Queued events apply in "
+        "the first one. A finished run returns no new snapshots."
+    ),
+    responses=errors({404: "Unknown run_id.", 422: "`cycles` outside 1-72."}),
+    openapi_extra=AGENT,
+)
+def step_run(sim: Sim, run_id: RunId, body: StepIn) -> dict[str, Any]:
     return run_call(sim.runs.step, run_id, body.cycles)
 
 
@@ -173,10 +263,19 @@ def step_run(sim: Sim, run_id: str, body: StepIn) -> dict[str, Any]:
     "/sim/runs/{run_id}/replay",
     response_model=RunSummary,
     status_code=201,
-    tags=["experimentos"],
-    summary="Repetir con la misma semilla y eventos, cambiando política o capacidades",
+    tags=["global-runs"],
+    operation_id="global_replay_run",
+    summary="Replay a run with the same seed and events, optionally changing policy or capabilities",
+    description=(
+        "Creates a new run from the original's recipe: same seed and the same user events, "
+        "re-injected at their cycles, with the given overrides. It plays as many cycles as the "
+        "original (or `cycles`). An unchanged replay gives the same trace hash. Returns the new run "
+        "summary with `replay_of` and `overrides`."
+    ),
+    responses=errors({404: "Unknown run_id.", 422: "Invalid override."}),
+    openapi_extra=AGENT,
 )
-def replay_run(sim: Sim, run_id: str, body: ReplayIn) -> dict[str, Any]:
+def replay_run(sim: Sim, run_id: RunId, body: ReplayIn) -> dict[str, Any]:
     overrides: dict[str, Any] = {}
     for key in ("policy", "uncertainty", "seed"):
         if getattr(body, key) is not None:
@@ -189,19 +288,54 @@ def replay_run(sim: Sim, run_id: str, body: ReplayIn) -> dict[str, Any]:
 
 
 @router.get(
-    "/sim/runs/{run_id}/snapshots", tags=["experimentos"], summary="Snapshots ya calculados desde un ciclo"
+    "/sim/runs/{run_id}/snapshots",
+    tags=["global-runs"],
+    operation_id="global_get_run_snapshots",
+    summary="Read the snapshots already computed from a cycle on",
+    description=(
+        "Returns the run summary and the cycle snapshots from index `start`. Use it to read a "
+        "replay, which computes all its cycles at once. Read only."
+    ),
+    responses=errors({404: "Unknown run_id.", 422: "`start` is not an integer."}),
+    openapi_extra=AGENT,
 )
-def run_snapshots(sim: Sim, run_id: str, start: int = 0) -> dict[str, Any]:
+def run_snapshots(
+    sim: Sim,
+    run_id: RunId,
+    start: Annotated[int, Query(description="First cycle index to return (0-based)", examples=[0])] = 0,
+) -> dict[str, Any]:
     return run_call(sim.runs.snapshots, run_id, start)
 
 
-@router.get("/sim/runs/{run_id}/trace", tags=["experimentos"], summary="Log de auditoría encadenado y receta")
-def run_trace(sim: Sim, run_id: str) -> dict[str, Any]:
+@router.get(
+    "/sim/runs/{run_id}/trace",
+    tags=["global-runs"],
+    operation_id="global_get_run_trace",
+    summary="Read a run's hash-chained audit log and replay recipe",
+    description=(
+        "Returns the audit log (each entry chained by hash), whether the chain `verified`, its "
+        "`head` hash and the `recipe` (config and injected events) that rebuilds the run. Read only."
+    ),
+    responses=errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
+    openapi_extra=AGENT,
+)
+def run_trace(sim: Sim, run_id: RunId) -> dict[str, Any]:
     return run_call(sim.runs.trace, run_id)
 
 
-@router.get("/sim/runs/{run_id}/report", tags=["experimentos"], summary="Indicadores, índices y consecuencia")
-def run_report(sim: Sim, run_id: str) -> dict[str, Any]:
+@router.get(
+    "/sim/runs/{run_id}/report",
+    tags=["global-runs"],
+    operation_id="global_get_run_report",
+    summary="Read a run's indicators, indices and consequence card",
+    description=(
+        "Returns the indicators, indices, the consequence card (level L0-L3, people affected, "
+        "unserved MWh, cost) and the after-action keys. Works on running and finished runs. Read only."
+    ),
+    responses=errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
+    openapi_extra=AGENT,
+)
+def run_report(sim: Sim, run_id: RunId) -> dict[str, Any]:
     return run_call(sim.runs.report, run_id)
 
 
@@ -248,8 +382,15 @@ def narrative() -> dict[str, Any]:
 
 @router.get(
     "/sim/runs/{run_id}/after_action",
-    tags=["experimentos"],
-    summary="Informe posterior a la acción en español (determinista, desde plantillas)",
+    tags=["global-runs"],
+    operation_id="global_get_run_after_action",
+    summary="Read a run's after-action review in Spanish",
+    description=(
+        "Returns the after-action review built from fixed Spanish templates (deterministic). With "
+        "the server's LLM adapter enabled it adds a `narrative`. Read only."
+    ),
+    responses=errors({404: "Unknown run_id.", 422: "Invalid path parameter."}),
+    openapi_extra=AGENT,
 )
-def run_after_action(sim: Sim, run_id: str) -> dict[str, Any]:
+def run_after_action(sim: Sim, run_id: RunId) -> dict[str, Any]:
     return run_call(sim.runs.after_action, run_id)

@@ -17,6 +17,13 @@ uv run pytest
 
 After a rebuild, `POST /api/v1/admin/reload` reloads the snapshot without restarting the server. It answers 404 unless `CASCADASEN_ADMIN_ENABLED=true` (docker compose sets it; leave it off in production).
 
+Agent-only OpenAPI spec (routes marked `openapi_extra=AGENT`, rules in `docs/openapi.md`): served at `/api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`) and versioned in `docs/openapi/agents.openapi.json`. After adding or changing a marked route or its models, regenerate and validate the file, then commit it; `tests/integration/test_agent_openapi.py` fails while it is stale:
+
+```bash
+uv run python -m cascadasen.api.agent_openapi            # writes ../docs/openapi/agents.openapi.json
+uvx openapi-spec-validator ../docs/openapi/agents.openapi.json
+```
+
 Build outputs in `data/processed/`:
 
 | File | Content |

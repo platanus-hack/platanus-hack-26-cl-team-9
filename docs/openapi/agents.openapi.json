@@ -1,0 +1,1228 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sub50 agent API",
+    "description": "Endpoints an external agent needs to run strategic experiments on Sub50, a simulator of\nblackouts in the Chilean national grid (SEN). Public base URL: `https://sub50.cl`.\n\n**Ids.** The network has buses `B###` and lines `R###` (`GET /api/v1/sim/network`). Event targets\nalso accept an area (`A06`), a zone (`NG`), a corridor (`A06-A07/500`), a defence function\n(`pdce_zn`) or a real substation id (`SE...`). Event types, policies, objectives and templates come\nfrom `GET /api/v1/sim/catalog`. A run is identified by the `run_id` returned on creation.\n\n**Runs.** Runs in `global-runs` work on the default dataset and live in server memory: the most\nrecent 100 are kept and any run can be rebuilt from its recipe (`GET .../trace`). Session\nendpoints (tags `sessions`, `session-network`, `session-sandbox`, `session-runs`) carry the\nsession id in the path and work on that session's private copy of the dataset; create a session\nfirst and pass its id to every session call.\n\n**Notice.** Every scenario is hypothetical and simulated: Sub50 models the consequence of an\nevent on the grid, never the attack technique. The catalog and every run summary carry a\n`notice` field saying so.\n\nErrors return `{\"detail\": ...}`; messages inside `detail` are in Spanish.\n",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/sim/network": {
+      "get": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Read the default 188-bus network with its areas, corridors and defences",
+        "description": "Returns the mapa 3 network of the default dataset at one operating point: `nodes` (buses `B###` with their `area`), `lines` (`R###` with their `corridor`), `buses` (generation, load, people), `areas`, `corridors` and `defenses`. Call it before creating a run or injecting an event to pick valid targets. Read only.",
+        "operationId": "global_get_network",
+        "parameters": [
+          {
+            "name": "point",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Operating point id; omitted means the reference point. Valid ids are in the 404 body.",
+              "examples": [
+                "nov2026-1300"
+              ],
+              "title": "Point"
+            },
+            "description": "Operating point id; omitted means the reference point. Valid ids are in the 404 body."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Get Network"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown operating point; `detail.valid` lists the valid ones.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/catalog": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List event types, actions, policies, objectives and experiment templates",
+        "description": "Returns every choice an agent can make: `events` (type ids for `inject_run_event` and the target kinds they accept), defensive `actions`, `policies` A/B/C, adversary `objectives`, missions and experiment `templates`. Call it once before creating runs. Read only.",
+        "operationId": "get_catalog",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Catalog"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs": {
+      "post": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Create a strategic run over the default dataset",
+        "description": "Creates a run of the strategic theatre from a template (`GET /api/v1/sim/catalog` → `templates`) with a policy, an optional adversary, uncertainty, seed and initial events. Returns the run summary with its `run_id`, used by every other run call. With `auto_run` the run is played to the end before returning. The run lives in server memory.",
+        "operationId": "global_create_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown template or event target.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input (policy, operating point, horizon, adversary, capabilities, event type).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Read a run's latest state",
+        "description": "Returns the run summary, the latest cycle snapshot (real, observed and per-agent estimated state, decisions, grid frame, areas, crews, metrics), the resource ledger and the metric series of every cycle so far. Read only.",
+        "operationId": "global_get_run",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+              "examples": [
+                "3f2a9c1b7d4e"
+              ],
+              "title": "Run Id"
+            },
+            "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Get Run"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown run_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid path parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs/{run_id}/events": {
+      "post": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Trigger an event on a target; it applies at the next cycle",
+        "description": "Queues an event (`type` from `GET /api/v1/sim/catalog` → `events`) on a target: area, zone, corridor, bus `B###`, line `R###`, defence function or real substation id `SE...`. The response echoes `resolved_target` and `area`. The event is logged with `source: user` and takes effect when the run is stepped.",
+        "operationId": "global_inject_run_event",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+              "examples": [
+                "3f2a9c1b7d4e"
+              ],
+              "title": "Run Id"
+            },
+            "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Inject Run Event"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown run_id or target.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The run has finished; replay it instead.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid event type or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs/{run_id}/step": {
+      "post": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Advance a run by n cycles of 5 minutes",
+        "description": "Runs `cycles` cycles (1 to 72) and returns one snapshot per cycle. Queued events apply in the first one. A finished run returns no new snapshots.",
+        "operationId": "global_step_run",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+              "examples": [
+                "3f2a9c1b7d4e"
+              ],
+              "title": "Run Id"
+            },
+            "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Step Run"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown run_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`cycles` outside 1-72.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs/{run_id}/replay": {
+      "post": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Replay a run with the same seed and events, optionally changing policy or capabilities",
+        "description": "Creates a new run from the original's recipe: same seed and the same user events, re-injected at their cycles, with the given overrides. It plays as many cycles as the original (or `cycles`). An unchanged replay gives the same trace hash. Returns the new run summary with `replay_of` and `overrides`.",
+        "operationId": "global_replay_run",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+              "examples": [
+                "3f2a9c1b7d4e"
+              ],
+              "title": "Run Id"
+            },
+            "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown run_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid override.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs/{run_id}/snapshots": {
+      "get": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Read the snapshots already computed from a cycle on",
+        "description": "Returns the run summary and the cycle snapshots from index `start`. Use it to read a replay, which computes all its cycles at once. Read only.",
+        "operationId": "global_get_run_snapshots",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+              "examples": [
+                "3f2a9c1b7d4e"
+              ],
+              "title": "Run Id"
+            },
+            "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "First cycle index to return (0-based)",
+              "examples": [
+                0
+              ],
+              "default": 0,
+              "title": "Start"
+            },
+            "description": "First cycle index to return (0-based)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Get Run Snapshots"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown run_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`start` is not an integer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs/{run_id}/trace": {
+      "get": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Read a run's hash-chained audit log and replay recipe",
+        "description": "Returns the audit log (each entry chained by hash), whether the chain `verified`, its `head` hash and the `recipe` (config and injected events) that rebuilds the run. Read only.",
+        "operationId": "global_get_run_trace",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+              "examples": [
+                "3f2a9c1b7d4e"
+              ],
+              "title": "Run Id"
+            },
+            "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Get Run Trace"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown run_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid path parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs/{run_id}/report": {
+      "get": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Read a run's indicators, indices and consequence card",
+        "description": "Returns the indicators, indices, the consequence card (level L0-L3, people affected, unserved MWh, cost) and the after-action keys. Works on running and finished runs. Read only.",
+        "operationId": "global_get_run_report",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+              "examples": [
+                "3f2a9c1b7d4e"
+              ],
+              "title": "Run Id"
+            },
+            "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Get Run Report"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown run_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid path parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sim/runs/{run_id}/after_action": {
+      "get": {
+        "tags": [
+          "global-runs"
+        ],
+        "summary": "Read a run's after-action review in Spanish",
+        "description": "Returns the after-action review built from fixed Spanish templates (deterministic). With the server's LLM adapter enabled it adds a `narrative`. Read only.",
+        "operationId": "global_get_run_after_action",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)",
+              "examples": [
+                "3f2a9c1b7d4e"
+              ],
+              "title": "Run Id"
+            },
+            "description": "Run id returned by `POST /api/v1/sim/runs` or `/replay` (12 hex characters)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Global Get Run After Action"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown run_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid path parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdversaryIn": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "description": "Whether the adversary plays",
+            "default": true,
+            "examples": [
+              true
+            ]
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective",
+            "description": "Adversary objective; see `GET /api/v1/sim/catalog` → `objectives`",
+            "default": "reduce_observability",
+            "examples": [
+              "reduce_observability"
+            ]
+          },
+          "budget": {
+            "type": "number",
+            "title": "Budget",
+            "description": "Adversary actions, 0 to 50 (digital action = 1, physical = 2)",
+            "default": 8,
+            "examples": [
+              8
+            ]
+          },
+          "adaptive": {
+            "type": "boolean",
+            "title": "Adaptive",
+            "description": "True: it learns during the run (EXP3); False: it plays the template's plan",
+            "default": true,
+            "examples": [
+              true
+            ]
+          }
+        },
+        "type": "object",
+        "title": "AdversaryIn"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Detail",
+            "description": "Spanish message. Input errors from the simulator give an object `{field, message, valid}`; request validation errors give FastAPI's list of `{loc, msg, type}`.",
+            "examples": [
+              "No existe la corrida: 3f2a9c1b7d4e"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse",
+        "description": "Error body shared by every agent route."
+      },
+      "EventIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Event type; see `GET /api/v1/sim/catalog` → `events`",
+            "examples": [
+              "C3_transmission_opening",
+              "D1_telemetry_loss"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "Area (A06), zone (NG), corridor (A06-A07/500), bus B###, line R###, defence function (pdce_zn) or real substation id (SE…)",
+            "examples": [
+              "A06",
+              "B042"
+            ]
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params",
+            "description": "Overrides of the event's default size (catalog `events[].defaults`)",
+            "examples": [
+              {}
+            ]
+          },
+          "cause": {
+            "type": "string",
+            "enum": [
+              "intentional",
+              "failure"
+            ],
+            "title": "Cause",
+            "description": "Intentional event or plain failure",
+            "default": "intentional",
+            "examples": [
+              "intentional"
+            ]
+          },
+          "cycle": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycle",
+            "description": "Only in `initial_events`: cycle at which it happens",
+            "examples": [
+              0
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "target"
+        ],
+        "title": "EventIn"
+      },
+      "ReplayIn": {
+        "properties": {
+          "policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy",
+            "description": "New policy A, B or C",
+            "examples": [
+              "A"
+            ]
+          },
+          "uncertainty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty",
+            "description": "New uncertainty level, 0 to 2",
+            "examples": [
+              2.0
+            ]
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "New seed; omitted keeps the original",
+            "examples": [
+              12
+            ]
+          },
+          "adversary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdversaryIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New adversary; omitted keeps the original"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities",
+            "description": "New capacity per defensive resource",
+            "examples": [
+              {
+                "field_crews": 12
+              }
+            ]
+          },
+          "cycles": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 72.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycles",
+            "description": "Cycles to play; default is what the original played",
+            "examples": [
+              6
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ReplayIn"
+      },
+      "RunCreate": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "title": "Template",
+            "description": "Experiment template; see `GET /api/v1/sim/catalog` → `templates`",
+            "default": "open_field",
+            "examples": [
+              "flagship_observability",
+              "open_field"
+            ]
+          },
+          "policy": {
+            "type": "string",
+            "title": "Policy",
+            "description": "Defensive policy: A reactive, B preventive, C adaptive coordination",
+            "default": "C",
+            "examples": [
+              "C"
+            ]
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "Random seed; omitted means a fresh one, returned in the summary",
+            "examples": [
+              11
+            ]
+          },
+          "uncertainty": {
+            "type": "number",
+            "title": "Uncertainty",
+            "description": "0 perfect information, 1 baseline, 2 degraded",
+            "default": 1.0,
+            "examples": [
+              1.0
+            ]
+          },
+          "horizon": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon",
+            "description": "Cycles of 5 min (1 to 72); default is the template's",
+            "examples": [
+              30
+            ]
+          },
+          "adversary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdversaryIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default is the template's adversary"
+          },
+          "capabilities": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Capabilities",
+            "description": "Capacity per defensive resource (mode III), 0 to 10000; see catalog `resources`",
+            "examples": [
+              {
+                "field_crews": 12
+              }
+            ]
+          },
+          "point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point",
+            "description": "Mapa 3 operating point (catalog `operating_points`); default is the template's",
+            "examples": [
+              "nov2026-1300"
+            ]
+          },
+          "operating_point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operating Point",
+            "description": "Alias of `point`",
+            "examples": [
+              "nov2026-1300"
+            ]
+          },
+          "initial_events": {
+            "items": {
+              "$ref": "#/components/schemas/EventIn"
+            },
+            "type": "array",
+            "title": "Initial Events",
+            "description": "Events applied at their `cycle` (default 0)",
+            "examples": [
+              [
+                {
+                  "cycle": 2,
+                  "target": "A06",
+                  "type": "C3_transmission_opening"
+                }
+              ]
+            ]
+          },
+          "auto_run": {
+            "type": "boolean",
+            "title": "Auto Run",
+            "description": "Play the run to the end before returning",
+            "default": false,
+            "examples": [
+              false
+            ]
+          },
+          "llm_commander": {
+            "type": "boolean",
+            "title": "Llm Commander",
+            "description": "C2 picks among validated actions with the server's LLM (rules if none is configured)",
+            "default": false,
+            "examples": [
+              false
+            ]
+          },
+          "stochastic": {
+            "type": "boolean",
+            "title": "Stochastic",
+            "description": "Chance in the world: event sizes, unplanned events, action and defence failures",
+            "default": true,
+            "examples": [
+              true
+            ]
+          }
+        },
+        "type": "object",
+        "title": "RunCreate"
+      },
+      "RunSummary": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "cycle": {
+            "type": "integer",
+            "title": "Cycle"
+          },
+          "horizon": {
+            "type": "integer",
+            "title": "Horizon"
+          },
+          "t_min": {
+            "type": "integer",
+            "title": "T Min"
+          },
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "policy": {
+            "type": "string",
+            "title": "Policy"
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "uncertainty": {
+            "type": "number",
+            "title": "Uncertainty"
+          },
+          "operating_point": {
+            "type": "string",
+            "title": "Operating Point"
+          },
+          "defenses": {
+            "type": "string",
+            "title": "Defenses"
+          },
+          "adversary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Adversary"
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice"
+          },
+          "replay_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Of"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "cycle",
+          "horizon",
+          "t_min",
+          "template",
+          "policy",
+          "seed",
+          "uncertainty",
+          "operating_point",
+          "defenses",
+          "adversary",
+          "notice"
+        ],
+        "title": "RunSummary"
+      },
+      "StepIn": {
+        "properties": {
+          "cycles": {
+            "type": "integer",
+            "maximum": 72.0,
+            "minimum": 1.0,
+            "title": "Cycles",
+            "description": "Cycles of 5 minutes to advance",
+            "default": 1,
+            "examples": [
+              3
+            ]
+          }
+        },
+        "type": "object",
+        "title": "StepIn"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "catalog",
+      "description": "What an agent can choose from: events, actions, policies, objectives, templates."
+    },
+    {
+      "name": "global-runs",
+      "description": "Strategic runs over the default dataset, and its network."
+    }
+  ]
+}

@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
+from cascadasen.api import agent_openapi
 from cascadasen.api.limits import BodyLimitMiddleware, SseSlots, TokenBucket
 from cascadasen.api.schemas import EdgePage, Health, IslandsRequest, IslandsResponse, NodePage, Page
 from cascadasen.api.session_routes import router as session_router
@@ -79,6 +80,7 @@ def create_app(
     app.state.limiter, app.state.sse_slots = TokenBucket(), SseSlots()
     app.include_router(simulation_router)
     app.include_router(session_router)
+    agent_openapi.mount(app)  # agent-only spec at /api/v1/agents/openapi.json (docs/openapi.md)
 
     def found(fn, *args, **kwargs):
         try:
