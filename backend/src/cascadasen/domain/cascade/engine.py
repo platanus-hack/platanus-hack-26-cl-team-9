@@ -52,6 +52,20 @@ class _State:
     curves: dict[str, list[list[float]]]
     results: dict[frozenset, tuple[str, float | None]]
     dark: set[int]
+    edac_off: frozenset[str] = frozenset()
+    extra_reserve: np.ndarray | None = None
+
+
+@dataclass
+class CascadeState:
+    """Per-bus state after the cascade settles (the strategic theatre continues from it)."""
+
+    gen: np.ndarray
+    load: np.ndarray
+    sync: np.ndarray
+    inertia: np.ndarray
+    open_lines: set[str]
+    dark: set[int]
 
 
 def run_cascade_workflow(
@@ -61,14 +75,34 @@ def run_cascade_workflow(
     params: CascadeParams = CascadeParams(),
 ) -> dict:
     """Why: tell what a cut costs (islands, load lost, people in the dark) with calculated physics."""
-    state = _start(net, point, params, cut_line_ids)
+    return run_cascade_state(net, point, cut_line_ids, params)[0]
+
+
+def run_cascade_state(
+    net: ReducedNetwork,
+    point: OperatingPoint,
+    cut_line_ids: list[str],
+    params: CascadeParams = CascadeParams(),
+    *,
+    open_lines: frozenset[str] | set[str] = frozenset(),
+    edac_off: frozenset[str] | set[str] = frozenset(),
+    extra_reserve_by_bus: np.ndarray | None = None,
+) -> tuple[dict, CascadeState]:
+    """The cascade from a running state: `open_lines` were already open (no cut event), `edac_off`
+    zones do not shed, `extra_reserve_by_bus` adds fast reserve to each island. Returns the timeline
+    (same format as `run_cascade_workflow`) and the settled per-bus state."""
+    state = _start(net, point, params, cut_line_ids, set(open_lines))
+    state.edac_off, state.extra_reserve = frozenset(edac_off), extra_reserve_by_bus
     truncated = _cascade(state)
-    return _timeline(state, cut_line_ids, truncated)
+    final = CascadeState(
+        state.gen, state.load, state.sync, state.inertia, set(state.open_lines), set(state.dark)
+    )
+    return _timeline(state, cut_line_ids, truncated), final
 
 
-def _start(net, point, params, cut_ids) -> _State:
+def _start(net, point, params, cut_ids, already_open: set[str] | None = None) -> _State:
     known = {ln.id for ln in net.lines}
-    unknown = set(cut_ids) - known
+    unknown = (set(cut_ids) | (already_open or set())) - known
     if unknown:
         raise ValueError(f"unknown line ids: {sorted(unknown)}")
     state = _State(
@@ -79,7 +113,7 @@ def _start(net, point, params, cut_ids) -> _State:
         point.load.copy(),
         point.sync_mw.copy(),
         point.inertia_mws.copy(),
-        set(cut_ids),
+        set(cut_ids) | (already_open or set()),
         [],
         [],
         {},
@@ -170,6 +204,12 @@ def _island_input(
     s: _State, island: list[int], inertia: float, sync: float, gen: float, load: float
 ) -> IslandInput:
     system_zone = _zone_load(s.net, s.point.load, list(range(s.net.size)))
+    edac = {
+        z: steps
+        for z, steps in edac_tables(system_zone, float(s.point.load.sum())).items()
+        if z not in s.edac_off
+    }
+    extra = float(s.extra_reserve[island].sum()) if s.extra_reserve is not None else 0.0
     return IslandInput(
         inertia,
         sync,
@@ -177,7 +217,8 @@ def _island_input(
         load,
         float(s.gen[island].sum() - s.sync[island].sum()),
         _zone_load(s.net, s.load, island),
-        edac_tables(system_zone, float(s.point.load.sum())),
+        edac,
+        extra,
     )
 
 

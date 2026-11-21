@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(cascade): run the cascade from a running state
+
+- **Changed:** New `run_cascade_state(net, point, cuts, params, *, open_lines, edac_off, extra_reserve_by_bus)` returns the timeline plus a `CascadeState` (per-bus gen, load, sync, inertia, open lines, dark buses). `IslandInput.extra_reserve_mw` adds fast reserve to an island. `run_cascade_workflow` is now a thin wrapper with identical output (checked on 162 real cuts across two points).
+- **Why:** The strategic theatre is being ported onto the mapa 3 network; it needs to continue a cascade cycle after cycle, switch EDAC zones off (C4) and commit fast reserve or batteries.
+- **Agents:** Mapa 3 and `cascadasen-cache` are unchanged. EDAC zones are `norte_grande` and `centro_sur`.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`, `frequency.py`, `backend/tests/unit/test_cascade.py`.
+
 ## 2026-11-21 · merge main into feat/strategic-sim-api (mapa 3, cascade engine)
 
 - **Changed:** Brings mapa 3, `domain/cascade/` and `cascadasen-cache` from main (#10-#12). Conflicts in `CHANGELOG.md` and `backend/pyproject.toml` resolved keeping both sides. Lint-only fixes on the merged files so the pre-commit hook passes: `ruff format`, unused imports, sorted imports, `zip(..., strict=True)` in `cascade/engine.py`, executable bit on `data/scripts/*.py`. No behaviour change (126 tests pass).

@@ -70,6 +70,7 @@ class IslandInput:
     nonsync_mw: float
     zone_load_mw: dict[str, float]
     edac: dict[str, list[EdacStep]]
+    extra_reserve_mw: float = 0.0  # fast reserve or batteries committed to this island (strategic theatre)
 
 
 @dataclass
@@ -112,7 +113,7 @@ def simulate_island(island: IslandInput, params: Params = Params()) -> IslandRes
     done: set[tuple[str, int]] = set()
     steps_log: list[dict] = []
     curve: list[list[float]] = []
-    cap = params.reserve_share_of_sync * island.sync_mw
+    cap = params.reserve_share_of_sync * island.sync_mw + island.extra_reserve_mw
     min_hz, collapse = F0, None
     for k in range(int(params.horizon_s / params.step_s) + 1):
         t = k * params.step_s

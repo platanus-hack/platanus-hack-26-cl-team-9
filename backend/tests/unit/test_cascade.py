@@ -170,3 +170,29 @@ def test_real_grid_base_case_is_secure_and_a_cut_is_bounded():
     cut = run_cascade_workflow(net, point, [net.lines[0].id])
     assert 0 <= cut["summary"]["people_without_power"] <= point.people.sum() + 1
     assert cut["summary"]["load_shed_mw"] <= point.load.sum() + 1e-6
+
+
+def test_running_state_options_for_the_strategic_theatre():
+    """run_cascade_state: lines already open make no cut event, EDAC zones can be off, extra reserve
+    helps an island in deficit, and the default call equals run_cascade_workflow."""
+    from cascadasen.domain.cascade.engine import run_cascade_state
+
+    net = _toy_net(caps=(400.0, 400.0, 400.0))
+    deficit = _toy_point(gen=(300.0, 0.0, 0.0), load=(0.0, 225.0, 225.0))
+    plain, _ = run_cascade_state(net, deficit, [])
+    assert plain == run_cascade_workflow(net, deficit, [])
+    assert any(e["type"] == "load_shed" for e in plain["events"])  # EDAC acts on the 150 MW deficit
+
+    def min_hz(tl):
+        return min(i["min_hz"] for i in tl["summary"]["islands"] if i["min_hz"] is not None)
+
+    off, _ = run_cascade_state(net, deficit, [], edac_off={"centro_sur", "norte_grande"})
+    assert not any(e["type"] == "load_shed" for e in off["events"])
+    assert min_hz(off) < min_hz(plain)  # without EDAC the frequency falls further
+
+    helped, _ = run_cascade_state(net, deficit, [], extra_reserve_by_bus=np.array([200.0, 0.0, 0.0]))
+    assert min_hz(helped) > min_hz(plain)
+    assert helped["summary"]["load_shed_mw"] <= plain["summary"]["load_shed_mw"]
+
+    reopened, state = run_cascade_state(net, _toy_point(), [], open_lines={"R1"})
+    assert not any(e["type"] == "line_cut" for e in reopened["events"]) and "R1" in state.open_lines
