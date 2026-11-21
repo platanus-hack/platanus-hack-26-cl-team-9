@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · docs(architecture): document the system as built
+
+- **Changed:** New `docs/architecture.md`: system overview (sources → `data/processed` → API and static cache → web), backend ports and adapters with the dependency rule, the five ports and their adapters, domain modules (two engines, theatre, agents), use cases and CLI commands, the cut and theatre-cycle flows, frontend, data and parameters, deployment and tooling. `stack.md` sections 2-3 point to it and drop the stale `network.json`/`engine/` backlog entries; `AGENTS.md` and `backend/README.md` link it.
+- **Why:** Ricardo asked for architecture documentation; only the README's data-layer diagram existed and `stack.md` described the original target.
+- **Agents:** Keep `docs/architecture.md` in sync when a layer, port, engine, CLI command or deployment piece changes. `domain/` must not import from `api/`, `application/` or `infrastructure/`.
+- **Files:** `docs/architecture.md`, `docs/stack.md`, `AGENTS.md`, `backend/README.md`.
+
 ## 2026-11-21 · fix(web): rename the site title from CascadaSEN to Sub50
 - **Changed:** The browser tab `<title>` in `web/index.html` and the panel `<h1>` in `web/src/App.tsx` now read "Sub50".
 - **Why:** The project is called Sub50; the site still showed the old name.

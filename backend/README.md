@@ -37,6 +37,8 @@ Build outputs in `data/processed/`:
 
 ## Architecture (ports and adapters)
 
+Full picture (ports, both engines, theatre cycle, frontend, deployment): `docs/architecture.md`.
+
 ```
 api/ (FastAPI, driving adapter) ──> application/ (BuildGridSnapshot, GridQueryService)
                                           │

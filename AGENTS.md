@@ -7,7 +7,7 @@ These rules apply to every coding agent (Claude Code, Codex, Cursor, others) and
 Do this before each plan and before each change, not only at the start of a session.
 
 1. Read the docs that apply, in this order:
-   1. `docs/idea.md`: product, scope, limits, risks
+   1. `docs/idea.md`: product, scope, limits, risks (and `docs/architecture.md` for how the system is built)
    2. `docs/cyber.md`: main objective of the simulation (consequences of cyberattacks) and its guardrails
    3. `docs/stack.md`: architecture, simulation model, data contracts, conventions
    4. `docs/design.md`: visual direction, colors, zoom levels, logo (for UI work)

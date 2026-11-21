@@ -47,7 +47,7 @@ datasets (public APIs) --scripts--> data/processed/network.json
         web/public/cache/*.json  ------>  frontend player (reads timeline, renders from clock t)
 ```
 
-The diagram is the target architecture. In the frontend MVPs, fixture files in `web/public/` take the place of the engine output and the API, and the engine and API are backlog.
+The diagram is the original target. The architecture as built (backend ports and adapters, the two engines, the strategic theatre, frontend and deployment) is in [`architecture.md`](architecture.md). In particular, `network.json` does not exist: the engines read `data/processed/{grid_snapshot,operating_points,baseline_opf}.json`, and the cache lives in `web/public/cache/`.
 
 Principles:
 - The engine is the only place with physics. The frontend never computes physics, so there are no two implementations to diverge.
@@ -62,16 +62,18 @@ Current layout (2026-11-21). Entries marked (backlog) do not exist yet.
 ```
 AGENTS.md, CLAUDE.md  agent workflow rules; CHANGELOG.md is written for agents
 docs/                 this documentation
-backend/              Python package `cascadasen` (uv): source adapters, unify, validation, read-only FastAPI, tests
+backend/              Python package `cascadasen` (uv), ports and adapters (`architecture.md`): source adapters, unify,
+                      validation, the two engines (`domain/cascade`, `domain/simulation`), the strategic theatre and
+                      its agents, FastAPI, tests
 data/
   scripts/            build_chile_outline.sh, build_node_index.py, build_operating_points.py, build_baseline_opf.py
   raw/                downloaded sources (git-ignored cache)
   processed/          grid_snapshot.json, sen_network.json, geo/*.geojson, chile.geojson, node_index.json,
                       operating_points.json, baseline_opf.json, atlas_sen.html
 web/                  Vite + React + TypeScript app (deck.gl map, Mapbox option, node popup)
-  public/cache/       (backlog) timelines: fixtures first, builder output later
-engine/               (backlog) cascade, frequency model, narration keys, YAML parameters with sources
-scripts/              lint.sh and git hooks; build_cache.py is backlog
+  public/cache/       precomputed cuts per operating point (`cascadasen-cache`) and offline theatre runs
+infrastructure/       Terraform and deploy script for AWS (`infrastructure.md`)
+scripts/              lint.sh and git hooks
 docker-compose.yml    backend and web services (`docs/docker.md`)
 .github/workflows/    lint.yml (ruff and changelog check)
 ```
