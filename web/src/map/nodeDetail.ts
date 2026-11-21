@@ -14,7 +14,7 @@ export interface NodeRecord {
   in_main_grid: boolean; degree: number; generation_mw: number; served_population: number;
   cen?: { id: number; code: string; scada: boolean; comm: boolean };
   lines: Line[]; plants: Plant[]; plants_count: number; storage: Storage[]; storage_candidates: [number, number];
-  comunas: Comuna[]; model_buses: [string, number][]; model_branches: Branch[];
+  comunas: Comuna[]; operating: Record<string, [load: number, gen: number]>; model_buses: [string, number][]; model_branches: Branch[];
 }
 
 const MAX_LINES = 14;
@@ -84,6 +84,7 @@ function _card(n: NodeRecord, close: () => void): HTMLElement[] {
     _section("Almacenamiento", _storage(n)),
     _section("Población abastecida", _population(n)),
     _section(`Líneas conectadas · ${n.lines.length}`, _lines(n)),
+    _section("Demanda y despacho simulado", _operating(n)),
     _section("Modelo eléctrico (PyPSA-CL)", _model(n)),
   ];
 }
@@ -136,6 +137,16 @@ function _lines(n: NodeRecord): HTMLElement {
   ]);
   const more = n.lines.length > MAX_LINES ? `+${n.lines.length - MAX_LINES} líneas más` : "";
   return _stack(_rows(rows), _note(more), _note("s/d = dato no disponible en las fuentes"));
+}
+
+const POINT_LABELS: Record<string, string> = {
+  "feb2025-1500": "Feb 2025 15:00", "feb2025-0300": "Feb 2025 03:00", "nov2026-1300": "Nov 2026 13:00", "nov2026-2000": "Nov 2026 20:00",
+};
+
+function _operating(n: NodeRecord): HTMLElement {
+  const rows = Object.entries(n.operating).map(([id, [load, gen]]): [string, string] => [POINT_LABELS[id] ?? id, `consume ${formatNumber(load, 1)} · genera ${formatNumber(gen, 1)} MW`]);
+  const note = "Demanda: perfil modelado de PyPSA-CL. Despacho: simulado con supuestos. No son valores medidos.";
+  return _stack(rows.length ? _rows(rows) : _note("Sin barra eléctrica asociada"), _note(note, "warn"));
 }
 
 function _model(n: NodeRecord): HTMLElement {

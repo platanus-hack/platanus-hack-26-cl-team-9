@@ -24,6 +24,7 @@ def build_node_index_workflow() -> dict:
     _add_storage(nodes, snapshot)
     _add_population(nodes, snapshot)
     _add_electrical_model(nodes, snapshot)
+    _add_operating_points(nodes)
     return nodes
 
 
@@ -110,6 +111,26 @@ def _add_electrical_model(nodes: dict, snapshot: dict) -> None:
         for node in {r["node0"], r["node1"]}:
             if node in nodes:
                 nodes[node]["model_branches"].append([r["name"], r["asset_type"], r["s_nom_mva"], r["x_pu"], r["r_pu"]])
+
+
+def _add_operating_points(nodes: dict) -> None:
+    """Demand and simulated dispatch per node and per hour, summed over the node's electrical buses (see build_operating_points.py)."""
+    path = PROCESSED / "operating_points.json"
+    if not path.exists():
+        return
+    ops = json.loads(path.read_text(encoding="utf-8"))
+    bus_node = {name: b["node"] for name, b in ops["buses"].items()}
+    for point in ops["points"]:
+        totals = defaultdict(lambda: [0.0, 0.0])
+        for bus, mw in point["load_by_bus"].items():
+            totals[bus_node[bus]][0] += mw
+        for bus, mw in point["gen_by_bus"].items():
+            totals[bus_node[bus]][1] += mw
+        for node_id, (load, gen) in totals.items():
+            if node_id in nodes:
+                nodes[node_id].setdefault("operating", {})[point["id"]] = [round(load, 1), round(gen, 1)]
+    for n in nodes.values():
+        n.setdefault("operating", {})
 
 
 def _self_check(nodes: dict) -> None:
