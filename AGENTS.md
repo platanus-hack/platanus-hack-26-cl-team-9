@@ -1,4 +1,4 @@
-# Agent instructions: CascadaSEN
+# Agent instructions: Sub50
 
 These rules apply to every coding agent (Claude Code, Codex, Cursor, others) and to the humans on the team. Claude Code loads them through `CLAUDE.md`.
 
@@ -10,9 +10,10 @@ Do this before each plan and before each change, not only at the start of a sess
    1. `docs/idea.md`: product, scope, limits, risks
    2. `docs/cyber.md`: main objective of the simulation (consequences of cyberattacks) and its guardrails
    3. `docs/stack.md`: architecture, simulation model, data contracts, conventions
-   4. `docs/datasets.md`: data sources, pipeline, provenance rule
-   5. `docs/plan.md`: phases, validation cases, priorities, open decisions (section 9)
-   6. `backend/README.md` for backend work
+   4. `docs/design.md`: visual direction, colors, zoom levels, logo (for UI work)
+   5. `docs/datasets.md`: data sources, pipeline, provenance rule
+   6. `docs/plan.md`: phases, validation cases, priorities, open decisions (section 9)
+   7. `backend/README.md` for backend work, `web/README.md` for frontend work
    For a small change, reading the sections the change touches plus `plan.md` section 9 is enough. A plan that contradicts the docs must say so explicitly.
 2. Read the newest entries of `CHANGELOG.md`. They say what changed after the docs were written.
 3. Check `git status` and `git log --oneline -10`. Do not overwrite uncommitted work from someone else.

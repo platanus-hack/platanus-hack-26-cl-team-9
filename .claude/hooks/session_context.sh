@@ -12,8 +12,8 @@ if [[ -f "$ROOT/CHANGELOG.md" ]]; then
   latest="$(awk '/^## /{n++} n>=1 && n<=3' "$ROOT/CHANGELOG.md")"
 fi
 
-msg="CascadaSEN project rules (AGENTS.md):
-- Before planning or changing anything, read the docs that apply, in this order: docs/idea.md -> docs/cyber.md -> docs/stack.md -> docs/datasets.md -> docs/plan.md (backend work: also backend/README.md). Then read the latest CHANGELOG.md entries.
+msg="Sub50 project rules (AGENTS.md):
+- Before planning or changing anything, read the docs that apply, in this order: docs/idea.md -> docs/cyber.md -> docs/stack.md -> docs/design.md (UI work) -> docs/datasets.md -> docs/plan.md (backend work: also backend/README.md; frontend work: also web/README.md). Then read the latest CHANGELOG.md entries.
 - Every edit is linted automatically (scripts/lint.sh: ruff for Python). Fix what the hook reports.
 - Every commit adds an entry at the top of CHANGELOG.md (format in AGENTS.md section 3).
 
