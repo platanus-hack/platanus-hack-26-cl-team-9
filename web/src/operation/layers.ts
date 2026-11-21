@@ -21,6 +21,8 @@ export const POSTURE_LABEL: Record<Posture, string> = {
 export const CREW_COLOR: Rgba = [34, 211, 238, 255];
 export const CREW_BUSY_COLOR: Rgba = [244, 114, 182, 255];
 export const AREA_RADIUS_M = 55_000;
+export const AI_COLOR: Rgba = [217, 70, 239, 255];      // actions C2 chose with the LLM
+export const ACTION_COLOR: Rgba = [56, 189, 248, 255];  // actions chosen by the rules
 
 /** Short map labels for the effects in force in an area (effect level only, never a technique). */
 export const EFFECT_SHORT: Record<string, string> = {
@@ -52,8 +54,8 @@ export interface OperationView {
 /** Area fill: posture colour, more opaque the less supervision sees (observability 1 = clear). */
 export function areaFill(posture: Posture, observability: number): Rgba {
   const [r, g, b] = POSTURE_COLOR[posture];
-  const alpha = Math.round(25 + 120 * Math.min(1, Math.max(0, 1 - observability)) + (posture === "normal" ? 0 : 40));
-  return [r, g, b, Math.min(200, alpha)];
+  const alpha = Math.round(40 + 130 * Math.min(1, Math.max(0, 1 - observability)) + (posture === "normal" ? 0 : 50));
+  return [r, g, b, Math.min(210, alpha)];
 }
 
 /** Where a crew is drawn: on its way from its position to the target substation, linearly by cycle. */
@@ -82,21 +84,34 @@ export function buildOperationLayers(v: OperationView): Layer[] {
   const labelled = areas.filter((a) => state(a).effects.length > 0 || state(a).posture !== "normal");
   return [
     new ScatterplotLayer<TheaterArea>({
-      id: "areas", data: areas, pickable: true, radiusUnits: "meters", getRadius: AREA_RADIUS_M, stroked: true, lineWidthMinPixels: 1,
+      id: "areas", data: areas, pickable: true, radiusUnits: "meters", getRadius: AREA_RADIUS_M, stroked: true, lineWidthMinPixels: 1.5,
       getPosition: (a) => [a.lon, a.lat], getFillColor: (a) => areaFill(state(a).posture, state(a).observability),
       getLineColor: (a) => POSTURE_COLOR[state(a).posture], updateTriggers: { getFillColor: [v.snapshot], getLineColor: [v.snapshot] },
     }),
     ...base,
     new TextLayer<TheaterArea>({
       id: "area-effects", data: labelled, getPosition: (a) => [a.lon + 0.9, a.lat], getText: (a) => _areaText(a, state(a)),
-      getSize: 11, getColor: [241, 245, 249, 230], getTextAnchor: "start", getAlignmentBaseline: "center", fontFamily: "system-ui, sans-serif",
+      getSize: 12, getColor: [241, 245, 249, 240], getTextAnchor: "start", getAlignmentBaseline: "center", fontFamily: "system-ui, sans-serif",
+      characterSet: "auto", fontWeight: 600,
       background: true, getBackgroundColor: [15, 23, 42, 190], backgroundPadding: [4, 2], updateTriggers: { getText: [v.snapshot] },
     }),
+    new ScatterplotLayer<Pulse>({
+      id: "action-pulses", data: _pulses(v), radiusUnits: "meters", stroked: true, filled: false,
+      getPosition: (p) => p.pos, getRadius: (p) => AREA_RADIUS_M * (1 + 1.4 * p.phase), lineWidthUnits: "pixels",
+      getLineWidth: (p) => 3 * (1 - p.phase) + 0.5, getLineColor: (p) => [...p.color.slice(0, 3), Math.round(255 * (1 - p.phase))] as Rgba,
+      updateTriggers: { getRadius: [v.time], getLineWidth: [v.time], getLineColor: [v.time] },
+    }),
     new ScatterplotLayer<Crew>({
-      id: "crews", data: v.snapshot.crews, pickable: true, radiusUnits: "pixels", getRadius: 6, stroked: true,
+      id: "crews", data: v.snapshot.crews, pickable: true, radiusUnits: "pixels", getRadius: 8, stroked: true,
       getLineColor: [15, 23, 42, 255], lineWidthMinPixels: 2,
       getPosition: (c) => crewPosition(c, v.network, v.snapshot.cycle, v.dispatched[c.id]),
       getFillColor: (c) => (c.status === "busy" ? CREW_BUSY_COLOR : CREW_COLOR), updateTriggers: { getPosition: [v.snapshot], getFillColor: [v.snapshot] },
+    }),
+    new TextLayer<Crew>({
+      id: "crew-labels", data: v.snapshot.crews.filter((c) => c.status === "busy"), getText: (c) => c.id,
+      getPosition: (c) => crewPosition(c, v.network, v.snapshot.cycle, v.dispatched[c.id]), getPixelOffset: [0, -16], getSize: 11,
+      getColor: CREW_BUSY_COLOR, fontWeight: 700, fontFamily: "system-ui, sans-serif", outlineWidth: 2, outlineColor: [6, 10, 20, 255],
+      fontSettings: { sdf: true }, updateTriggers: { getPosition: [v.snapshot] },
     }),
   ];
 }
@@ -105,4 +120,20 @@ function _areaText(a: TheaterArea, s: { posture: Posture; effects: { type: strin
   const parts = [...new Set(s.effects.map((e) => EFFECT_SHORT[e.type] ?? e.type))];
   if (s.posture !== "normal") parts.unshift(s.posture === "manual" ? "operación local" : "aislada");
   return `${a.id} · ${parts.join(" · ")}`;
+}
+
+interface Pulse { pos: [number, number]; phase: number; color: Rgba }
+
+/** Rings that grow from the areas where this cycle's actions were executed: magenta when C2's LLM chose them. */
+function _pulses(v: OperationView): Pulse[] {
+  const chosen = new Set(v.snapshot.llm?.chosen ?? []);
+  const byId = new Map(v.network.areas.map((a) => [a.id, a]));
+  const phase = (v.time % 1 + 1) % 1;
+  const out: Pulse[] = [];
+  for (const e of v.snapshot.executed) {
+    const a = byId.get(e.target) ?? byId.get(v.network.corridors.find((c) => c.id === e.target)?.a ?? "");
+    if (!a || !e.ok) continue;
+    out.push({ pos: [a.lon, a.lat], phase, color: chosen.has(`${e.action}:${e.target}`) ? AI_COLOR : ACTION_COLOR });
+  }
+  return out;
 }

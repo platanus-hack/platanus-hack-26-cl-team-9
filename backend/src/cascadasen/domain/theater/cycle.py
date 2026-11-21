@@ -197,6 +197,7 @@ class Simulation:
         self.feedback: list[ActionFeedback] = []
         self.cycle = 0
         self.llm_record: dict[int, tuple[str, ...]] = dict(conf.llm_choices)
+        self.llm_note: dict[str, Any] | None = None
         self.effect_seq = 0
         self.scheduled: dict[int, list[EventRequest]] = {}
         sources = [("scenario", e) for e in self.template.scenario_events]
@@ -700,6 +701,7 @@ class Simulation:
             "findings": findings,
             "resources": self.ledger.snapshot(),
             "crews": self._crews_view(),
+            "llm": self.llm_note,
             "metrics": metrics,
         }
 
@@ -709,12 +711,22 @@ class Simulation:
         """C2's LLM advisor for this cycle, or None. A recorded pick (replay) wins over a new call,
         so a replay never calls the LLM again. The advisor sees only C2's view, never the real state."""
         if not self.config.llm_commander:
+            self.llm_note = None
             return None
         recorded = dict(self.config.llm_choices)
         k = self.cycle
+        model = getattr(self.advisor, "model", None)
+        # what the operation view shows about C2's LLM this cycle (replaced below when it is called)
+        self.llm_note = {"status": "idle" if self.advisor or k in recorded else "unavailable", "model": model}
 
         def pick(eligible: list[COA], capacity: int) -> set[str] | None:
             if k in recorded:
+                self.llm_note = {
+                    "status": "replayed",
+                    "model": model,
+                    "chosen": list(recorded[k]),
+                    "options": len(eligible),
+                }
                 return set(recorded[k])
             if self.advisor is None:
                 return None
@@ -735,16 +747,22 @@ class Simulation:
             chosen = (answer or {}).get("chosen")
             if not isinstance(chosen, list):
                 self.log.append(k, "decide", "c2", "llm_unavailable", {})
+                self.llm_note = {"status": "unavailable", "model": model, "options": len(options)}
                 return None
             keys = tuple(str(x) for x in chosen if str(x) in {o["id"] for o in options})[:capacity]
             self.llm_record[k] = keys
+            explanation = str(answer.get("explanation", ""))[:2000]
             self.log.append(
-                k,
-                "decide",
-                "c2",
-                "llm_choice",
-                {"chosen": list(keys), "explanation": str(answer.get("explanation", ""))[:2000]},
+                k, "decide", "c2", "llm_choice", {"chosen": list(keys), "explanation": explanation}
             )
+            self.llm_note = {
+                "status": "chosen",
+                "model": model,
+                "chosen": list(keys),
+                "explanation": explanation,
+                "options": len(options),
+                "capacity": capacity,
+            }
             return set(keys)
 
         return pick

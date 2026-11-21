@@ -91,7 +91,9 @@ class SimulationService:
         return self.simulator.simulate(cmd)
 
     def catalog(self) -> dict[str, Any]:
-        return catalog(self.world)
+        advisor = self.runs.advisor
+        llm = {"available": advisor is not None, "model": getattr(advisor, "model", None)}
+        return {**catalog(self.world), "llm": llm}
 
     def theater_network(self, point: str | None = None) -> dict[str, Any]:
         """The mapa 3 network of a point (same `Network` shape as web/public/cache/network-<year>.json)

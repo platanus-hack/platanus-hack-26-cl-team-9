@@ -29,6 +29,11 @@ export interface Metrics {
 }
 export interface IsrPicture { p_intentional: number; leading_cause: string; confidence: number; affected: string[]; outages: string[]; rationale_key: string }
 
+export interface LlmNote {
+  status: "chosen" | "unavailable" | "idle" | "replayed";
+  model: string | null; chosen?: string[]; explanation?: string; options?: number; capacity?: number;
+}
+
 export interface TheaterSnapshot {
   cycle: number; t_min: number;
   events: CycleEvent[];
@@ -41,6 +46,7 @@ export interface TheaterSnapshot {
   executed: Executed[];
   metrics: Metrics;
   real: { worst_level: string };
+  llm?: LlmNote | null;
 }
 
 export interface AdversaryCfg { enabled: boolean; objective: string; adaptive: boolean; budget: number }
@@ -62,9 +68,10 @@ export interface Catalog {
   policies: { id: string; label_key: string }[];
   objectives: string[];
   operating_points: string[];
+  llm?: { available: boolean; model: string | null };
 }
 export type Narrative = Record<string, Record<string, string> | string | number>;
 
-export interface RunConfigIn { template: string; policy: string; point: string; adversary?: AdversaryCfg; seed?: number }
+export interface RunConfigIn { template: string; policy: string; point: string; adversary?: AdversaryCfg; seed?: number; llm_commander?: boolean }
 export interface CachedRun { run: RunSummary; snapshots: TheaterSnapshot[]; report: Report; after_action: AfterAction }
 export interface CacheIndex { points: string[]; runs: { file: string; point: string; template: string; policy: string; seed: number }[]; notice: string }

@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): show the AI commander and a live overlay in the operation tab
+
+- **Changed:** Backend: each snapshot carries `llm` (status `chosen` / `unavailable` / `idle` / `replayed`, model, chosen keys, explanation, options, capacity); `GET /sim/catalog` adds `llm: {available, model}`. Frontend: "Comandante con IA" checkbox (live API with an LLM configured), "pensando…" state while the model decides, AI card with the picked options and the Spanish explanation, "IA" badges on AI-picked actions, a map overlay (clock, service, level, this cycle's events coloured by source, AI explanation), pulsing rings on the areas where actions run (magenta = AI, cyan = rules), larger area circles and crew labels, Spanish accents in map labels (`characterSet: "auto"`).
+- **Why:** Ricardo wants to see clearly, and visually, what the models and agents do in each cycle.
+- **Agents:** Visually checked with headless Chromium (Playwright from the npx cache) against the real API: 12 cycles, cascades on cycles 6 and 10, no console errors. The LLM itself was not reachable from that environment (no AWS credentials), so the AI card showed "no disponible"; the Qwen path is covered by `test_llm_commander.py` and Ricardo's manual call.
+- **Files:** `backend/src/cascadasen/domain/theater/cycle.py`, `backend/src/cascadasen/application/simulation_service.py`, `backend/tests/unit/test_llm_commander.py`, `web/src/operation/{types,layers}.ts`, `web/src/operation/OperationPanel.tsx`, `web/src/styles.css`.
+
 ## 2026-11-21 · feat(llm): any Bedrock model through the Converse API
 
 - **Changed:** New provider `CASCADASEN_LLM_PROVIDER=bedrock-converse`: `infrastructure/llm.py` calls `bedrock-runtime` `converse` (boto3) with the model or inference-profile id as is (`CASCADASEN_LLM_MODEL`, e.g. `amazon.nova-pro-v1:0`). The JSON answer is a forced tool call with the schema; on `ValidationException` (model without forced tools) it retries with the schema in the prompt and parses the text. Same AWS credential chain (environment variables or profile). README: provider docs and a script that lists the Bedrock models the account can actually call.

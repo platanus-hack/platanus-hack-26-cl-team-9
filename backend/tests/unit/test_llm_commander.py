@@ -42,6 +42,8 @@ def test_llm_picks_at_most_one_and_is_audited(toy_world):
     assert adv.calls
     for s in sim.snapshots:
         assert sum(d["approved"] for d in s["decisions"]) <= 1
+    notes = [s["llm"] for s in sim.snapshots if s["llm"] and s["llm"]["status"] == "chosen"]
+    assert notes and notes[0]["explanation"] == "Primero lo más urgente." and len(notes[0]["chosen"]) == 1
     entries = [e for e in sim.log.entries if e["kind"] == "llm_choice"]
     assert entries and entries[0]["payload"]["explanation"]
     context, options, _ = adv.calls[0]
