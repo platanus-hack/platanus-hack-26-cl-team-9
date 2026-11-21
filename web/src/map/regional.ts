@@ -12,15 +12,15 @@ const urlOf = (suffix: string): string | undefined => Object.entries(FILES).find
 export const regionalOutlineUrl = urlOf("/latam/outlines.geojson");
 
 export interface RegionalSource { id: string; name: string; publisher: string; url: string; license: string; attribution: string }
-export interface RegionalCountry { country: string; name: string; counts: { lines: number; substations: number; plants: number }; sources: RegionalSource[]; warnings: string[] }
-export interface RegionalLine { id: string; name: string; kv: number; lengthKm: number | null; source: string; path: LonLat[] }
-export interface RegionalSubstation { id: string; name: string; kv: number; source: string; position: LonLat }
-export interface RegionalPlant { id: string; name: string; tech: string | null; mw: number; source: string; position: LonLat }
+export interface RegionalCountry { country: string; name: string; counts: { lines: number; substations: number; plants: number }; raw_counts: { lines: number; substations: number; plants: number }; plant_count: number; sources: RegionalSource[]; warnings: string[] }
+export interface RegionalLine { id: string; kv: number; circuits: number | null; lengthKm: number | null; source: string; path: LonLat[] }
+export interface RegionalSubstation { id: string; name: string; kv: number; kind: string; source: string; position: LonLat }
+export interface RegionalPlant { id: string; name: string; tech: string | null; mw: number; count: number; source: string; position: LonLat }
 export interface RegionalGrid { countries: RegionalCountry[]; lines: RegionalLine[]; substations: RegionalSubstation[]; plants: RegionalPlant[] }
 
 interface Feature<G, P> { geometry: G; properties: P }
 interface Collection<G, P> { features: Feature<G, P>[] }
-type Props = { id: string; name: string; source: string; kv: number; length_km: number | null; tech: string | null; mw: number };
+type Props = { id: string; name: string; source: string; kv: number; kind: string; circuits: number | null; length_km: number | null; tech: string | null; mw: number; count: number };
 
 /** Why: the other countries' grids are context drawn under Chile's; no physics runs on them. */
 export async function loadRegionalGrid(): Promise<RegionalGrid | null> {
@@ -33,9 +33,9 @@ export async function loadRegionalGrid(): Promise<RegionalGrid | null> {
       const url = urlOf(`/latam/${iso}/${layer}.geojson`);
       return url ? _fetchJson<Collection<{ coordinates: unknown }, Props>>(url) : Promise.resolve({ features: [] });
     }));
-    grid.lines.push(...lines.features.map((f) => ({ id: f.properties.id, name: f.properties.name, kv: f.properties.kv, lengthKm: f.properties.length_km, source: f.properties.source, path: f.geometry.coordinates as LonLat[] })));
-    grid.substations.push(...substations.features.map((f) => ({ id: f.properties.id, name: f.properties.name, kv: f.properties.kv, source: f.properties.source, position: f.geometry.coordinates as LonLat })));
-    grid.plants.push(...plants.features.map((f) => ({ id: f.properties.id, name: f.properties.name, tech: f.properties.tech, mw: f.properties.mw, source: f.properties.source, position: f.geometry.coordinates as LonLat })));
+    grid.lines.push(...lines.features.map((f) => ({ id: f.properties.id, kv: f.properties.kv, circuits: f.properties.circuits, lengthKm: f.properties.length_km, source: f.properties.source, path: f.geometry.coordinates as LonLat[] })));
+    grid.substations.push(...substations.features.map((f) => ({ id: f.properties.id, name: f.properties.name, kv: f.properties.kv, kind: f.properties.kind, source: f.properties.source, position: f.geometry.coordinates as LonLat })));
+    grid.plants.push(...plants.features.map((f) => ({ id: f.properties.id, name: f.properties.name, tech: f.properties.tech, mw: f.properties.mw, count: f.properties.count, source: f.properties.source, position: f.geometry.coordinates as LonLat })));
   }));
   return grid;
 }
@@ -67,15 +67,15 @@ const FOOT = "Red de contexto: no se simula";
 export function regionalTooltip(layerId: string, object: unknown): string | null {
   if (layerId === "regional-lines") {
     const l = object as RegionalLine;
-    return `${l.name || "Línea"}\n${l.kv} kV${l.lengthKm ? ` · ${Math.round(l.lengthKm)} km` : ""}\n${l.source}\n${FOOT}`;
+    return `Línea de ${l.kv} kV${l.circuits && l.circuits > 1 ? ` · ${l.circuits} circuitos` : ""}${l.lengthKm ? ` · ${Math.round(l.lengthKm)} km` : ""}\n${l.source}\n${FOOT}`;
   }
   if (layerId === "regional-substations") {
     const s = object as RegionalSubstation;
-    return `${s.name || "Subestación"}\n${s.kv} kV\n${s.source}\n${FOOT}`;
+    return `${s.name || (s.kind === "junction" ? "Derivación de línea" : "Subestación")}\n${s.kv} kV\n${s.source}\n${FOOT}`;
   }
   if (layerId === "regional-plants") {
     const p = object as RegionalPlant;
-    return `${p.name || "Central"}\n${p.tech ?? "otra"} · ${Math.round(p.mw)} MW\n${p.source}\n${FOOT}`;
+    return `${p.name || "Generación"}\n${p.count} ${p.count === 1 ? "central" : "centrales"} · ${p.tech ?? "otra"} · ${Math.round(p.mw)} MW\n${p.source}\n${FOOT}`;
   }
   return null;
 }

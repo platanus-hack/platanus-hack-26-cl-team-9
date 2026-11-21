@@ -3,13 +3,12 @@ from cascadasen.domain.regional import (
     RegionalLine,
     RegionalPlant,
     RegionalSubstation,
-    feature_collections,
-    manifest_entry,
     normalise,
     parse_kv_levels,
     simplify_line,
     tech_from_text,
 )
+from cascadasen.domain.regional_reduction import feature_collections, manifest_entry, reduce_bundle
 from cascadasen.infrastructure.sources.regional.energia_argentina import (
     EnergiaArgentinaSource,
     parse_geometry,
@@ -92,27 +91,65 @@ def test_normalise_filters_and_counts():
     assert any("menos de 66 kV" in w for w in out.warnings)
 
 
-def test_feature_collections_carry_the_common_properties():
-    out = normalise(_bundle())
-    cols = feature_collections(out)
+def _reduced():
+    """Two substations 1 km apart (one bus), a 220 kV double line cut in two OSM ways, a parallel line, a stub."""
+    b = RegionalBundle("XXX", "Pais")
+    b.substations += [
+        RegionalSubstation("a1", "A", 220.0, -60.00, -10.0, "s"),
+        RegionalSubstation("a2", "A bis", 110.0, -60.00, -10.01, "s"),  # 1 km away: same bus
+        RegionalSubstation("b", "B", 220.0, -61.0, -10.0, "s"),
+        RegionalSubstation("c", "C", 220.0, -62.0, -10.0, "s"),
+        RegionalSubstation("lonely", "Lonely", 220.0, -50.0, -20.0, "s"),
+    ]
+    mid = (-60.5, -10.0)
+    b.lines += [
+        RegionalLine("w1", "", 220.0, [(-60.0, -10.0), mid], "s"),  # A -> free point
+        RegionalLine("w2", "", 220.0, [mid, (-61.0, -10.0)], "s"),  # free point -> B, chained with w1
+        RegionalLine("p", "", 220.0, [(-60.0, -10.0), (-61.0, -10.0)], "s", circuits=1),  # parallel to A-B
+        RegionalLine("bc", "", 220.0, [(-61.0, -10.0), (-62.0, -10.0)], "s"),
+        RegionalLine("stub", "", 220.0, [(-62.0, -10.0), (-62.0, -12.0)], "s"),  # ends nowhere
+        RegionalLine("loop", "", 220.0, [(-60.0, -10.0), (-60.0, -10.005)], "s"),  # inside one substation
+    ]
+    b.plants += [
+        RegionalPlant("1", "P1", "solar", 30.0, -61.0, -10.0, "s"),
+        RegionalPlant("2", "P2", "hidro", 50.0, -61.01, -10.0, "s"),
+        RegionalPlant("3", "Far", "solar", 9.0, -40.0, -30.0, "s"),
+    ]
+    return reduce_bundle(b)
+
+
+def test_reduction_merges_substations_chains_ways_and_folds_parallels():
+    red = _reduced()
+    names = {bus.name for bus in red.buses}
+    assert {"A", "B", "C"} == names  # "A bis" merged into A, "Lonely" has no line
+    assert len(red.links) == 2  # A-B (w1+w2 chained, plus the parallel folded) and B-C; stub and loop gone
+    ab = next(ln for ln in red.links if ln.merged >= 3)
+    assert ab.circuits == 2 and ab.kv == 220.0
+    assert any("misma subestación" in w for w in red.warnings)
+
+
+def test_reduction_adds_plants_per_bus_and_drops_far_ones():
+    red = _reduced()
+    assert len(red.generation) == 1
+    g = red.generation[0]
+    assert g.mw == 80.0 and g.count == 2 and g.tech == "hidro"
+    assert any("a más de" in w for w in red.warnings)
+
+
+def test_reduced_feature_collections_and_manifest():
+    red = _reduced()
+    cols = feature_collections(red)
     line = cols["lines"]["features"][0]
-    assert line["geometry"]["type"] == "LineString"
-    assert line["properties"]["id"] == "XXX-L1"
+    assert line["geometry"]["type"] == "LineString" and len(line["geometry"]["coordinates"]) == 2
+    bus_ids = {f["properties"]["id"] for f in cols["substations"]["features"]}
+    assert {line["properties"]["a"], line["properties"]["b"]} <= bus_ids
+    assert cols["plants"]["features"][0]["properties"]["bus"] in bus_ids
     for layer in cols.values():
         for f in layer["features"]:
-            p = f["properties"]
-            assert (
-                p["country"] == "XXX" and p["source"] and p["source_record"] and p["is_assumption"] is False
-            )
-    assert cols["plants"]["features"][0]["properties"]["tech"] == "solar"
-
-
-def test_manifest_entry_summarises_km_and_sources():
-    out = normalise(_bundle())
-    entry = manifest_entry(out)
-    assert entry["counts"] == {"lines": 1, "substations": 1, "plants": 1}
-    assert set(entry["line_km_by_kv"]) == {"220"}
-    assert entry["plant_mw_by_tech"] == {"solar": 10.0}
+            assert f["properties"]["country"] == "XXX" and f["properties"]["source"]
+    entry = manifest_entry(red)
+    assert entry["counts"] == {"lines": 2, "substations": 3, "plants": 1}
+    assert entry["raw_counts"]["lines"] == 6 and entry["plant_count"] == 2
 
 
 class _FakeHttp:

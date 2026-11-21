@@ -12,31 +12,55 @@ Last updated: 2026-11-21. The map draws the transmission networks of Argentina, 
 | Domain (pure) | `domain/regional.py`: schema, `parse_kv_levels`, `tech_from_text`, `normalise`, `feature_collections`, `manifest_entry`; port `RegionalGridSource` in `domain/ports.py` |
 | Adapters | `infrastructure/sources/regional/`: `epe_brasil.py`, `osinergmin_peru.py`, `energia_argentina.py`, `osm_overpass.py`; wiring in `infrastructure/container.py` (`regional_use_case`) |
 | Frontend | `web/src/map/regional.ts` (loader, layers `regional-*`, tooltip), legend block in `web/src/cascade/Legend.tsx` |
+| Reduction (pure) | `domain/regional_reduction.py` (`reduce_bundle`, `feature_collections`, `manifest_entry`) |
 | Tests | `backend/tests/unit/test_regional.py`, `backend/tests/validation/test_regional_data.py` (skips without the data), `web/src/map/regional.test.ts` |
 
-## 2. Common schema (v1)
+## 2. Common schema (v2, reduced)
 
-Every feature has `id` (`<ISO3>-L|S|P<n>`), `country`, `name`, `source` (layer or dataset), `source_record` (original id) and `is_assumption` (always false: nothing is estimated).
+The layer is reduced the same way as Chile's network (`cascade/network.py`, `engine.md`): one bus per substation, parallel lines folded into one, drawn as straight segments between two buses. The code is `domain/regional_reduction.py`; `normalise` in `domain/regional.py` runs first (filters and deduplication of the raw records).
 
-- **Lines** (`LineString`; multipart lines are split): `kv` (highest level), `kv_levels`, `circuits`, `length_km` (declared, else computed from the geometry), `status`.
-- **Substations** (`Point`): `kv`, `kv_levels`.
-- **Plants** (`Point`): `tech` in `solar, eolica, hidro, termica, bioenergia, geotermica, nuclear` (Chile's vocabulary plus `nuclear`), `mw` installed, `status`, `fuel`.
-- Rules in `normalise`: lines and substations from 66 kV up; lines without voltage dropped; plants below 0.1 MW or not operating dropped; duplicates by (name, rounded position) dropped; lines simplified at 150 m; coordinates at 5 decimals.
-- `manifest.json` has, per country: counts, km per kV, MW per technology, bounding box, sources (url, licence, attribution, fetch date) and warnings.
+Steps of `reduce_bundle`:
+1. Substations closer than 3 km are one bus (the highest voltage gives its name and position); the voltage levels are merged.
+2. Each end of a line goes to the nearest bus within 12 km; an end with no bus becomes a free point (OSM splits one line into many ways that share end points).
+3. Free points with two lines are pass-through and the two lines are chained; free points with one line are dangling and that line is dropped; free points with three or more stay as `junction` buses.
+4. Lines between the same two buses are folded: voltage is the maximum, circuits add up, length is the longest. Lines with both ends in one bus are dropped.
+5. Connected pieces with fewer than 3 buses are dropped, then substations with no line.
+6. Plants are added up per bus (nearest bus within 40 km, else dropped and counted in `warnings`): total MW, MW per technology, number of plants, dominant technology.
 
-No electrical parameters (r, x, thermal limit) exist in this layer. Estimating them by voltage class would be an assumption and is out of scope for a drawn layer.
+The four thresholds (3, 12, 40 km and 3 buses) are assumptions chosen by looking at the result, not calibrated; they are constants at the top of `regional_reduction.py`.
+
+Result (2026-11-21), source records to reduced:
+
+| Country | Lines | Substations | Plants |
+|---|---|---|---|
+| Brazil | 2,264 to 1,286 | 927 to 839 | 2,953 to 519 generation points |
+| Peru | 575 to 246 | 269 to 198 | 246 to 102 |
+| Bolivia | 244 to 58 | 71 to 54 | 31 to 15 |
+| Argentina (OSM) | 3,056 to 390 | 308 to 300 | 208 to 81 |
+
+Brazil and Argentina still have more elements than Chile's 188 buses and 273 lines because the countries are far larger. Plants far from any substation are lost (Brazil: 531 plants, 15,581 MW; Argentina: 70, 5,475 MW); the manifest and the command print it.
+
+Files: `data/processed/latam/<ISO3>/{lines,substations,plants}.geojson` and `manifest.json` (counts reduced and raw, km per kV, MW per technology, sources with licence).
+
+- **Lines** (`LineString`, two points): `id` `<ISO3>-R<n>`, `a`, `b` (bus ids), `kv`, `circuits`, `length_km`, `source`, `source_records` (first 20), `merged`.
+- **Substations** (buses, `Point`): `id` `<ISO3>-B<n>`, `name`, `kv`, `kv_levels`, `kind` (`substation` or `junction`), `source`, `source_records`, `merged`.
+- **Plants** (generation per bus, `Point` at the bus): `id` `<ISO3>-G<n>`, `bus`, `name`, `tech`, `mw`, `mw_by_tech`, `count`, `source`.
+- Every feature has `country`, `source` and `is_assumption` (false: values come from the sources; the reduction thresholds are the only assumption, declared above).
+- Lines and substations from 66 kV up; lines without voltage dropped; plants below 0.1 MW or not operating dropped.
+
+No electrical parameters (r, x, thermal limit) exist in this layer, and the reduced lines are not a topology to simulate: the end points are resolved by distance, not declared by the source.
 
 ## 3. Sources used
 
 | Country | Source | Status | Notes |
 |---|---|---|---|
-| Brazil | EPE WebMap, `https://gisepeprd2.epe.gov.br/arcgis/rest/services/WMS_Webmap_EPE_Data/MapServer`: layer 23 lines (`Nome, Tensao, Extensao, Concession, Ano_Opera`), 22 substations, 14-21 plants by technology | **Verified**, built: 2,264 lines, 927 substations, 2,953 plants | `potencia` is in **kW** (Itaipú reads 14,000,000). 2,000 records per page. No licence stated |
-| Peru | Osinergmin GISEM, `https://gisem.osinergmin.gob.pe/serverosih/rest/services/Electricidad/MapaSEIN_Operacion/MapServer`: lines 28-32 by kV, substations 22-26, plants 6, 9, 12, 17-20 | **Verified**, built: 575 lines, 269 substations, 246 plants | `POT_INST` is in MW except four records typed in kW (Huanza, Callahuanca, Yanango, Carhuac); the adapter reads values above 3,000 as kW. SEIN only (isolated systems excluded). No licence stated |
-| Bolivia | OpenStreetMap through Overpass (`power=line\|cable` with `voltage`, `power=substation`, `power=plant`) | **Verified**, built: 244 lines, 71 substations, 31 plants | No official GIS exists (CNDC publishes single-line diagrams only). ODbL: the legend shows "© OpenStreetMap contributors". OSM may include lines under construction (500 kV near Cochabamba) |
-| Argentina | Secretaría de Energía CSV datasets (lines, transformer stations, plants), `http://datos.energia.gob.ar/dataset/...` (https refuses connections) | **Failed**: the server did not answer from this machine on 2026-11-21. **Built from OpenStreetMap instead** (`--osm ARG`): 3,056 lines, 308 substations, 208 plants | The adapter `energia_argentina.py` detects columns by candidate names and reads GeoJSON, WKT or lat/lon; it is tested only on synthetic CSV. Run `cascadasen-regional --countries ARG` when the server answers and fix the candidate lists to the real header. The committed Argentina data is the OSM fallback; its 132 kV total (35,900 km) looks high against the official 37,293 km for the whole grid, so expect duplicated circuits until the official source is read |
+| Brazil | EPE WebMap, `https://gisepeprd2.epe.gov.br/arcgis/rest/services/WMS_Webmap_EPE_Data/MapServer`: layer 23 lines (`Nome, Tensao, Extensao, Concession, Ano_Opera`), 22 substations, 14-21 plants by technology | **Verified**, built, see section 2 | `potencia` is in **kW** (Itaipú reads 14,000,000). 2,000 records per page. No licence stated |
+| Peru | Osinergmin GISEM, `https://gisem.osinergmin.gob.pe/serverosih/rest/services/Electricidad/MapaSEIN_Operacion/MapServer`: lines 28-32 by kV, substations 22-26, plants 6, 9, 12, 17-20 | **Verified**, built, see section 2 | `POT_INST` is in MW except four records typed in kW (Huanza, Callahuanca, Yanango, Carhuac); the adapter reads values above 3,000 as kW. SEIN only (isolated systems excluded). No licence stated |
+| Bolivia | OpenStreetMap through Overpass (`power=line\|cable` with `voltage`, `power=substation`, `power=plant`) | **Verified**, built, see section 2 | No official GIS exists (CNDC publishes single-line diagrams only). ODbL: the legend shows "© OpenStreetMap contributors". OSM may include lines under construction (500 kV near Cochabamba) |
+| Argentina | Secretaría de Energía CSV datasets (lines, transformer stations, plants), `http://datos.energia.gob.ar/dataset/...` (https refuses connections) | **Failed**: the server did not answer from this machine on 2026-11-21. **Built from OpenStreetMap instead** (`--osm ARG`): 390 lines after the reduction | The adapter `energia_argentina.py` detects columns by candidate names and reads GeoJSON, WKT or lat/lon; it is tested only on synthetic CSV. Run `cascadasen-regional --countries ARG` when the server answers and fix the candidate lists to the real header. The committed Argentina data is the OSM fallback; after the reduction it has 26,000 km against 37,293 km officially, so the duplicated circuits are gone but OSM is incomplete |
 | Outlines | geoBoundaries gbOpen ADM0, simplified geometry | **Verified** | Licence varies by country (Argentina: CC BY 2.5). GADM is excluded because it forbids redistribution |
 
-Quality check against official length (MapYourGrid index, CC BY 4.0, **not opened**, figures from earlier research): Argentina 37,293 km; Brazil 189,308 km (220 kV and up); Peru 28,711 km. Our Brazil total is 206,700 km (above 189,308: the EPE layer likely counts circuits, and it includes lines under 220 kV); Peru's is 26,100 km (SEIN only, below 28,711). Brazil's 600 and 800 kV entries are the HVDC links.
+Quality check against official length (MapYourGrid index, CC BY 4.0, **not opened**, figures from earlier research): Argentina 37,293 km; Brazil 189,308 km (220 kV and up); Peru 28,711 km. After the reduction Brazil has 132,900 km (189,308 officially, but folding parallels and dropping lines with both ends in one bus removes length) and Peru 15,700 km (28,711 officially, SEIN only). The reduced lengths are the longest of the folded lines, not the sum, so they undercount. Brazil's 600 and 800 kV entries are the HVDC links.
 
 ## 4. Sources found and not used (for the next step)
 

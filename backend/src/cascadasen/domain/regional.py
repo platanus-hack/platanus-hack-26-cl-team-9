@@ -1,8 +1,9 @@
 """Regional grids (context layer, docs/regional.md): one common schema for other countries.
 
+This module holds the raw schema and `normalise`; `regional_reduction` reduces it like Chile's network.
+
 Pure functions and data, no I/O. Source adapters deliver a `RegionalBundle` in the raw units of
-their source; `normalise` filters, deduplicates and simplifies it, and `feature_collections`
-turns it into the GeoJSON the map reads. Nothing here feeds the physics: the other countries are
+their source; `normalise` filters, deduplicates and simplifies it. Nothing here feeds the physics: the other countries are
 drawn, never simulated.
 """
 
@@ -235,108 +236,6 @@ def normalise(bundle: RegionalBundle, min_kv: float = MIN_KV) -> RegionalBundle:
     return out
 
 
-def _props(country: str, kind: str, n: int, source: str, record: str, name: str) -> dict[str, Any]:
-    return {
-        "id": f"{country}-{kind}{n}",
-        "country": country,
-        "name": name,
-        "source": source,
-        "source_record": record,
-        "is_assumption": False,
-    }
-
-
-def feature_collections(bundle: RegionalBundle) -> dict[str, dict[str, Any]]:
-    """GeoJSON per layer (`lines`, `substations`, `plants`) with the common property names."""
-    c = bundle.country
-    lines = []
-    for i, ln in enumerate(sorted(bundle.lines, key=lambda x: (-(x.kv or 0), x.name, x.record)), 1):
-        props = _props(c, "L", i, ln.source, ln.record, ln.name) | {
-            "kv": ln.kv,
-            "kv_levels": ln.kv_levels,
-            "circuits": ln.circuits,
-            "length_km": ln.length_km,
-            "status": ln.status,
-        }
-        lines.append(
-            {
-                "type": "Feature",
-                "geometry": {"type": "LineString", "coordinates": ln.coords},
-                "properties": props,
-            }
-        )
-    subs = []
-    for i, s in enumerate(sorted(bundle.substations, key=lambda x: (-(x.kv or 0), x.name, x.record)), 1):
-        props = _props(c, "S", i, s.source, s.record, s.name) | {
-            "kv": s.kv,
-            "kv_levels": s.kv_levels or [s.kv],
-        }
-        subs.append(
-            {
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [round(s.lon, 5), round(s.lat, 5)]},
-                "properties": props,
-            }
-        )
-    plants = []
-    for i, p in enumerate(sorted(bundle.plants, key=lambda x: (-(x.mw or 0), x.name, x.record)), 1):
-        props = _props(c, "P", i, p.source, p.record, p.name) | {
-            "tech": p.tech,
-            "mw": round(p.mw or 0, 2),
-            "status": p.status,
-            "fuel": p.fuel,
-        }
-        plants.append(
-            {
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [round(p.lon, 5), round(p.lat, 5)]},
-                "properties": props,
-            }
-        )
-    wrap = lambda feats: {"type": "FeatureCollection", "features": feats}  # noqa: E731
-    return {"lines": wrap(lines), "substations": wrap(subs), "plants": wrap(plants)}
-
-
-def manifest_entry(bundle: RegionalBundle) -> dict[str, Any]:
-    """Counts, km per voltage and sources of one country, for `manifest.json` and the UI legend."""
-    km_by_kv: dict[str, float] = {}
-    for ln in bundle.lines:
-        key = f"{ln.kv:g}"
-        km_by_kv[key] = round(km_by_kv.get(key, 0.0) + (ln.length_km or 0.0), 1)
-    mw_by_tech: dict[str, float] = {}
-    for p in bundle.plants:
-        key = p.tech or "otra"
-        mw_by_tech[key] = round(mw_by_tech.get(key, 0.0) + (p.mw or 0.0), 1)
-    lons = [c[0] for ln in bundle.lines for c in ln.coords] + [s.lon for s in bundle.substations]
-    lats = [c[1] for ln in bundle.lines for c in ln.coords] + [s.lat for s in bundle.substations]
-    return {
-        "country": bundle.country,
-        "name": bundle.country_name,
-        "counts": {
-            "lines": len(bundle.lines),
-            "substations": len(bundle.substations),
-            "plants": len(bundle.plants),
-        },
-        "line_km_by_kv": dict(sorted(km_by_kv.items(), key=lambda kv: -float(kv[0]))),
-        "plant_mw_by_tech": dict(sorted(mw_by_tech.items())),
-        "bbox": [min(lons), min(lats), max(lons), max(lats)] if lons else None,
-        "sources": [
-            {
-                "id": s.id,
-                "name": s.name,
-                "publisher": s.publisher,
-                "url": s.url,
-                "license": s.license,
-                "attribution": s.attribution,
-                "provides": list(s.provides),
-                "fetched_at": s.fetched_at,
-            }
-            for s in bundle.sources
-        ],
-        "warnings": bundle.warnings,
-    }
-
-
 __all__ = [
     "MIN_KV",
     "TECHS",
@@ -345,8 +244,6 @@ __all__ = [
     "RegionalPlant",
     "RegionalSource",
     "RegionalSubstation",
-    "feature_collections",
-    "manifest_entry",
     "normalise",
     "parse_kv_levels",
     "simplify_line",

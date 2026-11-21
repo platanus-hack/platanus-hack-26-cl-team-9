@@ -227,7 +227,7 @@ These fields support the scenario classes in `cyber.md` section 4. All are optio
 
 ### 6.2 Regional context layer (draft)
 
-`data/processed/latam/<ISO3>/{lines,substations,plants}.geojson` with `id`, `country`, `name`, `source`, `source_record`, `is_assumption` and the layer fields (`kv`, `kv_levels`, `circuits`, `length_km`, `status`; `tech`, `mw`, `fuel`), plus `manifest.json` (counts, km per kV, sources with licence and attribution). Full schema and rules in `regional.md` section 2. It is not part of `network.json` and no engine reads it.
+`data/processed/latam/<ISO3>/{lines,substations,plants}.geojson` reduced like Chile's network: buses (`substations`), straight folded `lines` between buses (`a`, `b`, `kv`, `circuits`, `length_km`) and generation per bus (`plants`: `bus`, `mw`, `mw_by_tech`, `count`), plus `manifest.json` (counts reduced and raw, km per kV, sources with licence and attribution). Full schema and rules in `regional.md` section 2. It is not part of `network.json` and no engine reads it.
 
 ## 7. API
 

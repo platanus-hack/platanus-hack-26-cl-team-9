@@ -26,7 +26,7 @@ def test_every_element_carries_its_provenance():
         for layer in ("lines", "substations", "plants"):
             for f in _features(iso, layer):
                 p = f["properties"]
-                assert p["country"] == iso and p["source"] and p["source_record"], (iso, layer, p.get("id"))
+                assert p["country"] == iso and p["source"], (iso, layer, p.get("id"))
                 assert p["id"].startswith(iso + "-")
 
 

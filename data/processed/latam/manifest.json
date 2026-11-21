@@ -5,32 +5,36 @@
    "country": "ARG",
    "name": "Argentina",
    "counts": {
+    "lines": 390,
+    "substations": 300,
+    "plants": 81
+   },
+   "raw_counts": {
     "lines": 3056,
     "substations": 308,
     "plants": 208
    },
+   "plant_count": 138,
    "line_km_by_kv": {
-    "500": 15366.1,
-    "345": 411.5,
-    "330": 1119.0,
-    "220": 2674.8,
-    "132": 35917.0,
-    "66": 801.1
+    "500": 10934.9,
+    "330": 555.9,
+    "220": 1899.4,
+    "132": 12731.3,
+    "66": 25.2
    },
    "plant_mw_by_tech": {
-    "bioenergia": 68.0,
-    "eolica": 2016.2,
-    "hidro": 10140.7,
+    "bioenergia": 55.0,
+    "eolica": 1114.5,
+    "hidro": 9720.0,
     "nuclear": 1700.0,
-    "otra": 31.9,
-    "solar": 1273.0,
-    "termica": 24333.8
+    "solar": 592.9,
+    "termica": 20905.9
    },
    "bbox": [
     -72.2326925,
-    -51.65733,
-    -54.4608,
-    -21.99918
+    -51.6559008,
+    -54.4609604,
+    -23.9181649
    ],
    "sources": [
     {
@@ -45,41 +49,49 @@
       "substations",
       "plants"
      ],
-     "fetched_at": "2026-11-21T21:47:40+00:00"
+     "fetched_at": "2026-11-21T21:55:16+00:00"
     }
    ],
    "warnings": [
     "223 líneas de menos de 66 kV descartadas",
-    "1377 subestaciones sin tensión o bajo 66 kV descartadas"
+    "1377 subestaciones sin tensión o bajo 66 kV descartadas",
+    "1567 líneas con los dos extremos en la misma subestación descartadas",
+    "4 buses en piezas de menos de 3 descartados",
+    "21 subestaciones sin ninguna línea resuelta descartadas",
+    "70 centrales (5,475 MW) a más de 40 km de una subestación descartadas"
    ]
   },
   "BOL": {
    "country": "BOL",
    "name": "Bolivia",
    "counts": {
+    "lines": 58,
+    "substations": 54,
+    "plants": 15
+   },
+   "raw_counts": {
     "lines": 244,
     "substations": 71,
     "plants": 31
    },
+   "plant_count": 22,
    "line_km_by_kv": {
-    "500": 235.7,
-    "230": 3675.9,
-    "132": 120.5,
-    "115": 2815.5,
-    "69": 848.6,
-    "66": 4.7
+    "500": 225.0,
+    "230": 2254.0,
+    "115": 1199.1,
+    "69": 103.3
    },
    "plant_mw_by_tech": {
     "eolica": 135.9,
-    "hidro": 1417.5,
-    "solar": 166.5,
-    "termica": 1468.8
+    "hidro": 1348.5,
+    "solar": 160.3,
+    "termica": 888.8
    },
    "bbox": [
-    -69.03427,
-    -22.71454,
-    -62.5186,
-    -14.44194
+    -68.3601468,
+    -22.7076244,
+    -62.5194746,
+    -14.8357465
    ],
    "sources": [
     {
@@ -94,46 +106,55 @@
       "substations",
       "plants"
      ],
-     "fetched_at": "2026-11-21T21:42:10+00:00"
+     "fetched_at": "2026-11-21T21:55:15+00:00"
     }
    ],
    "warnings": [
     "1 líneas de menos de 66 kV descartadas",
-    "193 subestaciones sin tensión o bajo 66 kV descartadas"
+    "193 subestaciones sin tensión o bajo 66 kV descartadas",
+    "85 líneas con los dos extremos en la misma subestación descartadas",
+    "2 buses en piezas de menos de 3 descartados",
+    "7 subestaciones sin ninguna línea resuelta descartadas",
+    "9 centrales (655 MW) a más de 40 km de una subestación descartadas"
    ]
   },
   "BRA": {
    "country": "BRA",
    "name": "Brasil",
    "counts": {
+    "lines": 1286,
+    "substations": 839,
+    "plants": 519
+   },
+   "raw_counts": {
     "lines": 2264,
     "substations": 927,
     "plants": 2953
    },
+   "plant_count": 2422,
    "line_km_by_kv": {
-    "800": 9235.7,
-    "765": 2700.5,
-    "600": 17629.2,
-    "525": 11056.8,
-    "500": 73318.9,
-    "440": 7085.7,
-    "345": 11230.2,
-    "230": 74434.5,
-    "132": 16.3
+    "800": 4617.9,
+    "765": 915.5,
+    "600": 3199.8,
+    "525": 7487.5,
+    "500": 48711.2,
+    "440": 5853.0,
+    "345": 8865.8,
+    "230": 53273.6
    },
    "plant_mw_by_tech": {
-    "bioenergia": 14898.0,
-    "eolica": 32560.7,
-    "hidro": 114947.3,
+    "bioenergia": 9672.5,
+    "eolica": 32256.8,
+    "hidro": 105528.8,
     "nuclear": 1990.0,
-    "solar": 14974.5,
-    "termica": 24474.4
+    "solar": 14379.2,
+    "termica": 24437.1
    },
    "bbox": [
-    -72.63972,
-    -33.47453,
-    -34.83921,
-    4.53068
+    -72.63880086699999,
+    -33.47438860313146,
+    -34.89127585699998,
+    2.9630301689024887
    ],
    "sources": [
     {
@@ -148,42 +169,50 @@
       "substations",
       "plants"
      ],
-     "fetched_at": "2026-11-21T21:42:08+00:00"
+     "fetched_at": "2026-11-21T21:55:11+00:00"
     }
    ],
    "warnings": [
-    "5 líneas sin tensión descartadas"
+    "5 líneas sin tensión descartadas",
+    "433 líneas con los dos extremos en la misma subestación descartadas",
+    "1 subestaciones sin ninguna línea resuelta descartadas",
+    "531 centrales (15,581 MW) a más de 40 km de una subestación descartadas"
    ]
   },
   "PER": {
    "country": "PER",
    "name": "Perú",
    "counts": {
+    "lines": 246,
+    "substations": 198,
+    "plants": 102
+   },
+   "raw_counts": {
     "lines": 575,
     "substations": 269,
     "plants": 246
    },
+   "plant_count": 195,
    "line_km_by_kv": {
     "500": 2889.0,
-    "220": 16393.1,
+    "220": 7816.3,
     "145": 69.4,
-    "138": 5288.9,
-    "72.5": 37.6,
-    "69": 156.7,
-    "66": 1256.3
+    "138": 4640.1,
+    "69": 37.8,
+    "66": 189.8
    },
    "plant_mw_by_tech": {
-    "bioenergia": 150.8,
+    "bioenergia": 148.5,
     "eolica": 1021.4,
-    "hidro": 4253.3,
-    "solar": 1151.5,
-    "termica": 6270.7
+    "hidro": 3869.4,
+    "solar": 1134.0,
+    "termica": 5796.6
    },
    "bbox": [
-    -81.27734,
-    -18.17411,
+    -81.27597943,
+    -18.08208018800002,
     -69.22217124600002,
-    -3.269989360000011
+    -3.5450846300000194
    ],
    "sources": [
     {
@@ -198,14 +227,18 @@
       "substations",
       "plants"
      ],
-     "fetched_at": "2026-11-21T21:42:09+00:00"
+     "fetched_at": "2026-11-21T21:55:14+00:00"
     }
    ],
    "warnings": [
     "642 líneas de menos de 66 kV descartadas",
-    "456 subestaciones sin tensión o bajo 66 kV descartadas"
+    "456 subestaciones sin tensión o bajo 66 kV descartadas",
+    "198 líneas con los dos extremos en la misma subestación descartadas",
+    "2 buses en piezas de menos de 3 descartados",
+    "11 subestaciones sin ninguna línea resuelta descartadas",
+    "51 centrales (878 MW) a más de 40 km de una subestación descartadas"
    ]
   }
  },
- "built_at": "2026-11-21T21:48:27+00:00"
+ "built_at": "2026-11-21T21:55:18+00:00"
 }

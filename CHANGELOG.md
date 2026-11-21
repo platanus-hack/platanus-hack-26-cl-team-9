@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(regional): reduce the other countries' networks like Chile's
+
+- **Changed:** New `domain/regional_reduction.py`: substations within 3 km become one bus, line ends are snapped to the nearest bus (12 km), OSM ways are chained, parallel lines are folded, small pieces dropped, and plants are added up per bus (40 km). `cascadasen-regional` now writes the reduced layer: lines `<ISO3>-R<n>` with `a`/`b` bus ids drawn straight, buses `<ISO3>-B<n>`, generation `<ISO3>-G<n>` per bus. Lines before to after: BRA 2,264 to 1,286, PER 575 to 246, BOL 244 to 58, ARG 3,056 to 390. The web reads the new fields; tooltips show circuits and plant counts.
+- **Why:** Ricardo asked for the same reduction Chile has (`cascade/network.py`): one bus per substation, parallel lines folded, straight segments.
+- **Agents:** The thresholds (3, 12, 40 km, 3 buses) are assumptions, constants at the top of `regional_reduction.py`. Plants far from every substation are dropped (BRA 15,581 MW, ARG 5,475 MW). The schema changed to v2: `source_record` is now `source_records`, plants carry `bus`, `mw_by_tech` and `count`. Regenerate with `uv run cascadasen-regional` (Argentina: `--countries ARG --osm ARG`). The reduced lines are not a simulable topology.
+- **Files:** `backend/src/cascadasen/domain/regional_reduction.py`, `domain/regional.py`, `application/build_regional.py`, `backend/tests/unit/test_regional.py`, `backend/tests/validation/test_regional_data.py`, `data/processed/latam/`, `web/src/map/regional.ts`, `web/src/cascade/Legend.tsx`, `docs/regional.md`, `docs/stack.md`.
+
 ## 2026-11-21 · docs(regional): document the sources and the common schema
 
 - **Changed:** New `docs/regional.md`: what is built, the common schema v1, the sources used with their status, and everything found and not used (region-wide datasets, Brazil ONS electrical parameters, Colombia XM API, Dominican Republic and Costa Rica ArcGIS services, Mexico CENACE, and the countries with nothing open). `datasets.md`, `architecture.md`, `stack.md` section 6.2, `idea.md` section 4 and `plan.md` section 9.14 point to it.

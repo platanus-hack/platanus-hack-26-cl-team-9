@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from cascadasen.domain.ports import RegionalGridSource
-from cascadasen.domain.regional import feature_collections, manifest_entry, normalise
+from cascadasen.domain.regional import normalise
+from cascadasen.domain.regional_reduction import feature_collections, manifest_entry, reduce_bundle
 
 log = logging.getLogger(__name__)
 LAYERS = ("lines", "substations", "plants")
@@ -40,21 +41,21 @@ class BuildRegionalGrid:
                 errors[iso] = f"país sin fuente registrada (disponibles: {', '.join(sorted(self.sources))})"
                 continue
             try:
-                bundle = normalise(source.fetch(refresh=refresh))
+                reduced = reduce_bundle(normalise(source.fetch(refresh=refresh)))
             except Exception as exc:
                 log.exception("%s failed", iso)
                 errors[iso] = str(exc)
                 continue
-            if not bundle.lines:
+            if not reduced.links:
                 errors[iso] = "sin líneas tras filtrar: no se escribe el país"
                 continue
             folder = self.out_dir / iso
             folder.mkdir(parents=True, exist_ok=True)
-            for layer, collection in feature_collections(bundle).items():
+            for layer, collection in feature_collections(reduced).items():
                 (folder / f"{layer}.geojson").write_text(
                     json.dumps(collection, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
                 )
-            manifest["countries"][iso] = manifest_entry(bundle)
+            manifest["countries"][iso] = manifest_entry(reduced)
         manifest["built_at"] = datetime.now(UTC).isoformat(timespec="seconds")
         manifest["countries"] = dict(sorted(manifest["countries"].items()))
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -91,7 +92,7 @@ def main() -> int:
             print(f"{iso}: ERROR {errors[iso]}")
             continue
         e = manifest["countries"][iso]
-        print(f"{iso}: {e['counts']} km por kV {e['line_km_by_kv']}")
+        print(f"{iso}: {e['counts']} (antes {e['raw_counts']}) km por kV {e['line_km_by_kv']}")
         for w in e["warnings"]:
             print(f"    aviso: {w}")
     return 1 if errors else 0
