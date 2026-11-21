@@ -248,7 +248,7 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 |---|---|
 | `GET /sim/network` | Areas and corridors of the reduced network: `id`, `name`, `lon`/`lat`, `zone`, `aggregates` (real node ids). These are the selectable targets |
 | `GET /sim/catalog` | Event types, defensive COAs, policies A/B/C, adversary objectives, missions, experiment templates |
-| `POST /sim/runs` | Create a run: `template`, `policy`, `adversary` `{objective, budget, adaptive}`, `uncertainty`, `seed`, `horizon`, `capabilities`, `initial_events`, `auto_run` |
+| `POST /sim/runs` | Create a run: `template`, `policy`, `adversary` `{objective, budget, adaptive}`, `uncertainty`, `seed` (optional: omitted means a fresh random seed, returned in the summary and recorded in the recipe), `horizon`, `capabilities`, `initial_events`, `auto_run` |
 | `POST /sim/runs/{id}/events` | Select a node and trigger an event: `{type, target, params}`, applied at the next cycle and logged with `source: user` |
 | `POST /sim/runs/{id}/step` | Advance `n` cycles; returns one snapshot per cycle |
 | `POST /sim/runs/{id}/replay` | New run with the same seed and injected events, and another policy or capabilities |

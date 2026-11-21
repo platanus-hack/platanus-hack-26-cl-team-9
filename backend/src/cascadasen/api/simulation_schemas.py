@@ -92,7 +92,9 @@ class EventIn(BaseModel):
 class RunCreate(BaseModel):
     template: str = Field("open_field", description="Ver /sim/catalog → templates (flagship_observability…)")
     policy: str = Field("C", description="A reactiva, B preventiva, C coordinación adaptativa")
-    seed: int = 7
+    seed: int | None = Field(
+        None, ge=0, description="Vacío: semilla al azar (cada corrida distinta), devuelta en la respuesta"
+    )
     uncertainty: float = Field(1.0, description="0 información perfecta, 1 línea base, 2 degradado")
     horizon: int | None = Field(None, description="Ciclos de 5 min; por defecto el de la plantilla")
     adversary: AdversaryIn | None = Field(None, description="Por defecto el de la plantilla")

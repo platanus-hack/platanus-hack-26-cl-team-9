@@ -215,7 +215,7 @@ def run_config(body: dict[str, Any]) -> RunConfig:
     return RunConfig(
         template=body.get("template", "open_field"),
         policy=body.get("policy", "C"),
-        seed=int(body.get("seed", 7)),
+        seed=None if body.get("seed") is None else int(body["seed"]),
         uncertainty=float(body.get("uncertainty", 1.0)),
         horizon=body.get("horizon"),
         adversary=AdversaryConfig(**adv) if adv else None,

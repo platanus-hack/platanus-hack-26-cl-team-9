@@ -14,9 +14,7 @@ Everything is appended to a hash-chained audit log. A run is reproducible from i
 
 from __future__ import annotations
 
-import hashlib
-import random
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 from cascadasen.domain.agents.adversary import AdversaryAgent
@@ -45,6 +43,7 @@ from cascadasen.domain.theater.execution import (
     UnknownEventTargetError,
 )
 from cascadasen.domain.theater.resources import Ledger
+from cascadasen.domain.theater.rng import new_seed, rng_for
 from cascadasen.domain.theater.state import AreaDigital, ObservedState, RealState
 from cascadasen.domain.theater.validator import ValidationContext, costs_of, validate
 
@@ -71,11 +70,6 @@ class RunFinishedError(RuntimeError):
     pass
 
 
-def rng_for(seed: int, name: str) -> random.Random:
-    digest = hashlib.sha256(f"{seed}:{name}".encode()).hexdigest()
-    return random.Random(int(digest[:16], 16))
-
-
 @dataclass(frozen=True)
 class AdversaryConfig:
     enabled: bool = False
@@ -88,7 +82,7 @@ class AdversaryConfig:
 class RunConfig:
     template: str = "open_field"
     policy: str = "C"
-    seed: int = 7
+    seed: int | None = None  # None: a fresh random seed, recorded in the recipe
     uncertainty: float = 1.0
     horizon: int | None = None
     adversary: AdversaryConfig | None = None
@@ -125,6 +119,8 @@ class Simulation:
     cfg: TheaterConfig = field(default_factory=theater_config)
 
     def __post_init__(self) -> None:
+        if self.config.seed is None:
+            self.config = replace(self.config, seed=new_seed())
         cfg, conf, net = self.cfg, self.config, self.network
         self._validate_config()
         self.template = cfg.template(conf.template)

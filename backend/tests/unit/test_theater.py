@@ -218,3 +218,14 @@ def test_adversary_with_defence_events_runs_and_stays_abstract(toy_network):
                 or e.target in sim.defense_areas
                 or e.target in toy_network.zones
             )
+
+
+def test_run_without_seed_gets_a_recorded_random_seed(toy_network):
+    a = Simulation(toy_network, RunConfig(template="open_field", horizon=3))
+    b = Simulation(toy_network, RunConfig(template="open_field", horizon=3))
+    assert isinstance(a.config.seed, int) and a.config.seed != b.config.seed
+    assert a.log.entries[0]["payload"]["config"]["seed"] == a.config.seed  # in the recipe
+    again = Simulation(toy_network, RunConfig(template="open_field", horizon=3, seed=a.config.seed))
+    a.run_to_end()
+    again.run_to_end()
+    assert a.log.head == again.log.head
