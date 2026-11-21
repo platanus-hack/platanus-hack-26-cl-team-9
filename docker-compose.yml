@@ -19,6 +19,9 @@ services:
       - AWS_SECRET_ACCESS_KEY
       - AWS_SESSION_TOKEN
       - AWS_REGION
+      # local dev: POST /api/v1/admin/reload enabled; runs (and sessions) persisted in ./data/sessions
+      - CASCADASEN_ADMIN_ENABLED=true
+      - CASCADASEN_SESSION_STORE=file
     volumes:
       - ./data:/data
       # Bedrock with an AWS profile: uncomment to share ~/.aws read-only with the container

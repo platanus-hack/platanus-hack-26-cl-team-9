@@ -18,7 +18,8 @@ from cascadasen.api.schemas import EdgePage, Health, IslandsRequest, IslandsResp
 from cascadasen.api.simulation_routes import router as simulation_router
 from cascadasen.application.grid_queries import GridQueryService, NotFoundError
 from cascadasen.application.simulation_service import SimulationService
-from cascadasen.infrastructure.container import repository
+from cascadasen.domain.ports import DocumentStore
+from cascadasen.infrastructure.container import document_store, repository
 from cascadasen.infrastructure.settings import Settings, get_settings
 
 STATIC = Path(__file__).parent / "static"
@@ -39,6 +40,7 @@ def create_app(
     service: GridQueryService | None = None,
     settings: Settings | None = None,
     simulation: SimulationService | None = None,
+    store: DocumentStore | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="CascadaSEN · Red eléctrica de Chile",
@@ -54,8 +56,13 @@ def create_app(
     )
     app.add_middleware(GZipMiddleware, minimum_size=2048)
 
+    settings = settings or get_settings()
+    app.state.settings = settings
+    if store is None:  # share the injected service's store, so runs and sessions use one store
+        store = simulation.store if simulation is not None else document_store(settings)
+    app.state.store = store
     if service is None:
-        snap = repository(settings or get_settings()).load()
+        snap = repository(settings).load()
         service = GridQueryService(snap) if snap else None
     app.state.service = service
     app.state.simulation = simulation  # built lazily from the snapshot on the first /sim request
@@ -89,10 +96,12 @@ def create_app(
         "/api/v1/admin/reload",
         response_model=Health,
         tags=["general"],
-        summary="Relee el snapshot del disco (tras correr cascadasen-build)",
+        summary="Relee el snapshot del disco (tras correr cascadasen-build; solo en desarrollo)",
     )
     def reload(request: Request) -> dict[str, Any]:
-        snap = repository(settings or get_settings()).load()
+        if not request.app.state.settings.admin_enabled:
+            raise HTTPException(404, "Deshabilitado. Usa CASCADASEN_ADMIN_ENABLED=true en desarrollo.")
+        snap = repository(request.app.state.settings).load()
         request.app.state.service = GridQueryService(snap) if snap else None
         request.app.state.simulation = None
         return health(request)

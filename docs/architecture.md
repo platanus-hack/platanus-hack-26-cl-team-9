@@ -76,7 +76,7 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 | Query the grid | `grid_queries.py` | `/api/v1/nodes`, `/edges`, `/graph/*`, ... |
 | Simulate a scenario (13 areas) | `simulate.py` | `POST /api/v1/simulate` |
 | Theatre world (network + operating points, cached) | `theater_world.py` | used by runs and campaigns |
-| Runs: create, step, inject, replay (in-memory LRU) | `run_experiment.py` | `/api/v1/sim/runs*` |
+| Runs: create, step, inject, external actions, replay; every command persists a run record in the `DocumentStore`, a bounded `RunCache` (LRU) keeps live simulations and rebuilds evicted ones | `run_experiment.py` | `/api/v1/sim/runs*` |
 | Campaigns with fragility and adaptation indices | `run_campaign.py` | `/api/v1/sim/campaigns*` |
 | Facade over simulation and theatre | `simulation_service.py` | `api/simulation_routes.py` |
 | Precompute every single-line cut | `cache_builder.py` | `cascadasen-cache` → `web/public/cache/` |
@@ -94,7 +94,7 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 
 ### 2.5 API (`api/`)
 
-`app.py` creates the FastAPI app (grid queries, health, admin reload, the `static/map.html` test page) and includes `simulation_routes.py` (`/api/v1/simulate`, `/api/v1/sim/*`). Schemas are in `schemas.py` and `simulation_schemas.py`. HTTP contract: `stack.md` sections 7 and 7.1. Command: `cascadasen-api`.
+`app.py` creates the FastAPI app (grid queries, health, admin reload when `CASCADASEN_ADMIN_ENABLED=true`, the `static/map.html` test page) and sets `app.state.settings` and `app.state.store` and includes `simulation_routes.py` (`/api/v1/simulate`, `/api/v1/sim/*`). Schemas are in `schemas.py` and `simulation_schemas.py`. HTTP contract: `stack.md` sections 7 and 7.1. Command: `cascadasen-api`.
 
 ## 3. Simulation flows
 

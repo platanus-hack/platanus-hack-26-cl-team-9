@@ -6,10 +6,10 @@ from __future__ import annotations
 from typing import Any
 
 from cascadasen.application.run_campaign import CampaignRunner
-from cascadasen.application.run_experiment import RunManager, catalog
+from cascadasen.application.run_experiment import RunCache, RunManager, catalog
 from cascadasen.application.simulate import PhysicsSimulator, SimulateCommand
 from cascadasen.domain.model import GridSnapshot
-from cascadasen.domain.ports import CommanderAdvisor, Interpreter
+from cascadasen.domain.ports import CommanderAdvisor, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics, build_state
 from cascadasen.domain.simulation.network import NetworkSpec, ReducedNetwork, build_reduced_network
 from cascadasen.domain.theater.areas import bus_id
@@ -26,12 +26,25 @@ class SimulationService:
         interpreter: Interpreter | None = None,
         advisor: CommanderAdvisor | None = None,
         world: TheaterWorld | None = None,
+        store: DocumentStore | None = None,
+        run_cache: RunCache | None = None,
+        version: str = "dev",
     ) -> None:
         self.network = network  # 13-area network of POST /simulate (domain/simulation)
         self.physics = physics or Physics.load()
         self.simulator = PhysicsSimulator(network, self.physics)
         self.world = world  # mapa 3 network and operating points: the strategic theatre runs here
-        self.runs = RunManager(world, self.physics, interpreter=interpreter, advisor=advisor)
+        self.run_cache = run_cache if run_cache is not None else RunCache()
+        self.runs = RunManager(
+            world,
+            self.physics,
+            interpreter=interpreter,
+            advisor=advisor,
+            store=store,
+            cache=self.run_cache,
+            version=version,
+        )
+        self.store = self.runs.store  # persisted run records (and, later, sessions)
         self.campaigns = CampaignRunner(world, self.physics)
 
     @classmethod

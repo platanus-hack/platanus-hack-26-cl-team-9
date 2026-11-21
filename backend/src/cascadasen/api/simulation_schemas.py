@@ -143,6 +143,10 @@ class RunSummary(BaseModel):
     operating_point: str
     defenses: str
     adversary: dict[str, Any]
+    rebuilt: bool = Field(False, description="La corrida se reconstruyó desde su registro persistido")
+    trace_matches: bool | None = Field(
+        None, description="Tras reconstruirla, si el hash del log coincide con el registrado"
+    )
     notice: str
     replay_of: str | None = None
     overrides: dict[str, Any] | None = None

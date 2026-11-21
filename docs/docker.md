@@ -22,7 +22,7 @@ Port already in use? Set `WEB_PORT` and `BACKEND_PORT`, for example `WEB_PORT=51
 docker compose --profile data run --rm data-build              # uses the cache in data/raw/
 docker compose --profile data run --rm data-build cascadasen-build --refresh
 ```
-Restart `backend` or call `POST /api/v1/admin/reload` afterwards.
+Restart `backend` or call `POST /api/v1/admin/reload` afterwards. The reload route only exists with `CASCADASEN_ADMIN_ENABLED=true`, which compose sets for `backend`. Compose also sets `CASCADASEN_SESSION_STORE=file`, so strategic runs persist in `data/sessions/` (git-ignored) across restarts.
 
 ## Notes
 - The backend image uses `uv sync --locked`, so `backend/uv.lock` must be current.

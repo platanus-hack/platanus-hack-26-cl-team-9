@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from cascadasen.api.app import create_app
 from cascadasen.application.grid_queries import GridQueryService
+from cascadasen.application.run_experiment import RunCache
 from cascadasen.application.simulation_service import SimulationService
 
 
@@ -116,3 +117,17 @@ def test_replay_snapshots_can_be_read_back(client):
         "snapshots"
     ]
     assert [s["cycle"] for s in tail] == [2, 3]
+
+
+def test_an_evicted_run_is_served_rebuilt(toy_snapshot, toy_network, toy_world):
+    sim = SimulationService(toy_network, world=toy_world, run_cache=RunCache(1))
+    client = TestClient(create_app(service=GridQueryService(toy_snapshot), simulation=sim))
+    a = client.post("/api/v1/sim/runs", json={"seed": 3, "horizon": 6}).json()["run_id"]
+    client.post(f"/api/v1/sim/runs/{a}/step", json={"cycles": 2})
+    head = client.get(f"/api/v1/sim/runs/{a}/trace").json()["head"]
+    assert client.post("/api/v1/sim/runs", json={"seed": 4}).status_code == 201  # evicts A
+    state = client.get(f"/api/v1/sim/runs/{a}")
+    assert state.status_code == 200
+    run = state.json()["run"]
+    assert run["rebuilt"] is True and run["trace_matches"] is True and run["cycle"] == 2
+    assert client.get(f"/api/v1/sim/runs/{a}/trace").json()["head"] == head

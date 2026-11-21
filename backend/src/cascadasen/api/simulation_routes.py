@@ -19,14 +19,13 @@ from cascadasen.api.simulation_schemas import (
     StepIn,
 )
 from cascadasen.application.run_campaign import CampaignNotFoundError, CampaignSpec
-from cascadasen.application.run_experiment import RunNotFoundError, run_config
+from cascadasen.application.run_experiment import RunCache, RunConflictError, RunNotFoundError, run_config
 from cascadasen.application.simulate import SimulateCommand, SimulationInputError, SimulationTimeoutError
 from cascadasen.application.simulation_service import SimulationService
 from cascadasen.application.theater_world import default_world
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunFinishedError, RunInputError
 from cascadasen.domain.theater.narrative import templates
 from cascadasen.infrastructure.llm import llm_adapters
-from cascadasen.infrastructure.settings import get_settings
 
 router = APIRouter(prefix="/api/v1")
 
@@ -37,10 +36,17 @@ def get_simulation(request: Request) -> SimulationService:
         service = request.app.state.service
         if service is None:
             raise HTTPException(503, "No hay snapshot de la red. Ejecuta `cascadasen-build` primero.")
-        interpreter, advisor = llm_adapters(get_settings())
-        world = default_world(str(get_settings().processed_dir))
+        settings = request.app.state.settings
+        interpreter, advisor = llm_adapters(settings)
+        world = default_world(str(settings.processed_dir))
         sim = SimulationService.from_snapshot(
-            service.s, interpreter=interpreter, advisor=advisor, world=world
+            service.s,
+            interpreter=interpreter,
+            advisor=advisor,
+            world=world,
+            store=request.app.state.store,
+            run_cache=RunCache(settings.run_cache_size),
+            version=settings.version,
         )
         request.app.state.simulation = sim
     return sim
@@ -116,6 +122,8 @@ def run_call(fn, *args, **kwargs) -> Any:
         raise HTTPException(404 if exc.not_found else 422, exc.detail()) from exc
     except RunFinishedError as exc:
         raise HTTPException(409, "La corrida terminó; usa /replay para repetirla") from exc
+    except RunConflictError as exc:
+        raise HTTPException(409, "La corrida cambió en otra instancia; reintenta") from exc
     except CampaignNotFoundError as exc:
         raise HTTPException(404, f"No existe la campaña: {exc.args[0]}") from exc
 
