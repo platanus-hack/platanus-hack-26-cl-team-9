@@ -1,13 +1,13 @@
-# CascadaSEN: what happens if this power line is cut?
+# Sub50: what happens if this power line is cut?
 
-Working name. Platanus Hack 26 Chile (Santiago, 20-22 Nov 2026), track **Simulations**, team-9.
+Product name: **Sub50** (chosen 2026-11-21; it was "CascadaSEN" before, and the Python package and commands still use `cascadasen`). The name refers to grid frequency falling below 50 Hz. Platanus Hack 26 Chile (Santiago, 20-22 Nov 2026), track **Simulations**, team-9.
 Last updated: 2026-11-21. Written so an agent with no prior context can start working.
 
-Read order for a new session: `idea.md` (this file) -> `cyber.md` -> `stack.md` -> `datasets.md` -> `plan.md`.
+Read order for a new session: `idea.md` (this file) -> `cyber.md` -> `stack.md` -> `design.md` -> `datasets.md` -> `plan.md`.
 
 ## 1. One-paragraph summary
 
-CascadaSEN is an open, interactive blackout simulator for the Chilean national power grid (SEN), running in the browser. The user clicks a transmission line or a power plant on a map of Chile. Within a second the app shows which zones lose power, how many people are affected, and why, as a chain of events in plain language. It also shows what would have prevented the blackout. The model is validated as code against published results of the 25 February 2025 blackout ("25F") and against the grid operator's yearly defence studies.
+Sub50 is an open, interactive blackout simulator for the Chilean national power grid (SEN), running in the browser. The user clicks a transmission line or a power plant on a map of Chile. Within a second the app shows which zones lose power, how many people are affected, and why, as a chain of events in plain language. It also shows what would have prevented the blackout. The model is validated as code against published results of the 25 February 2025 blackout ("25F") and against the grid operator's yearly defence studies.
 
 The main objective of the simulation is to estimate the consequences of cyberattacks on this critical infrastructure. The user sets the effect of an attack: plants or lines disconnected, defences disabled, control lost. The simulator shows the physical, social and economic consequence and what would have contained it. It models the effect of the attack, not how the attack is done. See `cyber.md`.
 
@@ -34,7 +34,7 @@ Source numbers in brackets refer to `datasets.md` section 7.
 
 ### 3.2 Experience (what the user sees)
 
-- Main screen: 2D map of Chile with 3D-style elements on top: generators as columns (height = MW, colour = technology), substations/nodes, transmission lines coloured by voltage, cities as lights. See `stack.md` section 5 for layers and animations.
+- Main screen: 2D map of Chile with 3D-style elements on top: generators as columns (height = MW, colour = technology), substations/nodes, transmission lines coloured by voltage, cities as lights. See `stack.md` section 5 for layers and animations. The look and the zoom behaviour changed in the 2026-11-21 design sessions (Electricity Maps style, lines only at country zoom, no glow): `design.md` overrides this bullet on visuals.
 - Click a line or plant -> "simulate failure". Shift+click adds up to 3 failures.
 - Animated cascade (~5 s of story time): flash at the cut, power flow rerouting, overloaded lines turning red and pulsing, the country splitting into two islands, a wave of darkness as cities go out, generator columns dropping.
 - Side panels: counter of people without power and MW of load shed; chain of events in plain Spanish from fixed templates (no LLM); frequency curve of each island, synchronised with the animation; validation table (our value / published value / source).
@@ -87,6 +87,8 @@ The independent evaluation scored Ambition 3/5 because plant disconnections are 
 7. Restoration phase (how long until power returns): only if the CEN reports contain enough data to fit it.
 
 Do not build an "attacker finds the minimum cut to black out the country" feature. It adds dual-use risk and no judging value. The cyber objective does not change this rule: the simulator estimates the consequence of a scenario the user chooses and never searches for the worst attack (`cyber.md` section 8).
+
+Exception proposed 2026-11-21 (needs a team decision): a bounded replay of documented cyber incidents, such as the Huatacondo plant in Chile, with a local API for external agents. It stays a catalog of known scenarios, never an optimiser or a ranking. See `attack-sim.md`.
 
 ## 7. Hackathon context
 
