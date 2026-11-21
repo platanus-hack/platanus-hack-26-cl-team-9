@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): Spanish ISR cause in the operation panel
+
+- **Changed:** The ISR line shows "sin anomalía", "falla" or "intencional" instead of the raw `none` / `failure` / `intentional`.
+- **Why:** Seen in the visual check with Qwen as commander (14 cycles: Qwen decided in 12, explanations in Spanish, cascades and crews visible, no console errors).
+- **Agents:** UI strings stay in Spanish (AGENTS.md section 4).
+- **Files:** `web/src/operation/OperationPanel.tsx`.
+
 ## 2026-11-21 · feat(web): show the AI commander and a live overlay in the operation tab
 
 - **Changed:** Backend: each snapshot carries `llm` (status `chosen` / `unavailable` / `idle` / `replayed`, model, chosen keys, explanation, options, capacity); `GET /sim/catalog` adds `llm: {available, model}`. Frontend: "Comandante con IA" checkbox (live API with an LLM configured), "pensando…" state while the model decides, AI card with the picked options and the Spanish explanation, "IA" badges on AI-picked actions, a map overlay (clock, service, level, this cycle's events coloured by source, AI explanation), pulsing rings on the areas where actions run (magenta = AI, cyan = rules), larger area circles and crew labels, Spanish accents in map labels (`characterSet: "auto"`).

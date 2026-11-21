@@ -11,6 +11,7 @@ import { actionText, clock, decisionText, eventLabel, label, notice, pct, SOURCE
 import type { AfterAction, Catalog, Crew, LlmNote, Narrative, Posture, Report, RunSummary, TheaterArea, TheaterNetwork, TheaterSnapshot } from "./types";
 
 const CYCLE_MS = 1200;
+const CAUSE: Record<string, string> = { none: "sin anomalía", failure: "falla", intentional: "intencional" };
 const STAGE_MS = 1400;
 const NODE_EVENTS = [
   { type: "C1_generation_loss", text: "Pérdida de generación" },
@@ -270,7 +271,7 @@ export function OperationPanel({ pointId, bridge }: { pointId: string; bridge: R
             {snap.executed.map((e, i) => <li key={`x${i}`} className={e.ok ? "" : "warn"}>{aiChosen.has(`${e.action}:${e.target}`) && <span className="badge ai">IA</span>}{actionText(nar, e.action, e.target)}{e.crew ? ` · cuadrilla ${e.crew}, llega en el ciclo ${e.arrival}` : ""}{e.ok ? "" : ` · ${verdictText(nar, e.verdict)}`}</li>)}
             {!snap.events.length && !snap.executed.length && <li className="muted">Sin eventos ni acciones.</li>}
           </ul>
-          <p className="muted">ISR: causa {snap.estimated.isr.leading_cause} ({Math.round(snap.estimated.isr.confidence * 100)}%) · áreas afectadas {snap.estimated.isr.affected.join(", ") || "ninguna"}</p>
+          <p className="muted">ISR: causa {CAUSE[snap.estimated.isr.leading_cause] ?? snap.estimated.isr.leading_cause} ({Math.round(snap.estimated.isr.confidence * 100)}%) · áreas afectadas {snap.estimated.isr.affected.join(", ") || "ninguna"}</p>
           <details><summary>Decisiones de C2 ({snap.decisions.length})</summary>
             <ul className="op-list">{snap.decisions.map((d, i) => <li key={i} className={d.approved ? "" : "muted"}>{aiChosen.has(`${d.action}:${d.target}`) && <span className="badge ai">IA</span>}{actionText(nar, d.action, d.target)} · {decisionText(nar, d.reason)}</li>)}</ul>
           </details>
