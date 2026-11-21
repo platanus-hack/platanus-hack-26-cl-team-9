@@ -4,6 +4,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { loadGridDataWorkflow } from "./gridData";
 import { buildGridLayers } from "./layers";
 import { mountChileMapWorkflow } from "./chileMap";
+import { createNodePopup } from "./nodeDetail";
 
 const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
 const MAP_PITCH_DEGREES = 45;
@@ -16,10 +17,11 @@ export function mountMapboxMapWorkflow(container: HTMLDivElement): () => void {
   const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
   if (!token) return _fallbackToOfflineMap(container);
   const map = _createMap(container, token);
-  const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
+  const popup = createNodePopup(container);
+  const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: popup.onClick, pickingRadius: 6 });
   map.addControl(overlay);
   _drawGridWhenLoaded(overlay);
-  return () => map.remove();
+  return () => { popup.dispose(); map.remove(); };
 }
 
 function _fallbackToOfflineMap(container: HTMLDivElement): () => void {
