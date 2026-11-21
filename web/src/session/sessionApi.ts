@@ -26,11 +26,19 @@ export function sessionIdFrom(search: string): string | null {
   const id = new URLSearchParams(search).get("sesion");
   return id && SID.test(id) ? id : null;
 }
+/** Retries of a busy 409 (docs/sessions-api.md section 7). The server did not run that request, so any method is safe. */
+const BUSY_RETRIES = 2;
 async function call<T>(method: string, path: string, opts: { body?: unknown; ifMatch?: number } = {}): Promise<T> {
   const headers: Record<string, string> = { "X-Sub50-Agent": AGENT };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   if (opts.ifMatch !== undefined) headers["If-Match"] = `"${opts.ifMatch}"`;
-  const r = await fetch(`${BASE}${path}`, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) });
+  const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
+  let r = await fetch(`${BASE}${path}`, { method, headers, body });
+  for (let i = 0; i < BUSY_RETRIES && r.status === 409 && r.headers.has("Retry-After"); i++) {
+    const wait = Math.min(Number(r.headers.get("Retry-After")) || 1, 10);
+    await new Promise((done) => setTimeout(done, wait * 1000));
+    r = await fetch(`${BASE}${path}`, { method, headers, body });
+  }
   if (r.status === 204) return undefined as T;
   const data = await r.json().catch(() => null);
   if (!r.ok) throw new ApiError(r.status, data?.detail ?? data);

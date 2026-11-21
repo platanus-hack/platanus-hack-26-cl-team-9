@@ -49,6 +49,36 @@ describe("sessionApi", () => {
     expect(err.message).toBe("Una línea necesita dos barras distintas.");
   });
 
+  it("retries a busy 409 after Retry-After, up to 2 times, with the same request", async () => {
+    vi.useFakeTimers();
+    const busy = () => json(409, { detail: "La sesión está ocupada con otra solicitud; reintenta." }, { "Retry-After": "1" });
+    fetchMock.mockResolvedValueOnce(busy()).mockResolvedValueOnce(busy()).mockResolvedValueOnce(json(200, { revision: 5, open_lines: ["R014"] }));
+    const out = cutLines(SID, ["R014"], 3);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1001);
+    expect((await out).revision).toBe(5);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(`${init.method} ${url}`).toBe(`POST /api/v1/sessions/${SID}/cut`);
+      expect(init.headers["If-Match"]).toBe('"3"');
+      expect(JSON.parse(init.body)).toEqual({ lines: ["R014"] });
+    }
+  });
+  it("gives up on a session still busy after 2 retries and does not retry a 409 without Retry-After", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(() => Promise.resolve(json(409, { detail: "La sesión está ocupada con otra solicitud; reintenta." }, { "Retry-After": "1" })));
+    const busy = getNetwork(SID).catch((e) => e);
+    await vi.advanceTimersByTimeAsync(5000);
+    const err = await busy;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(409);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(json(409, { detail: "La sesión cambió en otra instancia; reintenta" }));
+    expect((await deleteElement(SID, "loads", "D001", 2).catch((e) => e)).status).toBe(409);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it("polls GET /{sid} with If-None-Match when EventSource is undefined", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("EventSource", undefined);

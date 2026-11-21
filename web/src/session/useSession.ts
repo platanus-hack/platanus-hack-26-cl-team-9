@@ -3,6 +3,7 @@ import type { SessionNetwork } from "../cascade/types";
 import { createLoader } from "./loader";
 import { ApiError, createSession, getNetwork, getSession, getState, sessionIdFrom, subscribe, type CutState, type LiveMode, type SessionDoc } from "./sessionApi";
 
+const BUSY_RELOAD_MS = 3000;
 export type Edit = (fn: (sid: string, revision: number) => Promise<unknown>) => Promise<boolean>;
 export interface Session {
   sid: string | null; session: SessionDoc | null; network: SessionNetwork | null; state: CutState | null;
@@ -38,13 +39,19 @@ export function useSession(): Session {
   }, []);
   useEffect(() => {
     if (!sid) return;
-    let alive = true;
+    let alive = true, busy = false, retry: ReturnType<typeof setTimeout> | undefined;
     _setUrl(sid);
-    load(sid).catch((e) => {
+    // A busy session (409, still busy after call()'s own retries) keeps the session and tries again; other failures
+    // (network, 5xx) fall back to the base case.
+    const first = () => load(sid).then(() => { if (alive && busy) setError(null); }, (e) => {
       if (!alive) return;
       if (e instanceof ApiError && e.status === 404) { leave(); setError("La sesión no existe o expiró (24 h sin cambios). Se volvió al caso base."); }
-      else { setSid(null); setError(`No se pudo conectar con el servidor de sesiones: ${e.message}. Se muestra el caso base.`); }
+      else if (e instanceof ApiError && e.status === 409) {
+        busy = true; setError("La sesión está ocupada con otra solicitud. Se reintenta la carga en unos segundos.");
+        retry = setTimeout(first, BUSY_RELOAD_MS);
+      } else { setSid(null); setError(`No se pudo conectar con el servidor de sesiones: ${e.message}. Se muestra el caso base.`); }
     });
+    first();
     const sub = subscribe(sid, (e) => {
       if (!alive || e.revision === loaded.current) return;
       (e.dataset_revision === data.current ? loadDoc(sid) : load(sid)).catch((err) => setError(err.message));
@@ -52,7 +59,7 @@ export function useSession(): Session {
       onMode: (m) => alive && setLive(m),
       onGone: () => { if (alive) { leave(); setError("La sesión fue borrada o expiró."); } },
     });
-    return () => { alive = false; sub.close(); };
+    return () => { alive = false; clearTimeout(retry); sub.close(); };
   }, [sid, load, loadDoc, leave]);
   const edit: Edit = useCallback(async (fn) => {
     if (!sid || !network) return false;
@@ -65,8 +72,8 @@ export function useSession(): Session {
       } else setError((e as Error).message);
       return false;
     }
-    // The write landed: report success even if the reload fails, so a form is not resubmitted (the session's own
-    // revision event reloads again).
+    // The write landed: report success even if the reload fails (after call()'s busy retries), so a form is not
+    // resubmitted; the network on screen stays until the next revision event reloads it.
     setError(null);
     await load(sid).catch((e) => setError(`El cambio se guardó, pero no se pudo recargar la sesión: ${(e as Error).message}`));
     return true;

@@ -75,7 +75,7 @@ class SessionLocks:
     `max_waiters` requests wait behind the one in progress; more get the 409 at once, so a busy
     session cannot park the threadpool workers that every sync route shares."""
 
-    def __init__(self, timeout_s: float, max_waiters: int = 4) -> None:
+    def __init__(self, timeout_s: float, max_waiters: int = 10) -> None:
         self.timeout_s, self.max_waiters = timeout_s, max_waiters
         self._locks: dict[str, list[Any]] = {}  # sid -> [Lock, requests holding or waiting]
         self._guard = threading.Lock()

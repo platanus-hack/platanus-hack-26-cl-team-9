@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): retry the busy 409 in the web client and raise the waiter cap to 10
+- **Changed:** `call()` in `web/src/session/sessionApi.ts` retries a 409 that carries `Retry-After` up to 2 times, after that wait (capped at 10 s), with the same method, headers and body. A 409 without `Retry-After` (another instance won the write) is not retried.
+- **Changed:** `useSession` keeps the session when the first load still gets a busy 409 and retries it every 3 s with the note "La sesión está ocupada con otra solicitud. Se reintenta la carga en unos segundos."; network errors and 5xx still fall back to the base case.
+- **Changed:** `session_lock_max_waiters` (`CASCADASEN_SESSION_LOCK_MAX_WAITERS`) defaults to 10 instead of 4 (`SessionLocks` default too).
+- **Why:** Review of PR #50 pass 2: each browser sends 3 parallel GETs per refresh, so 2-3 browsers on one session went past the cap of 5 and got the busy 409 at once; the web client never retried it and a first load dropped the visitor to the base case. User decision: cap 10, web client honours `Retry-After`.
+- **Agents:** Every web session request now absorbs up to 2 busy 409s (about 2 s). `loader.ts` still sends its 3 reads in parallel (running them one after another would change the loader's tested overlap rules). Docs: `docs/sessions-api.md` sections 7-9, `docs/stack.md`, `docs/mapa3.md` section 11; agent spec regenerated (`DESCRIPTION`, `ERRORS[409]`).
+- **Files:** `web/src/session/{sessionApi,sessionApi.test,useSession}.ts`, `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack,mapa3}.md`, `docs/openapi/agents.openapi.json`.
 ## 2026-11-21 · fix(web): open a session only from ?sesion=, keep a landed edit, neutral overlay warnings
 - **Changed:** `useSession` no longer reads or writes `localStorage.sub50_session`; `sessionIdFrom(search)` takes the id only from `?sesion=`, so a bare `/` never calls `/api` (the URL still keeps `?sesion=` while in a session).
 - **Changed:** `edit()` returns true once the write succeeded; a failed reload after it (for example a busy 409) shows "El cambio se guardó, pero no se pudo recargar la sesión: …" instead of failing the edit, so a form is not resubmitted into a duplicate element.

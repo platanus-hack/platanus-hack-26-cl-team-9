@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     sse_head_s: float = 5.0
     sse_max_s: float = 55.0
     session_lock_timeout_s: float = 10.0  # wait for the request before it on the same session, then 409
-    session_lock_max_waiters: int = 4  # requests queued behind the one in progress; more get 409 at once
+    session_lock_max_waiters: int = 10  # requests queued behind the one in progress; more get 409 at once
     ide_energia_url: str = (
         "https://ide-energia.minenergia.cl/server/rest/services/IDE_Energia/Visor_IDE_Energ%C3%ADa/MapServer"
     )
