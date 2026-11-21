@@ -156,7 +156,7 @@ Layout (Paper "Design v5", `docs/design.md` section 3.2, with the Design v6 rail
 | Cream disc or column | Demand of the substation (off by default) |
 | Numbered pins | Events, the same numbers as the history and the timeline |
 
-The map legend, the "Ayuda" view and the layers share the constants in `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `LOAD_BANDS`, `DEAD_LINE`, `OPEN_LINE`, `FAULT`), so they cannot drift apart. The panel's "Líneas por tensión" card uses `VOLTAGE_BANDS` in `networkSummary.ts`, which takes its labels, kV limits and colors from `VOLTAGE_TIERS` and counts the whole IDE Energía grid rather than the 273-line model. The other countries' lines (`web/src/map/regional.ts`) still use the older `KV_COLORS` of `web/src/map/layers.ts`.
+The map legend, the "Ayuda" view and the layers share the constants in `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `LOAD_BANDS`, `DEAD_LINE`, `OPEN_LINE`, `FAULT`), so they cannot drift apart. The panel's "Líneas por tensión" card uses `VOLTAGE_BANDS` in `networkSummary.ts`, which takes its labels, kV limits and colors from `VOLTAGE_TIERS` and counts the whole IDE Energía grid rather than the 273-line model. The other countries' lines and substations (`web/src/map/regional.ts`) read the same `VOLTAGE_TIERS` and `NODE_COLOR`; in the load view their lines are neutral gray (`REGIONAL_NO_LOAD`) because they carry no load.
 
 Not drawn: generation per plant, transformers, voltage and reactive power, networks below 66 kV, and the 1,930 original map lines of mapas 1 and 2.
 

@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(regional): draw the other countries' lines like Chile's
+
+- **Changed:** Regional lines now use Chile's `VOLTAGE_TIERS` colours and widths at full opacity instead of the old atlas `kvColor` palette (yellow and orange) dimmed to alpha 130. Regional substations use Chile's node style (`NODE_COLOR`, radius 3 at 500 kV, 2 below). In the Simulación (load) view regional lines turn neutral gray `#767B80` (`REGIONAL_NO_LOAD`), because they have no load and green would claim "< 50 %". The help legend text and swatch follow.
+- **Why:** Ignacio asked for the lines outside Chile to follow the design (`design.md` section 3, Design v6 tokens) and look the same as Chile's. Closes the open item of the entry below: the regional `KV_COLORS` read like load colors next to Chile.
+- **Agents:** `buildRegionalLayers(grid, colorMode)` now takes the colour mode; `CascadeApp` rebuilds the regional layers when it changes. `hex` is exported from `web/src/cascade/layers.ts`. Regional lines have no `autoHighlight` on purpose: clicking them does not cut. Regional plants keep the old `TECH_COLORS` discs (Chile's map draws no plants). `kvColor` and `KV_COLORS` in `web/src/map/layers.ts` are now only used by the old `/map` page.
+- **Files:** `web/src/map/regional.ts`, `web/src/map/regional.test.ts`, `web/src/cascade/layers.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/Legend.tsx`, `docs/regional.md`, `docs/mapa3.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(web): line colors with a logic and conditions in the nav rail
 
 - **Changed:** Line colors in mapa 3 follow one rule: cold colors describe the network, the traffic-light ramp describes its stress, red is always failure. Voltage is white 500 kV, light cyan `#7FDBFF` 154-345 kV, blue `#3B9BF5` 100-110 kV, deep blue `#4F78E0` 44-69 kV. Load is green `#28B47E` under 50 %, yellow `#F5D547` 50-75 %, orange `#FF9838` 75-100 %, red over 100 %.

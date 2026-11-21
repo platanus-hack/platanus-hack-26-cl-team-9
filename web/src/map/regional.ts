@@ -1,6 +1,7 @@
 import type { Layer } from "@deck.gl/core";
 import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
-import { kvColor, TECH_COLORS, type Rgb } from "./layers";
+import { hex, NODE_COLOR, tierOf, type ColorMode } from "../cascade/layers";
+import { TECH_COLORS, type Rgb } from "./layers";
 
 export type LonLat = [number, number];
 
@@ -40,20 +41,26 @@ export async function loadRegionalGrid(): Promise<RegionalGrid | null> {
   return grid;
 }
 
-const DIM = 130; // alpha: context, quieter than Chile's grid
 const withAlpha = (c: Rgb, a: number): [number, number, number, number] => [c[0], c[1], c[2], a];
 const OTHER_TECH: Rgb = [200, 200, 200];
+/** Not part of the load ramp (green to red), so it reads as "no data" in the Simulación view. */
+export const REGIONAL_NO_LOAD = "#767B80";
 
-/** Flat context layers under Chile's grid. Not clickable as a cut: the tooltip says they are not simulated. */
-export function buildRegionalLayers(grid: RegionalGrid): Layer[] {
+/**
+ * Lines and substations drawn exactly like Chile's (cascade/layers.ts): same voltage tiers, widths and node style.
+ * In the load view they are neutral gray: they carry no load, and the green of the ramp would claim "< 50 %".
+ * Not clickable as a cut: the layer ids start with "regional-" and the tooltip says they are not simulated.
+ */
+export function buildRegionalLayers(grid: RegionalGrid, colorMode: ColorMode = "voltage"): Layer[] {
+  const lineColor = colorMode === "voltage" ? (l: RegionalLine) => hex(tierOf(l.kv).color) : () => hex(REGIONAL_NO_LOAD);
   return [
     new PathLayer<RegionalLine>({
-      id: "regional-lines", data: grid.lines, pickable: true, widthUnits: "pixels", getPath: (l) => l.path,
-      getColor: (l) => withAlpha(kvColor(l.kv), DIM), getWidth: (l) => (l.kv >= 500 ? 2.5 : l.kv >= 220 ? 1.8 : 1.2), capRounded: true,
+      id: "regional-lines", data: grid.lines, pickable: true, widthUnits: "pixels", capRounded: true, getPath: (l) => l.path,
+      getColor: lineColor, getWidth: (l) => tierOf(l.kv).width, updateTriggers: { getColor: colorMode },
     }),
     new ScatterplotLayer<RegionalSubstation>({
       id: "regional-substations", data: grid.substations, pickable: true, radiusUnits: "pixels", getPosition: (s) => s.position,
-      getRadius: (s) => (s.kv >= 500 ? 3.5 : 2.2), getFillColor: [226, 232, 240, 150],
+      getRadius: (s) => (s.kv >= 500 ? 3 : 2), getFillColor: hex(NODE_COLOR, 200),
     }),
     new ScatterplotLayer<RegionalPlant>({
       id: "regional-plants", data: grid.plants, pickable: true, radiusUnits: "pixels", getPosition: (p) => p.position,

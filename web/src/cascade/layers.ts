@@ -6,7 +6,7 @@ import { RECTANGLE_BASE } from "../map/shapes";
 import type { BusState, EdgeState, Frame, NetLine, NetNode, Network } from "./types";
 
 type Rgba = [number, number, number, number];
-const hex = (h: string, a = 255): Rgba => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
+export const hex = (h: string, a = 255): Rgba => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
 
 /** What line color means. One meaning per color at a time; stroke width always shows voltage. */
 export type ColorMode = "voltage" | "load";

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildRegionalLayers, regionalTooltip, type RegionalGrid } from "./regional";
+import type { PathLayer } from "@deck.gl/layers";
+import { hex, LOAD_BANDS, tierOf } from "../cascade/layers";
+import { buildRegionalLayers, REGIONAL_NO_LOAD, regionalTooltip, type RegionalGrid } from "./regional";
 
 const GRID: RegionalGrid = {
   countries: [],
@@ -13,6 +15,16 @@ describe("regional layers", () => {
     const ids = buildRegionalLayers(GRID).map((l) => l.id);
     expect(ids).toEqual(["regional-lines", "regional-substations", "regional-plants"]);
     expect(ids.every((id) => id.startsWith("regional-"))).toBe(true);
+  });
+
+  it("lines use Chile's voltage tiers, and a gray outside the load ramp in the load view", () => {
+    const line = GRID.lines[0];
+    const props = (mode: "voltage" | "load") => (buildRegionalLayers(GRID, mode)[0] as PathLayer<typeof line>).props;
+    const color = (mode: "voltage" | "load") => (props(mode).getColor as (l: typeof line) => unknown)(line);
+    expect(color("voltage")).toEqual(hex(tierOf(500).color));
+    expect(color("load")).toEqual(hex(REGIONAL_NO_LOAD));
+    expect(LOAD_BANDS.map((b) => b.color)).not.toContain(REGIONAL_NO_LOAD);
+    expect((props("voltage").getWidth as (l: typeof line) => number)(line)).toBe(tierOf(500).width);
   });
 
   it("tooltips carry the source and say the network is not simulated", () => {
