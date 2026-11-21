@@ -41,7 +41,7 @@ Restart `npm run dev` after changing it. Without a token, `?mapa=2` falls back t
 
 ## Mapa 3: cascade viewer (`?mapa=3`)
 
-Full guide, actors and legend: [`docs/mapa3.md`](../docs/mapa3.md).
+Full guide, actors and legend: [`docs/mapa3.md`](../docs/mapa3.md). Minimum dataset: [`docs/minimum-dataset.md`](../docs/minimum-dataset.md).
 
 Click a line to cut it and replay the cascade computed by the engine (`docs/engine.md`). It reads precomputed files from `web/public/cache/`, which git ignores, so generate them first:
 
