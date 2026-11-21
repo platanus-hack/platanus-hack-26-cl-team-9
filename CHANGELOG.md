@@ -9,6 +9,41 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** Build new UI on `web/src/cascade/`, not on `web/src/map/chileMap.ts` or `mapboxMap.ts`. `docs/mapa3.md` and `docs/minimum-dataset.md` (merged in #12 without a changelog entry) describe the engine, the actors and the minimum dataset. The cache in `web/public/cache/` must be generated (`cascadasen-cache`) or the root page shows an error. Older docs that call `/` "the offline map" (`stack.md`, `docker.md`, `datasets.md`) are out of date on that point.
 - **Files:** `web/src/main.tsx`, `web/README.md`, `docs/mapa3.md`, `CHANGELOG.md`.
 
+## 2026-11-21 · chore(project): enlarge Sub50 logo wordmark
+
+- **Changed:** `project-logo.png` is replaced with a version of the same logo (option 01) where the wordmark fills more of the 1000 x 1000 square. 40 KB PNG. `docs/design.md` section 6 updated.
+- **Why:** The previous file had a lot of empty margin, so the logo looked small at the README's 200 px.
+- **Agents:** Same design as before, only the scale changed. A small-size version is still open.
+- **Files:** `project-logo.png`, `docs/design.md`.
+
+## 2026-11-21 · chore(project): align oneliner and project page with the description
+
+- **Changed:** `project-oneliner-spanish` in `platanus-hack-project.jsonc` now condenses `project-description-spanish` into one line: the agent first simulation plus its purpose (finding the most fragile points). `project-description.md` reuses the description's wording ("agent first", "en vivo la infraestructura crítica", "con datos públicos", "conectarse a nuestra API") and keeps its headings and bullets.
+- **Why:** The three submission texts said the same thing with slightly different wording.
+- **Agents:** `project-description-spanish` is the source text. Change the oneliner and `project-description.md` along with it.
+- **Files:** `platanus-hack-project.jsonc`, `project-description.md`.
+
+## 2026-11-21 · chore(project): set Sub50 deploy URL
+
+- **Changed:** `deploy-url` in `platanus-hack-project.jsonc` is now `https://sub50.cl`.
+- **Why:** The hackathon submission needs the public URL of the running project.
+- **Agents:** All Platanus metadata fields are now filled (`plan.md` section 8). On 2026-11-21 the domain did not resolve yet (no DNS record); check that it serves the app before the submission deadline.
+- **Files:** `platanus-hack-project.jsonc`.
+
+## 2026-11-21 · chore(project): add Sub50 logo
+
+- **Changed:** `project-logo.png` replaces the Platanus template logo with the Sub50 logo (option 01, Subscript: "sub" with a subscript "5" and a power-button "0", black on white, 1000 x 1000 PNG, 36 KB). `docs/design.md` sections 1, 6 and 7 record the pick.
+- **Why:** The hackathon submission needs a 1000 x 1000 PNG logo under 500 KB.
+- **Agents:** The logo is chosen, so do not reopen the logo pick. A small-size version without fine detail is still open. The README embeds the logo at 200 px.
+- **Files:** `project-logo.png`, `docs/design.md`.
+
+## 2026-11-21 · chore(project): set Sub50 description in project metadata
+
+- **Changed:** `project-description-spanish` in `platanus-hack-project.jsonc` now holds the final team description (one paragraph that opens with the agent-first framing, then the map, blackout propagation and agent API). `project-name` stays "Sub50".
+- **Why:** The hackathon submission reads name and description from this file.
+- **Agents:** Do not rewrite the description without the team's approval. `deploy-url` is still `<FILL THIS>`. `project-oneliner-spanish` and `project-description.md` were not changed.
+- **Files:** `platanus-hack-project.jsonc`.
+
 ## 2026-11-21 · docs: sync docs with the Sub50 name, design sessions and merged work
 
 - **Changed:** New `docs/design.md`: Paper file and pages, Electricity Maps style, voltage and technology palette, 5 zoom levels, data behind the mockups, logo options. Product name Sub50 in titles and summaries (`idea.md`, `AGENTS.md`, `cyber.md`, both READMEs, session hook). `stack.md` now matches the repo (status, Mapbox option, engine base case, real layout, frontend section defers to `design.md`). `plan.md` repo state, submission checklist and open decisions 11-13. `datasets.md` adds the operating points and DC-OPF scripts and sources [40] Mapbox and [41] OpenStreetMap. Backfilled changelog entries for #2, #6, #7, #10 and the Sub50 project-page commit.
