@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · chore(web): proxy /api to the backend for the mapa 3 operation mode
+
+- **Changed:** `web/vite.config.ts` proxies `/api` to `VITE_API_TARGET` (default `http://localhost:8000`). `docker-compose.yml` sets `VITE_API_TARGET=http://backend:8000` for `web` and starts it after `backend` is healthy. `docs/docker.md` no longer says the web never calls the backend.
+- **Why:** The operation mode of mapa 3 (theatre on the map) calls `/api/v1/sim/*`.
+- **Agents:** Frontend code calls relative `/api/v1/...` paths; never hard-code the backend URL.
+- **Files:** `web/vite.config.ts`, `docker-compose.yml`, `docs/docker.md`.
+
 ## 2026-11-21 · merge main into feat/strategic-sim-api (mapa 3 as main map, 2D/3D, attack-sim proposal)
 
 - **Changed:** Brings #14-#19 (mapa 3 is `/`, 2D/3D toggle `?vista=2d`, city labels, Sub50 project metadata) and `docs/attack-sim.md`. `CHANGELOG.md` conflict resolved keeping both sides. Follow-ups: `mapa3.md` section 10 now says the operation mode lives in `/` and that `buildCascadeLayers` takes `mode` (draw `snapshot.grid` with the same 2D/3D mode); `stack.md` section 2 map row updated (it still said `/` was the offline map); `attack-sim.md` gets a note on its overlap with the theatre's event API.

@@ -1,5 +1,5 @@
 # Local stack. Only Docker is needed:  docker compose up --build
-#   web      http://localhost:5173  (Vite dev server, hot reload; ?mapa=2 needs a Mapbox token, see docs/docker.md)
+#   web      http://localhost:5173  (Vite dev server, hot reload; mapa 3; /api is proxied to the backend)
 #   backend  http://localhost:8000  (grid data API, /map test map, /docs)
 services:
   backend:
@@ -18,6 +18,12 @@ services:
     build: ./web
     ports:
       - "${WEB_PORT:-5173}:5173"
+    environment:
+      # the operation mode of mapa 3 talks to the backend through the Vite proxy (/api)
+      VITE_API_TARGET: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
     volumes:
       - ./web:/app/web
       - ./data:/app/data
