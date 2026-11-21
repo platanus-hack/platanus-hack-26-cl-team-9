@@ -261,7 +261,7 @@ A session edits the 188-bus engine network (`domain/cascade/network.py`) of one 
 
 The backend serves everything under `/api/v1` (FastAPI, `backend/src/cascadasen/api/`); the live schema is at `/docs`. The frontend can still work from fixtures only, which also gives the offline behaviour in section 9.
 
-External agents (and the future MCP server) use a separate spec with only the routes marked `x-sub50-agent`: `GET /api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`), versioned in `docs/openapi/agents.openapi.json`. Marking rules, operationIds, error model, tags and the regeneration command: `docs/openapi.md`. It holds `/sim/catalog`, `/sim/network`, `/sim/runs*` (section 7.1) and every session route except the SSE stream (section 7.2).
+External agents (and the MCP server, `docs/mcp.md`) use a separate spec with only the routes marked `x-sub50-agent`: `GET /api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`), versioned in `docs/openapi/agents.openapi.json`. Marking rules, operationIds, error model, tags and the regeneration command: `docs/openapi.md`. It holds `/sim/catalog`, `/sim/network`, `/sim/runs*` (section 7.1) and every session route except the SSE stream (section 7.2).
 
 `POST /api/v1/simulate` runs one physical contingency on the reduced network (`strategy.md` section 2.1) and returns a `timeline.json` (section 6). `elements_out` accepts corridor ids, area ids (`A01`-`A13`) or real snapshot node ids (`SE…`), resolved to the area that contains them.
 
@@ -321,6 +321,10 @@ Shared, persistent sessions under `/api/v1/sessions` (`api/session_routes.py`). 
 
 - Every agent endpoint takes `{sid}` in the path. Agent routes carry `x-sub50-agent`, an explicit `operationId` and English OpenAPI text (`docs/openapi.md`); error details stay in Spanish.
 - Limits (per process): 64 KB bodies (413), creation per client IP, cuts and writes per session (429 with `Retry-After`), 5 SSE streams per session and IP, one request in progress per session (others wait up to 10 s, then 409). Knobs are the `CASCADASEN_RATE_*`, `CASCADASEN_SSE_*` and `CASCADASEN_SESSION_LOCK_TIMEOUT_S` settings.
+
+### 7.3 Assistant API
+
+`POST /api/v1/assistant/chat` and `GET`/`DELETE /api/v1/assistant/conversations/{cid}` (`api/assistant_routes.py`) run natural-language requests through an LLM that calls the MCP tools over the app's own routes. Contract, limits and guardrails: `docs/assistant.md`. These routes are for the web client and are not marked `x-sub50-agent`.
 
 ## 8. Testing and CI
 

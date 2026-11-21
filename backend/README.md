@@ -25,6 +25,10 @@ uv run python -m cascadasen.api.agent_openapi            # writes ../docs/openap
 uvx openapi-spec-validator ../docs/openapi/agents.openapi.json
 ```
 
+MCP server (natural-language simulations through the agent API, `docs/mcp.md`): `uv run --extra mcp cascadasen-mcp` over stdio, with `SUB50_API_URL` pointing at the API. Register it with `claude mcp add sub50 --env SUB50_API_URL=http://localhost:8000 -- uv run --directory <abs>/backend --extra mcp cascadasen-mcp`.
+
+In-app assistant (the same tools behind a chat endpoint, `docs/assistant.md`): with `CASCADASEN_LLM_ENABLED=true`, `CASCADASEN_LLM_PROVIDER=bedrock-converse` and a tool-capable `CASCADASEN_LLM_MODEL`, `POST /api/v1/assistant/chat` takes `{"message": "..."}` in natural language and runs the simulation; without them it answers 503.
+
 Build outputs in `data/processed/`:
 
 | File | Content |

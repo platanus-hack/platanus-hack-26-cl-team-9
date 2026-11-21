@@ -1,6 +1,6 @@
 # Agent-only OpenAPI spec
 
-External agents (and the MCP server that will wrap them) get a separate OpenAPI 3.1 spec that holds only the endpoints they need. The full spec stays at `/docs`, `/redoc` and `/openapi.json`.
+External agents (and the MCP server that wraps them, `docs/mcp.md`) get a separate OpenAPI 3.1 spec that holds only the endpoints they need. The full spec stays at `/docs`, `/redoc` and `/openapi.json`.
 
 | What | Where |
 |---|---|

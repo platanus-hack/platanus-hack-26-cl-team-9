@@ -28,6 +28,76 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** User rule (PR #50 brief, task 2): a session handles only one request at a time. The wait plus 409 is the orchestrator's default. Store conditional writes and `If-Match` stay the guard across processes.
 - **Agents:** The lock is per process; with several instances two requests on one session can still run at once on different instances. Routes are sync `def`, so a waiting request blocks a threadpool worker, not the event loop. New tests: `tests/unit/test_session_locks.py`, and three tests at the end of `tests/integration/test_sessions_api.py` (same session serial, two sessions parallel, held lock gives 409). Verification: `uv run pytest` 282 passed, 2 skipped, 1 failed (only the Bedrock test); `ruff check` and `ruff format --check` clean; agent spec regenerated.
 - **Files:** `backend/src/cascadasen/api/{limits,app,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/{unit/test_session_locks.py,integration/test_sessions_api.py}`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`.
+## 2026-11-21 · fix(assistant): open a session on first use and stop asking the user to call tools
+
+- **Changed:** `SessionTools.run` (`mcp/toolbox.py`) opens a session the first time a tool that needs one is called with none active (all but `start_session`, `join_session`, `list_options`) and adds `nota` to that result. The assistant's system prompt says the user cannot run tools, so the model must call them itself.
+- **Why:** With Qwen on Bedrock the model called `add_datacenter` first, got "No hay sesión activa" and told the user to run `start_session`, which they cannot. The MCP server is unchanged: there the client's model handles it.
+- **Agents:** Auto-created sessions count against the session-creation limit (10 per hour per IP). `docs/assistant.md` section 3 says it.
+- **Files:** `backend/src/cascadasen/{mcp/toolbox.py,api/assistant_routes.py}`, `backend/tests/{unit/test_assistant.py,integration/test_assistant_api.py}`, `docs/assistant.md`.
+
+## 2026-11-21 · fix(assistant): log the AWS error behind a model failure
+
+- **Changed:** `ConverseToolChat.turn` logs the model id and, for an AWS error, its code and message (`describe`), instead of only the exception name. The client still gets the fixed Spanish text.
+- **Why:** A user got "El modelo de lenguaje no está disponible ahora" with Qwen on Bedrock and the log could not say whether it was credentials, access to the model, throttling or a timeout.
+- **Agents:** To diagnose a 502 from `/api/v1/assistant/chat`, read the server log line `assistant LLM call failed for <model>: <Type>: <code> <message>`.
+- **Files:** `backend/src/cascadasen/infrastructure/llm_tools.py`, `backend/tests/unit/test_llm_tools.py`.
+
+## 2026-11-21 · docs(assistant): document the in-app assistant and the third LLM role
+
+- **Changed:** New `docs/assistant.md` (turn it on, routes, how the loop and the in-process transport work, guardrails, what is not done). `docs/strategy.md` section 10 gets the assistant as a third LLM role; `docs/stack.md` gets section 7.3; `docs/mcp.md`, `backend/README.md` and `AGENTS.md` (read order) point to it.
+- **Why:** `strategy.md` said the LLM only explains or plays C2; the assistant executes what the user asks on the user's own session, so the doc had to say so.
+- **Agents:** Read `docs/assistant.md` before touching `api/assistant_routes.py` or `application/assistant.py`. Pending: a real run against Bedrock and the 188-bus network (to pick the `step` cap and check the 25 s deadline), Terraform for Bedrock permission and a longer CloudFront origin timeout, a daily cost cap per IP.
+- **Files:** `docs/{assistant,strategy,stack,mcp}.md`, `backend/README.md`, `AGENTS.md`.
+
+## 2026-11-21 · feat(api): assistant chat routes with rate limit and body cap
+
+- **Changed:** `api/assistant_routes.py` adds `POST /api/v1/assistant/chat` (`{message 1-2000, conversation_id?, session_id?}` → `{conversation_id, session_id, run_id, reply, tool_calls, steps, truncated, notice}`), `GET` and `DELETE /api/v1/assistant/conversations/{cid}`. Each request builds its tools over `in_process_client(app, client_ip)` with `X-Sub50-Agent: asistente`. Limits: `rate_assistant_per_minute` (10) per client IP, and `BODY_LIMIT_PREFIXES` covers `/api/v1/assistant`. Errors: 503 when `CASCADASEN_LLM_ENABLED` is off or the provider is not `bedrock-converse`, 502 on a model failure (fixed Spanish text), 404, 409, 422, 429.
+- **Why:** The in-app assistant: natural-language simulations through the same session routes an external agent uses, with no MCP client.
+- **Agents:** The routes carry no `x-sub50-agent` mark, so `docs/openapi/agents.openapi.json` is unchanged. Internal tool calls pass through the real rate limits keyed on the caller's IP, so a chat message that makes many writes can hit 429 inside a tool (the model sees it and tells the user). `Settings` reads `backend/.env`: tests pass `llm_enabled=False` to stay hermetic. Verification: `uv run --extra mcp pytest -q` 284 passed, 2 skipped, 1 failed (only the Bedrock test); not tried against real Bedrock.
+- **Files:** `backend/src/cascadasen/api/{assistant_routes,app,limits}.py`, `backend/tests/integration/test_assistant_api.py`.
+
+## 2026-11-21 · feat(assistant): chat use case with step and deadline caps
+
+- **Changed:** `application/assistant.py`: `Assistant.chat(message, conversation_id, session_id, toolbox_for)` runs a tool-use loop (max `assistant_max_steps`, deadline `assistant_deadline_s`), trims big tool results to 8 KB, keeps the history trimmed at a user turn, and stores each conversation as `assistant/<cid>.json` in the `DocumentStore` (conditional writes; a lost race raises `ConversationConflictError`). `domain/ports.py` adds the `ToolBox` port; `mcp/toolbox.py` (`SessionTools`) implements it over `Sub50Tools`: it drops `end_session`, caps `step` at 24 cycles, and turns every failure into `(False, {"error"})` for the model.
+- **Why:** The use case depends only on ports, so the provider and the tool wiring stay in adapters. A model failure keeps the user's turn and a placeholder assistant turn, so roles keep alternating on retry. `truncated` is `"steps"` or `"deadline"`; the next message ("continúa") resumes from the stored history.
+- **Agents:** `session_id` and `run_id` live in the conversation document, so any instance continues a conversation. The conversation id is a capability like the session id. Not wired to HTTP yet.
+- **Files:** `backend/src/cascadasen/{application/assistant.py,mcp/toolbox.py,domain/ports.py}`, `backend/tests/unit/test_assistant.py`.
+
+## 2026-11-21 · feat(assistant): tool schemas and in-process transport over the MCP tools
+
+- **Changed:** `mcp/specs.py` builds JSON Schemas from the signatures of `Sub50Tools` (no `title`, `T | None` collapsed, defaults dropped) for an LLM that calls tools directly. `infrastructure/inprocess.py` adds `InProcessTransport` and `in_process_client(app, client_ip)`: an httpx client that enters the same FastAPI app through ASGI from a worker thread, presenting the caller's IP as the peer. `INSTRUCTIONS` moved from `mcp/server.py` to `mcp/tools.py` (the assistant imports it without the optional `mcp` SDK; `server.py` still exposes it).
+- **Changed:** `httpx` is now a main dependency (`mcp/client.py` runs in production); the `mcp` extra holds only `mcp>=2.0`. `uv.lock` updated.
+- **Why:** The in-app assistant reuses the MCP tools through the real routes, so validation, errors and per-IP rate limits all apply without a network hop or a loopback port shared by every user.
+- **Agents:** `in_process_client` must be used from a sync (`def`) route or a thread, because it calls `anyio.from_thread.run`. It sends `Accept-Encoding: identity` so the GZip middleware does not compress the internal bodies.
+- **Files:** `backend/src/cascadasen/{mcp/specs.py,mcp/tools.py,mcp/server.py,infrastructure/inprocess.py}`, `backend/pyproject.toml`, `backend/uv.lock`, `backend/tests/unit/test_tool_specs.py`.
+
+## 2026-11-21 · feat(assistant): tool-chat port and Bedrock Converse adapter
+
+- **Changed:** `domain/ports.py` gets `ToolSpec`, `ToolCall`, `AssistantTurn`, `ToolChatError` and the `ToolChatModel` port (provider-neutral messages: `user`, `assistant` with `tool_calls`, `tool` with `tool_call_id`, `ok`, `result`). `infrastructure/llm_tools.py` implements it for Bedrock Converse (`ConverseToolChat`, `tool_chat(settings)`); it reuses `make_client` and returns `None` unless `CASCADASEN_LLM_ENABLED` and `CASCADASEN_LLM_PROVIDER=bedrock-converse`. New settings `assistant_max_steps`, `assistant_deadline_s`, `assistant_call_timeout_s`, `assistant_history_messages`, `rate_assistant_per_minute`.
+- **Why:** First step of the in-app natural-language assistant (user decision: bedrock-converse only, JSON response with the tool trace). The port keeps `application/` free of any provider.
+- **Agents:** Errors from Bedrock become `ToolChatError` with a fixed Spanish message and no provider detail. Nothing is wired to the API yet.
+- **Files:** `backend/src/cascadasen/{domain/ports.py,infrastructure/llm_tools.py,infrastructure/settings.py}`, `backend/tests/unit/test_llm_tools.py`.
+
+## 2026-11-21 · docs(mcp): guide for the MCP server and links from the agent docs
+
+- **Changed:** New `docs/mcp.md` (run, layout, tools, guardrails, how to add a tool). `docs/openapi.md`, `docs/stack.md` and `docs/agents.md` now point to it instead of saying the MCP server is future; `backend/README.md` has the run and `claude mcp add` commands; `AGENTS.md` section 1 lists `docs/mcp.md` in the read order.
+- **Why:** The server exists, so the older "will wrap them" wording was wrong.
+- **Agents:** Read `docs/mcp.md` before touching `cascadasen/mcp/`.
+- **Files:** `docs/{mcp,openapi,stack,agents}.md`, `backend/README.md`, `AGENTS.md`.
+
+## 2026-11-21 · feat(mcp): MCP server with 23 curated tools over the agent API
+
+- **Changed:** New package `cascadasen/mcp/` (client, state, digest, tools, server). Tools: session (`start_session`, `join_session`, `end_session`, `list_options`, `describe_network`), network edits (`add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network`), sandbox (`cut_lines`, `repair_lines`, `get_grid_state`) and runs (`start_run`, `inject_event`, `step`, `submit_action`, `run_status`, `run_report`, `after_action`, `replay`). Results are compact summaries with the scenario `notice`.
+- **Why:** Simulations driven only by natural language. User decisions: only the MCP server (the LLM lives in the client), stdio transport calling the API over HTTP (`SUB50_API_URL`), curated tools instead of 1:1 with the OpenAPI.
+- **Agents:** No API route changed, so the agent spec is not regenerated. Edits send no `If-Match` (operations do not overwrite each other); a 409 is retried once. No tool ranks or searches cuts (`cyber.md` section 8): a test guards the tool names and another checks each tool's operationIds against `docs/openapi/agents.openapi.json`. Not done: remote HTTP transport and API authentication. Verification: `uv run --extra mcp pytest -q` 258 passed, 2 skipped, 1 failed (only the Bedrock test); smoke test on the real 188-bus API.
+- **Files:** `backend/src/cascadasen/mcp/*`, `backend/tests/{unit/test_mcp_tools.py,integration/test_mcp_server.py}`.
+
+## 2026-11-21 · build(mcp): optional mcp extra and cascadasen-mcp entry point
+
+- **Changed:** `pyproject.toml` gets the optional extra `mcp = ["mcp>=2.0", "httpx>=0.28"]` and the script `cascadasen-mcp = "cascadasen.mcp.server:main"`; `uv.lock` is updated.
+- **Why:** The MCP server (next commit) needs the SDK and `httpx` at runtime, and `httpx` was dev-only. The SDK is `mcp` 2.x, where `FastMCP` became `mcp.server.mcpserver.MCPServer`.
+- **Agents:** Install with `uv sync --extra mcp`. The script exists only once the `cascadasen.mcp` package lands in the next commit.
+- **Files:** `backend/pyproject.toml`, `backend/uv.lock`.
 
 ## 2026-11-21 · fix(api): trusted client IP, rate-limit global runs, document the version tag
 
