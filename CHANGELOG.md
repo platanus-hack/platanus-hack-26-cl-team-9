@@ -220,6 +220,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** Follow `docs/openapi.md` for every agent route: mark it, set `operation_id` from its list, English summary/description, `responses=errors(...)`, tags. Regenerate with `cd backend && uv run python -m cascadasen.api.agent_openapi` in the same commit, or the test fails. Session routes (`/sessions/*`) still need marking when they land. Tags and English summaries of the marked routes also changed in the full `/docs` (were `experimentos`, Spanish). `ErrorResponse.detail` is `str | object | list` because simulator input errors return `{field, message, valid}`.
 - **Files:** `backend/src/cascadasen/api/{agent_openapi,app,simulation_routes,simulation_schemas}.py`, `backend/tests/integration/test_agent_openapi.py`, `docs/openapi.md`, `docs/openapi/agents.openapi.json`, `docs/{stack,architecture,agents}.md`, `backend/README.md`.
 
+## 2026-11-21 · fix(web): draw the wordmark subscript with the logo's SVG paths
+
+- **Changed:** The nav-rail wordmark draws its subscript "50" with the two paths of `web/public/favicon.svg` (Geist 800 "5" and the power button) instead of a Roboto "5" next to a hand-drawn 8 x 11 oval. Size and drop below the baseline are measured from `project-logo.png`.
+- **Why:** Ignacio saw the "0" as stretched and the subscript at the wrong size; the old oval was taller than wide, while the logo's power button is nearly round.
+- **Agents:** The ratios (5 = 0.69 "sub" x-heights tall, drop = 0.43 x-heights) are in `docs/design.md` section 6 and in the `.wordmark .subscript` rule. If the "sub" font size changes, rescale `width`, `height` and `vertical-align` together.
+- **Files:** `web/src/cascade/ui.tsx`, `web/src/cascade/cascade.css`, `docs/design.md`.
+
 ## 2026-11-21 · docs(pitch): add pitch ideas and project benefits
 - **Changed:** New `docs/pitch_idea.md`: pitch notes (25F losses of US$ 984 millones with source, "wow" moment ideas) and a "Beneficios de este proyecto" section with a short list of 17 benefits followed by a paragraph per benefit, including cost vs resilience trade-offs, best combination for a budget and minimum investment that avoids a national blackout.
 - **Why:** The team needs material for the pitch.
