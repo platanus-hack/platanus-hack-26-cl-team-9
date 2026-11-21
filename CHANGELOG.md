@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(agents): operation view pending outside this backend PR
+
+- **Changed:** `docs/agents.md` pending item 2 no longer points to `web/src/operation/`, which this branch removed; drawing the physical readings waits for the frontend PR.
+- **Why:** The physical-bots commits were moved onto `feat/strategic-sim-api`, which is backend only.
+- **Agents:** The snapshot fields (`observed.areas[].freq_hz`, `rocof_hz_s`, `transient.islands[]`) are the contract the frontend PR should read.
+- **Files:** `docs/agents.md`.
+
 ## 2026-11-21 · docs(agents): pending work of the physical bots
 
 - **Changed:** `docs/agents.md` section 4 is now a table of pending work: LLM commander physical context, operation view drawing the readings, releasing reserve and batteries, regenerating the map cache, the repeating `low_inertia` alarm, the per-island inertia floor, and V2–V9 calibration on the 188-bus network.
