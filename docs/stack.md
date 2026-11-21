@@ -258,7 +258,7 @@ A session edits the 188-bus engine network (`domain/cascade/network.py`) of one 
 
 The backend serves everything under `/api/v1` (FastAPI, `backend/src/cascadasen/api/`); the live schema is at `/docs`. The frontend can still work from fixtures only, which also gives the offline behaviour in section 9.
 
-External agents (and the future MCP server) use a separate spec with only the routes marked `x-sub50-agent`: `GET /api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`), versioned in `docs/openapi/agents.openapi.json`. Marking rules, operationIds, error model, tags and the regeneration command: `docs/openapi.md`. It holds `/sim/catalog`, `/sim/network`, `/sim/runs*` (section 7.1) and every session route except the SSE stream (section 7.2).
+External agents (and the MCP server, `docs/mcp.md`) use a separate spec with only the routes marked `x-sub50-agent`: `GET /api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`), versioned in `docs/openapi/agents.openapi.json`. Marking rules, operationIds, error model, tags and the regeneration command: `docs/openapi.md`. It holds `/sim/catalog`, `/sim/network`, `/sim/runs*` (section 7.1) and every session route except the SSE stream (section 7.2).
 
 `POST /api/v1/simulate` runs one physical contingency on the reduced network (`strategy.md` section 2.1) and returns a `timeline.json` (section 6). `elements_out` accepts corridor ids, area ids (`A01`-`A13`) or real snapshot node ids (`SE…`), resolved to the area that contains them.
 

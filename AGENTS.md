@@ -15,7 +15,7 @@ Do this before each plan and before each change, not only at the start of a sess
    6. `docs/plan.md`: phases, validation cases, priorities, open decisions (section 9)
    7. `backend/README.md` for backend work, `web/README.md` for frontend work
    8. `docs/strategy.md` and `docs/agents.md` for work on the strategic theatre and its agents
-   9. `docs/sessions-api.md` for work on shared sessions or on external agents that call the API (every agent endpoint takes the session id in its path)
+   9. `docs/sessions-api.md` for work on shared sessions or on external agents that call the API (every agent endpoint takes the session id in its path), and `docs/mcp.md` for the MCP server that lets a client run simulations in natural language
    For a small change, reading the sections the change touches plus `plan.md` section 9 is enough. A plan that contradicts the docs must say so explicitly.
 2. Read the newest entries of `CHANGELOG.md`. They say what changed after the docs were written.
 3. Check `git status` and `git log --oneline -10`. Do not overwrite uncommitted work from someone else.

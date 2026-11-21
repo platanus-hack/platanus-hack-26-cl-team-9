@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(mcp): guide for the MCP server and links from the agent docs
+
+- **Changed:** New `docs/mcp.md` (run, layout, tools, guardrails, how to add a tool). `docs/openapi.md`, `docs/stack.md` and `docs/agents.md` now point to it instead of saying the MCP server is future; `backend/README.md` has the run and `claude mcp add` commands; `AGENTS.md` section 1 lists `docs/mcp.md` in the read order.
+- **Why:** The server exists, so the older "will wrap them" wording was wrong.
+- **Agents:** Read `docs/mcp.md` before touching `cascadasen/mcp/`.
+- **Files:** `docs/{mcp,openapi,stack,agents}.md`, `backend/README.md`, `AGENTS.md`.
+
 ## 2026-11-21 · feat(mcp): MCP server with 23 curated tools over the agent API
 
 - **Changed:** New package `cascadasen/mcp/` (client, state, digest, tools, server). Tools: session (`start_session`, `join_session`, `end_session`, `list_options`, `describe_network`), network edits (`add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network`), sandbox (`cut_lines`, `repair_lines`, `get_grid_state`) and runs (`start_run`, `inject_event`, `step`, `submit_action`, `run_status`, `run_report`, `after_action`, `replay`). Results are compact summaries with the scenario `notice`.

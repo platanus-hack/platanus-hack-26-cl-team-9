@@ -24,6 +24,8 @@ uv run python -m cascadasen.api.agent_openapi            # writes ../docs/openap
 uvx openapi-spec-validator ../docs/openapi/agents.openapi.json
 ```
 
+MCP server (natural-language simulations through the agent API, `docs/mcp.md`): `uv run --extra mcp cascadasen-mcp` over stdio, with `SUB50_API_URL` pointing at the API. Register it with `claude mcp add sub50 --env SUB50_API_URL=http://localhost:8000 -- uv run --directory <abs>/backend --extra mcp cascadasen-mcp`.
+
 Build outputs in `data/processed/`:
 
 | File | Content |
