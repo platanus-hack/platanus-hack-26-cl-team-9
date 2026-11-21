@@ -50,21 +50,19 @@ infrastructure/deploy.sh apply   # ECR, build and push images, full apply, print
 - A new deployment is a new commit and a new tag: the task definition changes and ECS runs the blue/green swap.
 - `plan` creates only the state bucket in AWS.
 
-## Add a domain with Route 53 and ACM
-The Terraform stack creates the Route 53 hosted zone `sub50.cl` (`infrastructure/route53.tf`) and nothing else for DNS: no records, no ACM certificate, no alias. The domain is not registered by this stack.
+## Domain with Route 53 and ACM
+`var.domain_name` (default `sub50.cl`) drives three things:
+- `infrastructure/route53.tf`: the hosted zone, plus apex `A` and `AAAA` alias records pointing to the CloudFront distribution. The domain is not registered by this stack.
+- `infrastructure/acm.tf`: an ACM certificate for `sub50.cl` and `*.sub50.cl` (us-east-1), validated by the CNAME records `aws_route53_record.acm_validation` in the zone, and `aws_acm_certificate_validation`, which waits until the certificate is ISSUED.
+- `infrastructure/cloudfront.tf`: the distribution alias `sub50.cl` and the validated certificate (SNI, TLS 1.2 minimum). The distribution takes the certificate from `aws_acm_certificate_validation`, so it is only updated once the certificate is issued.
 
-NS delegation: after `apply`, read `terraform -chdir=infrastructure output route53_name_servers` and set those four name servers for `sub50.cl` at the .cl registrar. Until then the zone does not resolve publicly.
+NS delegation is a manual step. Read `terraform -chdir=infrastructure output route53_name_servers` and set those four name servers for `sub50.cl` at the .cl registrar (NIC Chile). Validation and the alias only work after delegation; `aws_acm_certificate_validation` times out before that. The site is then at the `site_url` output. The `*.cloudfront.net` URL keeps working.
 
-`infrastructure/acm.tf` defines an ACM certificate for `sub50.cl` and `*.sub50.cl` (us-east-1, DNS validation in the zone) and the output `acm_certificate_arn`. It is not attached to CloudFront or the ALB. `aws_acm_certificate_validation` only completes after the registrar delegates `sub50.cl` to the zone's name servers.
-
-To use the domain, create the certificates and set variables in `infrastructure/terraform.tfvars` (git-ignored, example in `terraform.tfvars.example`):
-- `domain_name` and `cloudfront_certificate_arn` (ACM certificate in `us-east-1`) add the alias and certificate to CloudFront.
-- `origin_https = true` and `alb_certificate_arn` make the ALB production listener HTTPS :443 and CloudFront use `https-only`.
-- Then add an alias record in the `sub50.cl` zone pointing to the distribution.
+Optional, in `infrastructure/terraform.tfvars` (git-ignored, example in `terraform.tfvars.example`): `origin_https = true` and `alb_certificate_arn` make the ALB production listener HTTPS :443 and CloudFront use `https-only`. That needs a certificate whose name matches the origin host, so it also needs a record such as `alb.sub50.cl` pointing to the ALB; it is not set up.
 
 ## Backlog
 No issue numbers yet: `scripts/issue.sh` does not exist in the repo and the fork has issues disabled. Create these in the team tracker:
-- ACM certificates and the alias record for `sub50.cl` on CloudFront (the zone exists).
+- HTTPS between CloudFront and the ALB: an `alb.sub50.cl` record pointing to the ALB, CloudFront origin set to that name, and `origin_https = true`.
 - CloudFront origin secret header, so the ALB rejects requests that do not come from this distribution (the prefix list allows any CloudFront distribution).
 - Multi-task high availability.
 - Load data from S3 instead of baking it into the image.

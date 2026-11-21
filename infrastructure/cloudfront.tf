@@ -6,14 +6,14 @@ data "aws_cloudfront_origin_request_policy" "all_viewer" {
   name = "Managed-AllViewer"
 }
 
-# CloudFront is a plain proxy (TLS and, later, the domain). Nothing is cached.
+# CloudFront is a plain proxy (TLS and the domain). Nothing is cached.
 resource "aws_cloudfront_distribution" "main" {
   enabled         = true
   comment         = "cascadasen"
   is_ipv6_enabled = true
   http_version    = "http2and3"
   price_class     = "PriceClass_100"
-  aliases         = var.domain_name == null ? [] : [var.domain_name]
+  aliases         = [var.domain_name]
 
   origin {
     origin_id   = "alb"
@@ -44,16 +44,8 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = var.domain_name == null ? true : null
-    acm_certificate_arn            = var.domain_name == null ? null : var.cloudfront_certificate_arn
-    ssl_support_method             = var.domain_name == null ? null : "sni-only"
-    minimum_protocol_version       = var.domain_name == null ? null : "TLSv1.2_2021"
-  }
-
-  lifecycle {
-    precondition {
-      condition     = var.domain_name == null || var.cloudfront_certificate_arn != null
-      error_message = "domain_name needs cloudfront_certificate_arn."
-    }
+    acm_certificate_arn      = aws_acm_certificate_validation.main.certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 }

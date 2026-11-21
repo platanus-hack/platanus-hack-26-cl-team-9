@@ -4,15 +4,9 @@ variable "image_tag" {
 }
 
 variable "domain_name" {
-  description = "Public domain served by CloudFront. null keeps the default *.cloudfront.net name."
+  description = "Public domain: the Route 53 zone, the ACM certificate and the CloudFront alias."
   type        = string
-  default     = null
-}
-
-variable "cloudfront_certificate_arn" {
-  description = "ACM certificate in us-east-1 for domain_name. Required when domain_name is set."
-  type        = string
-  default     = null
+  default     = "sub50.cl"
 }
 
 variable "origin_https" {

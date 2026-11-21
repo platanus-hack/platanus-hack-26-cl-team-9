@@ -3,6 +3,10 @@ output "cloudfront_url" {
   value       = "https://${aws_cloudfront_distribution.main.domain_name}"
 }
 
+output "site_url" {
+  description = "Public URL on the custom domain (works after NS delegation and certificate validation)."
+  value       = "https://${var.domain_name}"
+}
 output "alb_dns_name" {
   description = "ALB DNS name (an ALB has no Elastic IP). CloudFront points to it."
   value       = aws_lb.main.dns_name
@@ -28,6 +32,6 @@ output "route53_name_servers" {
   value       = aws_route53_zone.main.name_servers
 }
 output "acm_certificate_arn" {
-  description = "ACM certificate (us-east-1) for sub50.cl and *.sub50.cl. Use it for cloudfront_certificate_arn and alb_certificate_arn."
+  description = "ACM certificate (us-east-1) for sub50.cl and *.sub50.cl. Attached to CloudFront. Reuse it for alb_certificate_arn if origin_https is enabled."
   value       = aws_acm_certificate_validation.main.certificate_arn
 }

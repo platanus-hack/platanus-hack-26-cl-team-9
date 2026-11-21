@@ -1,8 +1,8 @@
 # Certificate for sub50.cl and *.sub50.cl, validated by DNS in the zone from route53.tf.
-# Not attached to CloudFront or the ALB yet.
+# Attached to CloudFront (cloudfront.tf). Not attached to the ALB.
 resource "aws_acm_certificate" "main" {
-  domain_name               = aws_route53_zone.main.name
-  subject_alternative_names = ["*.${aws_route53_zone.main.name}"]
+  domain_name               = var.domain_name
+  subject_alternative_names = ["*.${var.domain_name}"]
   validation_method         = "DNS"
 
   lifecycle {
