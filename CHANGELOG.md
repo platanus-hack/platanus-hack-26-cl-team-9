@@ -271,6 +271,46 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Ricardo reframed CascadaSEN: it simulates whether a utility keeps its mission when it loses the capacity to understand its own state, not attacks. The task is backend only; another teammate builds the frontend against this API.
 - **Agents:** Read `strategy.md` after `cyber.md`. The adversary acts only through abstract events at area or function level, and no output ranks elements or areas. The LLM never decides or plays the adversary. Primary user: utility operations and continuity teams, with Mode II (adaptive adversary) first. The framing, item 7 and the node list are pending team confirmation. The implementation lands on branch `feat/strategic-sim-api`.
 - **Files:** `docs/strategy.md`, `docs/cyber.md`, `docs/stack.md`, `docs/plan.md`.
+## 2026-11-21 · feat(infra): Mapbox token in the web image and deploy-on-main workflow
+- **Changed:** `web.Dockerfile` takes the build argument `VITE_MAPBOX_TOKEN`; `deploy.sh` passes it (public `pk.*` default, overridable). New `deploy.sh deploy` command (no plan step). New `.github/workflows/deploy.yml` runs it on every push to `main` through GitHub OIDC.
+- **Why:** The deployed map showed the offline fallback because Vite inlines the token at build time. The team wants every commit on main deployed.
+- **Agents:** The workflow needs the repository variable `AWS_DEPLOY_ROLE_ARN` and an IAM role plus OIDC provider created by hand; trust policy in `docs/infrastructure.md`. Until then it fails at the credentials step.
+- **Files:** `infrastructure/docker/web.Dockerfile`, `infrastructure/deploy.sh`, `.github/workflows/deploy.yml`, `docs/infrastructure.md`.
+## 2026-11-21 · feat(web): mapa 3 interface following the Paper design (#28)
+
+- **Changed:** New layout (`.shell` in `styles.css`): a collapsible rail on the left (Sub50, Mapa, Supuestos; the collapsed state is saved in localStorage), a floating panel with the tabs Red, Simulación, Leyenda and Supuestos (the last two used to sit at the bottom of the old right panel), a timeline card at the bottom of the panel (play, scrubber, stage and seconds), the case selector as a pill at the top center of the map, and the 2D/3D toggle plus zoom buttons at the top right. The camera now leaves room on the left, and the Mapbox logo moved to the bottom right. Neutral charcoal colors instead of navy.
+- **Why:** The team asked for the full interface of the Paper mockup, with Red and Simulación within reach and the legend and assumptions as tabs.
+- **Agents:** Mapa 3 only; the deprecated mapas 1 and 2 keep the old `.layout` and `.panels`. `BaseMap` has a new `zoomBy()`. The camera clearance (`PANEL_CLEARANCE_PX`, 640) is fixed: collapsing the rail does not re-center the map. Not built: rail items Escenarios, Validación, Datos y fuentes, Metodología and Ayuda; tabs Qué lo habría evitado and Validación; the date pill; the "Color de líneas: Tensión" legend and mode; scale bar and layers button; Hz and speed in the timeline.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/Legend.tsx`, `web/src/map/baseMap.ts`, `web/src/styles.css`.
+
+## 2026-11-21 · feat(web): Red panel with network summary and node detail (#26)
+
+- **Changed:** The right panel of mapa 3 has two tabs, Red and Simulación (the previous results block). Red shows the Paper design: km of lines (34.578), substations (1.220), installed MW (38.203) and km by voltage band, computed in the browser from `data/processed/geo/{lines,substations,plants}.geojson` (`web/src/cascade/networkSummary.ts`; the numbers match the mockup exactly). Clicking a substation (3D bar, 2D disc or node dot) opens its detail in Red: kV, zone, generation, demand, people, and its connected lines with their loading at the current stage; clicking one of those lines cuts it. A cut line also gets a detail card (capacity, flow, loading). Cutting a line switches to Simulación.
+- **Why:** The design has a Red tab; the team asked to visualise each node or line with the data we have.
+- **Agents:** Clicking a line on the map still cuts it (not changed). Node data is the reduced network (188 buses); the summary is the full IDE data (1.220 substations), so the two counts differ on purpose. `people` has the known defect (substations with load and 0 people, for example S/E Mauro). Not built: tabs Qué lo habría evitado and Validación, the nav rail, inertia or sync MW per node (not in the cache), per-plant detail.
+- **Files:** `web/src/cascade/NetworkPanel.tsx`, `networkSummary.ts` (+ test), `CascadeApp.tsx`, `web/src/styles.css`.
+
+## 2026-11-21 · feat(web): seven more icons for the 2D view (#24)
+
+- **Changed:** Added `plant-hydro`, `plant-gas`, `plant-geothermal`, `plant-biomass`, `grid-tower`, `grid-breaker` and `grid-transformer` (512 px PNG) to the icon folder, and the matching kinds to `IconKind` in `web/src/cascade/icons.ts`. Now 12 icons. All icons live in `web/src/assets/icons/` (moved from `web/public/icons/`, where #23 put the first five) and are imported with `?url` in `icons.ts`, so Vite bundles and hashes them.
+- **Why:** The 2D view needs an icon per generation carrier in the data and per grid element in `design.md`.
+- **Agents:** Still no icon is drawn: nothing passes `icons` to the View yet. `plant-biomass` is an ASSUMPTION (the image is a plant with a sprout and wind, named `green-factory` by its source). Still missing: diesel, CSP (solar thermal), substation, pole, gantry. `grid-tower.png` is dark gray; the others are black. `mask: true` tints all of them, so the color of the file does not matter.
+- **Files:** `web/src/assets/icons/*`, `web/src/cascade/icons.ts`.
+
+## 2026-11-21 · feat(web): 2D view = same map from above, with flat symbols (#22)
+
+- **Changed:** 2D keeps the same Mapbox Standard (night) basemap as 3D and only looks straight down: camera pitch 0 and rotation disabled. The 3D demand bars are replaced by flat discs whose radius grows with the square root of MW (layer id `load-2d`). New 2D-only icon layer: `IconPoint` and `iconLayers()` in `web/src/cascade/icons.ts`, sized in meters on the ground (clamped to 12 to 40 pixels) so icons scale with the zoom. Image files in `web/src/assets/icons/` (`plant-coal`, `plant-wind`, `plant-solar`, `storage-battery`, `power-bolt`; 512 px PNG, black outline on transparent, tinted at draw time with `mask: true`). The legend text changes with the mode.
+- **Why:** A different flat basemap (dark-v11) looked worse than the main map. The team chose the same 3D scene seen from above with 2D symbols, so icons can be added without 3D polygons.
+- **Agents:** To add icons, build `IconPoint[]` and pass it as `icons` in the `View` given to `buildCascadeLayers` (`CascadeApp.tsx`, `_animate`). Nothing passes it yet, so no icon draws. Plant icons need per-plant data that the cache does not have (`node_index.json` `plants[]` has it). The Standard style still draws 3D buildings and terrain when zoomed in, even in 2D. The offline map (no token) only gets the camera lock. Branched from `feature/21-cities-metadata` (#21); this PR includes that commit until #21 merges.
+- **Files:** `web/src/map/baseMap.ts`, `web/src/cascade/layers.ts`, `web/src/cascade/icons.ts`, `web/src/cascade/Legend.tsx`, `web/src/cascade/CascadeApp.tsx`.
+
+## 2026-11-21 · fix(web): city labels become metadata, not drawn (#20)
+
+- **Changed:** The city labels of #19 are no longer drawn. The list moved to `web/src/cascade/cities.ts` (`CITIES`) as data only.
+- **Why:** Mapbox already labels these cities, so each name showed twice.
+- **Agents:** Nothing imports `CITIES` yet. Use it for search, camera jumps or a breadcrumb. The "city labels" entry below is superseded: those labels are gone from the screen.
+- **Files:** `web/src/cascade/layers.ts`, `web/src/cascade/cities.ts`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(web): city labels in mapa 3 (#18)
 
 - **Changed:** Six reference cities (Arica, Antofagasta, Calama, Santiago, Concepción, Puerto Montt) drawn as a cream dot plus a text label, in deck.gl (`CITIES` in `web/src/cascade/layers.ts`), on top of the grid layers.
@@ -341,6 +381,58 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** Dispatch and demand are simulated from PyPSA-CL inputs, not measured; show them as such. N-1 is not enforced. PyPSA-CL storage units are model candidates, not real batteries. Details in `docs/datasets.md` section 0.
 - **Files:** `data/scripts/`, `data/processed/{node_index,operating_points,baseline_opf}.json`, `web/src/map/`.
 
+## 2026-11-21 · feat(infra): attach ACM certificate and Route 53 alias to CloudFront for sub50.cl
+- **Changed:** `domain_name` (default `sub50.cl`) drives the zone, the ACM certificate and the CloudFront alias. CloudFront uses the validated certificate (SNI, TLS 1.2 minimum). Apex `A` and `AAAA` alias records point to the distribution. New output `site_url`. The variable `cloudfront_certificate_arn` is removed.
+- **Why:** Serve the app on `https://sub50.cl` through CloudFront.
+- **Agents:** `aws_acm_certificate_validation` needs `sub50.cl` delegated to the Route 53 name servers (done by the user). Apply with `infrastructure/deploy.sh apply`, which sets `image_tag`. Origin HTTPS stays off; it needs an `alb.sub50.cl` record first (see backlog in `docs/infrastructure.md`).
+- **Files:** `infrastructure/*.tf`, `infrastructure/terraform.tfvars.example`, `docs/infrastructure.md`.
+## 2026-11-21 · docs(infra): marker line for second deploy
+
+- **Changed:** One marker line in `docs/infrastructure.md`.
+- **Why:** New commit gives a new image tag, so the second deploy proves the blue/green swap.
+- **Agents:** Previous deploy: task definition `cascadasen:2`, tag `aade205`.
+- **Files:** `docs/infrastructure.md`.
+## 2026-11-21 · feat(infra): add ACM certificate for sub50.cl (not applied)
+- **Changed:** `infrastructure/acm.tf` adds `aws_acm_certificate` (`sub50.cl` + `*.sub50.cl`, DNS), the validation records in the Route 53 zone and `aws_acm_certificate_validation`. Output `acm_certificate_arn`. Docs updated.
+- **Why:** A certificate is needed for CloudFront and the ALB HTTPS listener before the domain goes live.
+- **Agents:** Plan: 4 to add. Not applied; needs user approval. Apply only works once the registrar delegates `sub50.cl` to the zone's name servers, else validation waits and times out. The stack is deployed: CloudFront `https://d2bc0ohphbh56u.cloudfront.net`, image tag `aade205`, task definition `cascadasen:2`. Not attached to CloudFront yet.
+- **Files:** `infrastructure/acm.tf`, `infrastructure/outputs.tf`, `docs/infrastructure.md`.
+## 2026-11-21 · fix(infra): build images with buildx as Docker-format gzip layers
+- **Changed:** `push_image` in `deploy.sh` uses `docker buildx build --provenance=false --sbom=false --output type=image,push=true,compression=gzip,force-compression=true,oci-mediatypes=false`.
+- **Why:** Fargate failed with `CannotPullContainerError: wrong diff id` on images pushed with plain `docker build` + `docker push` from Colima (containerd image store, OCI manifest).
+- **Agents:** `docker-buildx` is required (`brew install docker-buildx`, plugin linked in `~/.docker/cli-plugins`). ECR tag `probe1` in `cascadasen/backend` is a test push; ignore it. Images pushed under the old tag format are not usable.
+- **Files:** `infrastructure/deploy.sh`.
+## 2026-11-21 · fix(infra): auto-approve the targeted ECR apply in deploy.sh
+- **Changed:** The ECR-only `terraform apply -target` in `deploy.sh apply` now passes `-auto-approve`.
+- **Why:** The step prompted for `yes`, so a non-interactive `apply` hung. The user already approved the plan that includes the ECR repos.
+- **Agents:** The full apply still uses the saved `tfplan` and needs no prompt. Run `plan` and get approval before `apply`.
+- **Files:** `infrastructure/deploy.sh`.
+## 2026-11-21 · docs(tasks): add animation, city and adversarial agent tasks
+
+- **Changed:** `docs/tasks.md` gains animations with audio on attacked infrastructure, an affected people counter, city lights, a clickable city component (population, % dependent on electricity, deaths rising with blackout time) and an adversarial agents backlog item (attacker and resilience agents plus APIs, owner Ricardo).
+- **Why:** The team refined the task list. The adversarial agents spec is backlog and is not written yet.
+- **Agents:** Open questions are listed in each task (animation and sound mapping, death-rate model and its source, attacker objective and limits). The "% dependent on electricity" value needs a source or `is_assumption: true`. No code or contract changed.
+- **Files:** `docs/tasks.md`.
+## 2026-11-21 · feat(infra): add Route 53 hosted zone for sub50.cl
+- **Changed:** `infrastructure/route53.tf` adds `aws_route53_zone.main` (`sub50.cl`). New output `route53_name_servers`. `docs/infrastructure.md` documents the zone and the NS delegation step.
+- **Why:** The team will serve the app from sub50.cl; the zone must exist first so its name servers can be delegated at the .cl registrar.
+- **Agents:** Zone only: no records, no ACM certificate, no CloudFront alias. The domain is not registered by Terraform. Plan is now 39 to add. `apply` still needs explicit user approval.
+- **Files:** `infrastructure/route53.tf`, `infrastructure/outputs.tf`, `docs/infrastructure.md`.
+## 2026-11-21 · docs(infra): document the AWS deployment
+- **Changed:** `docs/infrastructure.md` covers architecture, sizing, blue/green, `deploy.sh plan|apply`, tag scheme, Route 53 + ACM variables and the backlog. `docs/docker.md` links to it.
+- **Why:** AGENTS.md requires docs with each behavior change.
+- **Agents:** Backlog items have no issue numbers: `scripts/issue.sh` is missing and the fork has issues disabled. Create them upstream when the team agrees. The two-target-group blue/green setup is validated by Terraform only; the ECS API confirms it at first apply.
+- **Files:** `docs/infrastructure.md`, `docs/docker.md`.
+## 2026-11-21 · feat(infra): add deploy.sh with plan and apply phases
+- **Changed:** `infrastructure/deploy.sh plan` checks the AWS account (402909940511), creates the versioned, encrypted state bucket `cascadasen-tfstate-402909940511` if missing, runs init/fmt/validate/plan and writes `infrastructure/.deploy-tag`. `apply` creates ECR, builds and pushes both images (`linux/amd64`), then applies a fresh plan and prints the CloudFront URL. `terraform.tfvars.example` lists the optional variables.
+- **Why:** The user runs deploys with their own credentials; plan and apply are split so the plan is reviewed first.
+- **Agents:** Credentials come from the environment, else the keys file (never printed, no `AWS_PROFILE`). Image tag is the short commit, plus `-dirty-<UTC time>` when `backend`, `web`, `data` or `infrastructure/docker` have uncommitted changes. ECR is immutable, so `apply` skips a build when the tag already exists. `apply` aborts if the tree changed since `plan`. Only run `apply` after the user approves the plan.
+- **Files:** `infrastructure/deploy.sh`, `infrastructure/terraform.tfvars.example`.
+## 2026-11-21 · feat(infra): add Terraform stack for ECS Fargate behind ALB and CloudFront
+- **Changed:** `infrastructure/*.tf` defines a VPC with 2 public subnets, an ALB (production listener :80, test listener :8080, 4 target groups), one ECS Fargate service (1 task, 2 vCPU / 4 GB, containers `backend` :8000 and `web` :80) with native ECS blue/green on two `load_balancer` blocks, two immutable ECR repos, CloudWatch logs, and a CloudFront proxy (no cache, redirect to HTTPS). State uses an S3 backend with `use_lockfile`.
+- **Why:** POC deployment requested by the team. An ALB cannot hold an Elastic IP, so CloudFront points to the ALB DNS name.
+- **Agents:** Variables: `image_tag` (required, set by deploy.sh), `domain_name`, `cloudfront_certificate_arn`, `origin_https`, `alb_certificate_arn` (all optional). ECS rewrites the listener-rule forward actions on each deployment, so those rules use `ignore_changes = [action]`. No Route 53 resources yet. Never run `terraform apply` by hand; `infrastructure/deploy.sh` comes in the next commit.
+- **Files:** `infrastructure/*.tf`, `infrastructure/.terraform.lock.hcl`.
 ## 2026-11-21 · feat(docker): add docker compose stack for backend and web
 - **Changed:** `docker-compose.yml` runs `backend` (FastAPI, :8000) and `web` (Vite dev server with npm, :5173). `backend/Dockerfile` installs from `uv.lock`. `web/Dockerfile` uses `npm ci`; compose bind-mounts `./web` and `./data` because the app imports `../data/processed`. Optional `data-build` profile rebuilds `data/processed`. Host ports are configurable with `WEB_PORT` and `BACKEND_PORT`. Root `.gitignore` also ignores `node_modules/`, `dist/`, `.env.local`, `.DS_Store` and `.playwright-mcp/`.
 - **Why:** Run and simulate the whole project locally with only Docker installed.

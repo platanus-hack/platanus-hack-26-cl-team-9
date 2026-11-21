@@ -17,3 +17,12 @@ dist/
 .env.local
 .DS_Store
 .playwright-mcp/
+
+# Terraform
+infrastructure/.terraform/
+*.tfstate*
+tfplan
+*.tfplan
+*.tfvars
+!*.tfvars.example
+infrastructure/.deploy-tag

@@ -5,10 +5,13 @@ import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers } from "./layers";
 import { CascadeLegend } from "./Legend";
 import { FrequencyChart } from "./FrequencyChart";
+import { NetworkPanel } from "./NetworkPanel";
 import { OperationPanel, type MapBridge } from "../operation/OperationPanel";
 import { formatPeople, lineName, narrate } from "./text";
 import type { BusState, Index, Network, Timeline } from "./types";
 
+type Tab = "red" | "sim" | "operacion" | "legend" | "assumptions";
+const TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["operacion", "Operación"], ["legend", "Leyenda"], ["assumptions", "Supuestos"]];
 const STAGE_MS = 1400;
 const FLOW_PERIOD_S = 3.0;
 const FLOW_CYCLE = 1 + 2 / 3;
@@ -26,9 +29,11 @@ export function CascadeApp() {
   const [cut, setCut] = useState<string | null>(params.get("cut"));
   const [stage, setStage] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [tab, setTab] = useState<Tab>(params.get("modo") === "operacion" ? "operacion" : "red");
+  const [node, setNode] = useState<string | null>(null);
+  const [railOpen, setRailOpen] = useState(localStorage.getItem("rail") !== "closed");
   const [mode, setMode] = useState<ViewMode>(params.get("vista") === "2d" ? "2d" : "3d");
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"corte" | "operacion">(params.get("modo") === "operacion" ? "operacion" : "corte");
   const bridge = useRef<MapBridge | null>(null);  // the operation panel draws on the same map through this
   const view = useRef({ network, buses, timeline, stage, cut, mode, tab });
   view.current = { network, buses, timeline, stage, cut, mode, tab };
@@ -37,6 +42,7 @@ export function CascadeApp() {
   useEffect(() => { _loadPoint(); }, [pointId, index]);
   useEffect(() => { _loadTimeline(); }, [pointId, cut, network]);
   useEffect(() => _mountMap(), []);
+  useEffect(() => { if (cut) _switchTab("sim"); }, [cut]);
   useEffect(() => { baseMap.current?.setMode(mode); }, [mode]);
   useEffect(() => _animate(), []);
   useEffect(() => _autoplay(), [playing, timeline]);
@@ -56,7 +62,10 @@ export function CascadeApp() {
     const map = createBaseMap(mapRef.current!, {
       onClick: (info: PickingInfo) => {
         if (view.current.tab === "operacion") return bridge.current?.onClick(info);
-        if (info.layer?.id === "lines" && info.object) setCut((info.object as { id: string }).id);
+        const id = (info.object as { id: string } | undefined)?.id;
+        if (!id) return;
+        if (info.layer?.id === "lines") setCut(id);
+        else if (info.layer?.id === "nodes" || info.layer?.id === "load" || info.layer?.id === "load-2d") { _switchTab("red"); setNode(id); }
       },
       getTooltip: (info: PickingInfo) => (view.current.tab === "operacion" ? bridge.current?.tooltip(info) ?? null : _tooltip(info)),
     });
@@ -88,7 +97,7 @@ export function CascadeApp() {
       const frame = v.timeline?.frames[Math.min(v.stage, (v.timeline?.frames.length ?? 1) - 1)];
       if (operation) baseMap.current?.setLayers(operation);
       else if (v.network && frame) {
-        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.tab === "corte" ? v.cut : null, mode: v.mode }));
+        baseMap.current?.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame, time, selected: v.tab !== "operacion" ? v.cut : null, mode: v.mode }));
       }
       raf = requestAnimationFrame(tick);
     };
@@ -96,7 +105,7 @@ export function CascadeApp() {
     return () => cancelAnimationFrame(raf);
   }
 
-  function _switchTab(next: "corte" | "operacion") {
+  function _switchTab(next: Tab) {
     setTab(next);
     const url = new URL(location.href);
     if (next === "operacion") url.searchParams.set("modo", "operacion"); else url.searchParams.delete("modo");
@@ -115,43 +124,75 @@ export function CascadeApp() {
     return timeline.events.filter((e) => e.t <= until + 1e-9 || e.t <= until + (timeline.frames[1]?.t ?? 1));
   }, [timeline, stage]);
 
+  const frame = timeline?.frames[Math.min(stage, (timeline?.frames.length ?? 1) - 1)];
   return (
-    <div className="layout">
+    <div className={railOpen ? "shell" : "shell rail-closed"}>
       <div className="map" ref={mapRef} />
-      <div className="view-toggle" role="group" aria-label="Vista del mapa">
-        {(["2d", "3d"] as const).map((m) => <button key={m} className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>{m.toUpperCase()}</button>)}
-      </div>
-      <div className="panels wide">
-        <h1>CascadaSEN</h1>
-        <div className="tabs" role="tablist">
-          {([["corte", "Corte"], ["operacion", "Operación"]] as const).map(([id, text]) => (
-            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => _switchTab(id)}>{text}</button>
-          ))}
+      <nav className={railOpen ? "rail" : "rail collapsed"} aria-label="Navegación">
+        <div className="brand"><Icon d="M13 2 4 14h6l-1 8 9-12h-6z" fill /><span className="label">Sub50</span></div>
+        <button className="rail-item on" aria-current="page" title="Mapa"><Icon d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2zM9 3v16M15 5v16" /><span className="label">Mapa</span></button>
+        <p className="rail-section label">Referencia</p>
+        <button className="rail-item" title="Supuestos" onClick={() => _switchTab("assumptions")}><Icon d="M6 2h9l4 4v16H6zM14 2v5h5M9 12h7M9 16h7" /><span className="label">Supuestos</span></button>
+        <button className="rail-item rail-toggle" aria-label={railOpen ? "Contraer barra lateral" : "Expandir barra lateral"} title={railOpen ? "Contraer" : "Expandir"} onClick={() => { localStorage.setItem("rail", railOpen ? "closed" : "open"); setRailOpen(!railOpen); }}>
+          <Icon d={railOpen ? "m15 6-6 6 6 6" : "m9 6 6 6-6 6"} /><span className="label">Contraer</span>
+        </button>
+      </nav>
+      <select className="case-pill" aria-label="Hora del caso base" value={pointId} onChange={(e) => { setCut(null); setPointId(e.target.value); }}>
+        {index?.points.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+      </select>
+      <div className="map-controls">
+        <div className="seg" role="group" aria-label="Vista del mapa">
+          {(["2d", "3d"] as const).map((m) => <button key={m} className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>{m.toUpperCase()}</button>)}
         </div>
-        {error && <p className="note warn">{error}</p>}
-        <label className="field">Hora del caso base
-          <select value={pointId} onChange={(e) => { setCut(null); setPointId(e.target.value); }}>
-            {index?.points.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
-        </label>
-        {tab === "operacion" ? <OperationPanel pointId={pointId} bridge={bridge} /> : <>
-          <p className="muted">Haz clic en una línea para cortarla y mira cómo se propaga la falla. Usa Reproducir o la barra para recorrer las etapas.</p>
-          {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
-          {timeline && network && <Results timeline={timeline} network={network} stage={stage} setStage={(s) => { setPlaying(false); setStage(s); }} playing={playing} setPlaying={setPlaying} events={visibleEvents} cut={cut} />}
-          {network && <CascadeLegend network={network} buses={buses} />}
-        </>}
-        <details><summary>Supuestos del modelo</summary>
-          <ul>{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>
-        </details>
+        <div className="seg col"><button aria-label="Acercar" onClick={() => baseMap.current?.zoomBy(1)}>+</button><button aria-label="Alejar" onClick={() => baseMap.current?.zoomBy(-1)}>−</button></div>
+      </div>
+      <section className="sidebar">
+        <header><h1>Chile</h1><span>Sistema Eléctrico Nacional</span></header>
+        <div className="tabs" role="tablist">
+          {TABS.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => _switchTab(k)}>{label}</button>)}
+        </div>
+        <div className="tab-body">
+          {error && <p className="note warn">{error}</p>}
+          {tab === "red" && network && <NetworkPanel network={network} buses={buses} frame={frame} node={node} line={cut} clearNode={() => setNode(null)} cutLine={(id) => { setNode(null); setCut(id); }} />}
+          {tab === "sim" && <>
+            <p className="muted">Haz clic en una línea del mapa para cortarla y mira cómo se propaga la falla. Haz clic en una subestación para ver su detalle en Red.</p>
+            {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
+            {timeline && network && <Results timeline={timeline} network={network} events={visibleEvents} cut={cut} />}
+          </>}
+          {tab === "operacion" && <OperationPanel pointId={pointId} bridge={bridge} />}
+          {tab === "legend" && network && <CascadeLegend network={network} buses={buses} mode={mode} />}
+          {tab === "assumptions" && <ul className="assumptions">{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>}
+        </div>
+        <TimelineCard timeline={timeline} stage={stage} playing={playing} setPlaying={setPlaying} setStage={(n) => { setPlaying(false); setStage(n); }} />
+      </section>
+    </div>
+  );
+}
+
+function Icon({ d, fill = false }: { d: string; fill?: boolean }) {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill={fill ? "currentColor" : "none"} stroke={fill ? "none" : "currentColor"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={d} /></svg>;
+}
+
+/** Bottom card of the panel (design: play, scrubber, time). It steps through the cascade stages. */
+function TimelineCard(p: { timeline: Timeline | null; stage: number; playing: boolean; setPlaying(b: boolean): void; setStage(n: number): void }) {
+  const last = (p.timeline?.frames.length ?? 1) - 1;
+  const now = Math.min(p.stage, last);
+  const seconds = p.timeline?.frames[now]?.t ?? 0;
+  return (
+    <div className="timeline">
+      <div className="timeline-top"><span>{p.timeline?.label ?? ""}</span><b>{seconds.toFixed(1).replace(".", ",")} s</b></div>
+      <div className="timeline-row">
+        <button className="play" aria-label={p.playing ? "Pausa" : "Reproducir"} disabled={last === 0} onClick={() => p.setPlaying(!p.playing)}>{p.playing ? "❚❚" : "▶"}</button>
+        <input type="range" aria-label="Etapa de la cascada" min={0} max={last} value={now} onChange={(e) => p.setStage(Number(e.target.value))} disabled={last === 0} />
+        <span className="stage">{now} / {last}</span>
       </div>
     </div>
   );
 }
 
-function Results(p: { timeline: Timeline; network: Network; stage: number; setStage(s: number): void; playing: boolean; setPlaying(b: boolean): void; events: Timeline["events"]; cut: string | null }) {
+function Results(p: { timeline: Timeline; network: Network; events: Timeline["events"]; cut: string | null }) {
   const s = p.timeline.summary;
   const pct = s.load_total_mw ? Math.round((s.load_shed_mw / s.load_total_mw) * 100) : 0;
-  const last = p.timeline.frames.length - 1;
   return (
     <section className="results">
       <h2>{p.cut ? `Corte: ${lineName(p.network, p.cut)}` : "Caso base (sin corte)"}</h2>
@@ -161,11 +202,6 @@ function Results(p: { timeline: Timeline; network: Network; stage: number; setSt
         <div><b>{s.stages}</b><span>etapas de cascada</span></div>
       </div>
       {p.timeline.truncated && <p className="note warn">La cascada llegó al tope de 20 etapas.</p>}
-      <div className="player">
-        <button onClick={() => p.setPlaying(!p.playing)} disabled={last === 0}>{p.playing ? "Pausa" : "Reproducir"}</button>
-        <input type="range" min={0} max={last} value={Math.min(p.stage, last)} onChange={(e) => p.setStage(Number(e.target.value))} disabled={last === 0} />
-        <span>Etapa {Math.min(p.stage, last)} / {last}</span>
-      </div>
       <ol className="events">{p.events.map((e, i) => <li key={i}><span className="t">{e.t.toFixed(1)} s</span> {narrate(e, p.network)}</li>)}</ol>
       <FrequencyChart curves={p.timeline.frequency_hz} />
     </section>
