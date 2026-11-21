@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): mapa 3 interface following the Paper design (#28)
+
+- **Changed:** New layout (`.shell` in `styles.css`): a collapsible rail on the left (Sub50, Mapa, Supuestos; the collapsed state is saved in localStorage), a floating panel with the tabs Red, Simulación, Leyenda and Supuestos (the last two used to sit at the bottom of the old right panel), a timeline card at the bottom of the panel (play, scrubber, stage and seconds), the case selector as a pill at the top center of the map, and the 2D/3D toggle plus zoom buttons at the top right. The camera now leaves room on the left, and the Mapbox logo moved to the bottom right. Neutral charcoal colors instead of navy.
+- **Why:** The team asked for the full interface of the Paper mockup, with Red and Simulación within reach and the legend and assumptions as tabs.
+- **Agents:** Mapa 3 only; the deprecated mapas 1 and 2 keep the old `.layout` and `.panels`. `BaseMap` has a new `zoomBy()`. The camera clearance (`PANEL_CLEARANCE_PX`, 640) is fixed: collapsing the rail does not re-center the map. Not built: rail items Escenarios, Validación, Datos y fuentes, Metodología and Ayuda; tabs Qué lo habría evitado and Validación; the date pill; the "Color de líneas: Tensión" legend and mode; scale bar and layers button; Hz and speed in the timeline.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/Legend.tsx`, `web/src/map/baseMap.ts`, `web/src/styles.css`.
+
 ## 2026-11-21 · feat(web): Red panel with network summary and node detail (#26)
 
 - **Changed:** The right panel of mapa 3 has two tabs, Red and Simulación (the previous results block). Red shows the Paper design: km of lines (34.578), substations (1.220), installed MW (38.203) and km by voltage band, computed in the browser from `data/processed/geo/{lines,substations,plants}.geojson` (`web/src/cascade/networkSummary.ts`; the numbers match the mockup exactly). Clicking a substation (3D bar, 2D disc or node dot) opens its detail in Red: kV, zone, generation, demand, people, and its connected lines with their loading at the current stage; clicking one of those lines cuts it. A cut line also gets a detail card (capacity, flow, loading). Cutting a line switches to Simulación.

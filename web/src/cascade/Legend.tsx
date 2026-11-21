@@ -8,8 +8,7 @@ const css = (c: number[]) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${(c[3] ?? 255) / 
 export function CascadeLegend({ network, buses, mode }: { network: Network; buses: Record<string, BusState>; mode: ViewMode }) {
   const columns = network.nodes.filter((n) => (buses[n.id]?.load_mw ?? 0) > 20).length;
   return (
-    <details className="legend">
-      <summary>Qué muestra el mapa</summary>
+    <section className="legend">
       <p className="muted">
         Red reducida del SEN: {network.nodes.length} subestaciones y {network.lines.length} líneas. Cada línea une dos subestaciones en línea recta
         y agrupa los circuitos en paralelo y los transformadores.
@@ -38,7 +37,7 @@ export function CascadeLegend({ network, buses, mode }: { network: Network; buse
 
       <h3>Lo que no se dibuja</h3>
       <p className="muted">Generación por central, transformadores, tensión y potencia reactiva, y las redes bajo 66 kV. Las líneas del mapa 1 y 2 (1.930) se agrupan aquí en {network.lines.length}.</p>
-    </details>
+    </section>
   );
 }
 
