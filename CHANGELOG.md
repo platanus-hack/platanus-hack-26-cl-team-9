@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(theater): real islands, battery pool and frequency per area
+
+- **Changed:** `TheaterGrid` keeps `battery` per area apart from `extra_reserve` (passed to the engine as `battery_by_bus`, 200 ms + 300 ms response) and reads the engine's settled islands into `freq_hz`, `nadir_hz`, `rocof_hz_s` and `island_result` per area, plus `last_islands` (area lists). `settle_frequency()` puts energized areas back at 50 Hz at each `Executor.tick` (secondary control, assumption). `island_inertia_mws(area)` is new. `last_transient["islands"]` now lists the engine's real islands touching hit areas, with `min_hz`, `final_hz`, `rocof_hz_s`, `inertia_mws`; `voltage_limited` maps to `uncertain` and `last_transient["uncertain"]` takes the engine summary.
+- **Why:** The bots need physical readings per area (docs/agents.md); the old `islands` entry was one synthetic island and `uncertain` was always false.
+- **Agents:** `battery_support` now fills `grid.battery`, not `extra_reserve`. Reserve and battery blocks stay held until the area blacks out (no release yet; `restoration.reserve_recovery` is still unused).
+- **Files:** `backend/src/cascadasen/domain/theater/{grid,execution}.py`.
+
 ## 2026-11-21 · feat(cascade): provenance params, droop, batteries, extreme EDAC and voltage verdict
 
 - **Changed:** The cascade engine (188 buses, drives the theatre and the map cuts) reads every number from `domain/cascade/params/cascade.yaml` (source or `is_assumption`, same loader as `domain/simulation/params.py`). Frequency model: reserve with 5% droop capped at 4% of synchronous MW; batteries as a separate fast term (`IslandInput.battery_mw`, trigger 49.8 Hz, 200 ms delay, 300 ms ramp); extreme-contingency EDAC of the centro-sur (671.55 MW, three df/dt stages). Each island reports `final_hz`, `rocof_hz_s`, `inertia_mws`, `shed_mw` and `battery_mw`; `CascadeState.islands` adds the bus indices. Opening the 25F boundary with a pre-fault flow above 1,600 MW N→S / 1,000 MW S→N gives `result: "voltage_limited"` and `summary.uncertain: true`. Fix: deployed reserve now also counts as synchronous (the theatre classed it as renewable).
