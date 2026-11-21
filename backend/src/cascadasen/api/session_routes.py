@@ -70,7 +70,8 @@ router = APIRouter(prefix="/api/v1/sessions")
 ERRORS = {
     404: "The session, run or element does not exist, or the id is malformed.",
     409: "Conflict: the element is still referenced, the run finished, another writer won, or the session is "
-    "busy with another request for longer than the lock timeout (10 s by default); retry.",
+    "busy with another request for longer than the lock timeout (10 s by default) or has 4 waiting; retry "
+    "after Retry-After.",
     412: "If-Match does not match the current dataset_revision; re-read the network and retry.",
     422: "Invalid input: detail names the field and, when useful, the valid values.",
     429: "Rate limit reached; wait the seconds in Retry-After.",

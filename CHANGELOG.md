@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(api): cap the waiters per session and retry the busy 409 in the MCP client
+- **Changed:** `SessionLocks(timeout_s, max_waiters=4)` (`api/limits.py`): when one request holds a session and 4 already wait, a further request gets the busy 409 (`Retry-After: 1`) at once instead of waiting. New setting `session_lock_max_waiters` (`CASCADASEN_SESSION_LOCK_MAX_WAITERS`, default 4).
+- **Changed:** `Sub50Client.request` (`mcp/client.py`) retries a 409 that carries `Retry-After` once, for GET and non-GET, after that wait (capped at 5 s, `sleep` injectable); a 409 without it keeps the old rule (non-GET retried at once).
+- **Why:** Review of PR #50: sync routes wait in threadpool workers (anyio default 40, shared by every sync route and the SSE pollers), and session reads have no rate limit, so a long holder plus refresh bursts could stall the process. Ricardo's MCP client (merged from the remote branch) ignored the new busy 409.
+- **Agents:** Only the busy 409 carries `Retry-After`; a busy 409 means the request did not run, so retrying a POST is safe. Docs: `docs/sessions-api.md` sections 7-9, `docs/stack.md` 6.2 and 7.2, `docs/mcp.md`; agent spec regenerated (`DESCRIPTION`, `ERRORS[409]`).
+- **Files:** `backend/src/cascadasen/api/{limits,app,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/src/cascadasen/mcp/client.py`, `backend/tests/unit/{test_session_locks,test_mcp_tools}.py`, `docs/{sessions-api,stack,mcp}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · fix(web): keep the network of a refresh that a run event overtakes
 - **Changed:** New `web/src/session/loader.ts`: `createLoader(api, apply)` returns `{load, loadDoc, cancel}`. A full load applies network and state when it is the newest full load, and its session document only when no newer document read started. `useSession.ts` uses it (the `seq`/`docSeq` refs are gone; `leave()` calls `cancel()`); the `Session` interface is unchanged.
 - **Why:** Review finding (PR #50, user task 3): a run event (`loadDoc`) during a dataset refresh made `load` return early and drop the new network and state, so the screen kept the old dataset.

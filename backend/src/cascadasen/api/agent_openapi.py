@@ -41,7 +41,7 @@ first and pass its id to every session call.
 
 **One request at a time.** A session serves one request at a time in a backend process (the SSE
 stream excepted); a request waits up to 10 s for the one before it and then gets 409 with
-`Retry-After: 1`; retry it.
+`Retry-After: 1`; retry it. When 4 requests already wait on the session, the 409 comes at once.
 
 **Notice.** Every scenario is hypothetical and simulated: Sub50 models the consequence of an
 event on the grid, never the attack technique. The catalog and every run summary carry a

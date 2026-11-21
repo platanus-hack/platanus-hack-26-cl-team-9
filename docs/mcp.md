@@ -23,13 +23,13 @@ Transport is stdio. The process holds the active session and run in memory only:
 
 | File | Role |
 |---|---|
-| `client.py` | `Sub50Client` over `httpx`: sends `X-Sub50-Agent`, retries a 409 once, turns 429 into "wait N seconds" and any error into `ToolError` with the API's Spanish `detail` and `valid` list |
+| `client.py` | `Sub50Client` over `httpx`: sends `X-Sub50-Agent`, retries a 409 once (after `Retry-After`, for any method, when the session is busy with another request; at once for a write another instance won), turns 429 into "wait N seconds" and any error into `ToolError` with the API's Spanish `detail` and `valid` list |
 | `state.py` | `McpState`: active session id and run id, so the user never repeats ids |
 | `digest.py` | Compact summaries (a whole network is 188 buses; a step has frames and per-area detail) and name resolution (`resolve_bus`) |
 | `tools.py` | One method per tool; `OPERATIONS` maps each tool to the agent-API operationIds it calls |
 | `server.py` | `MCPServer` (SDK `mcp` 2.x), `INSTRUCTIONS`, entry point `cascadasen-mcp` |
 
-Edits send no `If-Match`: each edit applies to the freshly read document and operations do not overwrite each other's elements (`sessions-api.md` section 7). A conditional edit needs the raw API.
+A session serves one request at a time (`sessions-api.md` section 7), so a tool call may wait up to 10 s behind another client's request; the busy 409 is retried once after its `Retry-After` and then shown to the model. Edits send no `If-Match`: each edit applies to the freshly read document and operations do not overwrite each other's elements (`sessions-api.md` section 7). A conditional edit needs the raw API.
 
 ## 3. Tools
 

@@ -79,7 +79,9 @@ def create_app(
     app.state.simulation = simulation  # built lazily from the snapshot on the first /sim request
     app.state.sessions = sessions  # built lazily from the simulation on the first /sessions request
     app.state.limiter, app.state.sse_slots = TokenBucket(), SseSlots()
-    app.state.session_locks = SessionLocks(settings.session_lock_timeout_s)  # one request at a time
+    app.state.session_locks = SessionLocks(  # one request at a time per session
+        settings.session_lock_timeout_s, settings.session_lock_max_waiters
+    )
     app.include_router(simulation_router)
     app.include_router(session_router)
     app.state.assistant = None  # built lazily on the first /assistant request, only when the LLM is set up

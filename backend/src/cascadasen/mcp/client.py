@@ -8,12 +8,15 @@ list of simulator input errors).
 from __future__ import annotations
 
 import os
+import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
 
 DEFAULT_URL = "http://localhost:8000"
 AGENT_NAME = "mcp"
+MAX_BUSY_WAIT_S = 5.0
 
 
 class ToolError(Exception):
@@ -34,20 +37,31 @@ def describe_detail(detail: Any) -> str:
     return str(detail)
 
 
+def _seconds(retry_after: str) -> float:
+    try:
+        return min(max(float(retry_after), 0.0), MAX_BUSY_WAIT_S)
+    except ValueError:
+        return 1.0
+
+
 class Sub50Client:
     def __init__(
         self,
         base_url: str | None = None,
         agent: str | None = None,
         http: httpx.Client | None = None,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         base = (base_url or os.environ.get("SUB50_API_URL") or DEFAULT_URL).rstrip("/")
         self.agent = (agent or os.environ.get("SUB50_AGENT") or AGENT_NAME)[:64]
         self.http = http or httpx.Client(base_url=base, timeout=60)
+        self.sleep = sleep
         self.api = "/api/v1"
 
     def request(self, method: str, path: str, body: Any = None, params: dict[str, Any] | None = None) -> Any:
-        """One call. A 409 (another instance won the write) is retried once, as the API asks."""
+        """One call, retried once on a 409 as the API asks. A 409 with Retry-After means the session is
+        busy with another request and did not run this one (sessions-api.md section 7): any method is
+        retried after that wait. Without it another instance won the write: a non-GET is retried at once."""
         for attempt in (0, 1):
             try:
                 r = self.http.request(
@@ -59,8 +73,12 @@ class Sub50Client:
                 )
             except httpx.HTTPError as exc:
                 raise ToolError(f"No se pudo llamar a la API de Sub50 ({type(exc).__name__}).") from exc
-            if r.status_code == 409 and attempt == 0 and method != "GET":
-                continue
+            if r.status_code == 409 and attempt == 0:
+                if "Retry-After" in r.headers:
+                    self.sleep(_seconds(r.headers["Retry-After"]))
+                    continue
+                if method != "GET":
+                    continue
             break
         if r.status_code == 204:
             return None

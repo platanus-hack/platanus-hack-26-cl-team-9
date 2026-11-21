@@ -80,6 +80,24 @@ def test_a_write_conflict_is_retried_once_and_reads_are_not():
     assert calls == ["POST", "POST"]
 
 
+def test_a_busy_session_is_retried_after_retry_after_for_reads_and_writes():
+    calls, waits = [], []
+
+    def handler(request):
+        calls.append(request.method)
+        if len(calls) % 2:
+            return httpx.Response(
+                409, headers={"Retry-After": "1"}, json={"detail": "La sesión está ocupada"}
+            )
+        return httpx.Response(200, json={"ok": True})
+
+    http = httpx.Client(base_url="http://api", transport=httpx.MockTransport(handler))
+    c = Sub50Client(http=http, agent="tester", sleep=waits.append)
+    assert c.get("/sessions/x/state") == {"ok": True}
+    assert c.post("/sessions/x/cut", {"lines": ["R1"]}) == {"ok": True}
+    assert calls == ["GET", "GET", "POST", "POST"] and waits == [1.0, 1.0]
+
+
 def test_every_call_names_the_agent():
     seen = {}
 

@@ -71,10 +71,12 @@ class SseSlots:
 
 class SessionLocks:
     """One request at a time per session: a lock per session id, dropped when no request holds or
-    waits for it. A request that waits longer than `timeout_s` gets 409 with Retry-After."""
+    waits for it. A request that waits longer than `timeout_s` gets 409 with Retry-After. At most
+    `max_waiters` requests wait behind the one in progress; more get the 409 at once, so a busy
+    session cannot park the threadpool workers that every sync route shares."""
 
-    def __init__(self, timeout_s: float) -> None:
-        self.timeout_s = timeout_s
+    def __init__(self, timeout_s: float, max_waiters: int = 4) -> None:
+        self.timeout_s, self.max_waiters = timeout_s, max_waiters
         self._locks: dict[str, list[Any]] = {}  # sid -> [Lock, requests holding or waiting]
         self._guard = threading.Lock()
 
@@ -82,13 +84,13 @@ class SessionLocks:
     def hold(self, sid: str) -> Iterator[None]:
         with self._guard:
             entry = self._locks.setdefault(sid, [threading.Lock(), 0])
+            if entry[1] > self.max_waiters:  # one holder plus max_waiters already queued
+                raise _busy()
             entry[1] += 1
         got = entry[0].acquire(timeout=self.timeout_s)
         try:
             if not got:
-                raise HTTPException(
-                    409, "La sesión está ocupada con otra solicitud; reintenta.", headers={"Retry-After": "1"}
-                )
+                raise _busy()
             yield
         finally:
             if got:
@@ -101,6 +103,12 @@ class SessionLocks:
     def __len__(self) -> int:
         with self._guard:
             return len(self._locks)
+
+
+def _busy() -> HTTPException:
+    return HTTPException(
+        409, "La sesión está ocupada con otra solicitud; reintenta.", headers={"Retry-After": "1"}
+    )
 
 
 def client_ip(request: Request) -> str:

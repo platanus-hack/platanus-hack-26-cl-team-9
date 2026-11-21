@@ -153,7 +153,7 @@ The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agen
 - `GET /{sid}` carries `ETag: "<revision>"` (for `If-None-Match` polling). `/network`, `/state`, every edit, reset, cut and repair carry `ETag: "<dataset_revision>"`. Run commands that change the session return `session_revision` (the `revision`) and the same header.
 - Send `If-Match: "<dataset_revision>"` on an edit, reset, cut or repair to make it conditional: if someone else changed the dataset first, the request is refused with 412 and nothing changes. A run stepped by another agent does not cause a 412. Re-read, decide again, retry. Without `If-Match` the edit applies to whatever the current revision is (last writer wins per operation; operations never overwrite each other's elements, because each edit is applied to the freshly read document).
 - Between instances, writes are conditional on the store's etag and retried 3 times; after that the API answers 409 and the client retries.
-- One request at a time per session. In a backend process, every request with `{sid}` in the path (reads, edits, reset, cut, repair, delete and every run route) holds a lock on that session, so requests on one session run one after another; different sessions run in parallel. `GET /{sid}/events` (SSE) and `POST ""` do not take it. A request waits up to 10 s (`CASCADASEN_SESSION_LOCK_TIMEOUT_S`) for the one before it, then gets 409 `"La sesión está ocupada con otra solicitud; reintenta."` with `Retry-After: 1`; retry it. Rate limits and body checks run before the wait, so a refused request never waits. The lock is per process: across instances the store's conditional writes and `If-Match` stay the guard.
+- One request at a time per session. In a backend process, every request with `{sid}` in the path (reads, edits, reset, cut, repair, delete and every run route) holds a lock on that session, so requests on one session run one after another; different sessions run in parallel. `GET /{sid}/events` (SSE) and `POST ""` do not take it. A request waits up to 10 s (`CASCADASEN_SESSION_LOCK_TIMEOUT_S`) for the one before it, then gets 409 `"La sesión está ocupada con otra solicitud; reintenta."` with `Retry-After: 1`; retry it. At most 4 requests wait behind the one in progress (`CASCADASEN_SESSION_LOCK_MAX_WAITERS`); a further one gets the same 409 at once, so waiters cannot hold every worker of the process. Rate limits and body checks run before the wait, so a refused request never waits. The lock is per process: across instances the store's conditional writes and `If-Match` stay the guard.
 
 ## 8. Limits and expiry
 
@@ -164,7 +164,7 @@ The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agen
 | Cut and repair | 30 per minute per session | `CASCADASEN_RATE_CUTS_PER_MINUTE` |
 | Other edits and run commands | 60 per minute per session | `CASCADASEN_RATE_WRITES_PER_MINUTE` |
 | SSE streams | 5 per session and client IP | `CASCADASEN_SSE_PER_SESSION_IP` |
-| Requests in progress per session | 1 per backend process; others wait up to 10 s, then 409 with `Retry-After: 1` | `CASCADASEN_SESSION_LOCK_TIMEOUT_S` |
+| Requests in progress per session | 1 per backend process; up to 4 others wait up to 10 s, then 409 with `Retry-After: 1`; a fifth waiter gets 409 at once | `CASCADASEN_SESSION_LOCK_TIMEOUT_S`, `CASCADASEN_SESSION_LOCK_MAX_WAITERS` |
 | Added elements | 50 per session (buses + lines + loads + generators), 3000 MW each, 5000 MW of added load plus generation plus the MW changed by bus overrides; bus `load_mw`/`gen_mw`/`sync_mw` at most the base value + 3000 MW, `inertia_mws` at most 10 s × `sync_mw` | `domain/cascade/overlay.py` |
 | Lines per cut call | 1 to 3 | |
 | Runs per session | 20 (422 above) | |
@@ -181,7 +181,7 @@ Errors are JSON `{"detail": ...}` with a Spanish message (`ErrorResponse` in the
 | Code | Meaning |
 |---|---|
 | 404 | Unknown or malformed session id, run not in this session, unknown element or line, unknown target |
-| 409 | Deleting a base element (use `in_service: false`) or a bus that lines, loads or generators still use (`valid` lists them); finished run; another instance won the write (retry); the session stayed busy with another request for the lock timeout (10 s; retry after `Retry-After: 1`) |
+| 409 | Deleting a base element (use `in_service: false`) or a bus that lines, loads or generators still use (`valid` lists them); finished run; another instance won the write (retry); the session stayed busy with another request for the lock timeout (10 s) or already had 4 requests waiting (retry after `Retry-After: 1`) |
 | 412 | `If-Match` is not the current revision |
 | 413 | Body over 64 KB |
 | 422 | Invalid value (voltage not in the base set, `mw` out of range, `a == b`, unknown field, wrong role, `point` different from the session's), a limit reached |
