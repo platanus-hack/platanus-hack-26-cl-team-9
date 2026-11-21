@@ -68,6 +68,30 @@ actions:
   is_assumption: true
   note: "Costs in resource units; duration in cycles (no duration = held until released)"
 
+stochastic:
+  value:
+    effect_share_concentration: 20
+    effect_mw_sigma: 0.25
+    defense_misoperation_p: 0.03
+    background_event_p: 0.05
+    background_events:
+      E1_demand_surge: {weight: 0.6, share: 0.04}
+      E2_renewable_drop: {weight: 0.4, share: 0.15, tech: solar}
+    action_success_p:
+      manual_operation: 0.95
+      backup_comms: 0.9
+      digital_segmentation: 0.95
+      fast_reserve: 0.97
+      battery_support: 0.97
+      rearm_defense: 0.85
+      islanding_prep: 0.9
+      restore_element: 0.9
+    repair_sigma: 0.4
+    restore_share_sigma: 0.3
+    field_miss_p: 0.1
+  is_assumption: true
+  note: "Chance in the world (strategy.md 4): event sizes around catalog defaults (Beta with concentration, lognormal sigma), defence functions failing to act per transient, unplanned external events per cycle, first-attempt action success, repair-time and restoration-speed spread, field crews missing a digital issue"
+
 restoration:
   value: {load_share_per_cycle: 0.3, gen_share_per_cycle: 0.34, manual_slowdown: 0.5, reserve_recovery: 0.5}
   is_assumption: true

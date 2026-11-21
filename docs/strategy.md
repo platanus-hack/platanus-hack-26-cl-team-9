@@ -74,6 +74,16 @@ The distance between the three states is a product variable. It is measured ever
 
 Restoration in the theatre is an operational abstraction: an area recovers a share of its load per cycle while crews and control are available (parameters flagged `is_assumption`). It is not an electrical restoration model; `cyber.md` section 2 still applies to the physics.
 
+**Chance (decided 2026-11-21).** The world does not behave exactly as planned. Each run draws its seed at random unless one is given; the seed is recorded in the recipe, so any run can be replayed. Every source of chance has its own seeded stream (`theater/rng.py`), so a policy change never alters the luck of the world (`theater/stochastic.py`, parameters in `theater.yaml` → `stochastic`, all `is_assumption`):
+
+- event sizes are sampled around the catalog defaults (explicit sizes from a scenario or a user stay exact);
+- a defence function (`edac:<zone>`) may fail to act in a transient; it stays disabled until re-armed;
+- unplanned external events (E1 demand surge, E2 renewable drop) may appear at zone level, with source `external`;
+- an approved action may not work on the first attempt (`action_failed`); repairs and restoration speed vary;
+- a field crew may miss a digital issue.
+
+`stochastic: false` in a run turns all of this off (catalog sizes, no unplanned events, actions always work).
+
 ## 5. Agents
 
 Every agent has its own mission, limited information, a set of capabilities, limited resources, decision rules, memory, success criteria, and permissions. Each holds a different representation of the state of the infrastructure.
@@ -95,7 +105,7 @@ Every agent has its own mission, limited information, a set of capabilities, lim
 - **Information:** it sees only signals the defence exposes (areas switched to manual operation or segmented, effects cleared, public blackouts) and keeps its own estimate of the defensive posture.
 - **Adaptation:** seeded multiplicative weights (EXP3) over event type × area, rewarded by an observable proxy of its objective. It changes strategy when the defence changes.
 - **Static variant:** the same budget following the scripted sequence of the template. Comparing the two gives the Adaptation Index.
-- Deterministic code, no LLM.
+- Seeded code on its own random stream, no LLM. Its arms are (event × target) with the target kind the event accepts: operating areas, zones, or defence functions (`pdce_zn`, `edac:<zone>`), never substations, corridors or lines.
 
 ## 6. Events and defensive actions
 

@@ -31,6 +31,7 @@ from cascadasen.domain.theater.catalog import EVENTS
 from cascadasen.domain.theater.config import TheaterConfig
 from cascadasen.domain.theater.decisions import COA, FieldReport
 from cascadasen.domain.theater.state import AreaDigital, Effect, RealState
+from cascadasen.domain.theater.stochastic import Chance
 
 LEVELS = ("L0", "L1", "L2", "L3")
 RESTORABLE_EFFECTS = {
@@ -111,9 +112,11 @@ class Executor:
         defenses: DefenseSet,
         cfg: TheaterConfig,
         defense_areas: dict[str, list[str]],
+        chance: Chance | None = None,
     ) -> None:
         self.net, self.physics, self.defenses, self.cfg = network, physics, defenses, cfg
         self.defense_areas = defense_areas
+        self.chance = chance  # None: deterministic world (catalog sizes, actions always work)
 
     # ------------------------------------------------------------ resolution
 
@@ -149,7 +152,12 @@ class Executor:
         for req, effect_id in reqs:
             target, area = self.resolve(req)
             spec = EVENTS[req.type]
-            params = {**(self.cfg.effects.get(req.type) or {}), **dict(req.params)}
+            defaults = self.cfg.effects.get(req.type) or {}
+            params = (
+                self.chance.effect_params(defaults, dict(req.params))
+                if self.chance
+                else {**defaults, **dict(req.params)}
+            )
             duration = params.get("duration")
             eff = Effect(
                 effect_id,
@@ -227,6 +235,15 @@ class Executor:
         return []
 
     def transient(self, real: RealState, changes: list[Change]) -> TransientResult:
+        misoperated: list[str] = []
+        if self.chance:
+            armed = [
+                z
+                for z in self.defense_areas
+                if z.startswith("edac:") and z not in real.grid.disabled_defenses
+            ]
+            misoperated = self.chance.misoperating(armed)
+            changes = [*changes, *(Change("disable_defense", d) for d in misoperated)]
         try:
             res = run_transient(self.net, real.grid, changes, self.defenses, self.physics, full=False)
         except ChangeError as exc:
@@ -240,6 +257,7 @@ class Executor:
             "load_lost_mw": res.load_lost_mw,
             "load_shed_mw": res.load_shed_mw,
             "people_without_power": res.people_without_power,
+            "misoperated_defenses": misoperated,
             "islands": [i.summary() for i in res.islands],
             "events": [
                 {"t": e["t"], "type": e["type"], "text_key": e["text_key"], "ids": e["ids"]}
@@ -287,7 +305,9 @@ class Executor:
         elif coa.action == "islanding_prep":
             self.transient(real, [Change("open_corridor", a)])
         elif coa.action == "restore_element":
-            ex.restorations.append(Restoration(coa.key, a, cyc, cyc + int(act.get("duration", 2))))
+            nominal = int(act.get("duration", 2))
+            duration = self.chance.repair_cycles(nominal) if self.chance else nominal
+            ex.restorations.append(Restoration(coa.key, a, cyc, cyc + duration))
         elif coa.action == "request_external_support":
             ex.pending_support[a] = cyc + int(act.get("duration", 3))
         return "executed"
@@ -301,11 +321,15 @@ class Executor:
             or bool(sum(g.tripped_mw.get(area, {}).values()) > 1)
         )
         kinds = sorted({EVENTS[e.event].family for e in effects})
+        digital = (
+            any(EVENTS[e.event].family == "digital" for e in effects) or not real.digital[area].remote_control
+        )
+        if digital and self.chance and self.chance.field_misses():
+            digital = False  # the crew did not find it
         return FieldReport(
             real.cycle + 1,
             area,
-            any(EVENTS[e.event].family == "digital" for e in effects)
-            or not real.digital[area].remote_control,
+            digital,
             physical,
             tuple(kinds),
         )
@@ -442,6 +466,8 @@ class Executor:
         if not d.manual_ops and (d.segmented or d.comms == "down" or not d.remote_control):
             return False, {"kind": "restoration_blocked", "area": a}
         speed = rest["manual_slowdown"] if d.manual_ops else 1.0
+        if self.chance:
+            speed *= self.chance.restore_factor()
         g.blackout_areas.discard(a)
         for t, mw in list(g.tripped_mw.get(a, {}).items()):
             back = mw * rest["gen_share_per_cycle"] * speed if mw > 1 else mw

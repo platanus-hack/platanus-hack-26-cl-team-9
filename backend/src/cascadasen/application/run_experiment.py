@@ -223,4 +223,5 @@ def run_config(body: dict[str, Any]) -> RunConfig:
         operating_point=body.get("operating_point"),
         defenses=body.get("defenses"),
         initial_events=tuple(body.get("initial_events") or ()),
+        stochastic=bool(body.get("stochastic", True)),
     )

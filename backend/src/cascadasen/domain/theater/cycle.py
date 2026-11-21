@@ -45,6 +45,7 @@ from cascadasen.domain.theater.execution import (
 from cascadasen.domain.theater.resources import Ledger
 from cascadasen.domain.theater.rng import new_seed, rng_for
 from cascadasen.domain.theater.state import AreaDigital, ObservedState, RealState
+from cascadasen.domain.theater.stochastic import Chance
 from cascadasen.domain.theater.validator import ValidationContext, costs_of, validate
 
 UNCERTAINTY_RANGE = (0.0, 2.0)
@@ -90,6 +91,7 @@ class RunConfig:
     operating_point: str | None = None
     defenses: str | None = None
     initial_events: tuple[dict[str, Any], ...] = ()
+    stochastic: bool = True  # False: catalog sizes, no unplanned events, actions always work
 
     def as_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -142,7 +144,10 @@ class Simulation:
         self.real = RealState(0, grid, {a: AreaDigital() for a in net.order})
         self.ledger = Ledger({**cfg.resources, **dict(conf.capabilities)})
         self.defense_areas = defense_areas(net, self.defenses)
-        self.executor = Executor(net, self.physics, self.defenses, cfg, self.defense_areas)
+        self.chance = (
+            Chance.for_run(conf.seed, cfg.stochastic) if conf.stochastic and cfg.stochastic else None
+        )
+        self.executor = Executor(net, self.physics, self.defenses, cfg, self.defense_areas, self.chance)
         self.ex = ExecutionState()
         self.log = AuditLog()
         self.isr = ISRAgent(net, cfg.isr)
@@ -383,6 +388,11 @@ class Simulation:
         # 1. events
         reqs = [*self.scheduled.get(k, []), *self.queue]
         self.queue = []
+        if self.chance and k > 0:
+            reqs += [
+                EventRequest(e["type"], e["target"], tuple(e["params"].items()), "external", "failure")
+                for e in self.chance.background(list(net.zones))
+            ]
         if self.adversary:
             reqs += self._admissible(self.adversary.act(self._adversary_view()))
         applied = []
@@ -473,9 +483,16 @@ class Simulation:
                 feedback.append(ActionFeedback(k, d.coa.action, d.coa.target, False, v.observable_code))
                 executed.append({**d.coa.as_dict(), "verdict": v.code, "ok": False})
                 continue
+            if self.chance and not self.chance.action_succeeds(d.coa.action):
+                # it did not work on this attempt: attention spent, durable resources kept
+                feedback.append(ActionFeedback(k, d.coa.action, d.coa.target, False, "action_failed"))
+                executed.append({**d.coa.as_dict(), "verdict": "failed", "ok": False})
+                continue
             if wrong_decision(real, d.coa):
                 wrong += 1
             duration = self.cfg.actions.get(d.coa.action, {}).get("duration")
+            if d.coa.action == "restore_element":
+                duration = None  # the executor releases the crew when the repair ends
             self.ledger.spend(
                 costs_of(d.coa, self.cfg.actions), d.coa.key, k + int(duration) if duration else None
             )

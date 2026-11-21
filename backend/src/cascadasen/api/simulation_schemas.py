@@ -105,6 +105,10 @@ class RunCreate(BaseModel):
     defenses: str | None = None
     initial_events: list[EventIn] = Field(default_factory=list)
     auto_run: bool = Field(False, description="Correr hasta el final al crear")
+    stochastic: bool = Field(
+        True,
+        description="Azar del mundo: tamaño de eventos, eventos imprevistos, fallas de acciones y defensas",
+    )
 
 
 class StepIn(BaseModel):

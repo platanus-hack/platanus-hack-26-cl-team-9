@@ -2,6 +2,16 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(theater): chance in the world on independent seeded streams
+
+- **Changed:**
+  - New `domain/theater/stochastic.py` (`Chance`) with streams `physics`, `external`, `ops`, `field`: sampled event sizes (Beta/lognormal around catalog defaults), defence functions that fail to act per transient (`misoperated_defenses` in `last_transient`), unplanned zone-level E1/E2 events (source `external`), first-attempt action failures (`action_failed`), repair-time and restoration-speed spread, field crews missing a digital issue.
+  - `theater.yaml` gains a `stochastic` section; `TheaterConfig.stochastic`.
+  - `RunConfig.stochastic` / `POST /sim/runs` `stochastic` (default true) switches it off.
+- **Why:** Ricardo wants runs to behave like real life, not a script, while keeping replay and fair comparisons.
+- **Agents:** `Executor(..., chance=None)` keeps the old deterministic behaviour (used when `stochastic` is false). Explicit params from scenarios or users are never sampled. A failed action spends attention only. `restore_element` crews are now released by the executor when the repair ends, not at a fixed cycle. Numbers quoted for the flagship in older entries were computed without chance; use `stochastic: false` to compare.
+- **Files:** `backend/src/cascadasen/domain/theater/stochastic.py`, `execution.py`, `cycle.py`, `config.py`, `params/theater.yaml`, `backend/src/cascadasen/api/simulation_schemas.py`, `backend/src/cascadasen/application/run_experiment.py`, `backend/tests/unit/test_theater_stochastic.py`, `docs/strategy.md`, `docs/cyber.md`.
+
 ## 2026-11-21 · feat(theater): random seed by default, recorded in the recipe
 
 - **Changed:** `RunConfig.seed` and `POST /sim/runs` `seed` are optional. Without one, the run draws a fresh seed (`theater/rng.new_seed`), stores it in its config, the `run_created` audit entry and the summary. Named streams moved to `domain/theater/rng.py` (`rng_for(seed, name)`).

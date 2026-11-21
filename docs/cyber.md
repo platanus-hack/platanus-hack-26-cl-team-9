@@ -110,7 +110,7 @@ The tool exists for prevention and education. It must stay a consequence and def
    - pursue objectives that target the defender's decision quality: observability, uncertainty, resources, unnecessary decisions, recovery;
    - see only what the defence exposes.
 
-   It has no technique, no real vulnerability and no real system model behind it. Campaign outputs compare defensive policies and capabilities. They never list which elements or areas hurt the most. The adversary is deterministic code; an LLM never plays it.
+   It has no technique, no real vulnerability and no real system model behind it. Campaign outputs compare defensive policies and capabilities. They never list which elements or areas hurt the most. The adversary is seeded code (reproducible from the run seed); an LLM never plays it. Its reward measures its abstract objective (persistence, defensive posture, delayed recovery), never megawatts or people.
 
 ## 9. Data gaps
 
