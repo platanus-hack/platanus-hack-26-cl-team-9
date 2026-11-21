@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(web): rebuild mapa 3 on the Design v5 interface
+
+- **Changed:** Mapa 3 (`/`) follows the three Paper "Design v5" frames: 200 px nav rail with the sub50 wordmark and scenarios (Apagón 25F, the active cut, Escenario nuevo), a 440 px docked panel with the Red and Simulación tabs, a timeline card with numbered event markers and island frequency curves, a time pill that picks the operating point, square map controls with a layers popover (2D or 3D, flow, demand), and a legend that switches between voltage and load. Event pins and a callout sit on the map. Styles live in the new `web/src/cascade/cascade.css`; the old mapa 3 block left `styles.css`, which now also holds the Roboto tokens and square corners for the legacy classes.
+- **Why:** Ignacio asked for the Design v5 UI with all the functionality of the current cascade viewer, on the Mapbox basemap.
+- **Agents:** Playback is now continuous in seconds (`web/src/cascade/simulation.ts`): dark substations wait for their `island_blackout` event, people and lost load between events are an interpolation that ends exactly at the engine summary (`docs/mapa3.md` section 5.1). 2D is the default; `?vista=3d` tilts. The URL is rewritten with `point`, `cut` and `vista`. `MAX_BOUNDS` widened to lon -110 to -35 so the whole country fits at 1440 px; the panel is the Mapbox camera padding. Mapbox uses the Standard style with `theme: "monochrome"`. Islands are "Isla 1", "Isla 2" because the cache has no island zone. "Qué lo habría evitado" and "Validación" are disabled. Mapbox needs `VITE_MAPBOX_TOKEN` in `web/.env.local`; the repo-root `.env` is not read by Vite.
+- **Files:** `web/src/cascade/*` (new: `simulation.ts`, `Timeline.tsx`, `SimulationPanel.tsx`, `MapLegend.tsx`, `MapOverlays.tsx`, `ui.tsx`, `cascade.css`, `simulation.test.ts`), `web/src/map/baseMap.ts`, `web/src/map/gridData.test.ts`, `web/src/styles.css`, `docs/mapa3.md`, `docs/design.md`, `web/README.md`.
+
 ## 2026-11-21 · feat(web): use the Roboto superfamily and square corners
 
 - **Changed:** `web/package.json` adds `@fontsource-variable/roboto`, `roboto-condensed` and `roboto-mono`; `web/src/main.tsx` imports them. `docs/design.md` section 2: the type rule is now the Roboto superfamily (replacing the Geist pair) and the corner rule is radius 0 on every container, card, button, tag, input and the time pill in the whole app; the layout bullet says "square-cornered floating panel".

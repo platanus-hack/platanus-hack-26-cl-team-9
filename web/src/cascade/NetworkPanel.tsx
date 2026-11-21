@@ -1,20 +1,19 @@
 import { useEffect, useState } from "react";
 import { loadNetworkSummary, VOLTAGE_BANDS, type NetworkSummary } from "./networkSummary";
-import { formatPeople, lineName } from "./text";
+import { formatPeople, int, lineName, pct, placeName, zoneName } from "./text";
 import type { BusState, Frame, Network } from "./types";
+import { Info } from "./ui";
 
-const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
-
-/** Tab "Red": size of the grid by voltage, and the detail of the selected substation or cut line. */
-export function NetworkPanel(p: { network: Network; buses: Record<string, BusState>; frame: Frame | undefined; node: string | null; line: string | null; clearNode(): void; cutLine(id: string): void }) {
+/** Tab "Red" (Design v5, V1): size of the whole grid by voltage, and the detail of the selected substation. */
+export function NetworkPanel(p: { network: Network; buses: Record<string, BusState>; frame: Frame | undefined; node: string | null; clearNode(): void; cutLine(id: string): void; source: string }) {
   const [summary, setSummary] = useState<NetworkSummary | null>(null);
   useEffect(() => { loadNetworkSummary().then(setSummary).catch(() => setSummary(null)); }, []);
   return (
-    <section className="network">
+    <>
       {p.node && <NodeCard {...p} node={p.node} />}
-      {p.line && !p.node && <LineCard network={p.network} frame={p.frame} line={p.line} />}
       {summary && <Overview s={summary} />}
-    </section>
+      <p className="source">Fuente: IDE Energía. {p.source}</p>
+    </>
   );
 }
 
@@ -22,19 +21,31 @@ function Overview({ s }: { s: NetworkSummary }) {
   const max = Math.max(...s.kmByBand, 1);
   return (
     <>
-      <div className="stats"><div><b>{fmt(s.km)}</b><span>km de líneas</span></div><div><b>{fmt(s.substations)}</b><span>subestaciones</span></div><div><b>{fmt(s.mw)}</b><span>MW instalados</span></div></div>
-      <div className="card">
-        <div className="card-head"><h3>Líneas por tensión</h3><span>km</span></div>
+      <div className="card figures">
+        <Figure value={int(s.km)} label="km de líneas" tip="Suma del largo de todas las líneas de transmisión de IDE Energía (data/processed/geo/lines.geojson)." />
+        <Figure value={int(s.substations)} label="subestaciones" tip="Subestaciones registradas en IDE Energía (data/processed/geo/substations.geojson)." />
+        <Figure value={int(s.mw)} label="MW instalados" tip="Potencia instalada de todas las centrales de IDE Energía (data/processed/geo/plants.geojson)." />
+      </div>
+      <div className="card bands">
+        <div className="card-head">
+          <div className="title"><h3>Líneas por tensión</h3><Info tip="Largo de las líneas de IDE Energía por nivel de tensión. Media tensión: bajo 44 kV. Las líneas sin tensión registrada no se cuentan aquí." /></div>
+          <span className="unit">km</span>
+        </div>
         {VOLTAGE_BANDS.map((b, i) => (
-          <div className="bar-row" key={b.label}>
-            <span className="swatch" style={{ background: b.color }} /><span className="bar-label">{b.label}</span>
-            <span className="track"><span style={{ width: `${(s.kmByBand[i] / max) * 100}%`, background: b.color }} /></span><span className="bar-value">{fmt(s.kmByBand[i])}</span>
+          <div className="band" key={b.label}>
+            <span className="sample" style={{ background: b.color, height: b.stroke }} />
+            <span className="band-label">{b.label}</span>
+            <span className="track"><span style={{ width: `${(s.kmByBand[i] / max) * 100}%`, background: b.color }} /></span>
+            <span className="band-value">{int(s.kmByBand[i])}</span>
           </div>
         ))}
       </div>
-      <p className="muted">Fuente: IDE Energía. Mapa base: Mapbox.</p>
     </>
   );
+}
+
+function Figure({ value, label, tip }: { value: string; label: string; tip: string }) {
+  return <div className="figure"><div className="value-row"><b>{value}</b><Info tip={tip} /></div><span>{label}</span></div>;
 }
 
 function NodeCard(p: { network: Network; buses: Record<string, BusState>; frame: Frame | undefined; node: string; clearNode(): void; cutLine(id: string): void }) {
@@ -44,29 +55,27 @@ function NodeCard(p: { network: Network; buses: Record<string, BusState>; frame:
   const dark = p.frame?.dark.includes(n.id);
   const lines = p.network.lines.filter((l) => l.a === n.id || l.b === n.id);
   return (
-    <div className="card">
-      <div className="card-head"><h3>{n.name}</h3><button className="link" onClick={p.clearNode}>Cerrar</button></div>
-      <p className="muted">{Math.round(n.kv)} kV · {n.zone === "norte_grande" ? "Norte Grande" : "centro-sur"}{dark ? " · sin energía" : ""}</p>
-      <div className="stats"><div><b>{fmt(b?.gen_mw ?? 0)} MW</b><span>generación</span></div><div><b>{fmt(b?.load_mw ?? 0)} MW</b><span>demanda</span></div><div><b>{formatPeople(b?.people ?? 0)}</b><span>personas</span></div></div>
-      <h4>Líneas conectadas · {lines.length}</h4>
+    <div className="card node">
+      <div className="card-head">
+        <div className="title"><h3>{placeName(n.name)}</h3></div>
+        <button className="text-btn" onClick={p.clearNode}>Cerrar</button>
+      </div>
+      <p className="meta">{Math.round(n.kv)} kV · {zoneName(n.zone)}{dark ? " · sin suministro" : ""}</p>
+      <div className="mini-figures">
+        <div><b>{int(b?.gen_mw ?? 0)} <small>MW</small></b><span>generación</span></div>
+        <div><b>{int(b?.load_mw ?? 0)} <small>MW</small></b><span>demanda</span></div>
+        <div><b>{formatPeople(b?.people ?? 0)}</b><span>personas</span></div>
+      </div>
+      <div className="list-head"><span>Líneas conectadas · {lines.length}</span><span>carga</span></div>
       {lines.map((l) => {
         const e = p.frame?.edges[l.id];
-        return <button className="row-btn" key={l.id} onClick={() => p.cutLine(l.id)} title="Cortar esta línea"><span>{lineName(p.network, l.id)}</span><span>{e ? `${Math.round(e.loading * 100)}%` : "s/d"}</span></button>;
+        return (
+          <button className="row-btn" key={l.id} onClick={() => p.cutLine(l.id)} title="Sacar de servicio esta línea">
+            <span>{lineName(p.network, l.id)}</span><span className="num">{e?.status === "open" ? "fuera" : e ? pct(e.loading) : "s/d"}</span>
+          </button>
+        );
       })}
-      <p className="muted">Clic en una línea de la lista la corta.</p>
-    </div>
-  );
-}
-
-function LineCard({ network, frame, line }: { network: Network; frame: Frame | undefined; line: string }) {
-  const l = network.lines.find((x) => x.id === line);
-  if (!l) return null;
-  const e = frame?.edges[line];
-  return (
-    <div className="card">
-      <div className="card-head"><h3>{lineName(network, line)}</h3></div>
-      <div className="stats"><div><b>{fmt(l.capacity_mw)} MW</b><span>capacidad</span></div><div><b>{e ? fmt(Math.abs(e.flow_mw)) : "s/d"} MW</b><span>flujo</span></div><div><b>{e ? `${Math.round(e.loading * 100)}%` : "s/d"}</b><span>de su capacidad</span></div></div>
-      <p className="muted">{e?.status === "open" ? "Abierta en esta etapa." : e?.status === "overload" ? "Sobre su capacidad." : "En servicio."} Agrupa {l.branches.length} elemento(s) del modelo (circuitos y transformadores).</p>
+      <p className="meta">Clic en una línea de la lista la saca de servicio. Generación, demanda y personas: punto de operación del motor Sub50.</p>
     </div>
   );
 }

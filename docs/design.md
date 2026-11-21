@@ -1,6 +1,6 @@
 # Design
 
-Last updated: 2026-11-21. Visual direction for the Sub50 web app, collected from the design sessions of 2026-11-21. Read after `stack.md` section 5, which this file overrides on look and layout. Nothing here is implemented in `web/` yet: the current app (`web/README.md`) predates these designs.
+Last updated: 2026-11-21. Visual direction for the Sub50 web app, collected from the design sessions of 2026-11-21. Read after `stack.md` section 5, which this file overrides on look and layout. Mapa 3 (`/`) is built from the Design v5 frames since 2026-11-21 (`docs/mapa3.md` section 4); the older pages are not implemented.
 
 ## 1. Where the designs live
 
@@ -115,6 +115,5 @@ The favicon, `web/public/favicon.svg`, is the small-size mark: only the subscrip
 
 ## 7. Open items
 
-- Pick the variant to build (A is the working reference).
-- Port the Design v2 and v3 look into `web/`. The current app uses a full-screen map with a floating right panel and generation columns (`web/README.md`).
+- Variant A is built: mapa 3 follows the three Design v5 frames (`docs/mapa3.md` section 4). Where the app departs from the mockup, and why: islands are named "Isla 1", "Isla 2" because the cache does not say which zone an island covers; the timeline spans the engine's whole `duration_s` (20 to 29 s), not 8 s, so close events share a marker ("1–11"); the "Qué lo habría evitado" and "Validación" tabs are disabled until the engine computes them; the next-zoom-level box and the breadcrumb are not built; the Mapbox basemap (night, monochrome) is darker than the mockup's gray land, while the offline outline uses the mockup's gray.
 - Decide whether the demo uses the Mapbox basemap (needs internet and a token) or the offline map (`stack.md` section 1).
