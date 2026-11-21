@@ -158,7 +158,7 @@ Not drawn: generation per plant, transformers, voltage and reactive power, netwo
 
 ![25F cut](images/mapa3-25f.jpg)
 
-EVIDENCE (engine output, `feb2025-1500`, cut `R239` Nueva Maitencillo-Nueva Pan de Azúcar 500 kV, 2,210 MVA):
+EVIDENCE (engine output, `feb2025-1500`, cut `R239` Nueva Maitencillo-Nueva Pan de Azúcar 500 kV, 2,210 MVA). Re-measured 2026-11-21: 3.8 million people without power, 1,972 of 11,096 MW (18%), 2 stages, islands `voltage_limited` (uncertain). The bullets below and the figures 15.2 M and 7,872 MW come from an earlier run and are out of date (cause not investigated):
 - 15.2 million people without power, 7,872 of 11,096 MW (71%), 2 stages.
 - 1.0 s: Pan de Azúcar-Punta Colorada 220 kV passes 120% and opens.
 - 2.0 s: Maitencillo-Pan de Azúcar 110 kV passes 120% and opens.

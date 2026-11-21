@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · docs(health): document the health index and flag stale 25F figures
+
+- **Changed:** New `docs/health.md` (rule, metrics with limits and sources, 25F against `feb2025-0300`, cautions). `architecture.md` lists the command and `health.yaml`. `engine.md`, `mapa3.md` and `minimum-dataset.md` carry a note that cutting R239 at `feb2025-1500` now gives 1,972 MW lost and 3.8 M people with `voltage_limited`, not 7,872 MW and 15.2 M.
+- **Why:** The code is the current state (`AGENTS.md` 1.4); the older figures no longer hold.
+- **Agents:** The cause of the change in the R239 result was not investigated, and the "cuts with no effect" column of `engine.md` was not re-run. The `minimum-dataset.md` section 2.4 worked case is out of date.
+- **Files:** `docs/health.md`, `docs/architecture.md`, `docs/engine.md`, `docs/mapa3.md`, `docs/minimum-dataset.md`.
+
 ## 2026-11-21 · feat(cascade): add the cascadasen-health command
 
 - **Changed:** New `application/grid_health.py` and script `cascadasen-health`: prints the health index of operating points before a fault and after a cut (default `feb2025-1500` and `feb2025-0300`, cut `R239`), or JSON with `--json`. New validation test: the 25F scores below the reference both before and after the cut, limited by `transfer_25f` before it.
