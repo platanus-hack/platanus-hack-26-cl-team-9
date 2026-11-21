@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): mapa 3 is the main map; mapas 1 and 2 deprecated (#14)
+
+- **Changed:** `/` and `?mapa=3` open mapa 3 (the cascade viewer). `?mapa=1` (offline deck.gl map) and `?mapa=2` (Mapbox basemap) still work but log a deprecation warning. No code was deleted.
+- **Why:** The team chose mapa 3 as the product map. It is the only one with the engine, the legend and the cascade replay.
+- **Agents:** Build new UI on `web/src/cascade/`, not on `web/src/map/chileMap.ts` or `mapboxMap.ts`. `docs/mapa3.md` and `docs/minimum-dataset.md` (merged in #12 without a changelog entry) describe the engine, the actors and the minimum dataset. The cache in `web/public/cache/` must be generated (`cascadasen-cache`) or the root page shows an error. Older docs that call `/` "the offline map" (`stack.md`, `docker.md`, `datasets.md`) are out of date on that point.
+- **Files:** `web/src/main.tsx`, `web/README.md`, `docs/mapa3.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · docs: sync docs with the Sub50 name, design sessions and merged work
 
 - **Changed:** New `docs/design.md`: Paper file and pages, Electricity Maps style, voltage and technology palette, 5 zoom levels, data behind the mockups, logo options. Product name Sub50 in titles and summaries (`idea.md`, `AGENTS.md`, `cyber.md`, both READMEs, session hook). `stack.md` now matches the repo (status, Mapbox option, engine base case, real layout, frontend section defers to `design.md`). `plan.md` repo state, submission checklist and open decisions 11-13. `datasets.md` adds the operating points and DC-OPF scripts and sources [40] Mapbox and [41] OpenStreetMap. Backfilled changelog entries for #2, #6, #7, #10 and the Sub50 project-page commit.
