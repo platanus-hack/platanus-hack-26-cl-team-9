@@ -79,8 +79,8 @@ def make_client(settings: Settings) -> Any:
 
     if settings.llm_provider == "bedrock":
         return anthropic.AnthropicBedrockMantle(
-            aws_profile=settings.aws_profile,
-            aws_region=settings.aws_region,
+            aws_profile=settings.aws_profile or None,  # None: standard AWS chain (env vars first)
+            aws_region=settings.aws_region or None,
             timeout=settings.llm_timeout_s,
             max_retries=1,
         )

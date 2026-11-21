@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(llm): Bedrock with temporary AWS environment credentials
+
+- **Changed:** An empty `CASCADASEN_AWS_PROFILE`/`CASCADASEN_AWS_REGION` now means "not set", so `AnthropicBedrockMantle` uses the standard AWS chain (environment variables first). `docker-compose.yml` passes `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_REGION` through to `backend` when set on the host. README and docker docs explain both options (environment variables or a profile).
+- **Why:** Ricardo authenticates with the SSO portal's "Set AWS environment variables" (temporary credentials in the shell), not with a named profile.
+- **Agents:** A profile set in `.env` takes precedence over the environment variables; leave it out when using variables. The variables must be exported in the terminal that runs `cascadasen-api` (or compose) and expire with the SSO session.
+- **Files:** `backend/src/cascadasen/infrastructure/llm.py`, `docker-compose.yml`, `backend/README.md`, `docs/docker.md`.
+
 ## 2026-11-21 · docs(web): operation mode of mapa 3
 
 - **Changed:** `docs/mapa3.md` section 10 now describes the implemented operation tab (user flow, offline behaviour); `web/README.md` gets a "Operation mode (mapa 3 + backend)" section with the commands to run API, caches and Vite.

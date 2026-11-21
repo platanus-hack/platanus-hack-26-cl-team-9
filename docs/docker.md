@@ -33,6 +33,6 @@ Restart `backend` or call `POST /api/v1/admin/reload` afterwards.
 
 `docker compose` reads `backend/.env` if it exists (only `CASCADASEN_*` settings, never keys). To use the LLM commander with Amazon Bedrock, build with the extra and share your AWS profile read-only:
 
-1. `backend/.env` with `CASCADASEN_LLM_ENABLED=true`, `CASCADASEN_LLM_PROVIDER=bedrock`, `CASCADASEN_AWS_REGION=us-east-1`, `CASCADASEN_AWS_PROFILE=cascadasen`.
-2. Uncomment the `${HOME}/.aws:/root/.aws:ro` volume of `backend` in `docker-compose.yml`.
+1. `backend/.env` with `CASCADASEN_LLM_ENABLED=true`, `CASCADASEN_LLM_PROVIDER=bedrock`, `CASCADASEN_AWS_REGION=us-east-1`.
+2. Credentials: either export `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` in the shell that runs compose (they are passed through to `backend`), or set `CASCADASEN_AWS_PROFILE` and uncomment the `${HOME}/.aws:/root/.aws:ro` volume.
 3. `WITH_LLM=1 docker compose up --build`.

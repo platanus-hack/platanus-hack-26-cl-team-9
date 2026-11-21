@@ -74,13 +74,13 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
 - `application/run_experiment.py`: `RunManager` (in-memory LRU of 100 runs; replay re-injects events at their cycles, so an unchanged replay gives the same trace hash) and the catalog. Endpoints are under `/api/v1/sim/*` (`docs/stack.md` 7.1).
 - `domain/theater/narrative.py` and `params/narrative_es.yaml`: Spanish templates for every key the API returns, plus the deterministic after-action review (`TemplateInterpreter`, behind the `Interpreter` port in `domain/ports.py`). An LLM-backed interpreter can implement the same port later; it would explain, never decide.
 - Optional LLM (off by default): `uv sync --extra llm`, then in `backend/.env` (git-ignored; settings only, **never keys**):
-  - Amazon Bedrock with an AWS profile (credentials stay in `~/.aws`, e.g. `aws configure --profile cascadasen` or `aws sso login --profile cascadasen`):
+  - Amazon Bedrock:
     ```
     CASCADASEN_LLM_ENABLED=true
     CASCADASEN_LLM_PROVIDER=bedrock
     CASCADASEN_AWS_REGION=us-east-1
-    CASCADASEN_AWS_PROFILE=cascadasen
     ```
+    Credentials, either way (never in `.env`): export the temporary `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` in the terminal that runs the API (SSO portal → "Set AWS environment variables"), **or** add `CASCADASEN_AWS_PROFILE=<your profile>` and run `aws sso login --profile <your profile>`. A profile set in `.env` takes precedence over the environment variables, so leave it out when you use variables.
     The model id gets the Bedrock prefix (`anthropic.claude-opus-5-5`); Bedrock has no server-side refusal fallback, so a refusal falls back to the rules.
   - Claude API: `CASCADASEN_LLM_ENABLED=true` and `ANTHROPIC_API_KEY` in your shell (or an `ant auth login` profile).
 

@@ -12,6 +12,13 @@ services:
     env_file:
       - path: ./backend/.env  # optional; CASCADASEN_* settings only, never keys (docs/docker.md)
         required: false
+    environment:
+      # Bedrock with temporary credentials exported in your shell (SSO "Set AWS environment variables"):
+      # passed through only when set on the host
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+      - AWS_REGION
     volumes:
       - ./data:/data
       # Bedrock with an AWS profile: uncomment to share ~/.aws read-only with the container
