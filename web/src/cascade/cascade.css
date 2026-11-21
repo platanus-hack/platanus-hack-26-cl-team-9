@@ -205,17 +205,16 @@
 .shell .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; }
 .shell .map-event.past { z-index: 1; }
 .shell .map-event.current { z-index: 2; }
-.shell .callout { position: absolute; left: 40px; top: -20px; width: 252px; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--glass); border: 1px solid var(--border-strong); pointer-events: auto; }
-.shell .callout::before { content: ""; position: absolute; top: 19px; right: 100%; width: 28px; height: 1px; background: var(--fg-3); }
-.shell .flip .callout { left: auto; right: 40px; }
-.shell .flip .callout::before { right: auto; left: 100%; }
+.shell .callout { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border-strong); pointer-events: auto; }
+/* Docked: top left of the map, under the time pill and clear of the panel, where there is only sea. */
+.shell .callout.docked { position: absolute; z-index: 4; left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); top: calc(var(--gap) + 70px); width: 260px; box-sizing: border-box; }
 .shell .callout-head { display: flex; justify-content: space-between; gap: 8px; color: var(--faint); font-size: 12px; line-height: 16px; }
-.shell .callout h4 { margin: 0; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 20px; }
-.shell .callout-figures { display: flex; gap: 24px; padding-top: 8px; border-top: 1px solid var(--border); }
+.shell .callout h4 { margin: 0; color: var(--fg); font-size: 13px; font-weight: 600; line-height: 18px; }
+.shell .callout-figures { display: flex; gap: 20px; padding-top: 6px; border-top: 1px solid var(--border); }
 .shell .callout-figures > div { display: flex; flex-direction: column; gap: 1px; }
 .shell .callout-figures b { color: var(--fg); font-size: 14px; font-weight: 600; line-height: 18px; }
 .shell .callout-figures b.cream { color: var(--place); }
-.shell .callout-figures span { color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap; }
+.shell .callout-figures span { color: var(--muted); font-size: 12px; line-height: 16px; }
 .shell .pin-label { position: absolute; left: 28px; top: -20px; display: flex; flex-direction: column; padding: 4px 10px; background: var(--surface); white-space: nowrap; }
 .shell .pin-label b { color: var(--fg); font-size: 13px; font-weight: 600; line-height: 18px; }
 .shell .pin-label span { color: var(--muted); font-size: 12px; line-height: 16px; }

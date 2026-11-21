@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · fix(web): the event callout is docked in a quiet corner (#52)
+
+- **Changed:** The callout of the current event (time, event number, title, people without supply, lost load) no longer sits next to its pin in the middle of the network. It is docked at the top left of the map, under the time pill and clear of the panel, with an opaque background and a smaller size, so no line crosses it. The pin stays on the map, still marked as the current one. Code: `MapOverlays.tsx` (`docked`) and `.callout.docked` in `cascade.css`.
+- **Why:** The callout covered the network and the lines showed through it ("behind everything and in the middle").
+- **Agents:** The callout is now one element outside the anchors; the label-collision code in `CascadeApp.tsx` still finds it with `.callout`. The old leader line and the `flip` rule for the callout are gone. The first event keeps its short label next to its pin.
+- **Files:** `web/src/cascade/MapOverlays.tsx`, `web/src/cascade/cascade.css`.
+
 ## 2026-11-21 · feat(regional): reduce the other countries' networks like Chile's
 
 - **Changed:** New `domain/regional_reduction.py`: substations within 3 km become one bus, line ends are snapped to the nearest bus (12 km), OSM ways are chained, parallel lines are folded, small pieces dropped, and plants are added up per bus (40 km). `cascadasen-regional` now writes the reduced layer: lines `<ISO3>-R<n>` with `a`/`b` bus ids drawn straight, buses `<ISO3>-B<n>`, generation `<ISO3>-G<n>` per bus. Lines before to after: BRA 2,264 to 1,286, PER 575 to 246, BOL 244 to 58, ARG 3,056 to 390. The web reads the new fields; tooltips show circuits and plant counts.
