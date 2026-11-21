@@ -128,7 +128,15 @@ class Sub50Tools:
         cat = self.client.get("/sim/catalog")
         return {
             "operating_points": cat["operating_points"],
-            "templates": [t["id"] for t in cat["templates"]],
+            "templates": [
+                {
+                    "id": t["id"],
+                    "scripted_events": t["scenario_events"],
+                    "adversary": t["adversary"]["enabled"],
+                    "horizon": t["horizon"],
+                }
+                for t in cat["templates"]
+            ],
             "policies": [p["id"] for p in cat["policies"]],
             "events": [
                 {"id": e["id"], "targets": e["targets"], "defaults": e["defaults"]} for e in cat["events"]
@@ -143,26 +151,32 @@ class Sub50Tools:
     def describe_network(self, focus: str | None = None) -> dict[str, Any]:
         """Describe the session network. Without `focus`: areas A01-A13 with demand, generation and
         population, what the session added, warnings and the baseline (overloaded lines, load shed).
-        With `focus` (an area id or name such as A06, or a bus id such as B010): its buses and lines."""
+        With `focus`: one area or bus, with its buses, lines and which of them are overloaded. Pass the
+        place as the user wrote it (a city or area name such as "Santiago", or an id such as A09 or
+        B010): the tool resolves names, so never guess an area id."""
         net = self._network()
         return digest.focus_digest(net, focus) if focus else digest.network_digest(net)
 
     # -- network edits -----------------------------------------------------------------------
 
     def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter") -> dict[str, Any]:
-        """Add a datacenter (a load) of `mw` megawatts. `bus` is a bus id (B010), an area id or name
-        (A02, Antofagasta) or a unique part of a bus name. The rebalance is reported with the
-        baseline: `newly_overloaded` are the lines this edit pushed over capacity, while the rest of
-        `overloaded_lines` were already over capacity before it."""
+        """Add a datacenter (a load) of `mw` megawatts; ask the user for `mw` if they did not give it.
+        `bus` is the place as the user wrote it (a city or area name such as "Antofagasta", a bus id such
+        as B010 or a unique part of a bus name); the tool resolves it, so never guess an id. An area is
+        enough: it uses the area's main (anchor) bus, so do not ask the user for a specific bus. The result says where it went
+        (bus, bus name, area) and, in `baseline`, which lines this edit pushed over capacity
+        (`newly_overloaded`), which were already overloaded and still are (`still_overloaded`) and which
+        it relieved (`no_longer_overloaded`)."""
         net = self._network()
         bus_id, before = digest.resolve_bus(net, bus), self._overloaded(net)
         resp = self.client.post(
             f"{self._base()}/loads", {"bus": bus_id, "mw": mw, "kind": "datacenter", "name": name}
         )
-        return {"bus": bus_id, **digest.edit_digest(resp), **self._after_edit(before)}
+        return {**digest.bus_place(net, bus_id), **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_generator(self, bus: str, mw: float, tech: str, name: str | None = None) -> dict[str, Any]:
-        """Add a generator of `mw` megawatts at a bus (same bus resolution as add_datacenter). `tech`:
+        """Add a generator of `mw` megawatts; ask the user for `mw` if they did not give it. `bus` resolves
+        like add_datacenter (a city or area name is enough, never ask for a specific bus). `tech`:
         solar, eolica, hidro, termica, bioenergia, geotermica (the last four are synchronous)."""
         net = self._network()
         bus_id, before = digest.resolve_bus(net, bus), self._overloaded(net)
@@ -170,7 +184,7 @@ class Sub50Tools:
             k: v for k, v in {"bus": bus_id, "mw": mw, "tech": tech, "name": name}.items() if v is not None
         }
         resp = self.client.post(f"{self._base()}/generators", body)
-        return {"bus": bus_id, **digest.edit_digest(resp), **self._after_edit(before)}
+        return {**digest.bus_place(net, bus_id), **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_line(
         self, a: str, b: str, kv: float, capacity_mw: float, name: str | None = None
@@ -220,17 +234,26 @@ class Sub50Tools:
         """The baseline after an edit and what the edit changed: the base case can already have
         overloaded lines, so only `newly_overloaded` is the edit's doing."""
         base = digest.baseline_digest(self._network().get("baseline", {}))
-        now = set(base["overloaded_lines"])
-        base["newly_overloaded"] = sorted(now - set(before))
-        base["no_longer_overloaded"] = sorted(set(before) - now)
+        now, was = set(base.pop("overloaded_lines")), set(before)
+        base.update(
+            {
+                "newly_overloaded": sorted(now - was),  # caused by this edit
+                "still_overloaded": sorted(now & was),  # overloaded before the edit and still
+                "no_longer_overloaded": sorted(was - now),  # relieved by this edit
+                "overloaded_now_total": len(now),
+            }
+        )
         return {"baseline": base, "notice": digest.NOTICE}
 
     # -- sandbox -----------------------------------------------------------------------------
 
     def cut_lines(self, lines: list[str]) -> dict[str, Any]:
-        """Open 1 to 3 transmission lines (ids R###/U###) and simulate the cascade: load shed, people
-        without power, islands and frequency. It models the effect of losing the lines, never how. The
-        lines stay open for everyone in the session until repair_lines."""
+        """Open 1 to 3 transmission lines and simulate the cascade: load shed, people without power,
+        islands and frequency. It models the effect of losing the lines, never how. The lines stay open
+        for everyone in the session until repair_lines. Only real line ids (R###/U###, from
+        describe_network); never build an id from area names. A corridor between two areas (A06-A07)
+        is a group of lines, not a line: to open a whole corridor use a strategic run (start_run, then
+        inject_event with C3_transmission_opening and the corridor id, then step)."""
         return digest.cut_digest(self.client.post(f"{self._base()}/cut", {"lines": lines}))
 
     def repair_lines(self, lines: list[str] | None = None) -> dict[str, Any]:
@@ -253,10 +276,12 @@ class Sub50Tools:
         adversary_objective: str | None = None,
         adversary_budget: int = 8,
     ) -> dict[str, Any]:
-        """Start a strategic run on the session network and make it the active one. `template` and the
-        adversary objectives come from list_options; `policy` A reactive, B preventive, C adaptive
-        coordination. Passing `adversary_objective` enables the abstract adversary, which only plays
-        events of the catalog against the defender's decision quality."""
+        """Start a strategic run on the session network and make it the active one. Keep the default
+        template `open_field` (no scripted events, no adversary: only the events you inject happen)
+        unless the user names another scenario; the other templates (list_options) bring their own
+        scripted events or adversary, which then mix with yours. `policy`: A reactive, B preventive, C
+        adaptive coordination. Passing `adversary_objective` enables the abstract adversary, which only
+        plays events of the catalog against the defender's decision quality."""
         body: dict[str, Any] = {"template": template, "policy": policy, "horizon": horizon}
         if seed is not None:
             body["seed"] = seed
@@ -272,9 +297,11 @@ class Sub50Tools:
         return {**digest.run_digest(run), "notice": digest.NOTICE}
 
     def inject_event(self, type: str, target: str, share: float | None = None) -> dict[str, Any]:
-        """Trigger an event of the abstract catalog at the next cycle (types from list_options, for
-        example C3_transmission_opening or D1_telemetry_loss). `target` is an area (A06), zone (NG),
-        corridor (A06-A07), bus B###, line R### or defence function. `share` overrides the size."""
+        """Trigger an event of the abstract catalog in the active run (call start_run first); it applies
+        when the run advances with step. Types come from list_options, for example
+        C3_transmission_opening (opens a corridor such as A06-A07, a line or a bus) or D1_telemetry_loss.
+        `target` is an area (A06), zone (NG), corridor (A06-A07), bus B###, line R### or defence
+        function. `share` overrides the size."""
         body: dict[str, Any] = {"type": type, "target": target}
         if share is not None:
             body["params"] = {"share": share}
@@ -287,12 +314,15 @@ class Sub50Tools:
         }
 
     def step(self, cycles: int = 1) -> dict[str, Any]:
-        """Advance the active run 1 to 72 cycles (5 minutes each) and summarise each cycle: served MW,
-        consequence level, people without power, alarms and the defensive actions executed."""
+        """Advance the active run (start_run first) 1 to 72 cycles of 5 minutes and summarise each cycle:
+        served MW, consequence level, people without power, alarms and the defensive actions executed.
+        Events injected before the step happen in its first cycle. `unserved_mw` is power not served in
+        that cycle (MW), not energy; the unserved energy (MWh) and cost are in run_report."""
         resp = self.client.post(f"{self._run()}/step", {"cycles": cycles})
         return {
             "run": digest.run_digest(resp["run"]),
             "cycles": [digest.snapshot_digest(s) for s in resp["snapshots"]],
+            **digest.events_applied(resp["snapshots"]),
             "notice": digest.NOTICE,
         }
 
@@ -325,7 +355,8 @@ class Sub50Tools:
         return digest.report_digest(self.client.get(f"{self._run()}/report"))
 
     def after_action(self) -> dict[str, Any]:
-        """The after-action review of the active run in Spanish: summary, key moments and lessons."""
+        """The after-action review of the active run in Spanish: summary lines and key moments. Show the
+        summary lines as they are (a list); do not add causes or lessons that are not written in them."""
         resp = self.client.get(f"{self._run()}/after_action")
         return {k: resp.get(k) for k in ("summary", "moments", "narrative", "policy", "notice")}
 

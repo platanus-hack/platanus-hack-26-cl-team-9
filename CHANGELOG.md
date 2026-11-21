@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(mcp): tool results the model cannot misread
+
+- **Changed:** Edit tools return where the element went (`bus`, `bus_name`, `area`, `area_name`) and the baseline as `newly_overloaded`, `still_overloaded`, `no_longer_overloaded`, `overloaded_now_total` (the edit results no longer carry `overloaded_lines`). `describe_network` lists corridors with their lines, annotates added loads and generators with their area, and with `focus` returns the area totals and its overloaded lines. `step` adds `unserved_mw` and `level_text` per cycle, `events_applied` and a `warning` when no event happened; `run_report` adds `worst_level_text`; `list_options` describes each template (scripted events, adversary, horizon).
+- **Changed:** Tool descriptions: pass places by name and never guess ids, an area is enough for a bus, a corridor is not a line (open it with `inject_event` in a run), keep `open_field` unless another template is named, ask for missing MW, `unserved_mw` is power not energy, show after-action lines verbatim.
+- **Why:** Live tests with Qwen3-Next and DeepSeek V3.2 on Bedrock (`docs/assistant.md` section 5) showed the model labelling the post-edit list as "already overloaded", guessing area ids (Santiago as A07), inventing a line id "R0607" for a corridor, picking a template with scripted events, adding MW across cycles into "GWh" and inventing a bus location.
+- **Agents:** `docs/mcp.md` section 3 lists the new keys. Clients of the MCP edit tools that read `baseline.overloaded_lines` must use `newly_overloaded` plus `still_overloaded`. `digest.py` imports `LEVELS_ES` from `domain/theater/narrative.py`.
+- **Files:** `backend/src/cascadasen/mcp/{tools,digest}.py`, `backend/tests/{unit/test_mcp_tools.py,integration/test_mcp_server.py}`, `docs/mcp.md`.
+
 ## 2026-11-21 · fix(theater): separate the two figures of one after-action summary line
 
 - **Changed:** `TemplateInterpreter.after_action` writes "Decisiones innecesarias: 1; reserva operacional final: 57 %." instead of "Decisiones innecesarias: 1. Reserva operacional final: 57 %.".

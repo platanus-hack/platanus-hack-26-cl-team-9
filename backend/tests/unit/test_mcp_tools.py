@@ -153,3 +153,25 @@ def test_tools_need_a_session_first():
 def test_there_is_no_tool_that_ranks_cuts():
     banned = ("worst", "rank", "optimi", "most_damage", "weakest", "critical")
     assert not [t for t in OPERATIONS if any(b in t for b in banned)]
+
+
+def test_focus_digest_totals_and_overloaded_lines_of_the_area():
+    net = {**NET, "baseline": {**NET["baseline"], "overloaded": ["R000"]}}
+    out = digest.focus_digest(net, "antofagasta")
+    assert out["area"] == "A02" and out["area_name"] == "Antofagasta"
+    assert out["load_mw"] == 5.0 and out["gen_mw"] == 20.0 and out["overloaded_lines"] == ["R000"]
+
+
+def test_snapshot_digest_computes_unserved_power_and_the_level_label():
+    snap = {
+        "cycle": 1,
+        "metrics": {"demand_mw": 100.0, "served_mw": 75.5, "level": "L1", "people_without_power": 12.7},
+    }
+    out = digest.snapshot_digest(snap)
+    assert (
+        out["unserved_mw"] == 24.5
+        and out["level_text"] == "L1 · contenido"
+        and out["people_without_power"] == 13
+    )
+    rep = digest.report_digest({"consequence": {"worst_level": "L2"}, "indicators": {}})
+    assert rep["consequence"]["worst_level_text"] == "L2 · apagón regional"
