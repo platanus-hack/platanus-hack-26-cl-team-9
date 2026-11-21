@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Legend } from "./Legend";
-import { mountChileMapWorkflow } from "./map/chileMap";
+export type MountMap = (container: HTMLDivElement) => () => void;
 
 // Full-screen map with a floating panel on the right (styles.css).
-export function App() {
+export function App({ mount }: { mount: MountMap }) {
   const mapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => mountChileMapWorkflow(mapRef.current!), []);
+  useEffect(() => mount(mapRef.current!), [mount]);
 
   return (
     <div className="layout">
