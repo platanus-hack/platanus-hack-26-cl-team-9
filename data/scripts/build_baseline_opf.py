@@ -2,27 +2,33 @@
 """Builds data/processed/baseline_opf.json: a secure base case for each operating point (DC optimal power flow).
 
 Why: the NTSyCS (art. 5-26/5-27) requires operating every series element at or below 100% of its transmission
-capacity in Normal state, and the N-1 criterion. A merit-order dispatch ignores the network and overloads lines
-before any cut, so it cannot be the starting point of an overload cascade. This script redispatches generation
-at minimum cost so that no branch exceeds its capacity (s_nom) and demand is served, with the same inertia floor.
+capacity in Normal state. A merit-order dispatch ignores the network and overloads lines before any cut, so it
+cannot be the starting point of an overload cascade. This script redispatches generation at minimum cost so that
+no line of the REDUCED network (the one the cascade engine uses) exceeds its capacity, with the same inertia floor.
 
 Needs numpy and scipy (HiGHS). Run after build_operating_points.py:
     python3 data/scripts/build_baseline_opf.py
+Keys of gen_by_bus, sync_mw_by_bus and inertia_by_bus_mws are reduced bus names (one per substation).
 """
 import collections
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from scipy.optimize import linprog
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, vstack
 
 SCRIPTS = Path(__file__).resolve().parent
 DATA = SCRIPTS.parent
+sys.path.insert(0, str(DATA.parent / "backend" / "src"))
+from cascadasen.domain.cascade.network import reduce_network  # noqa: E402
+
 BASE_MVA = 100.0
 SHED_COST = 5000.0       # USD/MWh, far above any generator: load is shed only if the case is infeasible
-CAPACITY_FACTOR = 1.0    # share of s_nom allowed pre-contingency (NTSyCS art. 5-27: up to 100% of the transmission capacity)
+CAPACITY_FACTOR = 1.0    # share of a line's capacity allowed pre-contingency (NTSyCS art. 5-27: up to 100%)
+NON_SYNCHRONOUS = {"solar PV", "onshore wind", "CSP"}
 
 
 def build_baseline_workflow() -> dict:
@@ -31,8 +37,10 @@ def build_baseline_workflow() -> dict:
     builder = _load_builder()
     generation = builder._read_generation()
     buses = {b["name"]: b for b in snapshot["model_buses"]}
-    return {"version": 1, "capacity_factor": CAPACITY_FACTOR, "branches": [_branch_row(r) for r in snapshot["model_branches"]],
-            "points": [_solve_point(p, snapshot, buses, generation, builder) for p in ops["points"]]}
+    nets = {y: reduce_network(snapshot, y) for y in {int(p["snapshot"][:4]) for p in ops["points"]}}
+    return {"version": 3, "network": "reduced (one bus per substation), links built after the point's year left out",
+            "capacity_factor": CAPACITY_FACTOR,
+            "points": [_solve_point(p, nets[int(p["snapshot"][:4])], buses, generation, builder) for p in ops["points"]]}
 
 
 def _load_builder():
@@ -42,93 +50,92 @@ def _load_builder():
     return module
 
 
-def _branch_row(r: dict) -> list:
-    return [r["name"], r["bus0"], r["bus1"], r["s_nom_mva"], r["x_pu"]]
-
-
-def _solve_point(point: dict, snapshot: dict, buses: dict, generation: dict, builder) -> dict:
-    names = list(buses)
-    index = {n: i for i, n in enumerate(names)}
-    branches = snapshot["model_branches"]
-    year, when = point["snapshot"][:4], point["snapshot"]
-    units = [c for g in generation["generators"] if (c := builder._candidate(g, generation, buses, when, year))]
-    committed = _committed(units, builder)
-    lp = _build_lp(point, names, index, branches, units, committed)
+def _solve_point(point: dict, net, buses: dict, generation: dict, builder) -> dict:
+    when = point["snapshot"]
+    units = [c for g in generation["generators"] if (c := builder._candidate(g, generation, buses, when, when[:4]))]
+    for u in units:
+        u["rbus"] = net.bus_of_model_bus[u["bus"]]
+    lp = _build_lp(point, net, units, _committed(units, builder))
     result = linprog(lp["c"], A_ub=lp["A_ub"], b_ub=lp["b_ub"], A_eq=lp["A_eq"], b_eq=lp["b_eq"], bounds=lp["bounds"], method="highs")
     assert result.status == 0, f"{point['id']}: LP not solved ({result.message})"
-    return _summarize(point, result, lp, names, branches, units)
+    return _summarize(point, result, lp, net, units)
 
 
 def _committed(units: list, builder) -> set:
     """Same security rule as the merit-order build: cheapest synchronous units stay online until the inertia floor."""
-    order = sorted(range(len(units)), key=lambda i: units[i]["cost"])
     online, inertia = set(), 0.0
-    for i in order:
+    for i in sorted(range(len(units)), key=lambda i: units[i]["cost"]):
         if inertia >= builder.INERTIA_TARGET_MWS:
             break
-        if units[i]["carrier"] not in builder.NON_SYNCHRONOUS and units[i]["inertia"] > 0:
+        if units[i]["carrier"] not in NON_SYNCHRONOUS and units[i]["inertia"] > 0:
             online.add(i)
             inertia += units[i]["inertia"]
     return online
 
 
-def _build_lp(point, names, index, branches, units, committed) -> dict:
-    nb, ng, nl = len(names), len(units), len(branches)
-    # variable order: generation (ng), voltage angle per bus (nb), load shed per bus (nb)
-    g0, t0, s0 = 0, ng, ng + nb
-    n = ng + 2 * nb
+def _load_by_reduced_bus(point: dict, net) -> np.ndarray:
+    load = np.zeros(net.size)
+    for bus, mw in point["load_by_bus"].items():
+        load[net.bus_of_model_bus[bus]] += mw
+    return load
+
+
+def _build_lp(point: dict, net, units: list, committed: set) -> dict:
+    nb, ng, nl = net.size, len(units), len(net.lines)
+    g0, t0, s0, n = 0, ng, ng + nb, ng + 2 * nb    # variables: generation, angle per bus, load shed per bus
+    load = _load_by_reduced_bus(point, net)
     c = np.zeros(n)
     bounds = []
+    room = collections.defaultdict(float)             # what a bus can absorb or export: its own load plus its line capacity
+    for ln in net.lines:
+        room[ln.a] += ln.capacity_mw
+        room[ln.b] += ln.capacity_mw
     for i, u in enumerate(units):
         c[g0 + i] = u["cost"]
-        low = min(u["pmin"], u["avail"]) if i in committed else 0.0
-        bounds.append((low, u["avail"]))
-    bounds += [(-np.pi, np.pi)] * nb
-    load = {b: point["load_by_bus"].get(b, 0.0) for b in names}
-    bounds += [(0.0, max(load[b], 0.0)) for b in names]
+        floor = min(u["pmin"], u["avail"], 0.5 * (load[u["rbus"]] + room[u["rbus"]])) if i in committed else 0.0
+        bounds.append((floor, u["avail"]))
+    bounds += [(-np.pi, np.pi)] * nb + [(0.0, max(float(load[b]), 0.0)) for b in range(nb)]  # some buses have net negative load (PMGD), they cannot be shed
     c[s0:s0 + nb] = SHED_COST
-    slack = max(range(nb), key=lambda i: sum(1 for r in branches if names[i] in (r["bus0"], r["bus1"])))
-    bounds[t0 + slack] = (0.0, 0.0)
-    rows, cols, vals = [], [], []
-    for i, u in enumerate(units):                                  # + generation at its bus
-        rows.append(index[u["bus"]]); cols.append(g0 + i); vals.append(1.0)
-    for b in range(nb):                                            # + load shed
-        rows.append(b); cols.append(s0 + b); vals.append(1.0)
-    flow_rows, flow_cols, flow_vals = [], [], []
-    for l, r in enumerate(branches):
-        i, j, w = index[r["bus0"]], index[r["bus1"]], BASE_MVA / r["x_pu"]
-        for bus, other, sign in ((i, j, -1.0), (j, i, 1.0)):       # - outgoing flow, + incoming flow in the balance
-            rows += [bus, bus]; cols += [t0 + i, t0 + j]; vals += [sign * w, -sign * w]
-        flow_rows += [l, l]; flow_cols += [t0 + i, t0 + j]; flow_vals += [w, -w]
-    A_eq = coo_matrix((vals, (rows, cols)), shape=(nb, n)).tocsr()
-    b_eq = np.array([load[b] for b in names])
-    flow = coo_matrix((flow_vals, (flow_rows, flow_cols)), shape=(nl, n)).tocsr()
-    limit = np.array([CAPACITY_FACTOR * r["s_nom_mva"] for r in branches])
-    from scipy.sparse import vstack
-    return {"c": c, "A_eq": A_eq, "b_eq": b_eq, "bounds": bounds, "flow": flow, "g0": g0, "t0": t0, "s0": s0,
-            "A_ub": vstack([flow, -flow]), "b_ub": np.concatenate([limit, limit])}
+    degree = collections.Counter(x for ln in net.lines for x in (ln.a, ln.b))
+    bounds[t0 + max(range(nb), key=lambda b: degree[b])] = (0.0, 0.0)
+    rows, cols, vals = [u["rbus"] for u in units] + list(range(nb)), list(range(ng)) + [s0 + b for b in range(nb)], [1.0] * (ng + nb)
+    frows, fcols, fvals = [], [], []
+    for k, ln in enumerate(net.lines):
+        w = BASE_MVA / ln.x_pu
+        for bus, sign in ((ln.a, -1.0), (ln.b, 1.0)):       # outgoing flow leaves the bus, incoming flow arrives
+            rows += [bus, bus]; cols += [t0 + ln.a, t0 + ln.b]; vals += [sign * w, -sign * w]
+        frows += [k, k]; fcols += [t0 + ln.a, t0 + ln.b]; fvals += [w, -w]
+    flow = coo_matrix((fvals, (frows, fcols)), shape=(nl, n)).tocsr()
+    limit = np.array([CAPACITY_FACTOR * ln.capacity_mw for ln in net.lines])
+    return {"c": c, "A_eq": coo_matrix((vals, (rows, cols)), shape=(nb, n)).tocsr(), "b_eq": load, "bounds": bounds,
+            "flow": flow, "g0": g0, "s0": s0, "A_ub": vstack([flow, -flow]), "b_ub": np.concatenate([limit, limit])}
 
 
-def _summarize(point, result, lp, names, branches, units) -> dict:
+def _summarize(point: dict, result, lp: dict, net, units: list) -> dict:
     x = result.x
-    gen_by_bus, carrier = collections.defaultdict(float), collections.defaultdict(float)
+    gen, sync, inertia = (collections.defaultdict(float) for _ in range(3))
+    carrier = collections.defaultdict(float)
     for i, u in enumerate(units):
-        gen_by_bus[u["bus"]] += x[lp["g0"] + i]
-        carrier[u["carrier"]] += x[lp["g0"] + i]
+        mw, name = x[lp["g0"] + i], net.names[u["rbus"]]
+        gen[name] += mw
+        carrier[u["carrier"]] += mw
+        if u["carrier"] not in NON_SYNCHRONOUS and mw > 0.5:
+            sync[name] += mw
+            inertia[name] += u["inertia"]
     flows = lp["flow"] @ x
-    loading = [abs(f) / r["s_nom_mva"] for f, r in zip(flows, branches)]
+    loading = [abs(f) / ln.capacity_mw for f, ln in zip(flows, net.lines)]
     return {"id": point["id"], "total_cost_usd_h": round(result.fun), "shed_mw": round(float(x[lp["s0"]:].sum()), 1),
-            "gen_by_bus": {b: round(v, 2) for b, v in gen_by_bus.items() if v > 0.01},
+            "gen_by_bus": {b: round(v, 2) for b, v in gen.items() if v > 0.01},
+            "sync_mw_by_bus": {b: round(v, 2) for b, v in sync.items()},
+            "inertia_by_bus_mws": {b: round(v) for b, v in inertia.items()},
             "gen_by_carrier_mw": {k: round(v) for k, v in sorted(carrier.items(), key=lambda kv: -kv[1]) if v > 0.5},
             "flow_mw": [round(float(f), 1) for f in flows], "max_loading": round(max(loading), 3),
-            "branches_over_90pct": sum(1 for v in loading if v > 0.9), "branches_at_limit": sum(1 for v in loading if v > 0.999)}
+            "lines_over_90pct": sum(1 for v in loading if v > 0.9), "lines_at_limit": sum(1 for v in loading if v > 0.999)}
 
 
 if __name__ == "__main__":
     out = build_baseline_workflow()
     path = DATA / "processed" / "baseline_opf.json"
     path.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
-    names = {r[0]: i for i, r in enumerate(out["branches"])}
-    corridor = names.get("S/E NUEVA PAN DE AZUCAR_500->S/E NUEVA MAITENCILLO_500")
     for p in out["points"]:
-        print(f"{p['id']}: cost {p['total_cost_usd_h']:,} USD/h | shed {p['shed_mw']} MW | max loading {p['max_loading']} | >90%: {p['branches_over_90pct']} | at limit: {p['branches_at_limit']} | 25F corridor {p['flow_mw'][corridor]} MW | {p['gen_by_carrier_mw']}")
+        print(f"{p['id']}: cost {p['total_cost_usd_h']:,} USD/h | shed {p['shed_mw']} MW | max loading {p['max_loading']} | >90%: {p['lines_over_90pct']} | at limit: {p['lines_at_limit']}")
