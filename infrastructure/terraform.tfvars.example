@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (git-ignored) to override defaults. image_tag is set by deploy.sh.
+
+# Domain for the Route 53 zone, ACM certificate and CloudFront alias (default sub50.cl).
+# domain_name = "sub50.cl"
+
+# HTTPS between CloudFront and the ALB. Needs an ACM certificate for the ALB.
+# origin_https        = true
+# alb_certificate_arn = "arn:aws:acm:us-east-1:402909940511:certificate/..."

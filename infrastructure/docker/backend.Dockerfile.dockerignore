@@ -1,0 +1,7 @@
+*
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/src
+!data/processed
+**/__pycache__
+**/*.egg-info
