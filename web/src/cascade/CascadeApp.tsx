@@ -5,6 +5,7 @@ import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { buildCascadeLayers } from "./layers";
 import { CascadeLegend } from "./Legend";
 import { NetworkPanel } from "./NetworkPanel";
+import { DEFAULT_SCENARIO, findScenario, SCENARIOS } from "./scenarios";
 import { formatPeople, lineName, narrate } from "./text";
 import type { BusState, Index, Network, Timeline } from "./types";
 
@@ -20,7 +21,7 @@ export function CascadeApp() {
   const baseMap = useRef<BaseMap | null>(null);
   const [index, setIndex] = useState<Index | null>(null);
   const params = useMemo(() => new URLSearchParams(location.search), []);  // ?point=<id>&cut=<line id> opens a case directly
-  const [pointId, setPointId] = useState(params.get("point") ?? "nov2026-1300");
+  const [pointId, setPointId] = useState(params.get("point") ?? DEFAULT_SCENARIO.point);
   const [network, setNetwork] = useState<Network | null>(null);
   const [buses, setBuses] = useState<Record<string, BusState>>({});
   const [timeline, setTimeline] = useState<Timeline | null>(null);
@@ -111,6 +112,23 @@ export function CascadeApp() {
     return timeline.events.filter((e) => e.t <= until + 1e-9 || e.t <= until + (timeline.frames[1]?.t ?? 1));
   }, [timeline, stage]);
 
+  const scenario = findScenario(pointId, cut);
+  const lastStage = (timeline?.frames.length ?? 1) - 1;
+  function pickScenario(id: string) {
+    const next = SCENARIOS.find((x) => x.id === id);
+    if (!next) return;
+    setNode(null);
+    setPointId(next.point);
+    setCut(next.cut);
+    setStage(0);
+    setPlaying(!!next.cut);
+  }
+  // Play at the last stage starts the cascade again (issue #13).
+  function togglePlay() {
+    if (playing) return setPlaying(false);
+    if (stage >= lastStage) setStage(0);
+    setPlaying(true);
+  }
   const frame = timeline?.frames[Math.min(stage, (timeline?.frames.length ?? 1) - 1)];
   return (
     <div className={railOpen ? "shell" : "shell rail-closed"}>
@@ -124,8 +142,10 @@ export function CascadeApp() {
           <Icon d={railOpen ? "m15 6-6 6 6 6" : "m9 6 6 6-6 6"} /><span className="label">Contraer</span>
         </button>
       </nav>
-      <select className="case-pill" aria-label="Hora del caso base" value={pointId} onChange={(e) => { setCut(null); setPointId(e.target.value); }}>
-        {index?.points.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+      <select className="case-pill" aria-label="Escenario" value={scenario?.id ?? "custom"} onChange={(e) => pickScenario(e.target.value)}>
+        {!scenario && <option value="custom">Corte manual · {index?.points.find((x) => x.id === pointId)?.label ?? pointId}</option>}
+        <optgroup label="Casos base">{SCENARIOS.filter((x) => x.group === "base").map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</optgroup>
+        <optgroup label="Cortes de referencia">{SCENARIOS.filter((x) => x.group === "cut").map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</optgroup>
       </select>
       <div className="map-controls">
         <div className="seg" role="group" aria-label="Vista del mapa">
@@ -149,7 +169,7 @@ export function CascadeApp() {
           {tab === "legend" && network && <CascadeLegend network={network} buses={buses} mode={mode} />}
           {tab === "assumptions" && <ul className="assumptions">{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>}
         </div>
-        <TimelineCard timeline={timeline} stage={stage} playing={playing} setPlaying={setPlaying} setStage={(n) => { setPlaying(false); setStage(n); }} />
+        <TimelineCard timeline={timeline} stage={stage} playing={playing} togglePlay={togglePlay} setStage={(n) => { setPlaying(false); setStage(n); }} />
       </section>
     </div>
   );
@@ -160,7 +180,7 @@ function Icon({ d, fill = false }: { d: string; fill?: boolean }) {
 }
 
 /** Bottom card of the panel (design: play, scrubber, time). It steps through the cascade stages. */
-function TimelineCard(p: { timeline: Timeline | null; stage: number; playing: boolean; setPlaying(b: boolean): void; setStage(n: number): void }) {
+function TimelineCard(p: { timeline: Timeline | null; stage: number; playing: boolean; togglePlay(): void; setStage(n: number): void }) {
   const last = (p.timeline?.frames.length ?? 1) - 1;
   const now = Math.min(p.stage, last);
   const seconds = p.timeline?.frames[now]?.t ?? 0;
@@ -168,7 +188,7 @@ function TimelineCard(p: { timeline: Timeline | null; stage: number; playing: bo
     <div className="timeline">
       <div className="timeline-top"><span>{p.timeline?.label ?? ""}</span><b>{seconds.toFixed(1).replace(".", ",")} s</b></div>
       <div className="timeline-row">
-        <button className="play" aria-label={p.playing ? "Pausa" : "Reproducir"} disabled={last === 0} onClick={() => p.setPlaying(!p.playing)}>{p.playing ? "❚❚" : "▶"}</button>
+        <button className="play" aria-label={p.playing ? "Pausa" : "Reproducir"} disabled={last === 0} onClick={p.togglePlay}>{p.playing ? "❚❚" : "▶"}</button>
         <input type="range" aria-label="Etapa de la cascada" min={0} max={last} value={now} onChange={(e) => p.setStage(Number(e.target.value))} disabled={last === 0} />
         <span className="stage">{now} / {last}</span>
       </div>

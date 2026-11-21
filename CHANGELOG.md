@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(web): scenario selector with the starting cases of mapa 3 (#13)
+
+- **Changed:** The pill at the top of mapa 3 now lists scenarios (\`web/src/cascade/scenarios.ts\`): base cases (normal day Feb 2025 15:00, normal night Feb 2025 03:00, solar noon Nov 2026, evening peak Nov 2026) and reference cuts (the 25F corridor at 15:00, the same cut at night, and with the 2026 network). Picking one loads its point and cut and plays the cut. A cut made by clicking a line shows as "Corte manual". Play at the last stage now restarts the cascade from stage 0.
+- **Why:** After the interface redesign the pill only listed hours, so the 25F could be reached only through a URL, and it could not be replayed once finished.
+- **Agents:** Add a starting case by adding one entry to \`SCENARIOS\`; its point and line must exist in \`web/public/cache\`. \`R239\` is Nueva Maitencillo - Nueva Pan de Azucar 500 kV (same id in the 2025 and 2026 networks). Deep links \`?point=...&cut=...\` still work. Results (EVIDENCE, engine): 25F at 15:00 = 15.2 M people, 7,872 MW; at 03:00 = 307,408 people, 631 MW; with the 2026 network at solar noon = 15.4 M people, 7,347 MW.
+- **Files:** \`web/src/cascade/scenarios.ts\` (+ test), \`web/src/cascade/CascadeApp.tsx\`.
+
 ## 2026-11-21 · docs(architecture): document the system as built
 
 - **Changed:** New `docs/architecture.md`: system overview (sources → `data/processed` → API and static cache → web), backend ports and adapters with the dependency rule, the five ports and their adapters, domain modules (two engines, theatre, agents), use cases and CLI commands, the cut and theatre-cycle flows, frontend, data and parameters, deployment and tooling. `stack.md` sections 2-3 point to it and drop the stale `network.json`/`engine/` backlog entries; `AGENTS.md` and `backend/README.md` link it.
