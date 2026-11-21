@@ -1,0 +1,59 @@
+html, body, #root { margin: 0; height: 100%; background: #060a14; color: #cbd5e1; font-family: system-ui, sans-serif; }
+/* The map fills the whole screen; panels float on top so the map is never cut into a slice. */
+.layout { position: relative; height: 100%; overflow: hidden; }
+.map { position: absolute; inset: 0; background: #060a14; }
+.panels {
+  position: absolute; top: 16px; right: 16px; bottom: 16px; width: 360px;
+  padding: 20px; box-sizing: border-box; overflow-y: auto;
+  background: rgba(10, 16, 30, 0.82); border: 1px solid #1e293b; border-radius: 8px;
+  backdrop-filter: blur(6px);
+}
+.panels h1 { margin: 0 0 8px; font-size: 22px; }
+.panels h2 { margin: 20px 0 4px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
+.panels h3 { margin: 16px 0 4px; font-size: 13px; color: #e2e8f0; }
+.panels p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.45; }
+.panels code { font-size: 11.5px; color: #93c5fd; }
+.muted { color: #94a3b8; }
+.legend-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin: 3px 0; }
+.swatch { width: 18px; height: 6px; border-radius: 2px; flex: none; }
+.node-popup {
+  position: absolute; z-index: 5; width: 360px; max-height: 70%; overflow-y: auto; padding: 10px 12px;
+  background: rgba(10, 16, 30, 0.94); border: 1px solid #334155; border-radius: 8px; font-size: 12px; line-height: 1.4;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+.node-popup .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; font-size: 14px; color: #f1f5f9; }
+.node-popup .close { background: none; border: 0; color: #94a3b8; font-size: 18px; line-height: 1; cursor: pointer; }
+.node-popup .sub { color: #94a3b8; margin: 2px 0 6px; }
+.node-popup h4 { margin: 10px 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #7dd3fc; }
+.node-popup .row { display: flex; justify-content: space-between; gap: 10px; padding: 1px 0; border-bottom: 1px solid #1e293b; }
+.node-popup .val { color: #e2e8f0; text-align: right; }
+.node-popup .note { color: #94a3b8; margin-top: 3px; }
+.node-popup .note.warn { color: #fbbf24; }
+.panels.wide { width: 420px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; margin: 10px 0; }
+.field select { background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; padding: 6px; }
+.reset, .player button { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.results h2 { font-size: 13px; margin: 14px 0 6px; color: #f1f5f9; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats div { background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; }
+.stats b { font-size: 15px; color: #f8fafc; }
+.stats span { font-size: 11px; color: #94a3b8; }
+.player { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 12px; }
+.player input { flex: 1; }
+.events { padding-left: 18px; font-size: 12px; line-height: 1.4; max-height: 240px; overflow-y: auto; }
+.events .t { color: #7dd3fc; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.chart { width: 100%; background: #0f172a; border-radius: 6px; }
+details { margin-top: 12px; font-size: 12px; } details ul { padding-left: 16px; }
+figure { margin: 8px 0 0; }
+figcaption { font-size: 11px; margin-top: 4px; }
+.legend { margin-top: 14px; border-top: 1px solid #1e293b; padding-top: 4px; }
+.legend h3 { margin-top: 12px; }
+.legend .sub { margin: 8px 0 2px; font-size: 11px; color: #94a3b8; }
+.legend-row { align-items: flex-start; }
+.legend-swatch { width: 30px; flex: none; display: flex; justify-content: center; align-items: center; min-height: 14px; }
+.legend .bar { display: block; width: 26px; border-radius: 2px; }
+.legend .dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 4px #fff; }
+.legend .dot.big { width: 10px; height: 10px; box-shadow: none; }
+.legend .col { display: block; width: 10px; height: 16px; }
+.node-popup .more { margin: 8px 0 4px; background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+.legend summary { cursor: pointer; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }

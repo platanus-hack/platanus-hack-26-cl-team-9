@@ -12,12 +12,16 @@ Last updated: 2026-11-21. Status labels: **verified** (opened or downloaded and 
 | Official line sections with end points | Topology | CEN Infotecnica `/v1/tramos/` | **In pipeline** (1,944 sections; 1,895 with both ends resolved) |
 | Energy storage (batteries) | "What would have prevented it" | IDE Energia layer 9 + PyPSA-CL StorageUnits | **In pipeline** (91 + 244 records) |
 | Line reactance and thermal limit | Power flow, overload rule | PyPSA-CL `Topology.xlsx` (Ministerio de Energia) | **Found**: 323 lines with r, x (pu and ohm) and s_nom (MVA); attached to 151 line edges |
-| Scenario generation and demand per node | Scenarios | CEN operation base Oct 2026 (zip); PyPSA-CL `Loads.xlsx` (139 MB, demand by bus) | Not downloaded |
+| Scenario generation and demand per node | Scenarios | PyPSA-CL `Loads.xlsx`, `Topology.xlsx`, `Profiles.xlsx`, `Costs.xlsx`; CEN operation base Oct 2026 (zip) | **Built** for 4 operating points: modelled demand per bus and simulated merit-order dispatch (`data/processed/operating_points.json`), plus a secure DC-OPF base case (`baseline_opf.json`). Simulated, not measured. The CEN zip is not used |
 | 25F figures for validation | Tests | CEN and university reports | **Verified** (see `plan.md` section 5) |
 | Comuna and region outlines | Base map | INE Censo 2024 FeatureServer layer 11 | **In pipeline** (345 comunas, simplified to 1.2 MB) |
 | Population per commune | "People without power" | INE Censo 2024 layers 11 and 2 | **In pipeline** (18,480,372 people; urban census zones for allocation) |
 | Plant -> node assignment | Network build | PyPSA-CL generator bus, then substation name, then nearest | **Done** (1,073 by declared model bus) |
 | Comuna -> substation (service areas) | People affected per node | Own rule on INE census zones | **Done**, flagged as assumption |
+| Public cyber incidents on the SEN | Cyber scenarios, case V10 (`cyber.md`) | pv magazine articles citing CEN daily reports [34][35] | **Read** (secondary source) |
+| Critical loads (hospitals, water, Metro) with location | Question Q4 in `cyber.md` | None found | **Missing** |
+| Basemap (streets, water, buildings, place names) | Zoom-level designs (`design.md` section 4), `?mapa=2` in `web/` | Mapbox [40] | **Used** by `web/` `?mapa=2` and the Paper mockups; needs a token and internet |
+| Towers, poles, transformers, MT lines | Closest zoom levels (`design.md` section 4) | OpenStreetMap [41] | **Mockups only** (Calama, Nueva Pan de Azucar); not in the pipeline |
 
 The pipeline that downloads, unifies and validates all of this lives in `backend/` (see `backend/README.md`). Section 0 summarises what it does. Sections 2-5 are the original research notes; where they conflict with section 0, section 0 is current.
 
@@ -36,6 +40,11 @@ Validation (18 checks, all passing on the current build; `GET /api/v1/validation
 - Coverage: 16/16 regions, SEN from -18.4 to -43.1 degrees latitude, 99.3% of substations sit inside the comuna polygon their IDE code names.
 - Connectivity: 11/11 corridors of the 500 kV backbone, a continuous path from Chapiquina to Quellon, 99.3% of SEN MW and 98.2% of the population in the main grid (the rest is Aysen and Magallanes, separate systems).
 - 25F: removing Nueva Maitencillo - Nueva Pan de Azucar 500 kV alone does not split the grid. The north separates only when both 220 kV circuits around Punta Colorada and the coastal 110 kV path (Maitencillo - Algarrobo - Incahuasi - Las Companias) also open. This is a test in `backend/tests/validation/`.
+
+Built on top of `data/processed/` by standalone scripts in `data/scripts/` (merged in #10, not part of `cascadasen-build`):
+- `build_operating_points.py` -> `operating_points.json`: demand per electrical bus from PyPSA-CL `Loads.xlsx` (259 loads, 252 mapped to model buses) and merit-order dispatch from PyPSA-CL generators (2,056 with bus, cost and inertia), solar and wind profiles and fuel prices. Synchronous units stay online until 31,000 MWs of inertia. Four points: Feb 2025 15:00 (25F reference) and 03:00, Nov 2026 13:00 and 20:00. PyPSA-CL has one representative day per month, so these are modelled, not measured. Downloads the four files into the git-ignored `data/raw/pypsa_cl/`. Needs openpyxl.
+- `build_baseline_opf.py` -> `baseline_opf.json`: DC optimal power flow per point so no branch exceeds s_nom (NTSyCS art. 5-27), with the same inertia floor. All four points solve without load shedding. N-1 is not enforced. Needs numpy and scipy. Run after the previous script.
+- `build_node_index.py` -> `node_index.json` (1.4 MB): one record per substation or tap for the web map popup (ficha, lines, plants, storage, served comunas, PyPSA-CL model, demand and dispatch). PyPSA-CL storage named `<TYPE>_<node>_<h>h` is shown as model candidates, not real batteries.
 
 Data quirks found while unifying:
 - The IDE storage layer has no geometry. The pipeline rebuilds it from `COORD_ESTE/COORD_NORT/HUSO` (sub-10 m error checked against the substation layer).
@@ -153,8 +162,16 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 | 29 | INE Census 2024 | https://censo2024.ine.gob.cl/resultados/ | Page verified |
 | 30 | INE Censo 2024 FeatureServer (behind visualizador.ine.gob.cl) | https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/Censo2024_v2/FeatureServer | Verified, in pipeline (layer 11 comunas, layer 2 census zones) |
 | 31 | CEN Infotecnica: substations, busbars, lines, sections, plants | https://api-infotecnica.coordinador.cl/v1/tramos/ (also `/subestaciones/`, `/barras/`, `/lineas/`, `/centrales/`) | Verified, in pipeline |
-| 32 | PyPSA-CL model inputs, Ministerio de Energia (public SharePoint folder; licence not stated) | https://minenergia-my.sharepoint.com/:f:/g/personal/mparedes_minenergia_cl/IgCWD1vzVNdFSZGLq9yAvae7AWiPl3JViAfaI602hsQZTQ0?e=SH5uDd | Verified: `Topology.xlsx` in pipeline; `Loads.xlsx` (demand by bus, 139 MB) not used yet |
+| 32 | PyPSA-CL model inputs, Ministerio de Energia (public SharePoint folder; licence not stated) | https://minenergia-my.sharepoint.com/:f:/g/personal/mparedes_minenergia_cl/IgCWD1vzVNdFSZGLq9yAvae7AWiPl3JViAfaI602hsQZTQ0?e=SH5uDd | Verified: `Topology.xlsx` in pipeline; `Loads.xlsx`, `Profiles.xlsx`, `Costs.xlsx` used by `data/scripts/build_operating_points.py` |
 | 33 | Mapa de Vulnerabilidad Energetica (IDE Energia): comunas with households without electricity | https://ide-energia.minenergia.cl/server/rest/services/MAPA_VULNERABILIDAD/Mapa_de_Vulnerabilidad_Energetica/MapServer | Verified, not used |
+| 34 | pv magazine, "Chilean solar plant offline for two months following cyberattack" (29 Oct 2026; cites the CEN daily report of 27 Oct 2026) | https://www.pv-magazine.com/2026/10/29/chilean-solar-plant-offline-for-two-months-following-cyberattack/ | Read in this project (secondary source; the CEN reports themselves were not opened) |
+| 35 | pv magazine, "Chilean PV plant hit by cyberattack remains disconnected" (17 Nov 2026; cites the CEN daily report of 14 Nov 2026 and T13) | https://www.pv-magazine.com/2026/11/17/chilean-pv-plant-hit-by-cyberattack-remains-disconnected/ | Read in this project (secondary source) |
+| 36 | Ley 21.663, Framework Cybersecurity Law (BCN) | https://www.bcn.cl/leychile/navegar?idNorma=1202434 | Found; legal text not read. Notification times taken from [35] |
+| 37 | CNE, public consultation on the draft cybersecurity and information-security technical standard for the electricity sector (28 Aug 2026) | https://www.cne.cl/es/prensa/prensa-2026/08-agosto-2026/cne-inicia-consulta-publica-de-proyecto-de-norma-tecnica-de-ciberseguridad-y-seguridad-de-la-informacion-para-el-sector-electrico/print/ | Found via search; status of the final standard unknown |
+| 38 | Idaho National Laboratory, Consequence-driven Cyber-informed Engineering (CCE) | https://www.inl.gov/cce/ | Found via search; not read in full |
+| 39 | MITRE ATT&CK, 2016 Ukraine Electric Power Attack (campaign C0025) | https://attack.mitre.org/campaigns/C0025/ | Found via search. The 2015 and 2016 Ukraine figures in `cyber.md` come from secondary sources and are not verified |
+| 40 | Mapbox (Streets v8 vector tiles, Standard style) | https://www.mapbox.com/ | Used: `web/` `?mapa=2` and design mockups. Requires a public token (`web/.env.local`, git-ignored) |
+| 41 | OpenStreetMap power data (towers, poles, transformers, lines) | https://www.openstreetmap.org/ | Used in design mockups only (2026-11-21); ODbL licence requires attribution if shipped |
 | - | Article by CEN engineers on the 25F protection sequence | https://www.pacw.org/chilean-grid-blackout-of-february-2025 | Read by the evaluator |
 | - | Andes (similar hackathon project, click-to-fail) | https://github.com/aleetreny/Encode | Verified |
 | - | COSMIC (MATLAB dynamic cascade simulator) | https://github.com/ecotillasanchez/cosmic | Verified |

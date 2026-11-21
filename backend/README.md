@@ -1,4 +1,6 @@
-# CascadaSEN backend: unified grid data API
+# Sub50 backend: unified grid data API
+
+The Python package and commands keep the earlier working name, `cascadasen`.
 
 Read-only API over one graph of the Chilean grid (SEN), built from four public sources. Every node, line, plant and comuna keeps the ids it has in each source and a provenance list. Inferred values carry `is_assumption`.
 

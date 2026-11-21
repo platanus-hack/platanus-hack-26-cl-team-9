@@ -1,0 +1,33 @@
+# Local stack. Only Docker is needed:  docker compose up --build
+#   web      http://localhost:5173  (Vite dev server, hot reload; ?mapa=2 needs a Mapbox token, see docs/docker.md)
+#   backend  http://localhost:8000  (grid data API, /map test map, /docs)
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build: ./web
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./web:/app/web
+      - ./data:/app/data
+      - /app/web/node_modules
+
+  # Optional: rebuild data/processed from the public sources (needs internet).
+  #   docker compose --profile data run --rm data-build [--refresh]
+  data-build:
+    profiles: ["data"]
+    build: ./backend
+    command: ["cascadasen-build"]
+    volumes:
+      - ./data:/data

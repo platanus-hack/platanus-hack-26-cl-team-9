@@ -5,5 +5,15 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 *.egg-info/
-.env
+# environment files: never commit tokens or keys; the empty template stays tracked
+.env*
+!.env.example
 .venv/
+
+# personal Claude Code overrides
+.claude/settings.local.json
+node_modules/
+dist/
+.env.local
+.DS_Store
+.playwright-mcp/
