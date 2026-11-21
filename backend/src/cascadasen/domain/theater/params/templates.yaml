@@ -1,0 +1,107 @@
+# Experiment templates (docs/strategy.md sections 6 and 9). All scenarios are hypothetical: they
+# model effects on the grid and on supervision, never how anyone could cause them.
+# `scenario_events` always happen (cause given per event). `adversary.plan` is what the static
+# adversary plays; the adaptive adversary chooses its own events within the same budget.
+version: 1
+
+templates:
+  value:
+    open_field:
+      label_key: tpl_open_field
+      question_key: q_open_field
+      operating_point: midday_2026
+      defenses: design_2026
+      mission: utility_continuity
+      horizon: 24
+      adversary: {enabled: false, objective: reduce_observability, adaptive: false, budget: 0}
+      scenario_events: []
+
+    flagship_observability:
+      label_key: tpl_flagship_observability
+      question_key: q_flagship_observability
+      operating_point: midday_2026
+      defenses: design_2026
+      mission: utility_continuity
+      horizon: 30
+      adversary:
+        enabled: true
+        objective: reduce_observability
+        adaptive: true
+        budget: 8
+        plan:
+          - {cycle: 2, type: D2_telemetry_delay, target: A07}
+          - {cycle: 4, type: D1_telemetry_loss, target: A06}
+          - {cycle: 6, type: D3_unreliable_data, target: A08}
+          - {cycle: 8, type: D4_comms_loss, target: A09}
+          - {cycle: 12, type: C5_remote_dispatch_loss, target: A10}
+          - {cycle: 15, type: D5_false_alarms, target: A11}
+      scenario_events:
+        - {cycle: 10, type: C1_generation_loss, target: A03, params: {mw: 900}, cause: intentional}
+
+    simultaneous_contingencies:
+      label_key: tpl_simultaneous_contingencies
+      question_key: q_simultaneous_contingencies
+      operating_point: midday_2026
+      defenses: design_2026
+      mission: utility_continuity
+      horizon: 24
+      adversary: {enabled: false, objective: complicate_recovery, adaptive: false, budget: 0}
+      scenario_events:
+        - {cycle: 2, type: E2_renewable_drop, target: NG, params: {share: 0.3, tech: solar}, cause: failure}
+        - {cycle: 2, type: C3_transmission_opening, target: A08-A09/220, cause: failure}
+        - {cycle: 3, type: C4_defense_not_acting, target: "edac:CE", cause: failure}
+        - {cycle: 4, type: D4_comms_loss, target: A09, cause: failure}
+
+    response_saturation:
+      label_key: tpl_response_saturation
+      question_key: q_response_saturation
+      operating_point: midday_2026
+      defenses: design_2026
+      mission: utility_continuity
+      horizon: 24
+      adversary:
+        enabled: true
+        objective: pressure_resources
+        adaptive: true
+        budget: 10
+        plan:
+          - {cycle: 1, type: D5_false_alarms, target: A08}
+          - {cycle: 3, type: D5_false_alarms, target: A10}
+          - {cycle: 5, type: D4_comms_loss, target: A11}
+          - {cycle: 7, type: C5_remote_dispatch_loss, target: A10}
+          - {cycle: 9, type: D4_comms_loss, target: A03}
+      scenario_events: []
+
+    degraded_recovery:
+      label_key: tpl_degraded_recovery
+      question_key: q_degraded_recovery
+      operating_point: midday_2026
+      defenses: design_2026
+      mission: utility_continuity
+      horizon: 36
+      adversary:
+        enabled: true
+        objective: complicate_recovery
+        adaptive: true
+        budget: 8
+        plan:
+          - {cycle: 4, type: D4_comms_loss, target: A07}
+          - {cycle: 6, type: D6_external_dependency_loss, target: A09}
+          - {cycle: 9, type: C4_defense_not_acting, target: pdce_zn}
+      scenario_events:
+        - {cycle: 2, type: C3_transmission_opening, target: A06-A07/500, cause: intentional}
+
+    external_dependency:
+      label_key: tpl_external_dependency
+      question_key: q_external_dependency
+      operating_point: midday_2026
+      defenses: design_2026
+      mission: utility_continuity
+      horizon: 24
+      adversary: {enabled: false, objective: reduce_observability, adaptive: false, budget: 0}
+      scenario_events:
+        - {cycle: 2, type: D6_external_dependency_loss, target: A09, cause: failure}
+        - {cycle: 2, type: D6_external_dependency_loss, target: A08, cause: failure}
+        - {cycle: 5, type: C1_generation_loss, target: A10, params: {mw: 300}, cause: failure}
+  is_assumption: true
+  note: "Hypothetical experiment designs; targets are operating areas, never named plants or companies"

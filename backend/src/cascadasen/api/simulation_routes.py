@@ -8,9 +8,19 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from cascadasen.api.simulation_schemas import NetworkOut, SimulateRequest
+from cascadasen.api.simulation_schemas import (
+    EventIn,
+    NetworkOut,
+    ReplayIn,
+    RunCreate,
+    RunSummary,
+    SimulateRequest,
+    StepIn,
+)
+from cascadasen.application.run_experiment import RunNotFoundError, run_config
 from cascadasen.application.simulate import SimulateCommand, SimulationInputError, SimulationTimeoutError
 from cascadasen.application.simulation_service import SimulationService
+from cascadasen.domain.theater.cycle import AdversaryConfig, RunFinishedError, RunInputError
 
 router = APIRouter(prefix="/api/v1")
 
@@ -68,3 +78,87 @@ def simulate(sim: Sim, body: SimulateRequest) -> Any:
         raise input_error(exc) from exc
     except SimulationTimeoutError:
         return JSONResponse({"reason": "timeout"}, status_code=503)
+
+
+# ------------------------------------------------------------------ strategic runs (stack.md 7.1)
+
+
+def run_call(fn, *args, **kwargs) -> Any:
+    try:
+        return fn(*args, **kwargs)
+    except RunNotFoundError as exc:
+        raise HTTPException(404, f"No existe la corrida: {exc.args[0]}") from exc
+    except RunInputError as exc:
+        raise HTTPException(404 if exc.not_found else 422, exc.detail()) from exc
+    except RunFinishedError as exc:
+        raise HTTPException(409, "La corrida terminó; usa /replay para repetirla") from exc
+
+
+@router.get(
+    "/sim/catalog", tags=["experimentos"], summary="Eventos, acciones, políticas, objetivos y plantillas"
+)
+def sim_catalog(sim: Sim) -> dict[str, Any]:
+    return sim.catalog()
+
+
+@router.post(
+    "/sim/runs",
+    response_model=RunSummary,
+    status_code=201,
+    tags=["experimentos"],
+    summary="Crear una corrida del teatro de operaciones",
+)
+def create_run(sim: Sim, body: RunCreate) -> dict[str, Any]:
+    data = body.model_dump(exclude={"auto_run"})
+    data["initial_events"] = [e.model_dump() for e in body.initial_events]
+    return run_call(lambda: sim.runs.create(run_config(data), body.auto_run))
+
+
+@router.get(
+    "/sim/runs/{run_id}", tags=["experimentos"], summary="Estado real, observado y estimado por agente"
+)
+def get_run(sim: Sim, run_id: str) -> dict[str, Any]:
+    return run_call(sim.runs.state, run_id)
+
+
+@router.post(
+    "/sim/runs/{run_id}/events",
+    tags=["experimentos"],
+    summary="Seleccionar un nodo y disparar un evento (se aplica en el próximo ciclo)",
+)
+def inject_event(sim: Sim, run_id: str, body: EventIn) -> dict[str, Any]:
+    return run_call(sim.runs.inject, run_id, body.type, body.target, body.params, body.cause)
+
+
+@router.post("/sim/runs/{run_id}/step", tags=["experimentos"], summary="Avanzar n ciclos de 5 minutos")
+def step_run(sim: Sim, run_id: str, body: StepIn) -> dict[str, Any]:
+    return run_call(sim.runs.step, run_id, body.cycles)
+
+
+@router.post(
+    "/sim/runs/{run_id}/replay",
+    response_model=RunSummary,
+    status_code=201,
+    tags=["experimentos"],
+    summary="Repetir con la misma semilla y eventos, cambiando política o capacidades",
+)
+def replay_run(sim: Sim, run_id: str, body: ReplayIn) -> dict[str, Any]:
+    overrides: dict[str, Any] = {}
+    for key in ("policy", "uncertainty", "seed"):
+        if getattr(body, key) is not None:
+            overrides[key] = getattr(body, key)
+    if body.adversary is not None:
+        overrides["adversary"] = AdversaryConfig(**body.adversary.model_dump())
+    if body.capabilities is not None:
+        overrides["capabilities"] = tuple(sorted(body.capabilities.items()))
+    return run_call(sim.runs.replay, run_id, overrides, body.cycles)
+
+
+@router.get("/sim/runs/{run_id}/trace", tags=["experimentos"], summary="Log de auditoría encadenado y receta")
+def run_trace(sim: Sim, run_id: str) -> dict[str, Any]:
+    return run_call(sim.runs.trace, run_id)
+
+
+@router.get("/sim/runs/{run_id}/report", tags=["experimentos"], summary="Indicadores, índices y consecuencia")
+def run_report(sim: Sim, run_id: str) -> dict[str, Any]:
+    return run_call(sim.runs.report, run_id)

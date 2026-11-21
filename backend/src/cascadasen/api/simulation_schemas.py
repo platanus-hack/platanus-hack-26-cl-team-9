@@ -68,3 +68,69 @@ class SimulateRequest(BaseModel):
     outage_duration_h: float | None = Field(None, description="0 a 2160 h; por defecto 4 h (supuesto)")
     cause: Literal["failure", "cyber_effect"] = "failure"
     frames: bool = Field(True, description="Incluir cuadros de animación (~10 Hz)")
+
+
+class AdversaryIn(BaseModel):
+    enabled: bool = True
+    objective: str = Field("reduce_observability", description="Ver /sim/catalog → objectives")
+    budget: float = Field(8, description="Acciones del adversario (digital = 1, física = 2)")
+    adaptive: bool = Field(True, description="True: aprende (EXP3); False: juega el plan de la plantilla")
+
+
+class EventIn(BaseModel):
+    type: str = Field(
+        description="Ver /sim/catalog → events, p. ej. D1_telemetry_loss, C3_transmission_opening"
+    )
+    target: str = Field(
+        description="Área (A06), corredor (A06-A07/500), zona (NG), defensa (pdce_zn) o id real (SE…)"
+    )
+    params: dict[str, Any] = Field(default_factory=dict)
+    cause: Literal["intentional", "failure"] = "intentional"
+    cycle: int | None = Field(None, ge=0, description="Solo en initial_events: ciclo en que ocurre")
+
+
+class RunCreate(BaseModel):
+    template: str = Field("open_field", description="Ver /sim/catalog → templates (flagship_observability…)")
+    policy: str = Field("C", description="A reactiva, B preventiva, C coordinación adaptativa")
+    seed: int = 7
+    uncertainty: float = Field(1.0, description="0 información perfecta, 1 línea base, 2 degradado")
+    horizon: int | None = Field(None, description="Ciclos de 5 min; por defecto el de la plantilla")
+    adversary: AdversaryIn | None = Field(None, description="Por defecto el de la plantilla")
+    capabilities: dict[str, float] = Field(
+        default_factory=dict, description="Capacidad por recurso (modo III)"
+    )
+    operating_point: str | None = None
+    defenses: str | None = None
+    initial_events: list[EventIn] = Field(default_factory=list)
+    auto_run: bool = Field(False, description="Correr hasta el final al crear")
+
+
+class StepIn(BaseModel):
+    cycles: int = Field(1, ge=1, le=72)
+
+
+class ReplayIn(BaseModel):
+    policy: str | None = None
+    uncertainty: float | None = None
+    seed: int | None = None
+    adversary: AdversaryIn | None = None
+    capabilities: dict[str, float] | None = None
+    cycles: int | None = Field(None, ge=1, le=72, description="Por defecto los ciclos que corrió la original")
+
+
+class RunSummary(BaseModel):
+    run_id: str
+    status: str
+    cycle: int
+    horizon: int
+    t_min: int
+    template: str
+    policy: str
+    seed: int
+    uncertainty: float
+    operating_point: str
+    defenses: str
+    adversary: dict[str, Any]
+    notice: str
+    replay_of: str | None = None
+    overrides: dict[str, Any] | None = None

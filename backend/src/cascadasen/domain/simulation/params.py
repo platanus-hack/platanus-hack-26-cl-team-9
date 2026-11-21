@@ -59,9 +59,9 @@ def check_provenance(tree: Any, where: str, path: str = "") -> None:
 
 
 @cache
-def load_params(name: str) -> dict[str, Any]:
-    """Load and validate `params/<name>.yaml`. Cached: files are read once per process."""
-    path = PARAMS_DIR / f"{name}.yaml"
+def load_params(name: str, directory: Path = PARAMS_DIR) -> dict[str, Any]:
+    """Load and validate `<directory>/<name>.yaml`. Cached: files are read once per process."""
+    path = directory / f"{name}.yaml"
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:

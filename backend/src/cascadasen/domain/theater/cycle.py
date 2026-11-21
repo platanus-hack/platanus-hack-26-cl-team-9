@@ -1,0 +1,654 @@
+"""Strategic cycle (docs/strategy.md section 7): one run of the cyber-physical theatre.
+
+Each operational cycle:
+    0. tick: effects expire, segmentation and external support finish, restorations progress
+    1. events: scenario, user injections and the adversary act on the real state (one transient)
+    2. observe: the digital engine turns the real state into what supervision shows
+    3. understand (ISR), intent (C2), plan (Operations, Stabilisation, Logistics)
+    4. validate (deterministic) and decide (C2, within attention), with vetoes
+    5. execute approved actions (re-validated) on the real state
+    6. evaluate (indicators, Auditor findings) and adapt (adversary learns)
+Everything is appended to a hash-chained audit log. A run is reproducible from its recipe
+(configuration, seed and injected events with their cycle).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import random
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+from cascadasen.domain.agents.adversary import AdversaryAgent
+from cascadasen.domain.agents.auditor import AuditorAgent, CycleRecord
+from cascadasen.domain.agents.base import AdversaryView, AgentView
+from cascadasen.domain.agents.commander import CommanderAgent
+from cascadasen.domain.agents.isr import ISRAgent
+from cascadasen.domain.agents.logistics import LogisticsAgent
+from cascadasen.domain.agents.operations import OperationsAgent
+from cascadasen.domain.agents.stabilization import StabilizationAgent
+from cascadasen.domain.simulation.defenses import DefenseSet, UnknownDefenseSetError
+from cascadasen.domain.simulation.grid import Physics, UnknownOperatingPointError, build_state
+from cascadasen.domain.simulation.network import ReducedNetwork
+from cascadasen.domain.simulation.timeline import NOTICE
+from cascadasen.domain.theater.audit import AuditLog
+from cascadasen.domain.theater.catalog import EVENTS, OBJECTIVES
+from cascadasen.domain.theater.config import TheaterConfig, UnknownTemplateError, theater_config
+from cascadasen.domain.theater.decisions import COA, ActionFeedback, Decision
+from cascadasen.domain.theater.digital import observe
+from cascadasen.domain.theater.evaluator import Evaluator, real_affected, wrong_decision
+from cascadasen.domain.theater.execution import (
+    EventError,
+    EventRequest,
+    ExecutionState,
+    Executor,
+    UnknownEventTargetError,
+)
+from cascadasen.domain.theater.resources import Ledger
+from cascadasen.domain.theater.state import AreaDigital, ObservedState, RealState
+from cascadasen.domain.theater.validator import ValidationContext, costs_of, validate
+
+UNCERTAINTY_RANGE = (0.0, 2.0)
+
+
+class RunInputError(ValueError):
+    """Invalid run input: HTTP 422, or 404 when it names something that does not exist."""
+
+    def __init__(
+        self, field: str, message: str, valid: list[str] | None = None, not_found: bool = False
+    ) -> None:
+        super().__init__(message)
+        self.field, self.message, self.valid, self.not_found = field, message, valid or [], not_found
+
+    def detail(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"field": self.field, "message": self.message}
+        if self.valid:
+            out["valid"] = self.valid
+        return out
+
+
+class RunFinishedError(RuntimeError):
+    pass
+
+
+def rng_for(seed: int, name: str) -> random.Random:
+    digest = hashlib.sha256(f"{seed}:{name}".encode()).hexdigest()
+    return random.Random(int(digest[:16], 16))
+
+
+@dataclass(frozen=True)
+class AdversaryConfig:
+    enabled: bool = False
+    objective: str = "reduce_observability"
+    budget: float = 8.0
+    adaptive: bool = True
+
+
+@dataclass(frozen=True)
+class RunConfig:
+    template: str = "open_field"
+    policy: str = "C"
+    seed: int = 7
+    uncertainty: float = 1.0
+    horizon: int | None = None
+    adversary: AdversaryConfig | None = None
+    capabilities: tuple[tuple[str, float], ...] = ()
+    operating_point: str | None = None
+    defenses: str | None = None
+    initial_events: tuple[dict[str, Any], ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["capabilities"] = dict(self.capabilities)
+        d["initial_events"] = [dict(e) for e in self.initial_events]
+        return d
+
+
+def defense_areas(network: ReducedNetwork, defenses: DefenseSet) -> dict[str, list[str]]:
+    out = {
+        "pdce_zn": [a for a in (defenses.pdce_north, defenses.pdce_south) if a in network.areas],
+        "edac": list(network.order),
+        "extreme_edac": [a for z in defenses.extreme_mw_by_zone for a in network.zone_areas(z)]
+        or list(network.order),
+        "lfsm_o": list(network.order),
+    }
+    for z in network.zones:
+        out[f"edac:{z}"] = network.zone_areas(z)
+    return out
+
+
+@dataclass
+class Simulation:
+    network: ReducedNetwork
+    config: RunConfig
+    physics: Physics = field(default_factory=Physics.load)
+    cfg: TheaterConfig = field(default_factory=theater_config)
+
+    def __post_init__(self) -> None:
+        cfg, conf, net = self.cfg, self.config, self.network
+        self._validate_config()
+        self.template = cfg.template(conf.template)
+        self.horizon = conf.horizon or self.template.horizon
+        adv = conf.adversary or AdversaryConfig(
+            enabled=bool(self.template.adversary.get("enabled")),
+            objective=self.template.adversary.get("objective", "reduce_observability"),
+            budget=float(self.template.adversary.get("budget", cfg.adversary["budget"])),
+            adaptive=bool(self.template.adversary.get("adaptive", True)),
+        )
+        self.adversary_config = adv
+        self.operating_point = conf.operating_point or self.template.operating_point
+        self.defenses_id = conf.defenses or self.template.defenses
+        self.defenses = DefenseSet.load(self.defenses_id)
+        self.mission = cfg.missions[self.template.mission]
+        self.policy = cfg.policies[conf.policy]
+        grid = build_state(net, self.operating_point, self.physics)
+        self.plan_load = dict(grid.load_mw)
+        self.real = RealState(0, grid, {a: AreaDigital() for a in net.order})
+        self.ledger = Ledger({**cfg.resources, **dict(conf.capabilities)})
+        self.defense_areas = defense_areas(net, self.defenses)
+        self.executor = Executor(net, self.physics, self.defenses, cfg, self.defense_areas)
+        self.ex = ExecutionState()
+        self.log = AuditLog()
+        self.isr = ISRAgent(net, cfg.isr)
+        self.c2 = CommanderAgent(net, self.plan_load)
+        self.ops = OperationsAgent(net)
+        self.stab = StabilizationAgent(net, self.plan_load, self.defense_areas)
+        self.logistics = LogisticsAgent(net)
+        self.auditor = AuditorAgent()
+        self.adversary: AdversaryAgent | None = None
+        if adv.enabled:
+            self.adversary = AdversaryAgent(
+                areas=list(net.order),
+                objective=adv.objective,
+                budget=adv.budget,
+                adaptive=adv.adaptive,
+                plan=list(self.template.adversary.get("plan") or []),
+                rng=rng_for(conf.seed, "adversary"),
+                catalog=cfg.adversary,
+            )
+        self.evaluator = Evaluator(
+            self.mission.priority_areas, cfg.clock["cycle_minutes"] / 60.0, self.physics.voll_usd_per_kwh
+        )
+        self.rng_digital = rng_for(conf.seed, "digital")
+        self.history_real = [self._real_snapshot()]
+        self.observations: list[ObservedState] = []
+        self.snapshots: list[dict[str, Any]] = []
+        self.injected: list[dict[str, Any]] = []
+        self.queue: list[EventRequest] = []
+        self.feedback: list[ActionFeedback] = []
+        self.cycle = 0
+        self.effect_seq = 0
+        self.scheduled: dict[int, list[EventRequest]] = {}
+        sources = [("scenario", e) for e in self.template.scenario_events]
+        sources += [("user", e) for e in conf.initial_events]
+        for source, e in sources:
+            req = EventRequest(
+                e["type"],
+                e["target"],
+                tuple((e.get("params") or {}).items()),
+                source,
+                e.get("cause", "intentional"),
+            )
+            self._check_event(req)
+            self.scheduled.setdefault(int(e.get("cycle", 0)), []).append(req)
+        self.log.append(
+            0,
+            "setup",
+            "engine",
+            "run_created",
+            {
+                "config": conf.as_dict(),
+                "horizon": self.horizon,
+                "operating_point": self.operating_point,
+                "defenses": self.defenses_id,
+                "mission": self.mission.id,
+                "policy": self.policy.id,
+                "adversary": asdict(adv),
+            },
+        )
+
+    # ------------------------------------------------------------ validation
+
+    def _validate_config(self) -> None:
+        cfg, conf = self.cfg, self.config
+        if conf.template not in cfg.templates:
+            raise RunInputError("template", "plantilla desconocida", sorted(cfg.templates), not_found=True)
+        if conf.policy not in cfg.policies:
+            raise RunInputError("policy", "política desconocida", sorted(cfg.policies))
+        lo, hi = UNCERTAINTY_RANGE
+        if not lo <= conf.uncertainty <= hi:
+            raise RunInputError("uncertainty", f"entre {lo:g} y {hi:g}")
+        if conf.horizon is not None and not 1 <= conf.horizon <= cfg.clock["max_horizon"]:
+            raise RunInputError("horizon", f"entre 1 y {cfg.clock['max_horizon']} ciclos")
+        if conf.adversary and conf.adversary.objective not in OBJECTIVES:
+            raise RunInputError("adversary.objective", "objetivo desconocido", list(OBJECTIVES))
+        if conf.adversary and not 0 <= conf.adversary.budget <= 50:
+            raise RunInputError("adversary.budget", "entre 0 y 50")
+        for pool, cap in conf.capabilities:
+            if pool not in cfg.resources:
+                raise RunInputError("capabilities", f"{pool}: recurso desconocido", sorted(cfg.resources))
+            if not 0 <= cap <= 10_000:
+                raise RunInputError("capabilities", f"{pool}: entre 0 y 10000")
+        try:
+            if conf.operating_point:
+                build_state(self.network, conf.operating_point, self.physics)
+            if conf.defenses:
+                DefenseSet.load(conf.defenses)
+        except UnknownOperatingPointError as exc:
+            raise RunInputError("operating_point", "punto de operación desconocido") from exc
+        except UnknownDefenseSetError as exc:
+            raise RunInputError("defenses", "conjunto de defensas desconocido") from exc
+        except UnknownTemplateError as exc:  # pragma: no cover - checked above
+            raise RunInputError("template", "plantilla desconocida") from exc
+
+    def _check_event(self, req: EventRequest) -> tuple[str, str | None]:
+        try:
+            return self.executor.resolve(req)
+        except UnknownEventTargetError as exc:
+            raise RunInputError("target", str(exc), not_found=True) from exc
+        except EventError as exc:
+            raise RunInputError("type", str(exc), sorted(EVENTS)) from exc
+
+    # ------------------------------------------------------------- interface
+
+    @property
+    def finished(self) -> bool:
+        return self.cycle >= self.horizon
+
+    def inject(
+        self, type_: str, target: str, params: dict[str, Any] | None = None, cause: str = "intentional"
+    ) -> dict[str, Any]:
+        """Queue a user event for the next cycle (the frontend's "select a node and trigger")."""
+        if self.finished:
+            raise RunFinishedError("la corrida terminó")
+        req = EventRequest(type_, target, tuple((params or {}).items()), "user", cause)
+        resolved, area = self._check_event(req)
+        self.queue.append(req)
+        rec = {"cycle": self.cycle, **req.as_dict()}
+        self.injected.append(rec)
+        self.log.append(self.cycle, "inject", "user", "event_queued", rec)
+        return {
+            "accepted": True,
+            "applies_at_cycle": self.cycle,
+            "resolved_target": resolved,
+            "area": area,
+            "notice": NOTICE if cause == "intentional" else None,
+        }
+
+    def step(self, n: int = 1) -> list[dict[str, Any]]:
+        out = []
+        for _ in range(n):
+            if self.finished:
+                break
+            out.append(self._cycle())
+        return out
+
+    def run_to_end(self) -> None:
+        while not self.finished:
+            self._cycle()
+
+    # ---------------------------------------------------------------- views
+
+    def _real_snapshot(self) -> dict[str, tuple[float, bool]]:
+        g = self.real.grid
+        return {a: (g.served_mw[a], a not in g.blackout_areas) for a in self.network.order}
+
+    def _view(self, role: str, obs: ObservedState, reports: tuple, **extra: Any) -> AgentView:
+        h = self.cfg.clock["history"]
+        return AgentView(
+            role=role,
+            cycle=self.cycle,
+            observed=obs,
+            history=tuple(self.observations[-h - 1 : -1]),
+            mission=self.mission,
+            policy=self.policy,
+            resources=tuple((p, round(self.ledger.available(p), 3)) for p in self.ledger.capacity),
+            field_reports=reports,
+            feedback=tuple(self.feedback),
+            active=tuple(sorted(self.ex.active)),
+            **extra,
+        )
+
+    def _adversary_view(self) -> AdversaryView:
+        real = self.real
+        g = real.grid
+        demand = sum(g.load_mw.values())
+        return AdversaryView(
+            cycle=self.cycle,
+            budget_left=(self.adversary.budget - self.adversary.spent) if self.adversary else 0.0,
+            posture=tuple(
+                (a, "segmented" if d.segmented else ("manual" if d.manual_ops else "normal"))
+                for a, d in real.digital.items()
+            ),
+            my_effects=tuple(
+                (e.id, e.event, e.area or e.target, e.established, e.start, e.cleared)
+                for e in real.effects
+                if e.source == "adversary"
+            ),
+            public_served_share=sum(g.served_mw.values()) / demand if demand else 1.0,
+            public_dark_areas=tuple(sorted(g.blackout_areas)),
+        )
+
+    def _people(self) -> float:
+        g = self.real.grid
+        return sum(
+            self.network.areas[a].population * max(0.0, 1.0 - g.served_mw[a] / g.load_mw[a])
+            for a in self.network.order
+            if g.load_mw[a] > 0
+        )
+
+    # ---------------------------------------------------------------- cycle
+
+    def _cycle(self) -> dict[str, Any]:
+        k, real, net = self.cycle, self.real, self.network
+        real.cycle = k
+        self.ledger.new_cycle(k)
+        notes = self.executor.tick(real, self.ex)
+        for key in self.ex.released:
+            self.ledger.release(key)
+        self.ex.released.clear()
+
+        # 1. events
+        reqs = [*self.scheduled.get(k, []), *self.queue]
+        self.queue = []
+        if self.adversary:
+            reqs += self.adversary.act(self._adversary_view())
+        applied = []
+        if reqs:
+            pairs = []
+            for r in reqs:
+                self.effect_seq += 1
+                pairs.append((r, f"fx{self.effect_seq}"))
+            for eff, status in self.executor.apply_events(real, pairs):
+                applied.append(
+                    {
+                        "effect": eff.id,
+                        "type": eff.event,
+                        "target": eff.target,
+                        "area": eff.area,
+                        "source": eff.source,
+                        "cause": eff.cause,
+                        "status": status,
+                    }
+                )
+        self.history_real.append(self._real_snapshot())
+
+        # 2. observe
+        prev = self.observations[-1] if self.observations else None
+        obs, truth = observe(
+            net,
+            real,
+            self.history_real,
+            prev,
+            self.rng_digital,
+            self.config.uncertainty,
+            self.cfg.digital,
+            self.defense_areas,
+        )
+        self.observations.append(obs)
+        reports = tuple(r for r in self.ex.pending_reports if r.cycle <= k)
+        self.ex.pending_reports = [r for r in self.ex.pending_reports if r.cycle > k]
+
+        # 3. understand, intent, plan
+        isr_report, isr_coas = self.isr.step(self._view("isr", obs, reports))
+        c2_view = self._view("c2", obs, reports, isr=isr_report)
+        self.c2.observe(c2_view)
+        intent = self.c2.intent(c2_view)
+        staff = {
+            r: self._view(r, obs, reports, isr=isr_report, intent=intent)
+            for r in ("operations", "stabilization", "logistics")
+        }
+        coas = [
+            *isr_coas,
+            *self.ops.propose(staff["operations"]),
+            *self.stab.propose(staff["stabilization"]),
+            *self.logistics.propose(staff["logistics"]),
+        ]
+        unique: dict[str, COA] = {}
+        for c in coas:
+            if c.key not in unique or c.benefit > unique[c.key].benefit:
+                unique[c.key] = c
+        coas = list(unique.values())
+
+        # 4. validate and decide
+        ctx = ValidationContext(
+            net,
+            real,
+            self.ledger,
+            self.mission,
+            intent,
+            self.cfg.actions,
+            self.defense_areas,
+            self.defenses,
+            self.physics,
+            active=set(self.ex.active),
+        )
+        verdicts = {c.key: validate(c, ctx) for c in coas}
+        vetoes = {
+            **self.stab.review(staff["stabilization"], coas),
+            **self.logistics.review(staff["logistics"], coas),
+        }
+        decisions = self.c2.decide(
+            self._view("c2", obs, reports, isr=isr_report, intent=intent), coas, verdicts, vetoes
+        )
+
+        # 5. execute
+        executed, feedback, wrong, ok_count = [], [], 0, 0
+        for d in (d for d in decisions if d.approved):
+            self.ledger.spend({"operator_attention": 1}, f"c2:{k}", None)
+            v = validate(d.coa, ctx)
+            if not v.ok:
+                feedback.append(ActionFeedback(k, d.coa.action, d.coa.target, False, v.observable_code))
+                executed.append({**d.coa.as_dict(), "verdict": v.code, "ok": False})
+                continue
+            if wrong_decision(real, d.coa):
+                wrong += 1
+            duration = self.cfg.actions.get(d.coa.action, {}).get("duration")
+            self.ledger.spend(
+                costs_of(d.coa, self.cfg.actions), d.coa.key, k + int(duration) if duration else None
+            )
+            self.executor.apply_action(real, self.ex, d.coa)
+            ctx.active = set(self.ex.active)
+            ok_count += 1
+            feedback.append(ActionFeedback(k, d.coa.action, d.coa.target, True, "executed"))
+            executed.append({**d.coa.as_dict(), "verdict": "ok", "ok": True})
+        self.feedback = feedback
+
+        # 6. evaluate and adapt
+        eval_ctx = ValidationContext(
+            net,
+            real,
+            self.ledger,
+            self.mission,
+            None,
+            self.cfg.actions,
+            self.defense_areas,
+            self.defenses,
+            self.physics,
+            active=set(self.ex.active),
+            check_physics=False,
+        )
+        metrics = self.evaluator.record(
+            real,
+            isr_report,
+            self.c2.estimate,
+            eval_ctx,
+            len(coas),
+            sum(d.approved for d in decisions),
+            ok_count,
+            wrong,
+            self._people(),
+        )
+        affected = sorted(real_affected(real))
+        findings = self.auditor.audit(
+            CycleRecord(
+                k,
+                tuple(d.as_dict() for d in decisions),
+                tuple(executed),
+                tuple(affected),
+                isr_report.affected,
+            )
+        )
+        if self.adversary:
+            self.adversary.learn(self._adversary_view())
+
+        decisions_out = [d.as_dict() for d in decisions]
+        self.log.append(
+            k,
+            "events",
+            "engine",
+            "events_applied",
+            {"events": applied, "transient": real.last_transient if applied else None},
+        )
+        self.log.append(
+            k,
+            "observe",
+            "digital",
+            "observation",
+            {"alarms": len(obs.alarms), "false_alarms": len(truth.false_alarms)},
+        )
+        self.log.append(k, "understand", "isr", "picture", isr_report.as_dict())
+        self.log.append(k, "intent", "c2", "intent", intent.as_dict())
+        self.log.append(k, "plan", "staff", "proposals", {"coas": [c.as_dict() for c in coas]})
+        self.log.append(k, "decide", "c2", "decisions", {"decisions": decisions_out, "vetoes": vetoes})
+        self.log.append(k, "execute", "engine", "executed", {"executed": executed, "notes": notes})
+        self.log.append(k, "evaluate", "auditor", "findings", {"findings": findings})
+        self.log.append(k, "evaluate", "evaluator", "metrics", metrics.as_dict())
+
+        snapshot = self._snapshot(
+            k, applied, obs, isr_report, intent, coas, decisions, executed, notes, findings, metrics.as_dict()
+        )
+        self.snapshots.append(snapshot)
+        self.cycle += 1
+        return snapshot
+
+    def _snapshot(
+        self,
+        k: int,
+        applied: list,
+        obs: ObservedState,
+        isr_report,
+        intent,
+        coas: list[COA],
+        decisions: list[Decision],
+        executed: list,
+        notes: list,
+        findings: list,
+        metrics: dict[str, Any],
+    ) -> dict[str, Any]:
+        real, net = self.real, self.network
+        g = real.grid
+        areas = {}
+        for a in net.order:
+            d = real.digital[a]
+            areas[a] = {
+                "demand_mw": round(g.load_mw[a], 1),
+                "served_mw": round(g.served_mw[a], 1),
+                "energized": a not in g.blackout_areas,
+                "digital": {
+                    "telemetry": round(d.telemetry, 2),
+                    "delay": d.delay,
+                    "reliable": d.reliable,
+                    "comms": d.comms,
+                    "remote_control": d.remote_control,
+                    "segmented": d.segmented,
+                    "manual_ops": d.manual_ops,
+                    "external_ok": d.external_ok,
+                },
+                "effects": [e.id for e in real.active_effects(a)],
+            }
+        return {
+            "cycle": k,
+            "t_min": k * self.cfg.clock["cycle_minutes"],
+            "events": applied,
+            "real": {
+                "areas": areas,
+                "corridors": {cid: ("closed" if g.corridor(net, cid) else "open") for cid in net.corridors},
+                "disabled_defenses": sorted(g.disabled_defenses),
+                "transient": real.last_transient
+                if real.last_transient and real.last_transient["cycle"] == k
+                else None,
+                "worst_level": real.worst_level,
+            },
+            "observed": obs.as_dict(),
+            "estimated": {
+                "isr": isr_report.as_dict(),
+                "c2": {
+                    "intent": intent.as_dict(),
+                    "served_estimate": {a: round(v, 1) for a, v in self.c2.estimate.items()},
+                },
+                "stabilization": {"waiting_for_stability": k <= self.stab.unstable_until},
+            },
+            "proposals": [c.as_dict() for c in coas],
+            "decisions": [d.as_dict() for d in decisions],
+            "executed": executed,
+            "notes": notes,
+            "findings": findings,
+            "resources": self.ledger.snapshot(),
+            "metrics": metrics,
+        }
+
+    # ------------------------------------------------------------ outputs
+
+    def recipe(self) -> dict[str, Any]:
+        return {"config": self.config.as_dict(), "injected": list(self.injected)}
+
+    def trace(self) -> dict[str, Any]:
+        return {
+            "head": self.log.head,
+            "verified": self.log.verify(),
+            "entries": self.log.entries,
+            "recipe": self.recipe(),
+        }
+
+    def report(self) -> dict[str, Any]:
+        ind = self.evaluator.report(
+            self.mission.continuity_threshold, self.mission.observability_threshold, self.real.worst_level
+        )
+        consequence = ind.pop("consequence", {})
+        moments = []
+        if self.evaluator.onset is not None:
+            moments.append({"cycle": self.evaluator.onset, "rationale_key": "aar_onset"})
+        if self.evaluator.understood_at is not None:
+            moments.append({"cycle": self.evaluator.understood_at, "rationale_key": "aar_understood"})
+        first = next((s["cycle"] for s in self.snapshots if s["executed"]), None)
+        if first is not None:
+            moments.append({"cycle": first, "rationale_key": "aar_first_action"})
+        rec = ind.get("recoverability_cycles")
+        if rec is not None and self.evaluator.onset is not None:
+            moments.append({"cycle": self.evaluator.onset + rec, "rationale_key": "aar_recovered"})
+        return {
+            "run": {
+                "template": self.template.id,
+                "question_key": self.template.question_key,
+                "policy": self.policy.id,
+                "seed": self.config.seed,
+                "uncertainty": self.config.uncertainty,
+                "horizon": self.horizon,
+                "cycles_run": self.cycle,
+                "finished": self.finished,
+                "operating_point": self.operating_point,
+                "defenses": self.defenses_id,
+            },
+            "notice": NOTICE,
+            "mission": {
+                "id": self.mission.id,
+                "label_key": self.mission.label_key,
+                "priority_areas": list(self.mission.priority_areas),
+                "continuity_threshold": self.mission.continuity_threshold,
+            },
+            "indicators": ind,
+            "coordination": self.auditor.summary(),
+            "consequence": consequence,
+            "adversary": None
+            if not self.adversary
+            else {
+                "objective": self.adversary.objective,
+                "adaptive": self.adversary.adaptive,
+                "budget": self.adversary.budget,
+                "spent": self.adversary.spent,
+                "strategy_mix": self.adversary.strategy_mix(),
+            },
+            "after_action": sorted(moments, key=lambda m: m["cycle"]),
+            "trace_head": self.log.head,
+        }

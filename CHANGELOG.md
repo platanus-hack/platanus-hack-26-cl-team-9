@@ -2,6 +2,28 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(theater): strategic cycle, agents and runs API
+
+- **Changed:**
+  - New `domain/theater/` with real vs observed state and a digital engine (missing, stale or unreliable supervision, false alarms, perfect information at uncertainty 0).
+  - Abstract events (C1-C5, D1-D6, E1-E2) and twelve defensive actions.
+  - A resource ledger with attention saturation, a deterministic validator (it reads the real state; agents only learn the observable reason) and an execution engine with effect lifecycles and operational restoration.
+  - A hash-chained audit log, an evaluator (continuity, awareness, response capacity, resistance, reserve, recoverability, coordination, wrong decisions, Freedom of Action Index) and the six-step cycle.
+  - New `domain/agents/`: C2, ISR (Bayesian cause belief), Operations, Stabilisation, Logistics, a read-only Auditor, and the Adversary (EXP3 over the abstract catalog, or the template plan when static).
+  - New `application/run_experiment.py` and endpoints `/api/v1/sim/catalog`, `/sim/runs`, `/runs/{id}`, `/events`, `/step`, `/replay`, `/trace`, `/report`.
+  - Six experiment templates, including `flagship_observability`.
+- **Why:** The strategic experimentation layer of `docs/strategy.md`, and the API the frontend uses to select a node, trigger an event and compare policies.
+- **Agents:**
+  - Agent views never carry `RealState`/`GridState` (tested).
+  - An unchanged replay reproduces the trace hash, and the adversary's weights are never exported (only its event-type mix).
+  - Event targets accept area, corridor, zone, defence or real `SE…`/`L…` ids. Unknown target or template returns 404, invalid input 422, and an inject into a finished run 409.
+  - Flagship (static adversary, seed 7):
+    - A, reactive: continuity 0.966.
+    - B, preventive: 0.984, but 39 unnecessary actions.
+    - C, adaptive: 0.978, with the fewest resources spent and the best response capacity.
+  - Every number in `theater.yaml`/`templates.yaml` is a declared design assumption.
+- **Files:** `backend/src/cascadasen/domain/theater/*`, `backend/src/cascadasen/domain/agents/*`, `backend/src/cascadasen/application/run_experiment.py`, `backend/src/cascadasen/api/simulation_*.py`, `backend/tests/*`, `backend/README.md`.
+
 ## 2026-11-21 · feat(sim): physical engine on the reduced SEN and POST /api/v1/simulate
 
 - **Changed:**

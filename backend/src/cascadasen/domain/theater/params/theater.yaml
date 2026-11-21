@@ -1,0 +1,123 @@
+# Strategic experimentation layer (docs/strategy.md). Every number is a declared assumption of the
+# experiment design: the layer models decisions under uncertainty, not a specific utility.
+version: 1
+
+clock:
+  value: {cycle_minutes: 5, default_horizon: 30, max_horizon: 72, history: 6}
+  is_assumption: true
+  note: "Operational cycle of 5 minutes; a run covers 2-3 hours (strategy.md 4)"
+
+resources:
+  value:
+    field_crews: 6
+    comms_kits: 4
+    fast_reserve_mw: 400
+    battery_mw: 300
+    analyst_attention: 3
+    operator_attention: 4
+  is_assumption: true
+  note: "Limited defensive resources for one incident. Attention pools refill every cycle (saturation)"
+
+digital:
+  value:
+    base_noise: 0.02
+    base_false_alarm_rate: 0.04
+    telemetry_floor: 0.2
+    backup_comms_telemetry: 0.7
+    backup_comms_delay: 1
+    defense_fault_detect_p: 0.5
+    control_lost_detect_p: 0.5
+    unreliable_detect_p: 0.1
+    unreliable_detect_p_tasked: 0.6
+    external_notice_p: 0.7
+  is_assumption: true
+  note: "Supervision quality at uncertainty level 1; level 2 doubles noise and false alarms, level 0 is perfect information"
+
+effects:
+  value:
+    D1_telemetry_loss: {share: 1.0}
+    D2_telemetry_delay: {cycles: 2, duration: 4}
+    D3_unreliable_data: {bias: 0.12}
+    D4_comms_loss: {}
+    D5_false_alarms: {rate: 1.5, duration: 4}
+    D6_external_dependency_loss: {lag: 2}
+    C1_generation_loss: {share: 0.25}
+    C2_common_mode_loss: {share: 0.4, tech: solar}
+    C3_transmission_opening: {}
+    C4_defense_not_acting: {}
+    C5_remote_dispatch_loss: {}
+    E1_demand_surge: {share: 0.05}
+    E2_renewable_drop: {share: 0.3, tech: solar}
+  is_assumption: true
+  note: "Default size of each abstract event; effects persist until a defensive action clears them unless a duration is given"
+
+actions:
+  value:
+    isr_tasking: {costs: {analyst_attention: 1}, duration: 3}
+    field_verification: {costs: {field_crews: 1}, duration: 1}
+    manual_operation: {costs: {field_crews: 1}}
+    backup_comms: {costs: {comms_kits: 1}}
+    digital_segmentation: {costs: {}, clears_after: 2}
+    preventive_load_reduction: {costs: {}, share: 0.05}
+    fast_reserve: {costs: {fast_reserve_mw: 100}, mw: 100}
+    battery_support: {costs: {battery_mw: 100}, mw: 100}
+    rearm_defense: {costs: {field_crews: 1}, duration: 1}
+    islanding_prep: {costs: {}}
+    restore_element: {costs: {field_crews: 1}, duration: 2}
+    request_external_support: {costs: {}, duration: 3}
+  is_assumption: true
+  note: "Costs in resource units; duration in cycles (no duration = held until released)"
+
+restoration:
+  value: {load_share_per_cycle: 0.3, gen_share_per_cycle: 0.34, manual_slowdown: 0.5, reserve_recovery: 0.5}
+  is_assumption: true
+  note: "Operational restoration abstraction, not an electrical restoration model (strategy.md 4)"
+
+isr:
+  value:
+    prior_intentional: 0.1
+    lr_multi_area_digital: 3.0
+    lr_unreliable_detected: 4.0
+    lr_field_confirms_digital: 3.0
+    lr_physical_only: 0.6
+    lr_persistence: 1.4
+    affected_threshold: 0.45
+    decay: 0.6
+    corroboration_cycles: 2
+  is_assumption: true
+  note: "Likelihood ratios of the ISR belief update; they set how fast the picture forms"
+
+policies:
+  value:
+    A: {label_key: policy_A_reactive, light: 0.8, medium: 0.8, heavy: 0.8, preventive: false, reserve_keep: 0.0, prefer_reversible: false, verify_first: false}
+    B: {label_key: policy_B_preventive, light: 0.0, medium: 0.3, heavy: 0.3, preventive: true, reserve_keep: 0.0, prefer_reversible: false, verify_first: false}
+    C: {label_key: policy_C_adaptive, light: 0.15, medium: 0.45, heavy: 0.7, preventive: false, reserve_keep: 0.3, prefer_reversible: true, verify_first: true}
+  is_assumption: true
+  note: "Thresholds on ISR confidence per action weight (strategy.md 7)"
+
+adversary:
+  value:
+    budget: 8
+    cooldown: 2
+    gamma: 0.2
+    costs: {digital: 1, physical: 2}
+    objectives:
+      reduce_observability: [D1_telemetry_loss, D2_telemetry_delay, D4_comms_loss, D6_external_dependency_loss]
+      raise_uncertainty: [D3_unreliable_data, D5_false_alarms, D2_telemetry_delay]
+      pressure_resources: [D5_false_alarms, D4_comms_loss, C5_remote_dispatch_loss]
+      provoke_unnecessary_actions: [D5_false_alarms, D3_unreliable_data]
+      complicate_recovery: [D4_comms_loss, D6_external_dependency_loss, C4_defense_not_acting, C1_generation_loss]
+  is_assumption: true
+  note: "Abstract catalog only (cyber.md 8 item 7); EXP3 exploration rate gamma"
+
+missions:
+  value:
+    utility_continuity:
+      label_key: mission_utility_continuity
+      priority_areas: [A09, A08]
+      continuity_threshold: 0.95
+      priority_threshold: 0.99
+      observability_threshold: 0.9
+      worst_acceptable_level: L1
+  is_assumption: true
+  note: "Priority areas are a population-density proxy until critical-load data exists (cyber.md 9)"

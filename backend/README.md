@@ -62,3 +62,11 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
 - `application/simulate.py`: `POST /api/v1/simulate`. `application/simulation_service.py` is the facade the routes use.
 - `GET /api/v1/sim/network`: areas and corridors with the real node and line ids they aggregate. A substation id from the map (`SE…`) is a valid target everywhere.
 - Validation cases: `tests/validation/test_engine_cases.py` runs V1-V5, V7, V8 and V10 on the real snapshot. V6 and V9 are skipped until their reference data is in the repo.
+- `domain/theater/`: strategic layer (`docs/strategy.md`).
+  - State and supervision: real vs observed state (`state.py`), and the digital engine for missing, stale or unreliable supervision and false alarms (`digital.py`).
+  - Catalog: abstract events and defensive actions (`catalog.py`).
+  - Control: resource ledger (`resources.py`), deterministic validator (`validator.py`), and the execution engine with effect lifecycles and restoration (`execution.py`).
+  - Record and orchestration: hash-chained audit log (`audit.py`), indicators and the Freedom of Action Index (`evaluator.py`), and the six-step cycle (`cycle.py`).
+  - Experiment design lives in `params/theater.yaml` and `params/templates.yaml`.
+- `domain/agents/`: C2, ISR, Operations, Stabilisation, Logistics, Auditor and the adaptive Adversary. They are deterministic and seeded. Views (`base.py`) never carry the real state, which a test checks.
+- `application/run_experiment.py`: `RunManager` (in-memory LRU of 100 runs; replay re-injects events at their cycles, so an unchanged replay gives the same trace hash) and the catalog. Endpoints are under `/api/v1/sim/*` (`docs/stack.md` 7.1).
