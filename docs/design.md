@@ -12,7 +12,8 @@ All mockups are in the team's Paper file "Platanus Hack": https://app.paper.desi
 | Design v1 (Claude) | First pass: 6 screens x 3 variations (A, B, C), glowing "night lights" style | Rejected as "too AI" |
 | Design v2 (Claude) | Same 6 screens x 3 variations in the Electricity Maps style, plus tower-level views Z1-Z3 (Nueva Pan de Azucar, a selected tower, a tower fault) | Current reference for screens. Frame 6C was blocked by a Paper sync error; check it exists |
 | Design v1 / v2 (Gemini) | Gemini's variations; v2 has 5 "control center" options on charcoal grays | Alternatives, not chosen |
-| Design v3 | The 5 zoom levels from all of Chile down to S/E Calama (section 4), in the variant A interface | Current reference for the map |
+| Design v3 | The 5 zoom levels from all of Chile down to S/E Calama (section 4), in the variant A interface | Reference for the zoom levels |
+| Design v4 | Felipe's review of v3 applied to 3 frames: V1 Red, V2 Simulación en curso, V3 Después del corte (section 3.1) | Current reference for the map and the simulation |
 | Logo Ideas | 20 black and white logo options, 1000 x 1000 (section 6) | Option 01 (Subscript) chosen, in `project-logo.png` |
 | Battle Page | Ideas for a "Batalla" tab that shows the attacker vs defender agent game | In progress; see the open decision in `plan.md` section 9 |
 | Vacía (borrar) | Empty page created by mistake | Delete by hand (Paper's API cannot delete pages) |
@@ -45,6 +46,15 @@ Copy the visual language of Electricity Maps (app.electricitymaps.com) closely. 
 | Cities and population | Cream | Reserved |
 
 The colorimetry was checked in OKLCH on 2026-11-21. Problems it fixed: 66 kV outshone 500 kV, plant colors collided with voltage colors (hydro with 110 kV, wind with 66 kV, thermal with 500 kV), buildings read as muddy brown, and substations had the same gray as roads.
+
+### 3.1 Design v4 rules (review of 2026-11-21)
+
+- **One meaning per color at a time.** In the Red tab, line color is voltage. In the Simulación tab, line color is load (% of capacity) on a gray-to-red ramp: under 50 % gray, 50-75 % light gray, 75-100 % pale red, over 100 % red and thicker. Out of service is dashed gray; no voltage is near-black. Stroke width keeps showing voltage in both tabs, so the load ramp never reuses the voltage hues (in v2, orange meant 220 kV in one tab and about 75 % load in the other).
+- **Legends use line samples**, not a segmented bar, so a categorical legend does not read as a percentage bar. Legend labels match the panel labels (154-345, 100-110, 44-69).
+- **Events are numbered once and shown in three places**: the panel's "Historial de eventos", markers on the timeline track, and pins on the map. The current event is red and has an expanded tooltip on the map; past events keep a pin, and the first one keeps a short label. Events that happen within a few tenths of a second share one marker ("1·2").
+- **The timeline** shows the frequency of each island as a small curve above the track, the played part of the track in white, and the event markers on it.
+- **Assumptions live in context**: a "N supuestos en esta simulación" row in the panel and the info icon next to each number. The nav rail no longer has "Referencia / Metodología / Supuestos"; it has one "Fuentes y supuestos" item, and under "Escenarios" it lists the active and recent scenarios.
+- The simulation map images were made by recoloring the v3 N1 SVG with a throwaway script (not in the repo). The event times and numbers are invented for the mockup, as in section 5.
 
 ## 4. Zoom levels
 

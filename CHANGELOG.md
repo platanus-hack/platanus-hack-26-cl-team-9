@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(design): add Design v4 page and simulation color rules
+
+- **Changed:** `docs/design.md` section 1 lists the new Paper page "Design v4" (V1 Red, V2 Simulación en curso, V3 Después del corte) as the current reference for the map and the simulation; Design v3 stays the reference for zoom levels. New section 3.1 records the v4 rules.
+- **Why:** Felipe's review of Design v3: the load legend reused the voltage hues, the event history was disconnected from the map and the timeline, and "Supuestos" took a nav rail slot.
+- **Agents:** In the Simulación tab, line color is load on a gray-to-red ramp and stroke width is voltage; never reuse voltage hues for load. Events are numbered once and shown in the panel history, on the timeline and as map pins. Assumptions sit next to their numbers and in a panel row, not in the nav rail. Section 3 still says 500 kV is magenta while v3 and v4 draw it near-white; that row is not fixed yet.
+- **Files:** `docs/design.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · chore(project): enlarge Sub50 logo wordmark
 
 - **Changed:** `project-logo.png` is replaced with a version of the same logo (option 01) where the wordmark fills more of the 1000 x 1000 square. 40 KB PNG. `docs/design.md` section 6 updated.
