@@ -28,3 +28,4 @@ Restart `backend` or call `POST /api/v1/admin/reload` afterwards.
 - The backend image uses `uv sync --locked`, so `backend/uv.lock` must be current.
 - `web` runs the dev server, not a production build.
 - Compose may warn that buildx is missing (Colima); the build still works with the classic builder.
+- AWS deployment (ECS Fargate, ALB, CloudFront) uses separate production images and Terraform, see `docs/infrastructure.md`.

@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(infra): document the AWS deployment
+- **Changed:** `docs/infrastructure.md` covers architecture, sizing, blue/green, `deploy.sh plan|apply`, tag scheme, Route 53 + ACM variables and the backlog. `docs/docker.md` links to it.
+- **Why:** AGENTS.md requires docs with each behavior change.
+- **Agents:** Backlog items have no issue numbers: `scripts/issue.sh` is missing and the fork has issues disabled. Create them upstream when the team agrees. The two-target-group blue/green setup is validated by Terraform only; the ECS API confirms it at first apply.
+- **Files:** `docs/infrastructure.md`, `docs/docker.md`.
 ## 2026-11-21 · feat(infra): add deploy.sh with plan and apply phases
 - **Changed:** `infrastructure/deploy.sh plan` checks the AWS account (402909940511), creates the versioned, encrypted state bucket `cascadasen-tfstate-402909940511` if missing, runs init/fmt/validate/plan and writes `infrastructure/.deploy-tag`. `apply` creates ECR, builds and pushes both images (`linux/amd64`), then applies a fresh plan and prints the CloudFront URL. `terraform.tfvars.example` lists the optional variables.
 - **Why:** The user runs deploys with their own credentials; plan and apply are split so the plan is reviewed first.
