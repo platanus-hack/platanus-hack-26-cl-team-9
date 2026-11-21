@@ -90,8 +90,11 @@ push_image() {
     echo "Image cascadasen/$name:$tag already in ECR, skipping build"
     return
   fi
-  docker build --platform linux/amd64 -f "$INFRA_DIR/docker/$name.Dockerfile" -t "$repo_url:$tag" "$REPO_ROOT"
-  docker push "$repo_url:$tag"
+  # Gzip layers, Docker (non-OCI) media types, no provenance/SBOM: Fargate failed to extract
+  # the default containerd-store layers ("wrong diff id").
+  docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+    --output "type=image,name=$repo_url:$tag,push=true,compression=gzip,force-compression=true,oci-mediatypes=false" \
+    -f "$INFRA_DIR/docker/$name.Dockerfile" "$REPO_ROOT"
 }
 
 cmd_apply() {
