@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 · docs(pitch): add pitch ideas and project benefits
+- **Changed:** New `docs/pitch_idea.md`: pitch notes (25F losses of US$ 984 millones with source, "wow" moment ideas) and a "Beneficios de este proyecto" section with a short list of 17 benefits followed by a paragraph per benefit, including cost vs resilience trade-offs, best combination for a budget and minimum investment that avoids a national blackout.
+- **Why:** The team needs material for the pitch.
+- **Agents:** `docs/pitch_idea.md` is pitch material, in Spanish. Costs of the measures (e.g. US$ per MW of battery) are assumed values, not sourced data. The note in the doc says no user has been interviewed yet; do not turn the benefits into claims of validated demand.
+- **Files:** `docs/pitch_idea.md`, `CHANGELOG.md`.
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 ## 2026-11-21 · feat(regional): reduce the other countries' networks like Chile's
 
