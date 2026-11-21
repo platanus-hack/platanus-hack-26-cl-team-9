@@ -233,3 +233,45 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 - **Primary reserve**: capacity that synchronous machines add automatically when frequency falls.
 - **Ride-through**: ability of a plant to stay connected during a short disturbance. Not modelled.
 - **25F**: the 25 February 2025 national blackout.
+
+## 10. Operation mode: the strategic theatre on this map (backend contract)
+
+The strategic theatre (`docs/strategy.md`) now runs on the same network and engine as this map. A run lasts 24-36 cycles of 5 minutes. In each cycle, digital degradation (telemetry loss, delayed or unreliable data, communications loss, false alarms), an adaptive adversary acting by area, unplanned external events, and the defenders' decisions and field crews play out. A physical event runs the same cascade engine as a line cut here. This section is the contract for the frontend. **Backend only for now:** the API, the snapshots and the offline cache are done; the visual layer of mapa 3 is not part of this PR and is left to the frontend work. A user flow that fits it: pick hour, scenario, defence policy and adversary; play 5-minute cycles drawing `grid`, areas and crews; replay `transient` in seconds; click a line or substation to inject an event (`POST /events`, applied next cycle); end with the report, the after-action and a replay with another policy (`/replay` + `GET /snapshots`).
+
+**Sources.**
+- Live: the API under `/api/v1/sim/*` (`docs/stack.md` 7.1). Every run without `seed` is a different random run.
+- Offline fallback: `web/public/cache/theater/`, written by `uv run cascadasen-sim-fixtures` (git-ignored, like the cut cache).
+
+**Areas.** The 13 operating areas `A01`-`A13` are groups of the 188 buses by latitude band. Corridors (`A06-A07`) are the `R###` lines that cross between two areas. Defence functions are `edac:norte_grande` and `edac:centro_sur`. The adversary acts only on areas, zones or defence functions, never on a single bus or line (`cyber.md` 8.7).
+
+**Types**, reusing `web/src/cascade/types.ts`:
+
+```ts
+interface TheaterNetwork extends Network {          // GET /sim/network?point=  |  cache/theater/network-<point>.json
+  point: string; points: string[];
+  nodes: (NetNode & { area: string })[];
+  lines: (NetLine & { corridor: string | null })[];
+  buses: Record<string, BusState>;
+  areas: { id: string; name: string; zone: string; lat: number; lon: number; population: number; buses: string[]; anchor_bus: string }[];
+  corridors: { id: string; a: string; b: string; lines: string[] }[];
+  defenses: Record<string, string[]>;                 // edac:<zone> -> areas
+}
+interface TheaterSnapshot {                         // one per 5-min cycle: POST /sim/runs/{id}/step  |  cache run file .snapshots[]
+  cycle: number; t_min: number;
+  events: { effect: string; type: string; target: string; area: string | null; source: "scenario" | "user" | "adversary" | "external"; cause: string; status: string }[];
+  grid: Frame & { buses: Record<string, number> };  // quasi-steady state at the end of the cycle; draw it with layers.ts
+  transient: Timeline | null;                       // the cascade (seconds) when a physical event happened this cycle
+  areas: Record<string, { observability: number; posture: "normal" | "manual" | "segmented"; effects: { id: string; type: string; source: string }[] }>;
+  crews: { id: string; base: string; position: string; bus: string; lon: number; lat: number; task: string | null; target: string | null; target_bus: string | null; arrival: number | null; status: "free" | "busy" }[];
+  observed: unknown; estimated: unknown; decisions: unknown[]; executed: unknown[]; metrics: unknown;   // panels
+  llm: { status: "chosen" | "unavailable" | "idle" | "replayed"; model: string | null; chosen?: string[]; explanation?: string } | null;  // C2 with an LLM, when the run has llm_commander
+}
+```
+
+**How the two clocks fit.** The operation mode belongs in the main map (`/`). The player moves cycle by cycle (5 min) and draws `grid` with the existing layers: `buildCascadeLayers({ network, buses, frame: snapshot.grid, time, selected, mode })`, with the same `mode` (`"2d" | "3d"`, `?vista=2d`) as the cut viewer. In 2D the demand is drawn as discs, in 3D as columns; `snapshot.grid.buses` gives the served MW per bus to scale them. When `transient` is not null, the viewer can replay that cascade inside the cycle with the same code as a cut (`frames`, `events`, `frequency_hz`). An area overlay can colour areas by `observability` and `posture`. Crews are drawn at `lon`/`lat` and move toward `target_bus` until `arrival`.
+
+**Other endpoints the frontend needs:** `GET /sim/runs/{id}/snapshots?start=` (snapshots already computed, e.g. after `/replay`, which runs all its cycles at once) and `GET /sim/catalog` → `llm: {available, model}` (whether the server has an LLM commander configured).
+
+**Offline index** (`cache/theater/index.json`): `{points, runs: [{file, point, template, policy, seed, adversary}], notice}`. Each run file holds `{run, recipe, snapshots, report, after_action, trace_head}`.
+
+Never shown: the adversary's learned weights or any ranking of areas or elements. Every run carries the notice "Escenario hipotético: se modela el efecto, no el ataque."

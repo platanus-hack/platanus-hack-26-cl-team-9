@@ -20,7 +20,7 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 | Layer | Choice | Status | Notes |
 |---|---|---|---|
 | Frontend | React + Vite + TypeScript | MVP | Decided earlier |
-| Map and 3D-style layers | deck.gl standalone (`MapView`, pitch ~50 degrees) by default; optional Mapbox vector basemap with deck.gl on top (`MapboxOverlay`) | Done (both) | Default map (`/`) has no tile server: Chile's outline is a local GeoJSON, so it works offline. `?mapa=2` adds Mapbox (merged in #6): needs internet and `VITE_MAPBOX_TOKEN` in `web/.env.local`, and falls back to the offline map without a token. The zoom-level designs in `design.md` section 4 assume the Mapbox basemap. Which map the demo uses is open (`plan.md` section 9) |
+| Map and 3D-style layers | deck.gl; Mapbox basemap when `VITE_MAPBOX_TOKEN` is set, offline Chile outline otherwise (`createBaseMap`) | Done | The main map (`/`, also `?mapa=3`) is mapa 3, the cascade viewer (`docs/mapa3.md`), with a 2D / 3D toggle (`?vista=2d`) and city labels. `?mapa=1` (offline deck.gl map) and `?mapa=2` (Mapbox) are deprecated and kept as reference. The strategic theatre's operation mode is specified for this map (`mapa3.md` section 10) |
 | Chile outline | Local simplified GeoJSON (Natural Earth admin-1 or IDE Chile/BCN, simplified with mapshaper) | MVP | Continental Chile only; see `datasets.md` |
 | State | Zustand | MVP | Holds one playback clock `t` that drives all animations |
 | Charts | uPlot | MVP | Frequency curve synchronised with `t`, read from fixture data |
@@ -47,7 +47,7 @@ datasets (public APIs) --scripts--> data/processed/network.json
         web/public/cache/*.json  ------>  frontend player (reads timeline, renders from clock t)
 ```
 
-The diagram is the target architecture. In the frontend MVPs, fixture files in `web/public/` take the place of the engine output and the API, and the engine and API are backlog.
+The diagram is the original target. The architecture as built (backend ports and adapters, the two engines, the strategic theatre, frontend and deployment) is in [`architecture.md`](architecture.md). In particular, `network.json` does not exist: the engines read `data/processed/{grid_snapshot,operating_points,baseline_opf}.json`, and the cache lives in `web/public/cache/`.
 
 Principles:
 - The engine is the only place with physics. The frontend never computes physics, so there are no two implementations to diverge.
@@ -62,16 +62,18 @@ Current layout (2026-11-21). Entries marked (backlog) do not exist yet.
 ```
 AGENTS.md, CLAUDE.md  agent workflow rules; CHANGELOG.md is written for agents
 docs/                 this documentation
-backend/              Python package `cascadasen` (uv): source adapters, unify, validation, read-only FastAPI, tests
+backend/              Python package `cascadasen` (uv), ports and adapters (`architecture.md`): source adapters, unify,
+                      validation, the two engines (`domain/cascade`, `domain/simulation`), the strategic theatre and
+                      its agents, FastAPI, tests
 data/
   scripts/            build_chile_outline.sh, build_node_index.py, build_operating_points.py, build_baseline_opf.py
   raw/                downloaded sources (git-ignored cache)
   processed/          grid_snapshot.json, sen_network.json, geo/*.geojson, chile.geojson, node_index.json,
                       operating_points.json, baseline_opf.json, atlas_sen.html
 web/                  Vite + React + TypeScript app (deck.gl map, Mapbox option, node popup)
-  public/cache/       (backlog) timelines: fixtures first, builder output later
-engine/               (backlog) cascade, frequency model, narration keys, YAML parameters with sources
-scripts/              lint.sh and git hooks; build_cache.py is backlog
+  public/cache/       precomputed cuts per operating point (`cascadasen-cache`) and offline theatre runs
+infrastructure/       Terraform and deploy script for AWS (`infrastructure.md`)
+scripts/              lint.sh and git hooks
 docker-compose.yml    backend and web services (`docs/docker.md`)
 .github/workflows/    lint.yml (ruff and changelog check)
 ```
@@ -132,6 +134,8 @@ Seed values (25F, centre-south):
 | Blackout | Frequency falls below the trip limit |
 | Uncertain: outside what the model evaluates | Pre-failure flow on the lost north 500 kV corridor exceeds the validity range of the CEN north defence scheme (1,600 MW north-to-south, 1,000 MW south-to-north [4]; 1,700 MW per [6]); voltage may dominate there |
 | Not modelled | The case needs something the model lacks (e.g. an island without defence data) |
+
+In the 188-bus cascade engine (`engine.md`) the uncertain verdict is `result: "voltage_limited"` with `summary.uncertain: true`, raised when a cut opens the 25F boundary with a pre-fault flow outside that range. The UI label is "limitado por tensión (incierto), evento documentado, no calculado".
 
 Consequence levels L0-L3 (`cyber.md` section 5) aggregate these island results into one headline value per run.
 
@@ -221,11 +225,11 @@ These fields support the scenario classes in `cyber.md` section 4. All are optio
 - `consequence_level`: `L0` absorbed, `L1` contained, `L2` regional blackout, `L3` national blackout.
 - `failure_cost_usd` = `unserved_energy_mwh` x 1,000 x 8.79 US$/kWh [19]. The value is a regulatory valuation and depends on the assumed duration.
 
-## 7. API (backlog)
+## 7. API
 
-Not needed for the frontend MVPs. The frontend reads fixtures only, which also gives the offline behaviour in section 9.
+The backend serves everything under `/api/v1` (FastAPI, `backend/src/cascadasen/api/`); the live schema is at `/docs`. The frontend can still work from fixtures only, which also gives the offline behaviour in section 9.
 
-`POST /simulate`
+`POST /api/v1/simulate` runs one physical contingency on the reduced network (`strategy.md` section 2.1) and returns a `timeline.json` (section 6). `elements_out` accepts corridor ids, area ids (`A01`-`A13`) or real snapshot node ids (`SE…`), resolved to the area that contains them.
 
 | Field | Type | Rule | On failure |
 |---|---|---|---|
@@ -243,6 +247,31 @@ Not needed for the frontend MVPs. The frontend reads fixtures only, which also g
 - Computation over 2 s: HTTP 503 `reason: timeout`; the frontend shows the nearest cached result or "not available".
 - Parameter files failing to load at startup: fatal, ERROR naming the file and field. A parameter without a source is rejected at startup.
 - Frontend without API: works from the cache only; combinations disabled with a discreet notice.
+
+### 7.1 Strategic experimentation API
+
+Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON, and narration comes as `rationale_key` + `params` (Spanish templates in the frontend).
+
+| Method and path | Purpose |
+|---|---|
+| `GET /sim/network?point=` | The mapa 3 network of a point (`nodes` `B###`, `lines` `R###`, same shape as `web/public/cache/network-<year>.json`, plus `area` per node and `corridor` per line), `buses` (gen, load, people), `areas` (`buses`, `anchor_bus`, `lat`/`lon`), `corridors` (`lines`) and `defenses`. The 13-area network of `POST /simulate` moved to `GET /simulate/network` |
+| `GET /sim/catalog` | Event types, defensive COAs, policies A/B/C, adversary objectives, missions, experiment templates |
+| `POST /sim/runs` | Create a run: `template`, `policy`, `adversary` `{objective, budget, adaptive}`, `uncertainty`, `seed` (optional: omitted means a fresh random seed, returned in the summary and recorded in the recipe), `horizon`, `capabilities`, `initial_events`, `auto_run`, `stochastic` (default true), `llm_commander` (default false; needs the server's LLM adapter, else rules) |
+| `POST /sim/runs/{id}/events` | Select a node and trigger an event: `{type, target, params}`, applied at the next cycle and logged with `source: user` |
+| `POST /sim/runs/{id}/step` | Advance `n` cycles; returns one snapshot per cycle |
+| `POST /sim/runs/{id}/replay` | New run with the same seed and injected events, and another policy or capabilities |
+| `GET /sim/runs/{id}` | Real, observed and per-agent estimated state, resources, field crews (`crews`: id, base, position, task, target, arrival, status), live indicators |
+| `GET /sim/runs/{id}/trace` | Hash-chained audit log and the replay recipe |
+| `GET /sim/runs/{id}/report` | Indicators, indices, consequence card (L0-L3, people, unserved MWh, cost) and after-action keys |
+| `POST /sim/campaigns`, `GET /sim/campaigns/{id}` | Campaign matrix (modes I, II, III): comparison table, Decisional Fragility Index, Adaptation Index |
+| `GET /sim/runs/{id}/after_action` | After-action review in Spanish from fixed templates; with the LLM adapter enabled it adds `narrative` (`interpreter: llm`) |
+| `GET /sim/narrative` | Spanish templates for every `text_key`, `rationale_key`, label and reason code |
+
+- `POST /sim/runs` takes `point` (mapa 3 operating point; alias `operating_point`). `target` accepts an area, zone, corridor, `B###`, `R###` or real `SE...` id; the response echoes `resolved_target` (a bus id for a substation), so a click on mapa 3 works directly.
+- Each cycle snapshot (`/step`, `GET /runs/{id}`) carries, besides `real`/`observed`/`estimated`/`decisions`: `grid` (mapa 3 `Frame`: `edges`, `dark`, `islands`, plus `buses` served MW), `transient` (a full mapa 3 `Timeline` when a physical event ran a cascade in that cycle, else null), `areas` (`observability` 0-1, `posture` normal/manual/segmented, active `effects` with source) and `crews` (`position`, `bus`, `lon`/`lat`, `target`, `target_bus`, `arrival`, `status`). Contract and viewer notes: `docs/mapa3.md` section 10.
+- Errors: 404 unknown run, element or template; 422 invalid input; 409 event injected into a finished run.
+- Runs live in memory (the most recent 100 are kept). Any run can be rebuilt from its recipe (`GET /sim/runs/{id}/trace`). An unchanged replay gives the same trace hash.
+- Campaign body: `mode` (`diagnostic`, `adversarial`, `capability`), `templates`, `policies`, `seeds` (up to 10), `uncertainty_levels`, `adversary_variants` (`none`, `static`, `adaptive`), `capability_variants` (`[{id, capabilities}]`, the first one is the baseline), `horizon`, `objective`, `budget`, `point`, `random_seeds` (1-10: draw fresh seeds instead of `seeds`, returned in `spec.seeds` and shared by every cell). Each table row adds `spread` (p10/p50/p90 of mission continuity and recoverability across seeds). It runs synchronously and is capped at 240 runs (422 above).
 
 ## 8. Testing and CI
 

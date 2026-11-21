@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +16,18 @@ class Settings(BaseSettings):
     data_dir: Path = REPO_ROOT / "data"
     http_timeout_s: float = 120.0
     user_agent: str = "cascadasen/0.1 (Platanus Hack 26; datos abiertos)"
+
+    # optional LLM commander and interpreter (docs/strategy.md 10); needs `uv sync --extra llm`
+    llm_enabled: bool = False
+    llm_model: str = "claude-opus-5-5"
+    llm_effort: str = "low"  # one call per C2 decision cycle: keep it fast
+    llm_timeout_s: float = 30.0
+    # provider: "anthropic" (Claude API, ANTHROPIC_API_KEY or an `ant auth login` profile), "bedrock"
+    # (Claude in Amazon Bedrock) or "bedrock-converse" (any Bedrock text model, model id as is). AWS
+    # credentials come from the environment or a profile, never from .env
+    llm_provider: Literal["anthropic", "bedrock", "bedrock-converse"] = "anthropic"
+    aws_region: str | None = None
+    aws_profile: str | None = None
 
     ide_energia_url: str = (
         "https://ide-energia.minenergia.cl/server/rest/services/IDE_Energia/Visor_IDE_Energ%C3%ADa/MapServer"

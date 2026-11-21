@@ -1,0 +1,43 @@
+# Physical engine parameters (docs/stack.md section 4). Numbers carry a source or is_assumption.
+version: 1
+
+f0_hz: {value: 50.0, source: "NTSyCS nominal frequency"}
+dt_s: {value: 0.01, source: "stack.md 4.4 (10 ms step)"}
+horizon_s: {value: 20.0, source: "stack.md 4.4 (20 s horizon)"}
+frame_step_s: {value: 0.1, source: "stack.md 6 (frames at about 10 Hz)"}
+blackout_hz: {value: 47.5, source: "NTSyCS art. 3-10, per [4] (stack.md 4.4)"}
+overfrequency_trip_hz:
+  value: 52.5
+  is_assumption: true
+  note: "Generator over-frequency protection limit; not in the docs"
+load_damping_pct_per_hz:
+  value: 2.0
+  is_assumption: true
+  note: "D in [1, 2] per stack.md 4.4; calibrated on V3a together with the reserve time constant"
+reserve_share_of_sync:
+  value: 0.04
+  is_assumption: true
+  note: "Primary reserve as a share of online synchronous generation when no published value exists"
+reserve_time_constant_s:
+  value: 1.0
+  is_assumption: true
+  note: "First-order primary response (stack.md 4.4); calibrated on V3a"
+reserve_full_deviation_hz:
+  value: 0.5
+  is_assumption: true
+  note: "Frequency deviation at which the whole primary reserve is deployed"
+inertia_h_s:
+  value: {termica: 4.0, hidro: 3.0, bioenergia: 3.0, geotermica: 3.0}
+  is_assumption: true
+  note: "Typical inertia constant per technology; solar, wind and storage add none"
+overload_trip_ratio: {value: 1.2, source: "stack.md 4.3 (120 % of capacity, parameter)"}
+weak_link_window_s: {value: 2.0, source: "stack.md 4.3 (overloads in the first ~2 s)"}
+max_cascade_iterations: {value: 20, source: "stack.md 4.3"}
+battery_delay_s: {value: 0.2, source: "[18] per stack.md 4.5"}
+battery_ramp_s: {value: 0.3, source: "[18] per stack.md 4.5"}
+local_cut_mw: {value: 200.0, source: "stack.md 4.5 (islands without synchronous generation, parameter)"}
+voll_usd_per_kwh: {value: 8.79, source: "[19] CNE failure cost (stack.md 6.1)"}
+default_outage_h:
+  value: 4.0
+  is_assumption: true
+  note: "Default outage duration for unserved energy; editable input (cyber.md section 9)"

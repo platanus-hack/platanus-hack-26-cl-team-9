@@ -1,0 +1,76 @@
+# Defence sets (docs/stack.md 4.3-4.6). EDAC steps are [threshold_hz, share of island load].
+# The published step tables ([4] Table 3-10, [14] Table 1, [16] Annex E) are not transcribed yet:
+# step values below are placeholders declared as assumptions and calibrated on the cases named.
+version: 1
+
+sets:
+  25F:
+    label_key: def_25F
+    edac_steps:
+      value: [[49.0, 0.05], [48.9, 0.04], [48.8, 0.04], [48.7, 0.04], [48.5, 0.04], [48.3, 0.04]]
+      is_assumption: true
+      note: "Placeholder for [4] Table 3-10; calibrated on V3b"
+    edac_delay_s: {value: 0.15, is_assumption: true, note: "Relay and breaker time"}
+    extreme_edac:
+      value: {threshold_hz: 49.5, gradients_hz_s: [-0.9, -1.2, -1.9], mw_by_zone: {CS: 671.55}}
+      source: "[4] Table 3-11 (stack.md 4.4)"
+      note: "Split in three equal tranches by gradient (assumption); zones without data get none"
+    pdce_zn:
+      value: {active: false, t_sep_s: 0.23, north: A06, south: A07, limit_ns_mw: 1600.0, limit_sn_mw: 1000.0}
+      source: "[4] (stack.md 4.4 and 4.6)"
+      note: "Not in service on 25F, so separation happened at the weak-link time"
+    weak_link_trip_s: {value: 1.566, source: "[4] separation time as it happened (stack.md 4.4)"}
+    lfsm_o:
+      value: {start_hz: 50.2, share_per_hz: 0.45, time_constant_s: 0.5}
+      is_assumption: true
+      note: "Over-frequency curtailment of inverter generation; calibrated on V5"
+
+  implemented_dec2025:
+    label_key: def_implemented_dec2025
+    edac_steps:
+      value: [[49.0, 0.035], [48.9, 0.035], [48.8, 0.035], [48.7, 0.035], [48.5, 0.035], [48.3, 0.035]]
+      is_assumption: true
+      note: "Placeholder; calibrated on V3a (25F with the north defence scheme acting at 0.23 s)"
+    edac_delay_s: {value: 0.15, is_assumption: true, note: "Relay and breaker time"}
+    extreme_edac:
+      value: {threshold_hz: 49.5, gradients_hz_s: [-0.9, -1.2, -1.9], mw_by_zone: {CS: 671.55}}
+      source: "[4] Table 3-11 (stack.md 4.4)"
+      note: "Split in three equal tranches by gradient (assumption)"
+    pdce_zn:
+      value: {active: true, t_sep_s: 0.23, north: A06, south: A07, limit_ns_mw: 1600.0, limit_sn_mw: 1000.0}
+      source: "[4] (stack.md 4.4 and 4.6)"
+    weak_link_trip_s: {value: 1.566, source: "[4] separation time as it happened (stack.md 4.4)"}
+    lfsm_o:
+      value: {start_hz: 50.2, share_per_hz: 0.45, time_constant_s: 0.5}
+      is_assumption: true
+      note: "Over-frequency curtailment of inverter generation; calibrated on V5"
+
+  design_2026:
+    label_key: def_design_2026
+    edac_steps:
+      value: [[49.0, 0.057], [48.9, 0.057], [48.8, 0.057], [48.7, 0.057], [48.6, 0.057], [48.5, 0.057], [48.4, 0.057]]
+      is_assumption: true
+      note: "Placeholder for [14] Table 1 and [16] Annex E; calibrated on V7 and V8"
+    edac_delay_s: {value: 0.15, is_assumption: true, note: "Relay and breaker time"}
+    extreme_edac:
+      value: {threshold_hz: 49.5, gradients_hz_s: [-0.9, -1.2, -1.9], mw_by_zone: {}}
+      is_assumption: true
+      note: "The 2026 design is modelled with frequency steps only until [14] Table 1 is transcribed"
+    pdce_zn:
+      value: {active: true, t_sep_s: 0.23, north: A06, south: A07, limit_ns_mw: 1600.0, limit_sn_mw: 1000.0}
+      source: "[4] (stack.md 4.4 and 4.6)"
+    weak_link_trip_s: {value: 1.566, source: "[4] separation time as it happened (stack.md 4.4)"}
+    lfsm_o:
+      value: {start_hz: 50.2, share_per_hz: 0.45, time_constant_s: 0.5}
+      is_assumption: true
+      note: "Over-frequency curtailment of inverter generation"
+
+# Behaviour "as it happened" (only with scenario 25F): generation that tripped although the grid code
+# says it should ride through.
+as_happened_25F:
+  documented_trips:
+    value:
+      - {start_s: 1.6, end_s: 6.0, mw: 1971.0, side: south, label_key: doc_rideThrough_failed}
+      - {start_s: 1.6, end_s: 6.0, mw: 737.34, side: south, label_key: doc_unidentified_generation}
+    source: "[4] (verified; stack.md 4.4)"
+    note: "Ramp timing is an assumption calibrated on V4"

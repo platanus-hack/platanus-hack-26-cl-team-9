@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · docs(architecture): document the system as built
+
+- **Changed:** New `docs/architecture.md`: system overview (sources → `data/processed` → API and static cache → web), backend ports and adapters with the dependency rule, the five ports and their adapters, domain modules (two engines, theatre, agents), use cases and CLI commands, the cut and theatre-cycle flows, frontend, data and parameters, deployment and tooling. `stack.md` sections 2-3 point to it and drop the stale `network.json`/`engine/` backlog entries; `AGENTS.md` and `backend/README.md` link it.
+- **Why:** Ricardo asked for architecture documentation; only the README's data-layer diagram existed and `stack.md` described the original target.
+- **Agents:** Keep `docs/architecture.md` in sync when a layer, port, engine, CLI command or deployment piece changes. `domain/` must not import from `api/`, `application/` or `infrastructure/`.
+- **Files:** `docs/architecture.md`, `docs/stack.md`, `AGENTS.md`, `backend/README.md`.
+
 ## 2026-11-21 · fix(web): rename the site title from CascadaSEN to Sub50
 - **Changed:** The browser tab `<title>` in `web/index.html` and the panel `<h1>` in `web/src/App.tsx` now read "Sub50".
 - **Why:** The project is called Sub50; the site still showed the old name.
@@ -17,6 +24,303 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** `?limite=0` disables all of it for A/B comparison. The offline map only gets the zoom limits, not a pan limit. 3D buildings are gone from the 3D view; revert `LITE_BASEMAP` if the team wants them back. Mapbox billing (per map load) does not change.
 - **Files:** `web/src/map/baseMap.ts`, `web/README.md`.
 
+## 2026-11-21 · docs(agents): operation view pending outside this backend PR
+
+- **Changed:** `docs/agents.md` pending item 2 no longer points to `web/src/operation/`, which this branch removed; drawing the physical readings waits for the frontend PR.
+- **Why:** The physical-bots commits were moved onto `feat/strategic-sim-api`, which is backend only.
+- **Agents:** The snapshot fields (`observed.areas[].freq_hz`, `rocof_hz_s`, `transient.islands[]`) are the contract the frontend PR should read.
+- **Files:** `docs/agents.md`.
+
+## 2026-11-21 · docs(agents): pending work of the physical bots
+
+- **Changed:** `docs/agents.md` section 4 is now a table of pending work: LLM commander physical context, operation view drawing the readings, releasing reserve and batteries, regenerating the map cache, the repeating `low_inertia` alarm, the per-island inertia floor, and V2–V9 calibration on the 188-bus network.
+- **Why:** Ricardo asked to keep the "not done yet" items written down.
+- **Agents:** Pick pending work from `docs/agents.md` section 4 and remove the row when it is done.
+- **Files:** `docs/agents.md`.
+
+## 2026-11-21 · feat(agents): bots read frequency, rocof, inertia and voltage-limited islands
+
+- **Changed:** `AreaObs` gains `freq_hz` and `rocof_hz_s`, filtered by supervision (missing → `None`, stale or unreliable → a normal 50 Hz, fresh → noise `digital.freq_noise_hz`). New alarms: `frequency_out_of_band` (49.0–51.0 Hz), `high_rocof` (≥ 1 Hz/s), `low_inertia` (island below 31,000 MWs after losing units) and `voltage_limited`; thresholds in `theater.yaml` → `physics_alarms` (`TheaterConfig.physics_alarms`, merged into `digital`). ISR weighs them as physical evidence. Stabilisation proposes batteries on steep RoCoF or lost inertia, reserve under frequency, and load reduction when nothing is left; it vetoes restorations into out-of-band or voltage-uncertain islands and a controlled islanding next to a low-inertia island. New `docs/agents.md` holds the bots' physical contract; `strategy.md`, `stack.md` 4.6 and `AGENTS.md` (read order) point to it.
+- **Why:** Ricardo (2026-11-21): the bots must work on the physics of the power-system review (operating band, RoCoF, inertia that falls, voltage documented and not computed), not only on MW.
+- **Agents:** Read `docs/agents.md` before touching `domain/agents/` or `theater/digital.py`. New rationale keys `stab_fast_support_low_inertia`, `stab_reserve_under_frequency`, `stab_voltage_uncertain`, `stab_low_inertia` (Spanish text in `narrative_es.yaml`). The snapshot's `observed.areas` carries `freq_hz`/`rocof_hz_s`; the web does not draw them yet. Open: the LLM commander context has no physical summary yet (`cycle.py`/`llm.py` were being edited in parallel on `feat/strategic-sim-api`). `AdversaryView` must stay free of physical fields (test).
+- **Files:** `backend/src/cascadasen/domain/agents/{stabilization,isr}.py`, `backend/src/cascadasen/domain/theater/{state,digital,config}.py`, `backend/src/cascadasen/domain/theater/params/{theater,narrative_es}.yaml`, `backend/tests/unit/test_physical_bots.py`, `docs/agents.md`, `docs/strategy.md`, `docs/stack.md`, `AGENTS.md`.
+
+## 2026-11-21 · feat(theater): real islands, battery pool and frequency per area
+
+- **Changed:** `TheaterGrid` keeps `battery` per area apart from `extra_reserve` (passed to the engine as `battery_by_bus`, 200 ms + 300 ms response) and reads the engine's settled islands into `freq_hz`, `nadir_hz`, `rocof_hz_s` and `island_result` per area, plus `last_islands` (area lists). `settle_frequency()` puts energized areas back at 50 Hz at each `Executor.tick` (secondary control, assumption). `island_inertia_mws(area)` is new. `last_transient["islands"]` now lists the engine's real islands touching hit areas, with `min_hz`, `final_hz`, `rocof_hz_s`, `inertia_mws`; `voltage_limited` maps to `uncertain` and `last_transient["uncertain"]` takes the engine summary.
+- **Why:** The bots need physical readings per area (docs/agents.md); the old `islands` entry was one synthetic island and `uncertain` was always false.
+- **Agents:** `battery_support` now fills `grid.battery`, not `extra_reserve`. Reserve and battery blocks stay held until the area blacks out (no release yet; `restoration.reserve_recovery` is still unused).
+- **Files:** `backend/src/cascadasen/domain/theater/{grid,execution}.py`.
+
+## 2026-11-21 · feat(cascade): provenance params, droop, batteries, extreme EDAC and voltage verdict
+
+- **Changed:** The cascade engine (188 buses, drives the theatre and the map cuts) reads every number from `domain/cascade/params/cascade.yaml` (source or `is_assumption`, same loader as `domain/simulation/params.py`). Frequency model: reserve with 5% droop capped at 4% of synchronous MW; batteries as a separate fast term (`IslandInput.battery_mw`, trigger 49.8 Hz, 200 ms delay, 300 ms ramp); extreme-contingency EDAC of the centro-sur (671.55 MW, three df/dt stages). Each island reports `final_hz`, `rocof_hz_s`, `inertia_mws`, `shed_mw` and `battery_mw`; `CascadeState.islands` adds the bus indices. Opening the 25F boundary with a pre-fault flow above 1,600 MW N→S / 1,000 MW S→N gives `result: "voltage_limited"` and `summary.uncertain: true`. Fix: deployed reserve now also counts as synchronous (the theatre classed it as renewable).
+- **Why:** Power-system review (2026-11-21): inertia that falls, EDAC from the CEN tables, batteries as fast injection, honest about voltage, every parameter traceable. First step before the agents read frequency.
+- **Agents:** Do not hardcode physics constants in `domain/cascade/`; add them to `cascade.yaml` with provenance. `run_cascade_state(..., battery_by_bus=...)` is new. Timeline `summary` gains `uncertain` and `prefault_boundary_mw`; island entries gain fields (additive, `web/src/cascade/types.ts` still reads). The V1 split holds on this network without tuning (1,905 / 287 MW, test `test_25f_prefault_split_matches_the_cen_report`). `web/public/cache/` is stale until `uv run cascadasen-cache` runs again.
+- **Files:** `backend/src/cascadasen/domain/cascade/{params/cascade.yaml,frequency.py,engine.py}`, `backend/tests/unit/test_cascade.py`, `docs/engine.md`.
+
+## 2026-11-21 · revert(web): remove the operation tab; this PR is backend only
+
+- **Changed:** `web/` is back to the state merged from main (`5c62e7b`): removed `web/src/operation/`, the Corte/Operación tabs and `FrequencyChart.tsx` extraction in `CascadeApp.tsx`, the operation styles, the Vite `/api` proxy and the README section. `docker-compose.yml` drops the web→backend wiring (`VITE_API_TARGET`, `depends_on`); the backend LLM options (env file, AWS variables, `WITH_LLM`) stay. `docs/mapa3.md` section 10 is again the backend contract (now listing `llm` in snapshots, `GET /sim/runs/{id}/snapshots` and `catalog.llm`); `docs/docker.md` says the web does not call the backend yet.
+- **Why:** Ricardo: the scope of this PR is the backend; the visual layer is separate frontend work.
+- **Agents:** Earlier entries describing the operation tab (`feat(web): ...`, `chore(web): proxy ...`, `docs(web): ...`) are superseded by this one; the code is in git history (`fbf8ef9`, `5b19c2f`) if the frontend work wants to reuse it. Backend endpoints and the `llm` snapshot field remain.
+- **Files:** `web/**`, `docker-compose.yml`, `docs/mapa3.md`, `docs/docker.md`.
+
+## 2026-11-21 · fix(web): Spanish ISR cause in the operation panel
+
+- **Changed:** The ISR line shows "sin anomalía", "falla" or "intencional" instead of the raw `none` / `failure` / `intentional`.
+- **Why:** Seen in the visual check with Qwen as commander (14 cycles: Qwen decided in 12, explanations in Spanish, cascades and crews visible, no console errors).
+- **Agents:** UI strings stay in Spanish (AGENTS.md section 4).
+- **Files:** `web/src/operation/OperationPanel.tsx`.
+
+## 2026-11-21 · feat(web): show the AI commander and a live overlay in the operation tab
+
+- **Changed:** Backend: each snapshot carries `llm` (status `chosen` / `unavailable` / `idle` / `replayed`, model, chosen keys, explanation, options, capacity); `GET /sim/catalog` adds `llm: {available, model}`. Frontend: "Comandante con IA" checkbox (live API with an LLM configured), "pensando…" state while the model decides, AI card with the picked options and the Spanish explanation, "IA" badges on AI-picked actions, a map overlay (clock, service, level, this cycle's events coloured by source, AI explanation), pulsing rings on the areas where actions run (magenta = AI, cyan = rules), larger area circles and crew labels, Spanish accents in map labels (`characterSet: "auto"`).
+- **Why:** Ricardo wants to see clearly, and visually, what the models and agents do in each cycle.
+- **Agents:** Visually checked with headless Chromium (Playwright from the npx cache) against the real API: 12 cycles, cascades on cycles 6 and 10, no console errors. The LLM itself was not reachable from that environment (no AWS credentials), so the AI card showed "no disponible"; the Qwen path is covered by `test_llm_commander.py` and Ricardo's manual call.
+- **Files:** `backend/src/cascadasen/domain/theater/cycle.py`, `backend/src/cascadasen/application/simulation_service.py`, `backend/tests/unit/test_llm_commander.py`, `web/src/operation/{types,layers}.ts`, `web/src/operation/OperationPanel.tsx`, `web/src/styles.css`.
+
+## 2026-11-21 · feat(llm): any Bedrock model through the Converse API
+
+- **Changed:** New provider `CASCADASEN_LLM_PROVIDER=bedrock-converse`: `infrastructure/llm.py` calls `bedrock-runtime` `converse` (boto3) with the model or inference-profile id as is (`CASCADASEN_LLM_MODEL`, e.g. `amazon.nova-pro-v1:0`). The JSON answer is a forced tool call with the schema; on `ValidationException` (model without forced tools) it retries with the schema in the prompt and parses the text. Same AWS credential chain (environment variables or profile). README: provider docs and a script that lists the Bedrock models the account can actually call.
+- **Why:** Ricardo's AWS account (402909940511) has no Claude model available on Bedrock ("not available for this account"); the LLM commander should work with another model.
+- **Agents:** Prompts and fallbacks are unchanged; any failure still falls back to the rules (`llm_unavailable`). Quality of C2 picks depends on the chosen model; the validator still filters every option first.
+- **Files:** `backend/src/cascadasen/infrastructure/{llm,settings}.py`, `backend/tests/unit/test_llm_commander.py`, `backend/README.md`.
+
+## 2026-11-21 · fix(llm): Bedrock with temporary AWS environment credentials
+
+- **Changed:** An empty `CASCADASEN_AWS_PROFILE`/`CASCADASEN_AWS_REGION` now means "not set", so `AnthropicBedrockMantle` uses the standard AWS chain (environment variables first). `docker-compose.yml` passes `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_REGION` through to `backend` when set on the host. README and docker docs explain both options (environment variables or a profile).
+- **Why:** Ricardo authenticates with the SSO portal's "Set AWS environment variables" (temporary credentials in the shell), not with a named profile.
+- **Agents:** A profile set in `.env` takes precedence over the environment variables; leave it out when using variables. The variables must be exported in the terminal that runs `cascadasen-api` (or compose) and expire with the SSO session.
+- **Files:** `backend/src/cascadasen/infrastructure/llm.py`, `docker-compose.yml`, `backend/README.md`, `docs/docker.md`.
+
+## 2026-11-21 · docs(web): operation mode of mapa 3
+
+- **Changed:** `docs/mapa3.md` section 10 now describes the implemented operation tab (user flow, offline behaviour); `web/README.md` gets a "Operation mode (mapa 3 + backend)" section with the commands to run API, caches and Vite.
+- **Why:** Close the frontend-backend integration with instructions to test it.
+- **Agents:** Keep `mapa3.md` section 10 in sync with `web/src/operation/` and `cycle._snapshot`.
+- **Files:** `docs/mapa3.md`, `web/README.md`.
+
+## 2026-11-21 · feat(llm): Amazon Bedrock provider with an AWS profile
+
+- **Changed:** `Settings` gains `llm_provider` (`anthropic` | `bedrock`), `aws_region` and `aws_profile` (`CASCADASEN_LLM_PROVIDER`, `CASCADASEN_AWS_REGION`, `CASCADASEN_AWS_PROFILE`). With Bedrock, `infrastructure/llm.py` builds `anthropic.AnthropicBedrockMantle(aws_profile, aws_region)`, prefixes the model (`anthropic.claude-opus-5-5`) and sends no `betas`/`fallbacks` (not supported on Bedrock); structured JSON output stays. A client that cannot be built (e.g. unknown profile) disables the LLM with a warning. Extra `llm` is now `anthropic[bedrock]` (adds boto3); `uv.lock` updated. Docker: optional `WITH_LLM=1` build arg, `backend/.env` as optional `env_file`, commented `~/.aws` read-only volume.
+- **Why:** Ricardo runs the LLM through Bedrock with an AWS profile; credentials stay in `~/.aws`, never in `.env`.
+- **Agents:** `backend/.env` holds settings only. Tests build `Settings(_env_file=None, ...)` so a developer's `.env` cannot change them. No test calls AWS.
+- **Files:** `backend/src/cascadasen/infrastructure/{llm,settings}.py`, `backend/pyproject.toml`, `backend/uv.lock`, `backend/Dockerfile`, `docker-compose.yml`, `backend/tests/unit/test_llm_commander.py`, `backend/README.md`, `docs/strategy.md`, `docs/docker.md`.
+
+## 2026-11-21 · feat(web): operation tab in mapa 3 (theatre on the map)
+
+- **Changed:** Mapa 3 has two tabs: "Corte" (unchanged cut viewer) and "Operación" (`?modo=operacion`). New `web/src/operation/OperationPanel.tsx`: pick scenario, defence policy and adaptive or static adversary; start a run (seed shown); play or step 5-minute cycles; the map draws the cycle's grid, areas and crews; "Ver cascada" replays the cycle's cascade in seconds with its events and frequency chart; click a line to open it (C3) or a substation for C1/D1/D4 next cycle; final report and after-action; repeat with the same seed and another policy. `CascadeApp` delegates layers, clicks and tooltips to the active tab through a `MapBridge` ref; `FrequencyChart` moved to `cascade/FrequencyChart.tsx`. Styles for tabs and the panel.
+- **Why:** Join the frontend with the theatre (approved plan).
+- **Agents:** Offline (no backend) the tab plays the precomputed runs and refuses events. Verified through the Vite proxy against the real API (R239 on `feb2025-1500` gives 15.2 M people, same as the cut viewer); `tsc`, `npm test` (19) and `npm run build` pass. Not verified by clicking in a browser here.
+- **Files:** `web/src/operation/OperationPanel.tsx`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/FrequencyChart.tsx`, `web/src/styles.css`.
+
+## 2026-11-21 · feat(web): operation layers for mapa 3 (areas, crews, effects)
+
+- **Changed:** New `web/src/operation/layers.ts`: `buildOperationLayers` reuses `buildCascadeLayers` with the cycle's frame and served load per bus, and adds operating areas (circle at the centroid, posture colour, more opaque as observability drops), effect labels per area (effect type only) and field crews moving linearly toward their target substation by cycle. Colour constants `POSTURE_COLOR`, `CREW_COLOR`, `CREW_BUSY_COLOR` for map and legend. Tests in `layers.test.ts`.
+- **Why:** Draw the theatre on mapa 3 with the same visual language as the cut viewer.
+- **Agents:** Areas are drawn as circles: the backend sends no area polygons. No layer shows adversary preferences or any ranking.
+- **Files:** `web/src/operation/layers.ts`, `web/src/operation/layers.test.ts`.
+
+## 2026-11-21 · feat(web): theatre client for the mapa 3 operation mode
+
+- **Changed:** New `web/src/operation/`: `types.ts` (theatre contract of `docs/mapa3.md` 10 over the mapa 3 types), `api.ts` (`TheaterSource` with `LiveSource` over `/api/v1/sim/*` and `CachedSource` over `web/public/cache/theater/`; `connect()` picks live when `/api/v1/health` answers within 1.5 s), `text.ts` (Spanish narration from the backend templates, fixed notice). Tests: `api.test.ts`, `text.test.ts`. Backend: new `GET /api/v1/sim/runs/{id}/snapshots?start=` because a replay computes all its cycles at once.
+- **Why:** First step to join the frontend with the theatre (approved plan: operation tab in mapa 3).
+- **Agents:** The frontend never hard-codes the backend URL (Vite proxy). Offline runs cannot inject events; "repeat with another policy" switches to the precomputed run of that policy.
+- **Files:** `web/src/operation/*`, `backend/src/cascadasen/application/run_experiment.py`, `backend/src/cascadasen/api/simulation_routes.py`, `backend/tests/integration/test_runs_api.py`.
+
+## 2026-11-21 · chore(web): proxy /api to the backend for the mapa 3 operation mode
+
+- **Changed:** `web/vite.config.ts` proxies `/api` to `VITE_API_TARGET` (default `http://localhost:8000`). `docker-compose.yml` sets `VITE_API_TARGET=http://backend:8000` for `web` and starts it after `backend` is healthy. `docs/docker.md` no longer says the web never calls the backend.
+- **Why:** The operation mode of mapa 3 (theatre on the map) calls `/api/v1/sim/*`.
+- **Agents:** Frontend code calls relative `/api/v1/...` paths; never hard-code the backend URL.
+- **Files:** `web/vite.config.ts`, `docker-compose.yml`, `docs/docker.md`.
+
+## 2026-11-21 · merge main into feat/strategic-sim-api (mapa 3 as main map, 2D/3D, attack-sim proposal)
+
+- **Changed:** Brings #14-#19 (mapa 3 is `/`, 2D/3D toggle `?vista=2d`, city labels, Sub50 project metadata) and `docs/attack-sim.md`. `CHANGELOG.md` conflict resolved keeping both sides. Follow-ups: `mapa3.md` section 10 now says the operation mode lives in `/` and that `buildCascadeLayers` takes `mode` (draw `snapshot.grid` with the same 2D/3D mode); `stack.md` section 2 map row updated (it still said `/` was the offline map); `attack-sim.md` gets a note on its overlap with the theatre's event API.
+- **Why:** Ricardo: main changed the map; check what the theatre must adapt.
+- **Agents:** No backend or contract change was needed: the cut cache format and `web/src/cascade/types.ts` are unchanged, and theatre snapshots already use the mapa 3 `Frame`. `attack-sim.md` is a proposal pending team decision; if approved, build it on `POST /sim/runs/{id}/events` (C1 on `B###`, C2 by zone, C3 on `R###`).
+- **Files:** `CHANGELOG.md`, `docs/mapa3.md`, `docs/stack.md`, `docs/attack-sim.md`.
+
+## 2026-11-21 · docs(theater): document the theatre on the mapa 3 network
+
+- **Changed:** `strategy.md` 2.1 (areas = groups of the 188 mapa 3 buses, corridors, EDAC defence functions, mapa 3 points), `stack.md` 7.1 (`/sim/network?point=`, `point`, snapshot `grid`/`transient`/`areas`/`crews`, `/simulate/network`, campaign `point`), `mapa3.md` new section 10 (operation-mode contract with TS types for the frontend), `plan.md` 9 item 4 (node decision), `backend/README.md`.
+- **Why:** The frontend teammate builds the operation mode on mapa 3 against this contract.
+- **Agents:** `mapa3.md` section 10 is the frontend contract; keep it in sync with `cycle._snapshot` and `SimulationService.theater_network`.
+- **Files:** `docs/strategy.md`, `docs/stack.md`, `docs/mapa3.md`, `docs/plan.md`, `backend/README.md`.
+
+## 2026-11-21 · feat(theater): offline theatre cache for mapa 3
+
+- **Changed:** `cascadasen-sim-fixtures` now writes `web/public/cache/theater/` (git-ignored, next to the mapa 3 cut cache): `index.json`, `catalog.json`, `narrative_es.json`, `network-<point>.json`, `<point>/flagship_observability-<A|B|C>-s<seed>.json` (recipe, snapshots, report, after-action) and `campaign-<point>.json`, for `nov2026-1300` and `feb2025-1500` by default. Campaigns accept `point` (`CampaignSpec.point`, `POST /sim/campaigns`).
+- **Why:** The live API gives a new random run each time; the demo needs a fallback without a server.
+- **Agents:** Options `--point` (repeatable), `--seed` (default 7), `--no-campaign`, `--out`; `build_theater_cache(..., template=)` for other templates. About 0.9 MB per run. The old 13-area fixtures (`data/processed/sim/`, 25F timelines of `/simulate`) are no longer written.
+- **Files:** `backend/src/cascadasen/sim_fixtures.py`, `application/run_campaign.py`, `api/simulation_{routes,schemas}.py`, `backend/tests/integration/test_theater_cache.py`.
+
+## 2026-11-21 · refactor(theater): run the strategic theatre on the mapa 3 network
+
+- **Changed:**
+  - New `domain/theater/areas.py` (`TheaterNetwork`): the 13 operating areas are groups of the 188 mapa 3 buses by latitude band; corridors are the `R###` lines crossing area boundaries (`A06-A07`); defence functions are `edac:norte_grande` and `edac:centro_sur`. `resolve` accepts area, zone, corridor, `B###`, `R###` and real `SE...` ids.
+  - New `domain/theater/grid.py` (`TheaterGrid`): per-bus state (plan vs current load, sync/renewable generation, inertia, open lines, dark buses, disabled EDAC zones, extra reserve) with area reads and explicit writes; physical events run `run_cascade_state` (mapa 3 engine). `frame()` gives the mapa 3 `Frame` of each cycle.
+  - New `domain/theater/world.py` (`TheaterWorld`, `StaticWorld`) and `application/theater_world.py` (`ProcessedWorld` over `data/processed`). `Simulation(world, config)`; `RunManager`/`CampaignRunner` take a world. Templates use mapa 3 points (`nov2026-1300`) and the new corridor/defence ids; `pdce_zn` and the `defenses` option are gone (one defence set: `cen_25f_edac`).
+  - Snapshots add `grid` (mapa 3 frame + served MW per bus), `transient` (full mapa 3 cascade timeline when a physical event happened), `areas` (observability, posture, effects) and crews with `bus`, `lon`, `lat`, `target_bus`. `GET /api/v1/sim/network?point=` serves the mapa 3 network plus areas, corridors and defences; the old 13-area view moved to `GET /api/v1/simulate/network`. `POST /sim/runs` accepts `point`.
+- **Why:** Ricardo: mapa 3 is the important view; one physics so the theatre's MW, dark buses and open lines are what the viewer draws.
+- **Agents:** The theatre no longer uses `domain/simulation` physics (only its params loader and the area bands). Campaigns run with `light=True` (no per-cycle frame): 36 flagship runs take about 9 s. Flagship on `nov2026-1300`, seed 7, static adversary: C keeps the most continuity, B makes the most unnecessary decisions (test still holds). The adversary never targets `B###`/`R###` (tested). `cascadasen-sim-fixtures` still needs porting (next commit).
+- **Files:** `backend/src/cascadasen/domain/theater/{areas,grid,world,execution,validator,digital,cycle,state,config,crews}.py`, `params/templates.yaml`, `domain/agents/*.py`, `application/{theater_world,run_experiment,run_campaign,simulation_service}.py`, `api/simulation_{routes,schemas}.py`, `backend/tests/**`.
+
+## 2026-11-21 · feat(cascade): run the cascade from a running state
+
+- **Changed:** New `run_cascade_state(net, point, cuts, params, *, open_lines, edac_off, extra_reserve_by_bus)` returns the timeline plus a `CascadeState` (per-bus gen, load, sync, inertia, open lines, dark buses). `IslandInput.extra_reserve_mw` adds fast reserve to an island. `run_cascade_workflow` is now a thin wrapper with identical output (checked on 162 real cuts across two points).
+- **Why:** The strategic theatre is being ported onto the mapa 3 network; it needs to continue a cascade cycle after cycle, switch EDAC zones off (C4) and commit fast reserve or batteries.
+- **Agents:** Mapa 3 and `cascadasen-cache` are unchanged. EDAC zones are `norte_grande` and `centro_sur`.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`, `frequency.py`, `backend/tests/unit/test_cascade.py`.
+
+## 2026-11-21 · merge main into feat/strategic-sim-api (mapa 3, cascade engine)
+
+- **Changed:** Brings mapa 3, `domain/cascade/` and `cascadasen-cache` from main (#10-#12). Conflicts in `CHANGELOG.md` and `backend/pyproject.toml` resolved keeping both sides. Lint-only fixes on the merged files so the pre-commit hook passes: `ruff format`, unused imports, sorted imports, `zip(..., strict=True)` in `cascade/engine.py`, executable bit on `data/scripts/*.py`. No behaviour change (126 tests pass).
+- **Why:** Ricardo: mapa 3 is the important view; the theatre must be ported onto its network next.
+- **Agents:** Two physics engines now coexist: `domain/cascade/` (188 buses, mapa 3) and `domain/simulation/` (13 areas, theatre and `/simulate`). The approved plan ports the theatre onto `domain/cascade/`.
+- **Files:** `backend/src/cascadasen/domain/cascade/*`, `backend/src/cascadasen/application/cache_builder.py`, `backend/tests/unit/test_cascade.py`, `data/scripts/*.py`, `backend/pyproject.toml`, `CHANGELOG.md`.
+
+## 2026-11-21 · feat(theater): optional LLM commander and after-action narrative
+
+- **Changed:**
+  - New port `CommanderAdvisor` (`domain/ports.py`). `CommanderAgent.decide(..., advisor=...)`: after the rules filter and resolve conflicts, an advisor may pick among the eligible validated COAs within attention; others get `not_selected_by_c2`.
+  - `Simulation(advisor=...)` + `RunConfig.llm_commander` / `llm_choices`: picks and Spanish explanations go to the audit log (`llm_choice`) and the recipe; replays reuse them and never call the LLM.
+  - New `infrastructure/llm.py`: `ClaudeCommander` and `ClaudeInterpreter` on the Anthropic SDK (`claude-opus-5-5`, effort `low`, JSON schema output, server-side refusal fallback `"default"`), wired by `llm_adapters(settings)` in the API. Optional extra `llm` (`anthropic>=1.0.0`, lock updated).
+  - `POST /sim/runs` field `llm_commander`; settings `CASCADASEN_LLM_ENABLED`, `_MODEL`, `_EFFORT`, `_TIMEOUT_S`.
+- **Why:** Ricardo chose rules by default plus an optional LLM as C2 that only chooses among validated options.
+- **Agents:** `strategy.md` 10 now allows the LLM as C2 (never the adversary, never computing or validating). Without the extra or credentials everything runs as before. Campaigns never pass an advisor. Tests use fake advisors/clients; no test calls the API.
+- **Files:** `backend/src/cascadasen/domain/ports.py`, `domain/agents/commander.py`, `domain/theater/cycle.py`, `infrastructure/llm.py`, `infrastructure/settings.py`, `application/run_experiment.py`, `application/simulation_service.py`, `api/simulation_routes.py`, `api/simulation_schemas.py`, `params/narrative_es.yaml`, `backend/pyproject.toml`, `backend/uv.lock`, `backend/tests/unit/test_llm_commander.py`, `backend/README.md`, `docs/strategy.md`, `docs/stack.md`.
+
+## 2026-11-21 · feat(theater): campaigns with random seeds and spread across seeds
+
+- **Changed:** `POST /sim/campaigns` accepts `random_seeds` (1-10): fresh seeds drawn per campaign, returned in `spec.seeds`, the same in every cell. Each row adds `spread` with p10/p50/p90 of mission continuity and recoverability. New API guardrail test: no run, trace, report or campaign payload carries adversary `weights`, `arms`, `probs` or a `ranking`.
+- **Why:** With chance in the world, a policy is judged by its distribution over many runs, not by one seed.
+- **Agents:** Explicit `seeds` still work and are the way to get stable numbers. `CampaignSpec.random_seeds`.
+- **Files:** `backend/src/cascadasen/application/run_campaign.py`, `backend/src/cascadasen/api/simulation_schemas.py`, `backend/src/cascadasen/api/simulation_routes.py`, `backend/tests/integration/test_campaigns_api.py`, `docs/stack.md`.
+
+## 2026-11-21 · feat(theater): field crews with home bases and road travel
+
+- **Changed:**
+  - New `domain/theater/crews.py` (`CrewRoster`): crews with a base and position, travel time from area centroids (haversine × road factor / speed + mobilisation, spread from the `field` stream), dispatch of the nearest free crew within `max_eta_cycles`, timed or held tasks.
+  - Verification, manual operation and re-arming wait for the crew (`ExecutionState.arrivals`, note `crew_arrived`); repairs start at arrival. Field reports arrive with the crew.
+  - Logistics vetoes crew actions whose nearest free crew is too far (`log_crew_too_far`); `AgentView.crew_eta` gives it the nearest free crew per area. Executed records carry `crew` and `arrival`; snapshots carry `crews`.
+  - `theater.yaml`: new `crews` section; `field_crews` 6 → 9.
+- **Why:** Ricardo wants defenders that repair anywhere in the country with real distances.
+- **Agents:** The flagship validation now asserts that C keeps the most continuity; B no longer beats A once crews are on the map (finding recorded in `strategy.md` 6). New verdict codes `no_crew_in_range`, `action_failed`, `failed` have Spanish text in `narrative_es.yaml`. `request_external_support` does not add crews yet.
+- **Files:** `backend/src/cascadasen/domain/theater/crews.py`, `execution.py`, `cycle.py`, `config.py`, `params/theater.yaml`, `params/narrative_es.yaml`, `backend/src/cascadasen/domain/agents/logistics.py`, `base.py`, `backend/tests/unit/test_crews.py`, `backend/tests/validation/test_flagship.py`, `docs/strategy.md`, `docs/stack.md`.
+
+## 2026-11-21 · feat(theater): chance in the world on independent seeded streams
+
+- **Changed:**
+  - New `domain/theater/stochastic.py` (`Chance`) with streams `physics`, `external`, `ops`, `field`: sampled event sizes (Beta/lognormal around catalog defaults), defence functions that fail to act per transient (`misoperated_defenses` in `last_transient`), unplanned zone-level E1/E2 events (source `external`), first-attempt action failures (`action_failed`), repair-time and restoration-speed spread, field crews missing a digital issue.
+  - `theater.yaml` gains a `stochastic` section; `TheaterConfig.stochastic`.
+  - `RunConfig.stochastic` / `POST /sim/runs` `stochastic` (default true) switches it off.
+- **Why:** Ricardo wants runs to behave like real life, not a script, while keeping replay and fair comparisons.
+- **Agents:** `Executor(..., chance=None)` keeps the old deterministic behaviour (used when `stochastic` is false). Explicit params from scenarios or users are never sampled. A failed action spends attention only. `restore_element` crews are now released by the executor when the repair ends, not at a fixed cycle. Numbers quoted for the flagship in older entries were computed without chance; use `stochastic: false` to compare.
+- **Files:** `backend/src/cascadasen/domain/theater/stochastic.py`, `execution.py`, `cycle.py`, `config.py`, `params/theater.yaml`, `backend/src/cascadasen/api/simulation_schemas.py`, `backend/src/cascadasen/application/run_experiment.py`, `backend/tests/unit/test_theater_stochastic.py`, `docs/strategy.md`, `docs/cyber.md`.
+
+## 2026-11-21 · feat(theater): random seed by default, recorded in the recipe
+
+- **Changed:** `RunConfig.seed` and `POST /sim/runs` `seed` are optional. Without one, the run draws a fresh seed (`theater/rng.new_seed`), stores it in its config, the `run_created` audit entry and the summary. Named streams moved to `domain/theater/rng.py` (`rng_for(seed, name)`).
+- **Why:** Ricardo wants every run to differ like real life while keeping replay and fair policy comparison (same seed, same luck).
+- **Agents:** Pass an explicit `seed` for stable fixtures, tests and comparisons (`cascadasen-sim-fixtures --seed 7` still does). `replay` keeps the original seed. New stochastic sources must draw from their own `rng_for(seed, "<name>")` stream, never from the defence stream.
+- **Files:** `backend/src/cascadasen/domain/theater/rng.py`, `backend/src/cascadasen/domain/theater/cycle.py`, `backend/src/cascadasen/api/simulation_schemas.py`, `backend/src/cascadasen/application/run_experiment.py`, `backend/tests/unit/test_theater.py`, `docs/stack.md`.
+
+## 2026-11-21 · fix(theater): adversary arms for defence events and recovery reward
+
+- **Changed:**
+  - The adversary builds its EXP3 arms per target kind: area events over the 13 areas, zone events over zones, C4 over defence functions (`pdce_zn`, `edac:<zone>`, ...). Before, `complicate_recovery` produced `(C4, A0x)` arms and every `degraded_recovery` run crashed with `UnknownEventTargetError`.
+  - `Simulation._admissible` resolves each adversary event before applying it; anything that is not an area, zone or defence function is dropped and logged as `adversary_event_rejected`.
+  - The `complicate_recovery` reward no longer uses lost load share: it pays for delayed recovery (effect persisted, area still dark).
+- **Why:** Bug found while planning the stochastic theatre; the reward change keeps `cyber.md` 8 item 7 (objectives target decision quality, not damage).
+- **Agents:** `AdversaryAgent(targets={"area": [...], "zone": [...], "defense": [...]}, ...)` replaces `areas=`. `Pending.area` is now `Pending.target`. Regression test `test_adversary_with_defence_events_runs_and_stays_abstract`.
+- **Files:** `backend/src/cascadasen/domain/agents/adversary.py`, `backend/src/cascadasen/domain/theater/cycle.py`, `backend/tests/unit/test_theater.py`.
+
+## 2026-11-21 · feat(theater): Spanish narration, after-action review and offline fixtures
+
+- **Changed:**
+  - New `domain/theater/params/narrative_es.yaml` with Spanish templates for every `text_key`, `rationale_key`, label, question and reason code, served at `GET /api/v1/sim/narrative`.
+  - New `domain/theater/narrative.py` with Spanish number format and a `TemplateInterpreter`, the default for the new `Interpreter` port in `domain/ports.py`. It backs `GET /sim/runs/{id}/after_action`.
+  - New CLI `cascadasen-sim-fixtures` that writes network, catalog, narration, 25F timelines, flagship runs per policy and a campaign.
+  - Recoverability is now measured from the worst-continuity cycle, not from the first effect.
+  - `backend/README.md` gains the V1-V10 status table.
+- **Why:** The frontend renders Spanish narration from keys (stack.md 9). This gives it one source of truth plus a ready after-action review and offline fixtures (stack.md 9: keep the demo working offline).
+- **Agents:**
+  - Every catalog event, action, objective, policy and question must have a template (tested).
+  - The LLM interpreter is not built. It would implement `Interpreter`; adding it needs the `anthropic` dependency and an API key decision from the team, and it would explain, never decide.
+  - Fixtures go to `data/processed/sim/` (about 1.6 MB, regenerate rather than edit).
+- **Files:** `backend/src/cascadasen/domain/theater/narrative.py`, `backend/src/cascadasen/domain/theater/params/narrative_es.yaml`, `backend/src/cascadasen/domain/theater/evaluator.py`, `backend/src/cascadasen/domain/ports.py`, `backend/src/cascadasen/application/run_experiment.py`, `backend/src/cascadasen/api/simulation_routes.py`, `backend/src/cascadasen/sim_fixtures.py`, `backend/pyproject.toml`, `backend/tests/*`, `backend/README.md`, `docs/stack.md`, `docs/strategy.md`.
+
+## 2026-11-21 · feat(theater): campaigns with fragility and adaptation indices
+
+- **Changed:**
+  - New `application/run_campaign.py` and endpoints `POST/GET /api/v1/sim/campaigns`.
+    - Mode I (diagnostic): continuity per area in geographic order.
+    - Mode II (adversarial): policies × uncertainty × static/adaptive adversary, with the Decisional Fragility Index (paired uncertainty-0 runs added automatically) and the Adaptation Index.
+    - Mode III (capability): deltas against the baseline variant. Capped at 240 runs.
+  - Perfect information (uncertainty 0) now also reports the true supervision losses as alarms.
+  - The digital engine was split into an `_Observer` with a fixed call order.
+- **Why:** Phase 4 of the plan: compare policies under equivalent conditions and measure how they degrade with uncertainty and against an adaptive adversary.
+- **Agents:**
+  - A negative fragility index means better information made that policy worse. It happens with the preventive policy against the adaptive adversary, and it is documented as a finding in `strategy.md` 8.
+  - Flagship campaign, 3 seeds × levels {0, 1, 2}: 54 runs in ~8 s.
+  - `docs/stack.md` 7.1 documents the campaign body.
+- **Files:** `backend/src/cascadasen/application/run_campaign.py`, `backend/src/cascadasen/application/simulation_service.py`, `backend/src/cascadasen/api/simulation_*.py`, `backend/src/cascadasen/domain/theater/digital.py`, `backend/tests/integration/test_campaigns_api.py`, `docs/strategy.md`, `docs/stack.md`.
+
+## 2026-11-21 · feat(theater): strategic cycle, agents and runs API
+
+- **Changed:**
+  - New `domain/theater/` with real vs observed state and a digital engine (missing, stale or unreliable supervision, false alarms, perfect information at uncertainty 0).
+  - Abstract events (C1-C5, D1-D6, E1-E2) and twelve defensive actions.
+  - A resource ledger with attention saturation, a deterministic validator (it reads the real state; agents only learn the observable reason) and an execution engine with effect lifecycles and operational restoration.
+  - A hash-chained audit log, an evaluator (continuity, awareness, response capacity, resistance, reserve, recoverability, coordination, wrong decisions, Freedom of Action Index) and the six-step cycle.
+  - New `domain/agents/`: C2, ISR (Bayesian cause belief), Operations, Stabilisation, Logistics, a read-only Auditor, and the Adversary (EXP3 over the abstract catalog, or the template plan when static).
+  - New `application/run_experiment.py` and endpoints `/api/v1/sim/catalog`, `/sim/runs`, `/runs/{id}`, `/events`, `/step`, `/replay`, `/trace`, `/report`.
+  - Six experiment templates, including `flagship_observability`, whose 900 MW shock hits while Santiago is blind.
+- **Why:** The strategic experimentation layer of `docs/strategy.md`, and the API the frontend uses to select a node, trigger an event and compare policies.
+- **Agents:**
+  - Agent views never carry `RealState`/`GridState` (tested).
+  - An unchanged replay reproduces the trace hash, and the adversary's weights are never exported (only its event-type mix).
+  - Event targets accept area, corridor, zone, defence or real `SE…`/`L…` ids. Unknown target or template returns 404, invalid input 422, and an inject into a finished run 409.
+  - Flagship (static adversary, seed 7):
+    - A, reactive: continuity 0.966.
+    - B, preventive: 0.984, but 39 unnecessary actions.
+    - C, adaptive: 0.978, with the fewest resources spent and the best response capacity.
+  - Every number in `theater.yaml`/`templates.yaml` is a declared design assumption.
+- **Files:** `backend/src/cascadasen/domain/theater/*`, `backend/src/cascadasen/domain/agents/*`, `backend/src/cascadasen/application/run_experiment.py`, `backend/src/cascadasen/api/simulation_*.py`, `backend/tests/*`, `backend/README.md`.
+
+## 2026-11-21 · feat(sim): physical engine on the reduced SEN and POST /api/v1/simulate
+
+- **Changed:**
+  - New `backend/src/cascadasen/domain/simulation/`: 13 operating areas built from the snapshot. Corridors are split by voltage and keep their parts, so a substation outage removes only its own lines, load and generation.
+  - Engine modules: DC power flow, weak-link cascade (>120 %, north defence scheme at 0.23 s, otherwise 1.566 s) and island swing-equation frequency (EDAC steps, extreme gradient shedding, primary reserve, batteries, over-frequency curtailment). Kinetic energy is tracked as state.
+  - Outputs: consequence card (L0-L3, people, unserved MWh, cost at 8.79 US$/kWh) and the `timeline.json` builder.
+  - API: `POST /api/v1/simulate` (stack.md 7 validation, 422 with valid values, 503 on timeout) and `GET /api/v1/sim/network`.
+- **Why:** The strategic layer needs a physics core, and the frontend needs "click a node → see the cascade".
+- **Agents:**
+  - Every number in `params/*.yaml` carries a source or `is_assumption`; the loader rejects bare numbers.
+  - Calibrated values declare their case: the A06-A07/220 reactance (V1), D = 2.0 %/Hz and the reserve time constant of 1 s (V3a), the EDAC step shares (V3a, V3b, V7, V8), the over-frequency curtailment (V5) and the 25F ramp timing (V4).
+  - Published EDAC tables ([4] 3-10, [14] Table 1) are still not transcribed. Replace the placeholders when they are.
+  - `tests/validation/test_engine_cases.py` passes V1-V5, V7, V8 and V10. V6 and V9 are skipped (reference data missing).
+  - `elements_out` accepts corridor, area, `SE…` or `L…`/`T…` ids.
+- **Files:** `backend/src/cascadasen/domain/simulation/*`, `backend/src/cascadasen/application/simulate.py`, `backend/src/cascadasen/application/simulation_service.py`, `backend/src/cascadasen/api/simulation_*.py`, `backend/src/cascadasen/api/app.py`, `backend/tests/*`, `backend/README.md`.
+
+## 2026-11-21 · docs(strategy): add strategic experimentation layer and its API contract
+
+- **Changed:** New `docs/strategy.md` covers:
+  - the thesis: losing the capacity to understand and coordinate is the main risk;
+  - five interacting systems and 13 operating areas reduced from the real SEN;
+  - real, observed and estimated state, and two clocks;
+  - six defensive agents and an adaptive adversary;
+  - the strategic cycle, deterministic validator and hash-chained audit;
+  - policies A/B/C, modes I-III, indicators and three experimental indices, and the flagship experiment.
+
+  `cyber.md` section 8 gains item 7 (adaptive adversary rules) and a pointer to `strategy.md`. `stack.md` section 7 now documents `/api/v1/simulate` and the new section 7.1 (`/api/v1/sim/*`). `plan.md` section 9 item 4 records the proposed 13-area node list.
+- **Why:** Ricardo reframed CascadaSEN: it simulates whether a utility keeps its mission when it loses the capacity to understand its own state, not attacks. The task is backend only; another teammate builds the frontend against this API.
+- **Agents:** Read `strategy.md` after `cyber.md`. The adversary acts only through abstract events at area or function level, and no output ranks elements or areas. The LLM never decides or plays the adversary. Primary user: utility operations and continuity teams, with Mode II (adaptive adversary) first. The framing, item 7 and the node list are pending team confirmation. The implementation lands on branch `feat/strategic-sim-api`.
+- **Files:** `docs/strategy.md`, `docs/cyber.md`, `docs/stack.md`, `docs/plan.md`.
 ## 2026-11-21 · feat(infra): CLI-only deploy workflow with CloudFront invalidation
 - **Changed:** `.github/workflows/deploy.yml` no longer runs Terraform: it builds and pushes both images, registers a new task definition revision, updates the ECS service, waits for stable, and invalidates CloudFront. The role ARN is hardcoded (`IAM-Role-ECS-Deploy`). New `infrastructure/deploy-role-policy.json` (minimal permissions for that role). `aws_ecs_service.app` gets `ignore_changes = [task_definition]`.
 - **Why:** The deploy only needs a new image tag; Terraform needed broad IAM permissions and a state bucket. Repository variables cannot be edited, so the ARN cannot come from `AWS_DEPLOY_ROLE_ARN`.

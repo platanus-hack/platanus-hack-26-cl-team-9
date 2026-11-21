@@ -5,6 +5,7 @@ Why: the map must answer "what is this node?" without calling the backend, so th
 static file keyed by node id (ficha, lines, plants, storage, served comunas, electrical model).
 Reads only files already in data/processed/. Run from anywhere: python3 data/scripts/build_node_index.py
 """
+
 import json
 import re
 from collections import defaultdict
@@ -38,13 +39,31 @@ def _node_records() -> dict:
         for feature in _load(f"geo/{layer}.geojson")["features"]:
             p = feature["properties"]
             nodes[p["id"]] = {
-                "id": p["id"], "name": p["name"], "kind": p["kind"], "kv": p["kv"], "kv_levels": p["kv_levels"],
-                "owner": p["owner"], "system": p["system"], "segment": p["segment"], "macro_zone": p["macro_zone"],
-                "region_code": p["region_code"], "comuna_code": p["comuna_code"], "lon": p["lon"], "lat": p["lat"],
-                "in_main_grid": p["in_main_grid"], "degree": p["degree"], "delivers": p["delivers"],
-                "generation_mw": p["generation_mw"], "served_population": p["served_population"],
-                "lines": [], "plants": [], "storage": [], "storage_candidates": [0, 0.0], "comunas": [],
-                "model_buses": [], "model_branches": [],
+                "id": p["id"],
+                "name": p["name"],
+                "kind": p["kind"],
+                "kv": p["kv"],
+                "kv_levels": p["kv_levels"],
+                "owner": p["owner"],
+                "system": p["system"],
+                "segment": p["segment"],
+                "macro_zone": p["macro_zone"],
+                "region_code": p["region_code"],
+                "comuna_code": p["comuna_code"],
+                "lon": p["lon"],
+                "lat": p["lat"],
+                "in_main_grid": p["in_main_grid"],
+                "degree": p["degree"],
+                "delivers": p["delivers"],
+                "generation_mw": p["generation_mw"],
+                "served_population": p["served_population"],
+                "lines": [],
+                "plants": [],
+                "storage": [],
+                "storage_candidates": [0, 0.0],
+                "comunas": [],
+                "model_buses": [],
+                "model_branches": [],
             }
     return nodes
 
@@ -53,8 +72,12 @@ def _add_cen_ids(nodes: dict, snapshot: dict) -> None:
     for n in snapshot["nodes"]:
         if n["id"] in nodes:
             ids = n.get("ids") or {}
-            nodes[n["id"]]["cen"] = {"id": ids.get("cen_id"), "code": ids.get("cen_code"),
-                                     "scada": ids.get("flag_scada"), "comm": ids.get("flag_equipocom")}
+            nodes[n["id"]]["cen"] = {
+                "id": ids.get("cen_id"),
+                "code": ids.get("cen_code"),
+                "scada": ids.get("flag_scada"),
+                "comm": ids.get("flag_equipocom"),
+            }
 
 
 def _add_lines(nodes: dict, network: dict) -> None:
@@ -62,9 +85,21 @@ def _add_lines(nodes: dict, network: dict) -> None:
     for e in network["edges"]:
         for here, other in ((e["source"], e["target"]), (e["target"], e["source"])):
             if here in nodes:
-                nodes[here]["lines"].append([e["id"], e["kv"], e["circuit"], names.get(other, other), other,
-                                             e["length_km"], e["s_nom_mva"], e["x_ohm"], e["topology_source"],
-                                             bool(e["is_assumption"]), e["kind"]])
+                nodes[here]["lines"].append(
+                    [
+                        e["id"],
+                        e["kv"],
+                        e["circuit"],
+                        names.get(other, other),
+                        other,
+                        e["length_km"],
+                        e["s_nom_mva"],
+                        e["x_ohm"],
+                        e["topology_source"],
+                        bool(e["is_assumption"]),
+                        e["kind"],
+                    ]
+                )
     for n in nodes.values():
         n["lines"].sort(key=lambda r: -(r[1] or 0))
 
@@ -93,14 +128,18 @@ def _add_storage(nodes: dict, snapshot: dict) -> None:
             c[0] += 1
             c[1] += s["mw"] or 0
         else:
-            nodes[s["node"]]["storage"].append([s["name"], s["mw"], s["hours"], s["equipment"], s["source"]])
+            nodes[s["node"]]["storage"].append(
+                [s["name"], s["mw"], s["hours"], s["equipment"], s["source"]]
+            )
 
 
 def _add_population(nodes: dict, snapshot: dict) -> None:
     for c in snapshot["comunas"]:
         for s in c["served_by"]:
             if s["node"] in nodes:
-                nodes[s["node"]]["comunas"].append([c["name"], round(s["population"]), s["share"]])
+                nodes[s["node"]]["comunas"].append(
+                    [c["name"], round(s["population"]), s["share"]]
+                )
 
 
 def _add_electrical_model(nodes: dict, snapshot: dict) -> None:
@@ -110,7 +149,9 @@ def _add_electrical_model(nodes: dict, snapshot: dict) -> None:
     for r in snapshot["model_branches"]:
         for node in {r["node0"], r["node1"]}:
             if node in nodes:
-                nodes[node]["model_branches"].append([r["name"], r["asset_type"], r["s_nom_mva"], r["x_pu"], r["r_pu"]])
+                nodes[node]["model_branches"].append(
+                    [r["name"], r["asset_type"], r["s_nom_mva"], r["x_pu"], r["r_pu"]]
+                )
 
 
 def _add_operating_points(nodes: dict) -> None:
@@ -128,7 +169,10 @@ def _add_operating_points(nodes: dict) -> None:
             totals[bus_node[bus]][1] += mw
         for node_id, (load, gen) in totals.items():
             if node_id in nodes:
-                nodes[node_id].setdefault("operating", {})[point["id"]] = [round(load, 1), round(gen, 1)]
+                nodes[node_id].setdefault("operating", {})[point["id"]] = [
+                    round(load, 1),
+                    round(gen, 1),
+                ]
     for n in nodes.values():
         n.setdefault("operating", {})
 
@@ -144,5 +188,7 @@ if __name__ == "__main__":
     index = build_node_index_workflow()
     _self_check(index)
     out = PROCESSED / "node_index.json"
-    out.write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    out.write_text(
+        json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
     print(f"{len(index)} nodes -> {out} ({out.stat().st_size / 1e6:.2f} MB)")

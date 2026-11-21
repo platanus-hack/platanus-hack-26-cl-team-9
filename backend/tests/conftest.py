@@ -186,3 +186,67 @@ def toy_bundle() -> SourceBundle:
 @pytest.fixture
 def toy_snapshot(toy_bundle):
     return GridUnifier().unify(toy_bundle)
+
+
+@pytest.fixture
+def toy_spec():
+    """Three areas over the toy grid: ALFA | BETA + DELTA | GAMMA."""
+    from cascadasen.domain.simulation.network import AreaSpec, NetworkSpec
+
+    return NetworkSpec(
+        areas=(
+            AreaSpec("T1", "Toy norte", "NC", -30.5),
+            AreaSpec("T2", "Toy centro", "NC", -31.5),
+            AreaSpec("T3", "Toy sur", "CE", None),
+        )
+    )
+
+
+@pytest.fixture
+def toy_network(toy_snapshot, toy_spec):
+    from cascadasen.domain.simulation.network import build_reduced_network
+
+    return build_reduced_network(toy_snapshot, toy_spec)
+
+
+@pytest.fixture
+def toy_world(toy_spec):
+    """A mapa 3 style network for the strategic theatre: 6 buses over the 3 toy areas (T1 north,
+    T2 centre, T3 south), generation in T1 and T3, load everywhere. The toy point is registered under
+    the default template point id so templates run unchanged."""
+    import numpy as np
+
+    from cascadasen.domain.cascade.network import Line, ReducedNetwork
+    from cascadasen.domain.cascade.scenario import OperatingPoint
+    from cascadasen.domain.theater.areas import build_theater_network
+    from cascadasen.domain.theater.world import StaticWorld
+
+    lats = [-30.2, -30.3, -31.0, -31.2, -32.0, -32.2]
+    names = ["N1", "N2", "C1", "C2", "S1", "S2"]
+    pairs = [(0, 1, 600), (1, 2, 500), (0, 2, 400), (2, 3, 500), (3, 4, 500), (2, 4, 400), (4, 5, 600)]
+    lines = [Line(f"R{k}", a, b, cap, 0.01, 220.0, (f"l{k}",), ()) for k, (a, b, cap) in enumerate(pairs)]
+    buses = ReducedNetwork(
+        names=names,
+        lat=lats,
+        lon=[-71.0, -70.8, -71.2, -70.9, -71.1, -70.7],
+        kv=[220.0] * 6,
+        model_buses=[[f"{n}_220"] for n in names],
+        map_nodes=[[f"SE_{n}"] for n in names],
+        lines=lines,
+        index={n: i for i, n in enumerate(names)},
+        bus_of_model_bus={f"{n}_220": i for i, n in enumerate(names)},
+    )
+    load = np.array([150.0, 100.0, 150.0, 100.0, 100.0, 50.0])  # 650 MW, balanced with generation
+    sync = np.array([300.0, 0.0, 0.0, 0.0, 250.0, 0.0])
+    renew = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    point = OperatingPoint(
+        "nov2026-1300",
+        "toy",
+        load,
+        sync + renew,
+        sync,
+        np.array([4000.0, 0, 0, 0, 3500.0, 0]),
+        np.array([20000.0, 15000.0, 40000.0, 30000.0, 25000.0, 20000.0]),
+    )
+    net = build_theater_network(buses, point.people, point.load, toy_spec)
+    return StaticWorld(net, {"nov2026-1300": point})

@@ -4,6 +4,8 @@ Last updated: 2026-11-21. Requested by Ricardo on 2026-11-21; the rest of the te
 
 **Context.** Sub50 (formerly CascadaSEN) is a hackathon project for the simulation track. It is an educational, preventive tool: a power-flow and frequency simulator that shows how the Chilean grid (SEN) responds when some elements go out of service, and which defences keep a local event from becoming a blackout. This document covers one family of scenarios: disturbances motivated by public cyber incidents. The simulator only takes grid-level effects as input (an element out of service, a defence not acting). It contains no information about how anyone could cause those effects, and it is not meant to find real weak points. Section 8 lists the guardrails that keep it that way.
 
+The strategic experimentation layer built on top of this engine (agents, observed vs real state, adaptive adversary, campaigns) is described in `strategy.md`; read it after this document.
+
 ## 1. Objective
 
 The main objective of the simulation is to **estimate the grid consequences of a disturbance like the ones public cyber incidents have caused**: which zones lose power, how many people, for how long, at what cost, and which defence would have contained it. The same engine also covers accidental failures like 25F. Cyber incidents are the motivating context the scenarios are built around, because they are the case current regulation asks operators to plan for (section 2).
@@ -98,11 +100,17 @@ There is no public measurement of the consequence of a cyber incident on the SEN
 The tool exists for prevention and education. It must stay a consequence and defence simulator and must never become a tool for finding real weak points. These rules extend `idea.md` section 8 and replace nothing in it.
 
 1. **Effects only, no technique.** Code, data, docs and UI contain no intrusion paths, malware, vulnerabilities, protocols, products, vendors, or links between plants and control centres.
-2. **No weak-point search.** No optimiser or ranking looks for the elements whose loss causes the most damage ("minimum cut"). Sweeps such as N-2 (`idea.md` section 6, item 4) are used only for validation against classifications the CEN already publishes [5]. They are shown aggregated by zone, never as a ranked list. The optimiser searches over defences, never over contingencies.
+2. **No weak-point search.** No optimiser or ranking looks for the elements whose loss causes the most damage ("minimum cut"). Sweeps such as N-2 (`idea.md` section 6, item 4) are used only for validation against classifications the CEN already publishes [5]. They are shown aggregated by zone, never as a ranked list. The optimiser searches over defences, never over contingencies. The adaptive adversary of the strategic layer (item 7) is not an exception: it adapts inside an abstract catalog, and its results are reported as defensive-policy outcomes, never as a ranking of elements or zones.
 3. **Zone-level resolution** for group scenarios (C2, C6). Company names never appear on screen (`stack.md` section 9).
 4. **Public references only.** Scenarios cite public cases: the Huatacondo reports, 25F and CEN studies. Do not collect non-public information about any incident.
 5. Every scenario of this family shows the notice: "Escenario hipotético: se modela el efecto, no el ataque."
 6. Narration describes effects and prevention ("se desconectan 400 MW solares en el Norte Grande"), never how they could be caused.
+7. **Adaptive adversary (strategic layer, `strategy.md`; pending team confirmation).** The experimentation layer includes an adversary agent that adapts its strategy when the defence changes. It may only:
+   - trigger events from the abstract catalog in `strategy.md` section 6 (grid-level effects C1-C5, and digital effects such as telemetry loss, delayed or unreliable data, communications loss and false alarms), always at operating-area or function level;
+   - pursue objectives that target the defender's decision quality: observability, uncertainty, resources, unnecessary decisions, recovery;
+   - see only what the defence exposes.
+
+   It has no technique, no real vulnerability and no real system model behind it. Campaign outputs compare defensive policies and capabilities. They never list which elements or areas hurt the most. The adversary is seeded code (reproducible from the run seed); an LLM never plays it. Its reward measures its abstract objective (persistence, defensive posture, delayed recovery), never megawatts or people.
 
 ## 9. Data gaps
 

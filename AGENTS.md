@@ -7,13 +7,14 @@ These rules apply to every coding agent (Claude Code, Codex, Cursor, others) and
 Do this before each plan and before each change, not only at the start of a session.
 
 1. Read the docs that apply, in this order:
-   1. `docs/idea.md`: product, scope, limits, risks
+   1. `docs/idea.md`: product, scope, limits, risks (and `docs/architecture.md` for how the system is built)
    2. `docs/cyber.md`: main objective of the simulation (consequences of cyberattacks) and its guardrails
    3. `docs/stack.md`: architecture, simulation model, data contracts, conventions
    4. `docs/design.md`: visual direction, colors, zoom levels, logo (for UI work)
    5. `docs/datasets.md`: data sources, pipeline, provenance rule
    6. `docs/plan.md`: phases, validation cases, priorities, open decisions (section 9)
    7. `backend/README.md` for backend work, `web/README.md` for frontend work
+   8. `docs/strategy.md` and `docs/agents.md` for work on the strategic theatre and its agents
    For a small change, reading the sections the change touches plus `plan.md` section 9 is enough. A plan that contradicts the docs must say so explicitly.
 2. Read the newest entries of `CHANGELOG.md`. They say what changed after the docs were written.
 3. Check `git status` and `git log --oneline -10`. Do not overwrite uncommitted work from someone else.

@@ -2,6 +2,8 @@
 
 Status: proposed extension, written 2026-11-21. Not implemented. Needs a team decision (section 9). Read `idea.md` and `stack.md` first.
 
+> **Overlap with what exists (added 2026-11-21, branch `feat/strategic-sim-api`).** The strategic theatre (`strategy.md`, `mapa3.md` section 10) already runs on the mapa 3 network (188 buses, not 10-14 nodes) and its cascade engine. Through `POST /api/v1/sim/runs/{id}/events` a user or a script can already trigger effect-level events on that network: `C1_generation_loss` on a bus `B###` (its generation, close to E1 `plant_out` at substation level), `C2_common_mode_loss` by zone and technology (close to E2 `fleet_out`), and `C3_transmission_opening` on a line `R###` or corridor (E3 `line_open`). It has no plant-level ids and no storage outage, and it keeps the same guardrails (no ranking, no worst-case search, the adversary acts by area only). If the team approves this extension, build the catalog and `/attacks/*` as a thin layer over those events rather than a second engine path.
+
 ## 1. What this adds
 
 CascadaSEN also replays **documented cyber incidents against power systems** as grid disturbances. A bounded catalog of scenarios, each tied to a real incident from the last months, is exposed through a local API so that real agents (LLM agents or scripts) can submit an attack scenario and read back what the grid does: islands, load lost, people without power, and what would have mitigated it.
