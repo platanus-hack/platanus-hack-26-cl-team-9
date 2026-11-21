@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): theatre client for the mapa 3 operation mode
+
+- **Changed:** New `web/src/operation/`: `types.ts` (theatre contract of `docs/mapa3.md` 10 over the mapa 3 types), `api.ts` (`TheaterSource` with `LiveSource` over `/api/v1/sim/*` and `CachedSource` over `web/public/cache/theater/`; `connect()` picks live when `/api/v1/health` answers within 1.5 s), `text.ts` (Spanish narration from the backend templates, fixed notice). Tests: `api.test.ts`, `text.test.ts`. Backend: new `GET /api/v1/sim/runs/{id}/snapshots?start=` because a replay computes all its cycles at once.
+- **Why:** First step to join the frontend with the theatre (approved plan: operation tab in mapa 3).
+- **Agents:** The frontend never hard-codes the backend URL (Vite proxy). Offline runs cannot inject events; "repeat with another policy" switches to the precomputed run of that policy.
+- **Files:** `web/src/operation/*`, `backend/src/cascadasen/application/run_experiment.py`, `backend/src/cascadasen/api/simulation_routes.py`, `backend/tests/integration/test_runs_api.py`.
+
 ## 2026-11-21 · chore(web): proxy /api to the backend for the mapa 3 operation mode
 
 - **Changed:** `web/vite.config.ts` proxies `/api` to `VITE_API_TARGET` (default `http://localhost:8000`). `docker-compose.yml` sets `VITE_API_TARGET=http://backend:8000` for `web` and starts it after `backend` is healthy. `docs/docker.md` no longer says the web never calls the backend.

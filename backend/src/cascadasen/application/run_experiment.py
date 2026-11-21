@@ -129,6 +129,11 @@ class RunManager:
             "series": [s["metrics"] for s in sim.snapshots],
         }
 
+    def snapshots(self, run_id: str, start: int = 0) -> dict[str, Any]:
+        """Snapshots already computed from cycle `start` (a replay runs its cycles at once)."""
+        sim = self.get(run_id)
+        return {"run": self.summary(run_id), "snapshots": sim.snapshots[max(0, start) :]}
+
     def trace(self, run_id: str) -> dict[str, Any]:
         return self.get(run_id).trace()
 

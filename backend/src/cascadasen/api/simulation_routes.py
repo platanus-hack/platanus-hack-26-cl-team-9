@@ -180,6 +180,13 @@ def replay_run(sim: Sim, run_id: str, body: ReplayIn) -> dict[str, Any]:
     return run_call(sim.runs.replay, run_id, overrides, body.cycles)
 
 
+@router.get(
+    "/sim/runs/{run_id}/snapshots", tags=["experimentos"], summary="Snapshots ya calculados desde un ciclo"
+)
+def run_snapshots(sim: Sim, run_id: str, start: int = 0) -> dict[str, Any]:
+    return run_call(sim.runs.snapshots, run_id, start)
+
+
 @router.get("/sim/runs/{run_id}/trace", tags=["experimentos"], summary="Log de auditoría encadenado y receta")
 def run_trace(sim: Sim, run_id: str) -> dict[str, Any]:
     return run_call(sim.runs.trace, run_id)

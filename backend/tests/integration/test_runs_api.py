@@ -104,3 +104,15 @@ def test_narrative_and_after_action(client):
     aar = client.get(f"/api/v1/sim/runs/{rid}/after_action").json()
     assert aar["summary"][0].startswith("La organización mantuvo el")
     assert any("Pérdida de comunicaciones en T2" in line for c in aar["timeline"] for line in c["lines"])
+
+
+def test_replay_snapshots_can_be_read_back(client):
+    rid = client.post("/api/v1/sim/runs", json={"policy": "A", "seed": 5, "horizon": 4}).json()["run_id"]
+    client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 4})
+    other = client.post(f"/api/v1/sim/runs/{rid}/replay", json={"policy": "C"}).json()
+    snaps = client.get(f"/api/v1/sim/runs/{other['run_id']}/snapshots").json()["snapshots"]
+    assert [s["cycle"] for s in snaps] == [0, 1, 2, 3]
+    tail = client.get(f"/api/v1/sim/runs/{other['run_id']}/snapshots", params={"start": 2}).json()[
+        "snapshots"
+    ]
+    assert [s["cycle"] for s in tail] == [2, 3]
