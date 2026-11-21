@@ -34,7 +34,7 @@ export function CascadeLegend({ network, buses, mode }: { network: Network; buse
       <h3>Demanda</h3>
       {mode === "3d"
         ? <Row swatch={<span className="col" style={{ background: css(COLUMN_COLOR) }} />} label={`Barra rectangular azul: demanda de la subestación (${MW_TO_METERS} m por MW, exagerada). ${columns} subestaciones con más de 20 MW. Desaparece al apagarse.`} />
-        : <p className="muted">En la vista 2D la demanda no se dibuja: pasa el cursor sobre una subestación para ver sus MW y personas. Cambia a 3D para verla como barras.</p>}
+        : <Row swatch={<span className="dot big" style={{ background: css([COLUMN_COLOR[0], COLUMN_COLOR[1], COLUMN_COLOR[2], 150]) }} />} label={`Círculo azul visto desde arriba: demanda de la subestación. Su tamaño crece con los MW. ${columns} subestaciones con más de 20 MW. Desaparece al apagarse.`} />}
 
       <h3>Lo que no se dibuja</h3>
       <p className="muted">Generación por central, transformadores, tensión y potencia reactiva, y las redes bajo 66 kV. Las líneas del mapa 1 y 2 (1.930) se agrupan aquí en {network.lines.length}.</p>

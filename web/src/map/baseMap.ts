@@ -7,8 +7,7 @@ import chileUrl from "../../../data/processed/chile.geojson?url";
 
 const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
 const PITCH_DEGREES = 45;
-const STYLE_3D = "mapbox://styles/mapbox/standard";
-const STYLE_2D = "mapbox://styles/mapbox/dark-v11"; // flat: no 3D buildings or terrain, so icons read cleanly
+const STYLE = "mapbox://styles/mapbox/standard";
 const PANEL_CLEARANCE_PX = 460;
 
 export type ViewMode = "2d" | "3d";
@@ -25,14 +24,13 @@ export function createBaseMap(container: HTMLDivElement, handlers: Handlers): Ba
 function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers): BaseMap {
   mapboxgl.accessToken = token;
   const map = new mapboxgl.Map({
-    container, style: STYLE_3D, projection: "mercator", config: { basemap: { lightPreset: "night" } },
+    container, style: STYLE, projection: "mercator", config: { basemap: { lightPreset: "night" } },
     bounds: SEN_BOUNDS, fitBoundsOptions: { padding: { top: 20, bottom: 20, left: 20, right: PANEL_CLEARANCE_PX }, pitch: PITCH_DEGREES }, pitch: PITCH_DEGREES,
   });
   const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: handlers.onClick, getTooltip: handlers.getTooltip, pickingRadius: 8 });
   map.addControl(overlay);
-  let current: ViewMode = "3d";
   const setMode = (mode: ViewMode) => {
-    if (mode !== current) { current = mode; map.setStyle(mode === "2d" ? STYLE_2D : STYLE_3D); if (mode === "3d") map.once("style.load", () => map.setConfigProperty("basemap", "lightPreset", "night")); }
+    // 2D is the same map seen from straight above: it cannot be tilted or rotated.
     const flat = mode === "2d"; // a true 2D map cannot be tilted or rotated
     flat ? (map.dragRotate.disable(), map.touchZoomRotate.disableRotation()) : (map.dragRotate.enable(), map.touchZoomRotate.enableRotation());
     map.easeTo({ pitch: pitchOf(mode), bearing: 0, duration: 600 });

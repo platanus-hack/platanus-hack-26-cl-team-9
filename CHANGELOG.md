@@ -2,11 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
-## 2026-11-21 · feat(web): flat 2D mode with an icon layer (#22)
+## 2026-11-21 · feat(web): 2D view = same map from above, with flat symbols (#22)
 
-- **Changed:** 2D is now its own mode: Mapbox `dark-v11` (flat, no 3D buildings or terrain), camera pitch 0 with rotation disabled, and no demand layer. 3D is unchanged (Standard style, night, rectangular bars). New 2D-only icon layer: `IconPoint` and `iconLayers()` in `web/src/cascade/icons.ts`. The legend explains that demand is not drawn in 2D.
-- **Why:** The 3D view would be overloaded with plant, tower and transformer icons. The 2D discs from #16 were only a camera change.
-- **Agents:** To add icons, build `IconPoint[]` and pass it as `icons` in the `View` given to `buildCascadeLayers` (in `CascadeApp.tsx`, `_animate`). Nothing passes it yet, so no icon draws. Plant icons need per-plant data that the cache does not have (`node_index.json` `plants[]` has it). Switching modes calls `map.setStyle`, so Mapbox reloads the style (about a second). The offline map (no token) has no basemap change, only the camera lock. Branched from `feature/21-cities-metadata` (#21); this PR includes that commit until #21 merges.
+- **Changed:** 2D keeps the same Mapbox Standard (night) basemap as 3D and only looks straight down: camera pitch 0 and rotation disabled. The 3D demand bars are replaced by flat discs whose radius grows with the square root of MW (layer id `load-2d`). New 2D-only icon layer: `IconPoint` and `iconLayers()` in `web/src/cascade/icons.ts`, sized in meters on the ground (clamped to 12 to 40 pixels) so icons scale with the zoom. The legend text changes with the mode.
+- **Why:** A different flat basemap (dark-v11) looked worse than the main map. The team chose the same 3D scene seen from above with 2D symbols, so icons can be added without 3D polygons.
+- **Agents:** To add icons, build `IconPoint[]` and pass it as `icons` in the `View` given to `buildCascadeLayers` (`CascadeApp.tsx`, `_animate`). Nothing passes it yet, so no icon draws. Plant icons need per-plant data that the cache does not have (`node_index.json` `plants[]` has it). The Standard style still draws 3D buildings and terrain when zoomed in, even in 2D. The offline map (no token) only gets the camera lock. Branched from `feature/21-cities-metadata` (#21); this PR includes that commit until #21 merges.
 - **Files:** `web/src/map/baseMap.ts`, `web/src/cascade/layers.ts`, `web/src/cascade/icons.ts`, `web/src/cascade/Legend.tsx`, `web/src/cascade/CascadeApp.tsx`.
 
 ## 2026-11-21 · fix(web): city labels become metadata, not drawn (#20)

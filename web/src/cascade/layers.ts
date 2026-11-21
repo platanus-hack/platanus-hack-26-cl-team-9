@@ -53,13 +53,13 @@ export function buildCascadeLayers(v: View): Layer[] {
       id: "flow", data: flowTrips(v, pos), getPath: (d) => d.path, getTimestamps: (d) => d.timestamps, getColor: (d) => d.color,
       currentTime: v.time, trailLength: 0.25, widthMinPixels: 4, capRounded: true, fadeTrail: true,
     }),
-    ...(v.mode === "3d" ? [new ColumnLayer<NetNode>({
+    v.mode === "2d" ? _demandSquares(v, dark) : new ColumnLayer<NetNode>({
       id: "load", data: v.network.nodes.filter((n) => (v.buses[n.id]?.load_mw ?? 0) > 20), pickable: true, extruded: true,
       vertices: RECTANGLE_BASE, diskResolution: 4, radiusUnits: "pixels", radius: 4, getPosition: (n) => [n.lon, n.lat],
       getElevation: (n) => (dark.has(n.id) ? 0 : v.buses[n.id].load_mw) * MW_TO_METERS,
       getFillColor: (n) => (dark.has(n.id) ? [0, 0, 0, 0] : COLUMN_COLOR),
       updateTriggers: { getElevation: [v.frame], getFillColor: [v.frame] },
-    })] : []),
+    }),
     new ScatterplotLayer<NetNode>({
       id: "nodes", data: v.network.nodes, pickable: true, radiusUnits: "pixels", getPosition: (n) => [n.lon, n.lat],
       getRadius: (n) => (dark.has(n.id) ? 5 : n.kv >= 500 ? 5 : 3), getFillColor: (n) => (dark.has(n.id) ? [239, 68, 68, 255] : [226, 232, 240, 255]),
@@ -67,6 +67,15 @@ export function buildCascadeLayers(v: View): Layer[] {
     }),
     ...(v.mode === "2d" ? iconLayers(v.icons ?? []) : []),
   ];
+}
+
+/** Seen from above there is no height, so demand is a flat disc whose area grows with MW (radius ~ sqrt of MW). */
+function _demandSquares(v: View, dark: Set<string>) {
+  return new ScatterplotLayer<NetNode>({
+    id: "load-2d", data: v.network.nodes.filter((n) => (v.buses[n.id]?.load_mw ?? 0) > 20 && !dark.has(n.id)), pickable: true,
+    radiusUnits: "pixels", getPosition: (n) => [n.lon, n.lat], getRadius: (n) => Math.sqrt(v.buses[n.id].load_mw) * 0.5,
+    getFillColor: [COLUMN_COLOR[0], COLUMN_COLOR[1], COLUMN_COLOR[2], 150], updateTriggers: { getRadius: [v.frame], getFillColor: [v.frame] },
+  });
 }
 
 const DOT_COUNT = 3;
