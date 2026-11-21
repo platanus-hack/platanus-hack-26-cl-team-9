@@ -15,7 +15,9 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
 from cascadasen.api.schemas import EdgePage, Health, IslandsRequest, IslandsResponse, NodePage, Page
+from cascadasen.api.simulation_routes import router as simulation_router
 from cascadasen.application.grid_queries import GridQueryService, NotFoundError
+from cascadasen.application.simulation_service import SimulationService
 from cascadasen.infrastructure.container import repository
 from cascadasen.infrastructure.settings import Settings, get_settings
 
@@ -33,7 +35,11 @@ def get_service(request: Request) -> GridQueryService:
 Svc = Annotated[GridQueryService, Depends(get_service)]
 
 
-def create_app(service: GridQueryService | None = None, settings: Settings | None = None) -> FastAPI:
+def create_app(
+    service: GridQueryService | None = None,
+    settings: Settings | None = None,
+    simulation: SimulationService | None = None,
+) -> FastAPI:
     app = FastAPI(
         title="CascadaSEN · Red eléctrica de Chile",
         version="0.1.0",
@@ -52,6 +58,8 @@ def create_app(service: GridQueryService | None = None, settings: Settings | Non
         snap = repository(settings or get_settings()).load()
         service = GridQueryService(snap) if snap else None
     app.state.service = service
+    app.state.simulation = simulation  # built lazily from the snapshot on the first /sim request
+    app.include_router(simulation_router)
 
     def found(fn, *args, **kwargs):
         try:
@@ -86,6 +94,7 @@ def create_app(service: GridQueryService | None = None, settings: Settings | Non
     def reload(request: Request) -> dict[str, Any]:
         snap = repository(settings or get_settings()).load()
         request.app.state.service = GridQueryService(snap) if snap else None
+        request.app.state.simulation = None
         return health(request)
 
     @app.get(

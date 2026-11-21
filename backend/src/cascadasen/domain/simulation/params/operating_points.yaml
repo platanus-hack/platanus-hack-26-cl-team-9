@@ -1,0 +1,59 @@
+# Operating points: demand, dispatch and inertia of the reduced network (docs/stack.md 4.1).
+# Demand is split by zone share, then by served population inside the zone. Renewables follow the
+# capacity factor; synchronous generation is scaled so the system balances.
+version: 1
+
+operating_points:
+  midday_2026:
+    label_key: op_midday_2026
+    total_load_mw:
+      value: 10500.0
+      is_assumption: true
+      note: "Order of magnitude of SEN weekday midday demand; replace with CEN data"
+    zone_demand_share:
+      value: {NG: 0.27, NC: 0.08, CE: 0.41, CS: 0.15, SU: 0.09}
+      is_assumption: true
+      note: "Approximate zonal shares (Norte Grande is mostly mining load); replace with CEN zonal demand"
+    capacity_factor:
+      value: {solar: 0.70, eolica: 0.30, hidro: 0.40, termica: 0.45, bioenergia: 0.50, geotermica: 0.85}
+      is_assumption: true
+      note: "Midday availability; synchronous values are starting points before balancing"
+
+  low_demand_2026:
+    label_key: op_low_demand_2026
+    total_load_mw: {value: 7532.1, source: "[14] CEN 2026 load-shedding study (case V7)"}
+    kinetic_energy_gvas: {value: 44.3, source: "[14] (case V7)"}
+    zone_demand_share:
+      value: {NG: 0.27, NC: 0.08, CE: 0.41, CS: 0.15, SU: 0.09}
+      is_assumption: true
+      note: "Approximate zonal shares; replace with CEN zonal demand"
+    capacity_factor:
+      value: {solar: 0.0, eolica: 0.35, hidro: 0.45, termica: 0.45, bioenergia: 0.50, geotermica: 0.85}
+      is_assumption: true
+      note: "Night-time low demand: no solar"
+
+  25F:
+    label_key: op_25F
+    total_load_mw:
+      value: 10200.0
+      is_assumption: true
+      note: "SEN demand at 15:16 on 25 Feb 2025, order of magnitude; confirm in [4]"
+    zone_demand_share:
+      value: {NG: 0.27, NC: 0.08, CE: 0.41, CS: 0.15, SU: 0.09}
+      is_assumption: true
+      note: "Approximate zonal shares; replace with CEN zonal demand"
+    capacity_factor:
+      value: {solar: 0.75, eolica: 0.30, hidro: 0.40, termica: 0.45, bioenergia: 0.50, geotermica: 0.85}
+      is_assumption: true
+      note: "Midday availability"
+    transfer:
+      value: {north: A06, south: A07, mw: 2114.0}
+      source: "[4] net flow lost across the 25F boundary (stack.md 4.4)"
+      note: "Dispatch is shifted north/south until the export across A06-A07 matches"
+    kinetic_energy_gvas_by_side:
+      value: {north: 11.72, south: 22.46}
+      source: "[4] Table 4-1"
+      note: "Which value belongs to which island is to be confirmed in the report"
+    primary_reserve_mw_by_side:
+      value: {south: 290.06}
+      source: "[4] Table 4-1 (267.99 + 22.07 MW in the centre-south)"

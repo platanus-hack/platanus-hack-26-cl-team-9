@@ -1,0 +1,50 @@
+# Reduced trunk network: 13 operating areas by latitude band (docs/strategy.md section 2.1).
+# Every number sits in a `value` with a source or is_assumption (docs/datasets.md section 6).
+version: 1
+
+s_base_mva:
+  value: 100.0
+  source: "Per-unit base for the DC power flow (convention)"
+
+# Systems and macro-zones left out: Aysén (SEA) and Magallanes (SEM) are not synchronous with the SEN.
+excluded_systems: [SEA, SEM, EDELAYSEN, EDELMAG]
+excluded_zones: [AY, MA]
+
+# Areas north to south. lat_south is the southern edge; null = no edge (last area).
+areas:
+  value:
+    - {id: A01, name: "Arica–Iquique", zone: NG, lat_south: -21.3, anchors: [Parinacota, Cóndores, Tarapacá]}
+    - {id: A02, name: "Crucero–Kimal", zone: NG, lat_south: -22.7, anchors: [Crucero, Encuentro, Kimal]}
+    - {id: A03, name: "Antofagasta–Taltal", zone: NG, lat_south: -25.6, anchors: [Mejillones, Los Changos, Jadresic]}
+    - {id: A04, name: "Cumbre–Diego de Almagro", zone: NC, lat_south: -26.9, anchors: [Cumbre]}
+    - {id: A05, name: "Copiapó", zone: NC, lat_south: -28.0, anchors: [Cardones, Nueva Cardones]}
+    - {id: A06, name: "Vallenar", zone: NC, lat_south: -29.3, anchors: [Maitencillo, Nueva Maitencillo]}
+    - {id: A07, name: "La Serena–Coquimbo", zone: NC, lat_south: -31.3, anchors: [Pan de Azúcar, Nueva Pan de Azúcar]}
+    - {id: A08, name: "Los Vilos–Valparaíso", zone: CE, lat_south: -33.3, anchors: [Los Vilos, Quillota, Polpaico]}
+    - {id: A09, name: "Santiago", zone: CE, lat_south: -33.9, anchors: [Lo Aguirre, Cerro Navia, Alto Jahuel]}
+    - {id: A10, name: "O'Higgins–Maule", zone: CS, lat_south: -36.4, anchors: [Rapel, Itahue, Ancoa]}
+    - {id: A11, name: "Biobío", zone: CS, lat_south: -38.2, anchors: [Charrúa, Entre Ríos, Hualpén, Mulchén]}
+    - {id: A12, name: "Araucanía", zone: SU, lat_south: -39.7, anchors: [Temuco, Ciruelos]}
+    - {id: A13, name: "Los Ríos–Los Lagos", zone: SU, lat_south: null, anchors: [Valdivia, Pichirropulli, Puerto Montt]}
+  source: "docs/strategy.md section 2.1, team proposal 2026-11-21 (plan.md section 9 item 4)"
+  is_assumption: true
+  note: "Band edges placed between backbone substations so the A06-A07 edge is the 25F corridor"
+
+# Corridors split by voltage: lines at or above this level form the '500' corridor, the rest the '220' corridor.
+high_voltage_kv:
+  value: 400.0
+  source: "stack.md 4.1: parallel lines at different voltages stay as separate edges"
+
+# Fallback for lines without PyPSA-CL electrical parameters: reactance from X_PER_KM midpoint,
+# thermal capacity by voltage class.
+typical_capacity_mva:
+  value: {500: 1700.0, 345: 900.0, 220: 400.0, 154: 180.0, 110: 120.0, 66: 60.0}
+  is_assumption: true
+  note: "Typical single-circuit ratings per voltage class; replace with Infotecnica ratings"
+
+# Corridor overrides used to calibrate the 25F transfer split (V1). Empty means data-derived.
+corridor_overrides:
+  value:
+    "A06-A07/220": {x_pu: 0.0292, note: "calibrated on V1: 25F split 1,800 MW on 500 kV and 314 MW on the 220 kV link [4]"}
+  is_assumption: true
+  note: "Declared calibration hook (stack.md 9); every entry must say which case it was fit on"

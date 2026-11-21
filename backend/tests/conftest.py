@@ -186,3 +186,24 @@ def toy_bundle() -> SourceBundle:
 @pytest.fixture
 def toy_snapshot(toy_bundle):
     return GridUnifier().unify(toy_bundle)
+
+
+@pytest.fixture
+def toy_spec():
+    """Three areas over the toy grid: ALFA | BETA + DELTA | GAMMA."""
+    from cascadasen.domain.simulation.network import AreaSpec, NetworkSpec
+
+    return NetworkSpec(
+        areas=(
+            AreaSpec("T1", "Toy norte", "NC", -30.5),
+            AreaSpec("T2", "Toy centro", "NC", -31.5),
+            AreaSpec("T3", "Toy sur", "CE", None),
+        )
+    )
+
+
+@pytest.fixture
+def toy_network(toy_snapshot, toy_spec):
+    from cascadasen.domain.simulation.network import build_reduced_network
+
+    return build_reduced_network(toy_snapshot, toy_spec)

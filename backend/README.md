@@ -51,3 +51,14 @@ infrastructure/ (sources/*, http cache, arcgis, snapshot repository, exporters, 
 ## Main endpoints
 
 `/api/v1/nodes`, `/nodes/{id}` (connections, plants, storage, served comunas), `/edges`, `/edges/{id}`, `/plants`, `/storage`, `/comunas`, `/zones` (macro zones and links between them with known capacity), `/graph/path`, `POST /graph/islands` (connectivity after removing lines or nodes), `/model/buses`, `/model/branches`, `/geo/{layer}.geojson`, `/sources`, `/validation`, `/assumptions`.
+
+## Simulation
+
+The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`, HTTP contract in `docs/stack.md` sections 7 and 7.1).
+
+- `domain/simulation/`: physical engine on the reduced trunk network (13 operating areas, `params/network.yaml`).
+  - Modules: DC power flow (`powerflow.py`), weak-link cascade (`engine.py`), island swing-equation frequency with EDAC, extreme-contingency shedding, battery and over-frequency curtailment (`frequency.py`), consequence card L0-L3 (`consequence.py`) and the `timeline.json` contract (`timeline.py`).
+  - Every parameter in `params/*.yaml` carries a `source` or `is_assumption: true`, and the loader rejects bare numbers. Calibrated values say which validation case they were fit on.
+- `application/simulate.py`: `POST /api/v1/simulate`. `application/simulation_service.py` is the facade the routes use.
+- `GET /api/v1/sim/network`: areas and corridors with the real node and line ids they aggregate. A substation id from the map (`SE…`) is a valid target everywhere.
+- Validation cases: `tests/validation/test_engine_cases.py` runs V1-V5, V7, V8 and V10 on the real snapshot. V6 and V9 are skipped until their reference data is in the repo.
