@@ -90,8 +90,14 @@ C2 still decides on the rules plus the optional LLM pick (`strategy.md` section 
 - No ranking. Physical readings describe consequences and never rank elements as targets (`cyber.md` section 8).
 - Every threshold carries a source or `is_assumption`.
 
-## 4. Open items
+## 4. Pending work (not done yet, 2026-11-21)
 
-- The LLM context does not carry physical readings yet, and the operation view does not draw them, although the snapshot's `observed.areas` already holds `freq_hz` and `rocof_hz_s`. `theater/cycle.py`, `infrastructure/llm.py` and `web/src/operation/` were being edited in parallel, so this was left for a later change.
-- Reserve and battery blocks are held until the area blacks out (no release or energy limit). `restoration.reserve_recovery` in `theater.yaml` is unused.
-- The low-inertia floor is a system-level figure applied per island.
+| # | Pending | Where | Note |
+|---|---|---|---|
+| 1 | Physical summary in the LLM commander's context: islands, observed f, out-of-band areas, uncertain flags; the prompt explains the 49–51 Hz band and that "incierto" means voltage is not computed | `theater/cycle.py` (`_llm_pick` context), `infrastructure/llm.py` (prompt) | Only from C2's view. Left out because both files were being edited in parallel on `feat/strategic-sim-api` |
+| 2 | Draw the physical readings in the operation view (frequency per area, RoCoF, physical alarms, "limitado por tensión (incierto)") | `web/src/operation/` (`types.ts`, `layers.ts`, `OperationPanel.tsx`) | The snapshot's `observed.areas` already holds `freq_hz` and `rocof_hz_s`; `transient.islands` holds `min_hz`, `final_hz`, `rocof_hz_s`, `inertia_mws`. Update `mapa3.md` section 10 with it |
+| 3 | Release fast reserve and battery blocks (duration or energy limit) | `theater/execution.py` (`apply_action`, `tick`), `theater/resources.py` | Today they stay held until the area blacks out. `restoration.reserve_recovery` in `theater.yaml` is unused: wire it up or remove it |
+| 4 | Regenerate the map's cached cuts | `uv run cascadasen-cache` → `web/public/cache/` | The engine changed (extreme EDAC, droop, new summary fields); the cache is stale until then |
+| 5 | `low_inertia` repeats every cycle while an island stays below the floor (12–13 times in the flagship run after the 900 MW loss) | `theater/digital.py` (`band_alarms`) | True condition but noisy for ISR. Option: raise it only when inertia drops further or on the first cycle below the floor |
+| 6 | The low-inertia floor (31,000 MWs) is a system-level figure applied per island | `theater.yaml` → `physics_alarms` | Needs a per-island criterion if a source exists |
+| 7 | Calibrate the island frequency on this network against the CEN 25F numbers (V2–V9); only the V1 flow split is checked | `domain/cascade/`, `tests/unit/test_cascade.py` | The 13-area engine keeps those cases (`engine.md`) |
