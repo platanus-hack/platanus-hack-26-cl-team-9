@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): city labels in mapa 3 (#18)
+
+- **Changed:** Six reference cities (Arica, Antofagasta, Calama, Santiago, Concepción, Puerto Montt) drawn as a cream dot plus a text label, in deck.gl (`CITIES` in `web/src/cascade/layers.ts`), on top of the grid layers.
+- **Why:** The Paper design (`2d.css`) has these labels. It placed them with fixed pixels on a 1440x900 artboard; real coordinates keep them in place when the map zooms or moves.
+- **Agents:** The labels are not pickable. Mapbox draws its own city names too, so some appear twice at some zooms. Font is Geist if installed, else system-ui; Geist is not bundled. Branched from `feature/toggle-2d` (#17), so this PR includes that commit until #17 merges.
+- **Files:** `web/src/cascade/layers.ts`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(web): 2D / 3D toggle in mapa 3 (#16)
 
 - **Changed:** A 2D / 3D button at the top of the map (left of the panel). 3D is the previous view: camera pitch 45 and rectangular demand bars. 2D sets pitch 0 and draws demand as flat discs (radius grows with the square root of MW). `?vista=2d` opens in 2D. `BaseMap` has a new `setMode()` for both the Mapbox and the offline map.

@@ -1,6 +1,6 @@
 import type { Layer } from "@deck.gl/core";
 import { TripsLayer } from "@deck.gl/geo-layers";
-import { ColumnLayer, PathLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { ColumnLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import type { ViewMode } from "../map/baseMap";
 import { RECTANGLE_BASE } from "../map/shapes";
 import type { BusState, EdgeState, Frame, NetLine, NetNode, Network } from "./types";
@@ -64,6 +64,7 @@ export function buildCascadeLayers(v: View): Layer[] {
       getRadius: (n) => (dark.has(n.id) ? 5 : n.kv >= 500 ? 5 : 3), getFillColor: (n) => (dark.has(n.id) ? [239, 68, 68, 255] : [226, 232, 240, 255]),
       stroked: dark.size > 0, getLineColor: [0, 0, 0, 255], lineWidthMinPixels: 1, updateTriggers: { getFillColor: [v.frame], getRadius: [v.frame] },
     }),
+    ..._cityLayers(),
   ];
 }
 
@@ -74,6 +75,28 @@ function _demandDiscs(v: View, dark: Set<string>) {
     radiusUnits: "pixels", getPosition: (n) => [n.lon, n.lat], getRadius: (n) => Math.sqrt(v.buses[n.id].load_mw) * 0.5,
     getFillColor: [...COLUMN_COLOR.slice(0, 3), 150] as Rgba, updateTriggers: { getRadius: [v.frame], getFillColor: [v.frame] },
   });
+}
+
+/** Reference cities from the Paper design (2d.css), at real coordinates so they stay put when the map moves or zooms. */
+export const CITIES: { name: string; lon: number; lat: number; side: "left" | "right" }[] = [
+  { name: "Arica", lon: -70.3126, lat: -18.4783, side: "left" },
+  { name: "Antofagasta", lon: -70.3975, lat: -23.6509, side: "left" },
+  { name: "Calama", lon: -68.9294, lat: -22.4544, side: "right" },
+  { name: "Santiago", lon: -70.6693, lat: -33.4489, side: "left" },
+  { name: "Concepción", lon: -73.0444, lat: -36.8201, side: "left" },
+  { name: "Puerto Montt", lon: -72.9424, lat: -41.4693, side: "left" },
+];
+const CREAM: Rgba = [255, 241, 218, 255];
+
+function _cityLayers(): Layer[] {
+  return [
+    new ScatterplotLayer<(typeof CITIES)[number]>({ id: "cities", data: CITIES, radiusUnits: "pixels", getRadius: 3, getPosition: (c) => [c.lon, c.lat], getFillColor: CREAM }),
+    new TextLayer<(typeof CITIES)[number]>({
+      id: "cities-label", data: CITIES, getPosition: (c) => [c.lon, c.lat], getText: (c) => c.name, getSize: 12, fontWeight: 600, fontFamily: "Geist, system-ui, sans-serif",
+      getColor: [230, 230, 232, 255], getTextAnchor: (c) => (c.side === "left" ? "end" : "start"), getPixelOffset: (c) => [c.side === "left" ? -8 : 8, 0],
+      outlineWidth: 2, outlineColor: [6, 10, 20, 255], fontSettings: { sdf: true }, characterSet: "auto",
+    }),
+  ];
 }
 
 const DOT_COUNT = 3;
