@@ -1,6 +1,13 @@
 # Changelog
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-21 · feat(data): add regional grid exports and country outlines
+
+- **Changed:** `data/processed/latam/` with lines, substations and plants for BRA (2,264 / 927 / 2,953), PER (575 / 269 / 246), BOL (244 / 71 / 31) and ARG from OpenStreetMap (3,056 / 308 / 208), a manifest, and `outlines.geojson` (geoBoundaries) built by `data/scripts/build_latam_outlines.sh`. New validation test `backend/tests/validation/test_regional_data.py`.
+- **Why:** The web map reads these files; they are versioned like the rest of `data/processed/` so the demo needs no download.
+- **Agents:** Argentina is the OSM fallback, not the official source; its 132 kV total looks high (duplicated circuits). Regenerate with `uv run cascadasen-regional` (add `--refresh` to download again). The validation test skips when the folder is missing.
+- **Files:** `data/processed/latam/`, `data/scripts/build_latam_outlines.sh`, `backend/tests/validation/test_regional_data.py`.
+
 ## 2026-11-21 · feat(regional): add the regional grid model, adapters and command
 
 - **Changed:** New pure `domain/regional.py` (common schema, voltage and technology normalisers, `normalise`, GeoJSON and manifest builders) and port `RegionalGridSource`. Four adapters in `infrastructure/sources/regional/` (EPE Brazil, Osinergmin Peru, Secretaría de Energía Argentina, OpenStreetMap through Overpass) and the command `cascadasen-regional --countries BRA,PER,ARG,BOL [--osm ARG] [--refresh]`.

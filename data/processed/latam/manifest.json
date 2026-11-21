@@ -1,0 +1,211 @@
+{
+ "version": 1,
+ "countries": {
+  "ARG": {
+   "country": "ARG",
+   "name": "Argentina",
+   "counts": {
+    "lines": 3056,
+    "substations": 308,
+    "plants": 208
+   },
+   "line_km_by_kv": {
+    "500": 15366.1,
+    "345": 411.5,
+    "330": 1119.0,
+    "220": 2674.8,
+    "132": 35917.0,
+    "66": 801.1
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 68.0,
+    "eolica": 2016.2,
+    "hidro": 10140.7,
+    "nuclear": 1700.0,
+    "otra": 31.9,
+    "solar": 1273.0,
+    "termica": 24333.8
+   },
+   "bbox": [
+    -72.2326925,
+    -51.65733,
+    -54.4608,
+    -21.99918
+   ],
+   "sources": [
+    {
+     "id": "osm_power",
+     "name": "OpenStreetMap, etiquetas power=*",
+     "publisher": "Colaboradores de OpenStreetMap",
+     "url": "https://www.openstreetmap.org/",
+     "license": "ODbL 1.0",
+     "attribution": "© OpenStreetMap contributors",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:47:40+00:00"
+    }
+   ],
+   "warnings": [
+    "223 líneas de menos de 66 kV descartadas",
+    "1377 subestaciones sin tensión o bajo 66 kV descartadas"
+   ]
+  },
+  "BOL": {
+   "country": "BOL",
+   "name": "Bolivia",
+   "counts": {
+    "lines": 244,
+    "substations": 71,
+    "plants": 31
+   },
+   "line_km_by_kv": {
+    "500": 235.7,
+    "230": 3675.9,
+    "132": 120.5,
+    "115": 2815.5,
+    "69": 848.6,
+    "66": 4.7
+   },
+   "plant_mw_by_tech": {
+    "eolica": 135.9,
+    "hidro": 1417.5,
+    "solar": 166.5,
+    "termica": 1468.8
+   },
+   "bbox": [
+    -69.03427,
+    -22.71454,
+    -62.5186,
+    -14.44194
+   ],
+   "sources": [
+    {
+     "id": "osm_power",
+     "name": "OpenStreetMap, etiquetas power=*",
+     "publisher": "Colaboradores de OpenStreetMap",
+     "url": "https://www.openstreetmap.org/",
+     "license": "ODbL 1.0",
+     "attribution": "© OpenStreetMap contributors",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:42:10+00:00"
+    }
+   ],
+   "warnings": [
+    "1 líneas de menos de 66 kV descartadas",
+    "193 subestaciones sin tensión o bajo 66 kV descartadas"
+   ]
+  },
+  "BRA": {
+   "country": "BRA",
+   "name": "Brasil",
+   "counts": {
+    "lines": 2264,
+    "substations": 927,
+    "plants": 2953
+   },
+   "line_km_by_kv": {
+    "800": 9235.7,
+    "765": 2700.5,
+    "600": 17629.2,
+    "525": 11056.8,
+    "500": 73318.9,
+    "440": 7085.7,
+    "345": 11230.2,
+    "230": 74434.5,
+    "132": 16.3
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 14898.0,
+    "eolica": 32560.7,
+    "hidro": 114947.3,
+    "nuclear": 1990.0,
+    "solar": 14974.5,
+    "termica": 24474.4
+   },
+   "bbox": [
+    -72.63972,
+    -33.47453,
+    -34.83921,
+    4.53068
+   ],
+   "sources": [
+    {
+     "id": "epe_webmap",
+     "name": "EPE WebMap, sistema eléctrico existente",
+     "publisher": "Empresa de Pesquisa Energética (EPE), Brasil",
+     "url": "https://gisepeprd2.epe.gov.br/arcgis/rest/services/WMS_Webmap_EPE_Data/MapServer",
+     "license": "No declarada; datos públicos del gobierno de Brasil",
+     "attribution": "EPE WebMap",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:42:08+00:00"
+    }
+   ],
+   "warnings": [
+    "5 líneas sin tensión descartadas"
+   ]
+  },
+  "PER": {
+   "country": "PER",
+   "name": "Perú",
+   "counts": {
+    "lines": 575,
+    "substations": 269,
+    "plants": 246
+   },
+   "line_km_by_kv": {
+    "500": 2889.0,
+    "220": 16393.1,
+    "145": 69.4,
+    "138": 5288.9,
+    "72.5": 37.6,
+    "69": 156.7,
+    "66": 1256.3
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 150.8,
+    "eolica": 1021.4,
+    "hidro": 4253.3,
+    "solar": 1151.5,
+    "termica": 6270.7
+   },
+   "bbox": [
+    -81.27734,
+    -18.17411,
+    -69.22217124600002,
+    -3.269989360000011
+   ],
+   "sources": [
+    {
+     "id": "osinergmin_gisem",
+     "name": "Osinergmin GISEM, mapa del SEIN en operación",
+     "publisher": "Osinergmin, Perú",
+     "url": "https://gisem.osinergmin.gob.pe/serverosih/rest/services/Electricidad/MapaSEIN_Operacion/MapServer",
+     "license": "No declarada; datos públicos del gobierno de Perú",
+     "attribution": "Osinergmin GISEM",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:42:09+00:00"
+    }
+   ],
+   "warnings": [
+    "642 líneas de menos de 66 kV descartadas",
+    "456 subestaciones sin tensión o bajo 66 kV descartadas"
+   ]
+  }
+ },
+ "built_at": "2026-11-21T21:48:27+00:00"
+}
