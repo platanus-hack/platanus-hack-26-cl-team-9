@@ -157,11 +157,23 @@ Three proposed indices:
 
 Before they are shown as business metrics, these indices must be validated (sensitivity across seeds, monotonic response to uncertainty).
 
+The campaign runner (`POST /api/v1/sim/campaigns`) computes B and C. A campaign is synchronous and capped at 240 runs, and Mode II adds the uncertainty-0 runs automatically.
+
+A negative Decisional Fragility Index is a finding, not an error: better information made that policy do worse. For example, the preventive policy over-reacts to every visible move of an adaptive adversary, which then exploits it.
+
 ## 9. Flagship experiment
 
 **"¿Puede una infraestructura mantener su misión cuando pierde la capacidad de comprender su propio estado?"** (template `flagship_observability`)
 
 - **Initial conditions:** the 13-area reduced SEN at a demanding operating point, generation and demand balanced, digital systems healthy, limited defensive resources.
+- **Static plan** (`params/templates.yaml`): supervision degrades step by step.
+  1. Cycle 2: delayed telemetry in A07.
+  2. Cycle 4: telemetry lost in A06.
+  3. Cycle 6: unreliable data in A08.
+  4. Cycle 8: Santiago (A09) loses communications.
+  5. Cycle 10: 900 MW of generation is lost in A03 while Santiago is blind.
+  6. Cycle 12: remote dispatch is lost in A10.
+  7. Cycle 15: false alarms in A11.
 - **Adversary:** objective "reduce observability / raise uncertainty", adaptive, budgeted.
 - **Runs:** policies A, B and C on the same scenario and seeds, with perfect and degraded information, against the static and the adaptive adversary.
 - **Results:** supply continuity, detection and understanding time, resources consumed, wrong decisions, response alternatives lost, recovery time, and each policy's sensitivity to uncertainty.

@@ -259,7 +259,8 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 
 - `target` accepts an area id or any real snapshot node id. The response echoes `resolved_target`, so a click on a substation of the frontend map works directly.
 - Errors: 404 unknown run, element or template; 422 invalid input; 409 event injected into a finished run.
-- Runs live in memory (the most recent 100 are kept). Any run can be rebuilt from its recipe (`GET /sim/runs/{id}/trace`).
+- Runs live in memory (the most recent 100 are kept). Any run can be rebuilt from its recipe (`GET /sim/runs/{id}/trace`). An unchanged replay gives the same trace hash.
+- Campaign body: `mode` (`diagnostic`, `adversarial`, `capability`), `templates`, `policies`, `seeds` (up to 10), `uncertainty_levels`, `adversary_variants` (`none`, `static`, `adaptive`), `capability_variants` (`[{id, capabilities}]`, the first one is the baseline), `horizon`, `objective`, `budget`. It runs synchronously and is capped at 240 runs (422 above).
 
 ## 8. Testing and CI
 

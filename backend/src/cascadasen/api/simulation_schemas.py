@@ -134,3 +134,25 @@ class RunSummary(BaseModel):
     notice: str
     replay_of: str | None = None
     overrides: dict[str, Any] | None = None
+
+
+class CapabilityVariant(BaseModel):
+    id: str = Field(description="Nombre de la variante, p. ej. 'baseline', 'mas_cuadrillas'")
+    capabilities: dict[str, float] = Field(default_factory=dict, description="Capacidad por recurso")
+
+
+class CampaignIn(BaseModel):
+    mode: Literal["diagnostic", "adversarial", "capability"] = "adversarial"
+    templates: list[str] = Field(
+        default_factory=lambda: ["flagship_observability"], min_length=1, max_length=6
+    )
+    policies: list[str] = Field(default_factory=lambda: ["A", "B", "C"], min_length=1, max_length=3)
+    seeds: list[int] = Field(default_factory=lambda: [1, 2, 3], min_length=1, max_length=10)
+    uncertainty_levels: list[float] = Field(default_factory=lambda: [1.0], min_length=1, max_length=3)
+    adversary_variants: list[str] = Field(default_factory=lambda: ["static", "adaptive"])
+    capability_variants: list[CapabilityVariant] = Field(
+        default_factory=list, description="Modo III: la primera variante es la línea base"
+    )
+    horizon: int | None = Field(None, ge=1, le=72)
+    objective: str | None = None
+    budget: float | None = Field(None, ge=0, le=50)

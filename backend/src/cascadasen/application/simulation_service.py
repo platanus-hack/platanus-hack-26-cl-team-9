@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from cascadasen.application.run_campaign import CampaignRunner
 from cascadasen.application.run_experiment import RunManager, catalog
 from cascadasen.application.simulate import PhysicsSimulator, SimulateCommand
 from cascadasen.domain.model import GridSnapshot
@@ -20,6 +21,7 @@ class SimulationService:
         self.physics = physics or Physics.load()
         self.simulator = PhysicsSimulator(network, self.physics)
         self.runs = RunManager(network, self.physics)
+        self.campaigns = CampaignRunner(network, self.physics)
 
     @classmethod
     def from_snapshot(cls, snapshot: GridSnapshot, spec: NetworkSpec | None = None) -> SimulationService:

@@ -2,6 +2,22 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(theater): campaigns with fragility and adaptation indices
+
+- **Changed:**
+  - New `application/run_campaign.py` and endpoints `POST/GET /api/v1/sim/campaigns`.
+    - Mode I (diagnostic): continuity per area in geographic order.
+    - Mode II (adversarial): policies × uncertainty × static/adaptive adversary, with the Decisional Fragility Index (paired uncertainty-0 runs added automatically) and the Adaptation Index.
+    - Mode III (capability): deltas against the baseline variant. Capped at 240 runs.
+  - Perfect information (uncertainty 0) now also reports the true supervision losses as alarms.
+  - The digital engine was split into an `_Observer` with a fixed call order.
+- **Why:** Phase 4 of the plan: compare policies under equivalent conditions and measure how they degrade with uncertainty and against an adaptive adversary.
+- **Agents:**
+  - A negative fragility index means better information made that policy worse. It happens with the preventive policy against the adaptive adversary, and it is documented as a finding in `strategy.md` 8.
+  - Flagship campaign, 3 seeds × levels {0, 1, 2}: 54 runs in ~8 s.
+  - `docs/stack.md` 7.1 documents the campaign body.
+- **Files:** `backend/src/cascadasen/application/run_campaign.py`, `backend/src/cascadasen/application/simulation_service.py`, `backend/src/cascadasen/api/simulation_*.py`, `backend/src/cascadasen/domain/theater/digital.py`, `backend/tests/integration/test_campaigns_api.py`, `docs/strategy.md`, `docs/stack.md`.
+
 ## 2026-11-21 · feat(theater): strategic cycle, agents and runs API
 
 - **Changed:**
@@ -11,7 +27,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
   - A hash-chained audit log, an evaluator (continuity, awareness, response capacity, resistance, reserve, recoverability, coordination, wrong decisions, Freedom of Action Index) and the six-step cycle.
   - New `domain/agents/`: C2, ISR (Bayesian cause belief), Operations, Stabilisation, Logistics, a read-only Auditor, and the Adversary (EXP3 over the abstract catalog, or the template plan when static).
   - New `application/run_experiment.py` and endpoints `/api/v1/sim/catalog`, `/sim/runs`, `/runs/{id}`, `/events`, `/step`, `/replay`, `/trace`, `/report`.
-  - Six experiment templates, including `flagship_observability`.
+  - Six experiment templates, including `flagship_observability`, whose 900 MW shock hits while Santiago is blind.
 - **Why:** The strategic experimentation layer of `docs/strategy.md`, and the API the frontend uses to select a node, trigger an event and compare policies.
 - **Agents:**
   - Agent views never carry `RealState`/`GridState` (tested).

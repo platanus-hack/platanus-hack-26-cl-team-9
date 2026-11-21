@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from cascadasen.api.simulation_schemas import (
+    CampaignIn,
     EventIn,
     NetworkOut,
     ReplayIn,
@@ -17,6 +18,7 @@ from cascadasen.api.simulation_schemas import (
     SimulateRequest,
     StepIn,
 )
+from cascadasen.application.run_campaign import CampaignNotFoundError, CampaignSpec
 from cascadasen.application.run_experiment import RunNotFoundError, run_config
 from cascadasen.application.simulate import SimulateCommand, SimulationInputError, SimulationTimeoutError
 from cascadasen.application.simulation_service import SimulationService
@@ -92,6 +94,8 @@ def run_call(fn, *args, **kwargs) -> Any:
         raise HTTPException(404 if exc.not_found else 422, exc.detail()) from exc
     except RunFinishedError as exc:
         raise HTTPException(409, "La corrida terminó; usa /replay para repetirla") from exc
+    except CampaignNotFoundError as exc:
+        raise HTTPException(404, f"No existe la campaña: {exc.args[0]}") from exc
 
 
 @router.get(
@@ -162,3 +166,33 @@ def run_trace(sim: Sim, run_id: str) -> dict[str, Any]:
 @router.get("/sim/runs/{run_id}/report", tags=["experimentos"], summary="Indicadores, índices y consecuencia")
 def run_report(sim: Sim, run_id: str) -> dict[str, Any]:
     return run_call(sim.runs.report, run_id)
+
+
+@router.post(
+    "/sim/campaigns",
+    status_code=201,
+    tags=["experimentos"],
+    summary="Campaña: matriz de corridas comparadas (modos I diagnóstico, II adversarial, III capacidades)",
+    response_description="Tabla comparativa por política, índices de fragilidad decisional y de adaptación",
+)
+def create_campaign(sim: Sim, body: CampaignIn) -> dict[str, Any]:
+    spec = CampaignSpec(
+        mode=body.mode,
+        templates=tuple(body.templates),
+        policies=tuple(body.policies),
+        seeds=tuple(body.seeds),
+        uncertainty_levels=tuple(body.uncertainty_levels),
+        adversary_variants=tuple(body.adversary_variants),
+        capability_variants=tuple(
+            (v.id, tuple(sorted(v.capabilities.items()))) for v in body.capability_variants
+        ),
+        horizon=body.horizon,
+        objective=body.objective,
+        budget=body.budget,
+    )
+    return run_call(sim.campaigns.run, spec)
+
+
+@router.get("/sim/campaigns/{campaign_id}", tags=["experimentos"], summary="Resultado de una campaña")
+def get_campaign(sim: Sim, campaign_id: str) -> dict[str, Any]:
+    return run_call(sim.campaigns.get, campaign_id)
