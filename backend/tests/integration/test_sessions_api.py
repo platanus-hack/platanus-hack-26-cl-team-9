@@ -4,11 +4,13 @@ limits, sandbox cuts, nested runs, the SSE stream and the agent OpenAPI conventi
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
 
 from cascadasen.api.app import create_app
+from cascadasen.api.limits import SessionLocks
 from cascadasen.application.grid_queries import GridQueryService
 from cascadasen.application.run_experiment import RunCache
 from cascadasen.application.sessions import SessionService
@@ -305,3 +307,50 @@ def test_global_runs_are_rate_limited_and_body_capped(app):
         "/api/v1/sim/runs", content=b"{" + b" " * 70000 + b"}", headers={"Content-Type": "application/json"}
     )
     assert big.status_code == 413
+
+
+def _slow_state(app, monkeypatch) -> list[tuple[float, float]]:
+    """Make the sandbox state read take 0.3 s and record its (start, end)."""
+    spans, real = [], app.state.sessions.state
+
+    def slow(sid):
+        start = time.monotonic()
+        time.sleep(0.3)
+        out = real(sid)
+        spans.append((start, time.monotonic()))
+        return out
+
+    monkeypatch.setattr(app.state.sessions, "state", slow)
+    return spans
+
+
+def _overlap(spans: list[tuple[float, float]]) -> bool:
+    first, second = sorted(spans)
+    return second[0] < first[1]
+
+
+def test_requests_on_one_session_run_one_after_another(app, client, monkeypatch):
+    sid = _create(client)
+    spans = _slow_state(app, monkeypatch)
+    with ThreadPoolExecutor(2) as pool:
+        codes = list(pool.map(lambda _: client.get(f"{BASE}/{sid}/state").status_code, range(2)))
+    assert codes == [200, 200] and len(spans) == 2 and not _overlap(spans)
+
+
+def test_requests_on_two_sessions_run_in_parallel(app, client, monkeypatch):
+    sids = [_create(client), _create(client)]
+    spans = _slow_state(app, monkeypatch)
+    with ThreadPoolExecutor(2) as pool:
+        codes = list(pool.map(lambda sid: client.get(f"{BASE}/{sid}/state").status_code, sids))
+    assert codes == [200, 200] and len(spans) == 2 and _overlap(spans)
+
+
+def test_a_request_that_cannot_get_the_lock_gets_409(app, client):
+    sid = _create(client)
+    app.state.session_locks = SessionLocks(0.2)
+    with app.state.session_locks.hold(sid):
+        busy = client.post(f"{BASE}/{sid}/cut", json={"lines": ["R1"]})
+    assert busy.status_code == 409 and "ocupada" in busy.json()["detail"]
+    assert busy.headers["Retry-After"] == "1"
+    assert client.post(f"{BASE}/{sid}/cut", json={"lines": ["R1"]}).status_code == 200
+    assert len(app.state.session_locks) == 0

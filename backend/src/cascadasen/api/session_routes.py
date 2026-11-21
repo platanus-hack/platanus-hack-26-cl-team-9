@@ -51,7 +51,8 @@ router = APIRouter(prefix="/api/v1/sessions")
 
 ERRORS = {
     404: "The session, run or element does not exist, or the id is malformed.",
-    409: "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+    409: "Conflict: the element is still referenced, the run finished, another writer won, or the session is "
+    "busy with another request for longer than the lock timeout (10 s by default); retry.",
     412: "If-Match does not match the current dataset_revision; re-read the network and retry.",
     422: "Invalid input: detail names the field and, when useful, the valid values.",
     429: "Rate limit reached; wait the seconds in Retry-After.",
@@ -64,7 +65,7 @@ def errors(*codes: int) -> dict[int | str, dict[str, Any]]:
 
 WRITE_ERRORS = errors(404, 409, 412, 422, 429)
 RUN_WRITE_ERRORS = errors(404, 409, 422, 429)
-READ_ERRORS = errors(404, 422)
+READ_ERRORS = errors(404, 409, 422)
 
 
 def get_sessions(request: Request) -> SessionService:
@@ -172,6 +173,11 @@ def limit(request: Request, name: str, key: str) -> None:
     request.app.state.limiter.check(name, key, per, window)
 
 
+def serial(request: Request, sid: str):
+    """Hold the session's lock: one request at a time per session in this process (409 when busy)."""
+    return request.app.state.session_locks.hold(sid)
+
+
 # ------------------------------------------------------------------ session documents
 @router.post(
     "",
@@ -218,6 +224,7 @@ def create_session(
     openapi_extra=AGENT,
 )
 def get_session(
+    request: Request,
     sid: Sid,
     response: Response,
     svc: Sessions,
@@ -226,7 +233,8 @@ def get_session(
         Header(alias="If-None-Match", description='Last ETag seen, e.g. "3".', examples=['"3"']),
     ] = None,
 ) -> Any:
-    doc = session_call(svc.get, sid)
+    with serial(request, sid):
+        doc = session_call(svc.get, sid)
     tag = f'"{doc["revision"]}"'
     if if_none_match and tag in {t.strip().removeprefix("W/") for t in if_none_match.split(",")}:
         return Response(status_code=304, headers={"ETag": tag})
@@ -242,12 +250,13 @@ def get_session(
     summary="Delete a session and its runs",
     description="Deletes the session document and the records of its runs. Every client of the "
     "session loses it (their SSE stream ends). Irreversible.",
-    responses=errors(404, 422, 429),
+    responses=errors(404, 409, 422, 429),
     openapi_extra=AGENT,
 )
 def delete_session(request: Request, sid: Sid, svc: Sessions) -> Response:
     limit(request, "write", sid)
-    session_call(svc.delete, sid)
+    with serial(request, sid):
+        session_call(svc.delete, sid)
     return Response(status_code=204)
 
 
@@ -271,7 +280,8 @@ def reset_session(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    out = session_call(svc.reset, sid, agent, if_revision(if_match))
+    with serial(request, sid):
+        out = session_call(svc.reset, sid, agent, if_revision(if_match))
     etag(response, out["dataset_revision"])
     return out
 
@@ -291,8 +301,9 @@ def reset_session(
     responses=READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_session_network(sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
-    view = session_call(svc.network_view, sid)
+def get_session_network(request: Request, sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        view = session_call(svc.network_view, sid)
     etag(response, view["dataset_revision"])
     return view
 
@@ -338,7 +349,8 @@ def _element_routes(
     ) -> dict[str, Any]:
         limit(request, "write", sid)
         fields = body.model_dump(exclude_unset=True)
-        out = session_call(svc.add, sid, kind, fields, agent, if_revision(if_match))
+        with serial(request, sid):
+            out = session_call(svc.add, sid, kind, fields, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
         return out
 
@@ -363,7 +375,8 @@ def _element_routes(
     ) -> dict[str, Any]:
         limit(request, "write", sid)
         fields = body.model_dump(exclude_unset=True)
-        out = session_call(svc.patch, sid, kind, element_id, fields, agent, if_revision(if_match))
+        with serial(request, sid):
+            out = session_call(svc.patch, sid, kind, element_id, fields, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
         return out
 
@@ -387,7 +400,8 @@ def _element_routes(
         agent: Agent = "anon",
     ) -> dict[str, Any]:
         limit(request, "write", sid)
-        out = session_call(svc.remove, sid, kind, element_id, agent, if_revision(if_match))
+        with serial(request, sid):
+            out = session_call(svc.remove, sid, kind, element_id, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
         return out
 
@@ -468,7 +482,8 @@ def cut_lines(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "cut", sid)
-    out = session_call(svc.cut, sid, body.lines, agent, if_revision(if_match))
+    with serial(request, sid):
+        out = session_call(svc.cut, sid, body.lines, agent, if_revision(if_match))
     etag(response, out["dataset_revision"])
     return out
 
@@ -494,7 +509,8 @@ def repair_lines(
     if not body.all and not body.lines:
         raise HTTPException(422, {"field": "lines", "message": "Indica las líneas o all=true."})
     limit(request, "cut", sid)
-    out = session_call(svc.repair, sid, body.lines, body.all, agent, if_revision(if_match))
+    with serial(request, sid):
+        out = session_call(svc.repair, sid, body.lines, body.all, agent, if_revision(if_match))
     etag(response, out["dataset_revision"])
     return out
 
@@ -510,8 +526,9 @@ def repair_lines(
     responses=READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_cut_state(sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
-    out = session_call(svc.state, sid)
+def get_cut_state(request: Request, sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        out = session_call(svc.state, sid)
     etag(response, out["dataset_revision"])
     return out
 
@@ -608,7 +625,8 @@ def create_run(
     limit(request, "write", sid)
     data = body.model_dump(exclude={"auto_run"})
     data["initial_events"] = [e.model_dump() for e in body.initial_events]
-    return _run_etag(response, session_call(svc.create_run, sid, data, body.auto_run, agent))
+    with serial(request, sid):
+        return _run_etag(response, session_call(svc.create_run, sid, data, body.auto_run, agent))
 
 
 @router.get(
@@ -622,8 +640,9 @@ def create_run(
     responses=READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_run(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "state")
+def get_run(request: Request, sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "state")
 
 
 @router.post(
@@ -646,9 +665,10 @@ def inject_run_event(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    out = session_call(
-        svc.run_command, sid, rid, "inject", body.type, body.target, body.params, body.cause, by=agent
-    )
+    with serial(request, sid):
+        out = session_call(
+            svc.run_command, sid, rid, "inject", body.type, body.target, body.params, body.cause, by=agent
+        )
     return _run_etag(response, out)
 
 
@@ -672,7 +692,8 @@ def step_run(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    return _run_etag(response, session_call(svc.run_command, sid, rid, "step", body.cycles, by=agent))
+    with serial(request, sid):
+        return _run_etag(response, session_call(svc.run_command, sid, rid, "step", body.cycles, by=agent))
 
 
 @router.post(
@@ -699,18 +720,19 @@ def submit_run_action(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    out = session_call(
-        svc.run_command,
-        sid,
-        rid,
-        "action",
-        body.action,
-        body.target,
-        body.role,
-        body.params,
-        body.agent or agent,
-        by=agent,
-    )
+    with serial(request, sid):
+        out = session_call(
+            svc.run_command,
+            sid,
+            rid,
+            "action",
+            body.action,
+            body.target,
+            body.role,
+            body.params,
+            body.agent or agent,
+            by=agent,
+        )
     return _run_etag(response, out)
 
 
@@ -744,7 +766,8 @@ def replay_run(
         overrides["adversary"] = AdversaryConfig(**body.adversary.model_dump())
     if body.capabilities is not None:
         overrides["capabilities"] = tuple(sorted(body.capabilities.items()))
-    out = session_call(svc.run_command, sid, rid, "replay", overrides, body.cycles, by=agent)
+    with serial(request, sid):
+        out = session_call(svc.run_command, sid, rid, "replay", overrides, body.cycles, by=agent)
     return _run_etag(response, out)
 
 
@@ -758,12 +781,14 @@ def replay_run(
     openapi_extra=AGENT,
 )
 def get_run_snapshots(
+    request: Request,
     sid: Sid,
     rid: RunId,
     svc: Sessions,
     start: Annotated[int, Query(ge=0, description="First cycle to return.", examples=[0])] = 0,
 ) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "snapshots", start)
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "snapshots", start)
 
 
 @router.get(
@@ -776,8 +801,9 @@ def get_run_snapshots(
     responses=READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_run_trace(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "trace")
+def get_run_trace(request: Request, sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "trace")
 
 
 @router.get(
@@ -789,8 +815,9 @@ def get_run_trace(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
     responses=READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_run_report(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "report")
+def get_run_report(request: Request, sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "report")
 
 
 @router.get(
@@ -802,5 +829,6 @@ def get_run_report(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
     responses=READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_run_after_action(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "after_action")
+def get_run_after_action(request: Request, sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "after_action")

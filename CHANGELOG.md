@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(api): serve one request at a time per session
+
+- **Changed:** New `SessionLocks` in `api/limits.py` (one `threading.Lock` per session id, refcounted, so idle sessions leave no entry), on `app.state.session_locks`. Every `{sid}` route of `api/session_routes.py` holds it around its `session_call` through `serial(request, sid)`: get/delete session, reset, network, the 12 element routes, cut, repair, state and every `/runs` route. `GET /{sid}/events` (SSE) and `POST /sessions` do not take it. Rate limits and the repair 422 check run before the wait.
+- **Changed:** A request waits up to `session_lock_timeout_s` (10 s, `CASCADASEN_SESSION_LOCK_TIMEOUT_S`), then gets 409 `"La sesión está ocupada con otra solicitud; reintenta."` with `Retry-After: 1`. The agent spec documents 409 on every sid route (`READ_ERRORS = errors(404, 409, 422)`, `delete_session` adds 409) and adds a "One request at a time" paragraph to its description.
+- **Why:** User rule (PR #50 brief, task 2): a session handles only one request at a time. The wait plus 409 is the orchestrator's default. Store conditional writes and `If-Match` stay the guard across processes.
+- **Agents:** The lock is per process; with several instances two requests on one session can still run at once on different instances. Routes are sync `def`, so a waiting request blocks a threadpool worker, not the event loop. New tests: `tests/unit/test_session_locks.py`, and three tests at the end of `tests/integration/test_sessions_api.py` (same session serial, two sessions parallel, held lock gives 409). Verification: `uv run pytest` 282 passed, 2 skipped, 1 failed (only the Bedrock test); `ruff check` and `ruff format --check` clean; agent spec regenerated.
+- **Files:** `backend/src/cascadasen/api/{limits,app,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/{unit/test_session_locks.py,integration/test_sessions_api.py}`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · fix(api): trusted client IP, rate-limit global runs, document the version tag
 
 - **Changed:** `limits.client_ip` takes the `X-Forwarded-For` entry `CASCADASEN_TRUSTED_PROXY_HOPS` from the right (new setting `trusted_proxy_hops`, default 0 = peer address); `infrastructure/ecs.tf` sets it to 2 (CloudFront appends the viewer, the ALB appends CloudFront). The leftmost entry, which a client can set, is ignored.

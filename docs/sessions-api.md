@@ -43,10 +43,10 @@ All paths are under `/api/v1/sessions`. Mutations accept `If-Match: "<revision>"
 | Method and path | operationId | Body | Response | Codes |
 |---|---|---|---|---|
 | `POST ""` | `create_session` | `{point?, label?}` | session document | 201, 422, 429 |
-| `GET /{sid}` | `get_session` | | session document (`ETag`; `If-None-Match` gives 304) | 200, 304, 404 |
-| `DELETE /{sid}` | `delete_session` | | empty | 204, 404, 429 |
+| `GET /{sid}` | `get_session` | | session document (`ETag`; `If-None-Match` gives 304) | 200, 304, 404, 409 |
+| `DELETE /{sid}` | `delete_session` | | empty | 204, 404, 409, 429 |
 | `POST /{sid}/reset` | `reset_session` | | `{revision, warnings, balance}` | 200, 404, 409, 412, 429 |
-| `GET /{sid}/network` | `get_session_network` | | network view (section 9) | 200, 404 |
+| `GET /{sid}/network` | `get_session_network` | | network view (section 9) | 200, 404, 409 |
 | `POST /{sid}/buses` | `add_bus` | `{name, lat, lon, kv}` | `{id, revision, warnings, balance}` | 201, 404, 409, 412, 422, 429 |
 | `PATCH /{sid}/buses/{element_id}` | `update_bus` | any of `name, kv, lat, lon, load_mw, gen_mw, sync_mw, inertia_mws, in_service` | same | 200, 404, 409, 412, 422, 429 |
 | `DELETE /{sid}/buses/{element_id}` | `delete_bus` | | same | 200, 404, 409, 412, 429 |
@@ -61,20 +61,20 @@ All paths are under `/api/v1/sessions`. Mutations accept `If-Match: "<revision>"
 | `DELETE /{sid}/generators/{element_id}` | `delete_generator` | | same | 200, ... |
 | `POST /{sid}/cut` | `cut_lines` | `{lines: [1-3 ids]}` | `{revision, open_lines, timeline, notice}` | 200, 404, 409, 412, 422, 429 |
 | `POST /{sid}/repair` | `repair_lines` | `{lines: [...]}` or `{all: true}` | same | 200, 404, 409, 412, 422, 429 |
-| `GET /{sid}/state` | `get_cut_state` | | same | 200, 404 |
+| `GET /{sid}/state` | `get_cut_state` | | same | 200, 404, 409 |
 | `GET /{sid}/events` | (not an agent tool) | | `text/event-stream` (section 6) | 200, 404, 429 |
 | `POST /{sid}/runs` | `create_run` | the `POST /sim/runs` body (`template, policy, seed, horizon, adversary, capabilities, initial_events, auto_run, stochastic, llm_commander`) | run summary + `session_revision` | 201, 404, 409, 422, 429 |
-| `GET /{sid}/runs/{rid}` | `get_run` | | `{run, latest, resources, series}` | 200, 404 |
+| `GET /{sid}/runs/{rid}` | `get_run` | | `{run, latest, resources, series}` | 200, 404, 409 |
 | `POST /{sid}/runs/{rid}/events` | `inject_run_event` | `{type, target, params?, cause?}` | resolved target, `run`, `session_revision` | 200, 404, 409, 422, 429 |
 | `POST /{sid}/runs/{rid}/step` | `step_run` | `{cycles: 1-72}` | `{run, snapshots, session_revision}` | 200, 404, 409, 422, 429 |
 | `POST /{sid}/runs/{rid}/actions` | `submit_run_action` | `{action, target, role, params?, agent?}` | `{accepted, applies_at_cycle, action, target, role, notice, run, session_revision}` | 200, 404, 409, 422, 429 |
 | `POST /{sid}/runs/{rid}/replay` | `replay_run` | `{policy?, uncertainty?, seed?, adversary?, capabilities?, cycles?}` | new run summary + `replay_of` | 201, 404, 409, 422, 429 |
-| `GET /{sid}/runs/{rid}/snapshots?start=` | `get_run_snapshots` | | `{run, snapshots}` | 200, 404, 422 |
-| `GET /{sid}/runs/{rid}/trace` | `get_run_trace` | | audit log, `head`, `verified`, `recipe` | 200, 404 |
-| `GET /{sid}/runs/{rid}/report` | `get_run_report` | | indicators, indices, consequence | 200, 404 |
-| `GET /{sid}/runs/{rid}/after_action` | `get_run_after_action` | | after-action report in Spanish | 200, 404 |
+| `GET /{sid}/runs/{rid}/snapshots?start=` | `get_run_snapshots` | | `{run, snapshots}` | 200, 404, 409, 422 |
+| `GET /{sid}/runs/{rid}/trace` | `get_run_trace` | | audit log, `head`, `verified`, `recipe` | 200, 404, 409 |
+| `GET /{sid}/runs/{rid}/report` | `get_run_report` | | indicators, indices, consequence | 200, 404, 409 |
+| `GET /{sid}/runs/{rid}/after_action` | `get_run_after_action` | | after-action report in Spanish | 200, 404, 409 |
 
-Every route can also answer 413 (body over 64 KB) and 422 (malformed headers or body). There is no `GET /{sid}/runs` list: the session document holds `runs`.
+Every route can also answer 413 (body over 64 KB) and 422 (malformed headers or body). Every route with `{sid}` except `/events` answers 409 when the session stays busy with another request (section 7). There is no `GET /{sid}/runs` list: the session document holds `runs`.
 
 ## 5. Examples
 
@@ -141,17 +141,19 @@ data: {"type": "revision", "revision": 3, "dataset_revision": 2, "op": "load_add
 - The server closes the stream after 55 s (`CASCADASEN_SSE_MAX_S`). `EventSource` reconnects by itself after `retry` (2 s) and sends `Last-Event-ID`; the server ignores it and starts again with the current revision, which is all a client needs.
 - The stream ends when the session is deleted or expires.
 - At most 5 open streams per session and client IP (`CASCADASEN_SSE_PER_SESSION_IP`), else 429.
+- The stream does not take the session lock (section 7): it is long-lived, so it neither waits for other requests nor makes them wait.
 - Rule for clients: when `dataset_revision` moved, refetch what you show (`GET /{sid}/network`, `GET /{sid}/state`). When only `revision` moved (`run_created`, `run_updated`), the dataset is the same: refetch `GET /{sid}` if you show its `runs`. If you cannot tell, refetch everything, including `GET /{sid}`.
 - Polling fallback (no `EventSource`, or a proxy that buffers): `GET /{sid}` every 2 s with `If-None-Match: "<last ETag>"`; 304 means nothing changed.
 
 The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agent that cannot hold a stream polls `GET /{sid}` with `If-None-Match`.
 
-## 7. Revisions, ETag and If-Match
+## 7. Revisions, ETag, If-Match and one request at a time
 
 - A session document has two counters. `revision` moves on every change, run activity included. `dataset_revision` moves only on what changes the dataset or the sandbox: element edits, reset, cut and repair.
 - `GET /{sid}` carries `ETag: "<revision>"` (for `If-None-Match` polling). `/network`, `/state`, every edit, reset, cut and repair carry `ETag: "<dataset_revision>"`. Run commands that change the session return `session_revision` (the `revision`) and the same header.
 - Send `If-Match: "<dataset_revision>"` on an edit, reset, cut or repair to make it conditional: if someone else changed the dataset first, the request is refused with 412 and nothing changes. A run stepped by another agent does not cause a 412. Re-read, decide again, retry. Without `If-Match` the edit applies to whatever the current revision is (last writer wins per operation; operations never overwrite each other's elements, because each edit is applied to the freshly read document).
 - Between instances, writes are conditional on the store's etag and retried 3 times; after that the API answers 409 and the client retries.
+- One request at a time per session. In a backend process, every request with `{sid}` in the path (reads, edits, reset, cut, repair, delete and every run route) holds a lock on that session, so requests on one session run one after another; different sessions run in parallel. `GET /{sid}/events` (SSE) and `POST ""` do not take it. A request waits up to 10 s (`CASCADASEN_SESSION_LOCK_TIMEOUT_S`) for the one before it, then gets 409 `"La sesión está ocupada con otra solicitud; reintenta."` with `Retry-After: 1`; retry it. Rate limits and body checks run before the wait, so a refused request never waits. The lock is per process: across instances the store's conditional writes and `If-Match` stay the guard.
 
 ## 8. Limits and expiry
 
@@ -162,6 +164,7 @@ The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agen
 | Cut and repair | 30 per minute per session | `CASCADASEN_RATE_CUTS_PER_MINUTE` |
 | Other edits and run commands | 60 per minute per session | `CASCADASEN_RATE_WRITES_PER_MINUTE` |
 | SSE streams | 5 per session and client IP | `CASCADASEN_SSE_PER_SESSION_IP` |
+| Requests in progress per session | 1 per backend process; others wait up to 10 s, then 409 with `Retry-After: 1` | `CASCADASEN_SESSION_LOCK_TIMEOUT_S` |
 | Added elements | 50 per session (buses + lines + loads + generators), 3000 MW each, 5000 MW of added load plus generation plus the MW changed by bus overrides; bus `load_mw`/`gen_mw`/`sync_mw` at most the base value + 3000 MW, `inertia_mws` at most 10 s × `sync_mw` | `domain/cascade/overlay.py` |
 | Lines per cut call | 1 to 3 | |
 | Runs per session | 20 (422 above) | |
@@ -178,7 +181,7 @@ Errors are JSON `{"detail": ...}` with a Spanish message (`ErrorResponse` in the
 | Code | Meaning |
 |---|---|
 | 404 | Unknown or malformed session id, run not in this session, unknown element or line, unknown target |
-| 409 | Deleting a base element (use `in_service: false`) or a bus that lines, loads or generators still use (`valid` lists them); finished run; another instance won the write (retry) |
+| 409 | Deleting a base element (use `in_service: false`) or a bus that lines, loads or generators still use (`valid` lists them); finished run; another instance won the write (retry); the session stayed busy with another request for the lock timeout (10 s; retry after `Retry-After: 1`) |
 | 412 | `If-Match` is not the current revision |
 | 413 | Body over 64 KB |
 | 422 | Invalid value (voltage not in the base set, `mw` out of range, `a == b`, unknown field, wrong role, `point` different from the session's), a limit reached |

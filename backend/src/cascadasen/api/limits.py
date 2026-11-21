@@ -1,6 +1,7 @@
 """Per-process limits of the sessions API and the global runs (docs/sessions-api.md, Limits):
-token-bucket rate limits, SSE connection slots and a 64 KB request body cap. With several instances each one counts on its
-own, so the effective limit is per instance."""
+token-bucket rate limits, SSE connection slots, one request at a time per session and a 64 KB request body cap. With
+several instances each one counts on its own, so the effective limit is per instance; across instances the store's
+conditional writes and If-Match guard a session."""
 
 from __future__ import annotations
 
@@ -8,7 +9,8 @@ import json
 import math
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -65,6 +67,40 @@ class SseSlots:
                 self._open[key] = left
             else:
                 self._open.pop(key, None)
+
+
+class SessionLocks:
+    """One request at a time per session: a lock per session id, dropped when no request holds or
+    waits for it. A request that waits longer than `timeout_s` gets 409 with Retry-After."""
+
+    def __init__(self, timeout_s: float) -> None:
+        self.timeout_s = timeout_s
+        self._locks: dict[str, list[Any]] = {}  # sid -> [Lock, requests holding or waiting]
+        self._guard = threading.Lock()
+
+    @contextmanager
+    def hold(self, sid: str) -> Iterator[None]:
+        with self._guard:
+            entry = self._locks.setdefault(sid, [threading.Lock(), 0])
+            entry[1] += 1
+        got = entry[0].acquire(timeout=self.timeout_s)
+        try:
+            if not got:
+                raise HTTPException(
+                    409, "La sesión está ocupada con otra solicitud; reintenta.", headers={"Retry-After": "1"}
+                )
+            yield
+        finally:
+            if got:
+                entry[0].release()
+            with self._guard:
+                entry[1] -= 1
+                if entry[1] == 0:
+                    del self._locks[sid]
+
+    def __len__(self) -> int:
+        with self._guard:
+            return len(self._locks)
 
 
 def client_ip(request: Request) -> str:

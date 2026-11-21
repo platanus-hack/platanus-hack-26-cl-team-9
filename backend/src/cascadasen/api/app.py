@@ -15,7 +15,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
 from cascadasen.api import agent_openapi
-from cascadasen.api.limits import BodyLimitMiddleware, SseSlots, TokenBucket
+from cascadasen.api.limits import BodyLimitMiddleware, SessionLocks, SseSlots, TokenBucket
 from cascadasen.api.schemas import EdgePage, Health, IslandsRequest, IslandsResponse, NodePage, Page
 from cascadasen.api.session_routes import router as session_router
 from cascadasen.api.simulation_routes import router as simulation_router
@@ -78,6 +78,7 @@ def create_app(
     app.state.simulation = simulation  # built lazily from the snapshot on the first /sim request
     app.state.sessions = sessions  # built lazily from the simulation on the first /sessions request
     app.state.limiter, app.state.sse_slots = TokenBucket(), SseSlots()
+    app.state.session_locks = SessionLocks(settings.session_lock_timeout_s)  # one request at a time
     app.include_router(simulation_router)
     app.include_router(session_router)
     agent_openapi.mount(app)  # agent-only spec at /api/v1/agents/openapi.json (docs/openapi.md)
