@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): operation layers for mapa 3 (areas, crews, effects)
+
+- **Changed:** New `web/src/operation/layers.ts`: `buildOperationLayers` reuses `buildCascadeLayers` with the cycle's frame and served load per bus, and adds operating areas (circle at the centroid, posture colour, more opaque as observability drops), effect labels per area (effect type only) and field crews moving linearly toward their target substation by cycle. Colour constants `POSTURE_COLOR`, `CREW_COLOR`, `CREW_BUSY_COLOR` for map and legend. Tests in `layers.test.ts`.
+- **Why:** Draw the theatre on mapa 3 with the same visual language as the cut viewer.
+- **Agents:** Areas are drawn as circles: the backend sends no area polygons. No layer shows adversary preferences or any ranking.
+- **Files:** `web/src/operation/layers.ts`, `web/src/operation/layers.test.ts`.
+
 ## 2026-11-21 · feat(web): theatre client for the mapa 3 operation mode
 
 - **Changed:** New `web/src/operation/`: `types.ts` (theatre contract of `docs/mapa3.md` 10 over the mapa 3 types), `api.ts` (`TheaterSource` with `LiveSource` over `/api/v1/sim/*` and `CachedSource` over `web/public/cache/theater/`; `connect()` picks live when `/api/v1/health` answers within 1.5 s), `text.ts` (Spanish narration from the backend templates, fixed notice). Tests: `api.test.ts`, `text.test.ts`. Backend: new `GET /api/v1/sim/runs/{id}/snapshots?start=` because a replay computes all its cycles at once.
