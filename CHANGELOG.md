@@ -17,6 +17,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** `web/src/cascade/layers.ts` is still the single source for line colors; `networkSummary.ts` now derives `VOLTAGE_BANDS` from `VOLTAGE_TIERS`. A scenario is now a cut alone: "Apagón 25F" is cut `R239` at any point (it opens at `feb2025-1500` by default), so do not test for the 25F case with the point. `clock()` in `text.ts` returns only `hms` and `tenths`; `conditionName` and `conditionDate` format a point for the rail. The rules are in `docs/design.md` section 3.3. Open: the other countries' lines still use `KV_COLORS` from `web/src/map/layers.ts` (yellow and orange), which now read like load colors next to Chile. The draw order of "fuera" was not checked visually at close zoom.
 - **Files:** `web/src/cascade/layers.ts`, `Scenarios.tsx`, `CascadeApp.tsx`, `cascade.css`, `MapLegend.tsx`, `Legend.tsx`, `networkSummary.ts`, `text.ts`, `text.test.ts`, `ui.tsx`, `docs/design.md`, `docs/mapa3.md`, `web/README.md`.
 
+## 2026-11-21 · fix(web): draw the wordmark subscript with the logo's SVG paths
+
+- **Changed:** The nav-rail wordmark draws its subscript "50" with the two paths of `web/public/favicon.svg` (Geist 800 "5" and the power button) instead of a Roboto "5" next to a hand-drawn 8 x 11 oval. Size and drop below the baseline are measured from `project-logo.png`.
+- **Why:** Ignacio saw the "0" as stretched and the subscript at the wrong size; the old oval was taller than wide, while the logo's power button is nearly round.
+- **Agents:** The ratios (5 = 0.69 "sub" x-heights tall, drop = 0.43 x-heights) are in `docs/design.md` section 6 and in the `.wordmark .subscript` rule. If the "sub" font size changes, rescale `width`, `height` and `vertical-align` together.
+- **Files:** `web/src/cascade/ui.tsx`, `web/src/cascade/cascade.css`, `docs/design.md`.
+
 ## 2026-11-21 · docs(pitch): add pitch ideas and project benefits
 - **Changed:** New `docs/pitch_idea.md`: pitch notes (25F losses of US$ 984 millones with source, "wow" moment ideas) and a "Beneficios de este proyecto" section with a short list of 17 benefits followed by a paragraph per benefit, including cost vs resilience trade-offs, best combination for a budget and minimum investment that avoids a national blackout.
 - **Why:** The team needs material for the pitch.
