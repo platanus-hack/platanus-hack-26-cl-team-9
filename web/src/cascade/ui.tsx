@@ -42,8 +42,9 @@ export function TipLayer() {
   return <div ref={ref} className="tip" role="tooltip" style={{ left, width, top: tip.y, transform: tip.below ? undefined : "translateY(-100%)" }}>{tip.text}</div>;
 }
 
-export const Chevron = ({ dir = "down" }: { dir?: "down" | "right" }) => (
-  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d={dir === "down" ? "M2.5 4l2.5 2.5L7.5 4" : "M4 2.5l2.5 2.5L4 7.5"} fill="none" stroke="#A1A2A6" strokeWidth="1.3" strokeLinecap="round" /></svg>
+/** `color` defaults to the muted gray; pass "currentColor" to let CSS decide (the rail's disclosure chevrons). */
+export const Chevron = ({ dir = "down", color = "#A1A2A6" }: { dir?: "down" | "right"; color?: string }) => (
+  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d={dir === "down" ? "M2.5 4l2.5 2.5L7.5 4" : "M4 2.5l2.5 2.5L4 7.5"} fill="none" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
 
 export function Icon({ children, size = 15, view = 16 }: { children: ReactNode; size?: number; view?: number }) {

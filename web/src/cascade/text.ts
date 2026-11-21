@@ -58,16 +58,38 @@ export function formatPeople(n: number): string {
 }
 
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const pad = (x: number) => String(Math.floor(x)).padStart(2, "0");
 
-/** Wall clock of the operating point (snapshot "YYYY-MM-DD HH:MM") plus t seconds of simulation. */
-export function clock(snapshot: string | undefined, t: number) {
+/** Snapshot "YYYY-MM-DD HH:MM" of an operating point as numbers, or null when it does not parse. */
+function parseSnapshot(snapshot: string | undefined) {
   const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(snapshot ?? "");
-  if (!m) return { date: "", hms: "--:--:--", tenths: "--:--:--,-", zone: "" };
+  if (!m) return null;
   const [, y, mo, d, h, mi] = m.map(Number);
-  const total = h * 3600 + mi * 60 + t;
-  const pad = (x: number) => String(Math.floor(x)).padStart(2, "0");
+  return { y, mo, d, h, mi };
+}
+
+/** Wall clock of the operating point plus t seconds of simulation, for the timeline card. */
+export function clock(snapshot: string | undefined, t: number) {
+  const s = parseSnapshot(snapshot);
+  if (!s) return { hms: "--:--:--", tenths: "--:--:--,-" };
+  const total = s.h * 3600 + s.mi * 60 + t;
   const hms = `${pad(total / 3600 % 24)}:${pad((total % 3600) / 60)}:${pad(total % 60)}`;
-  // Continental Chile keeps summer time (GMT-3) from September to early April.
-  const zone = mo >= 9 || mo <= 3 ? "GMT-3" : "GMT-4";
-  return { date: `${d} ${MONTHS[mo - 1]} ${y}`, hms, tenths: `${hms},${Math.floor(t * 10 + 1e-6) % 10}`, zone };
+  return { hms, tenths: `${hms},${Math.floor(t * 10 + 1e-6) % 10}` };
+}
+
+/** Date line of an operating condition in the rail: "1 nov 2026 · 13:00". */
+export function conditionDate(snapshot: string | undefined): string {
+  const s = parseSnapshot(snapshot);
+  return s ? `${s.d} ${MONTHS[s.mo - 1]} ${s.y} · ${pad(s.h)}:${pad(s.mi)}` : "";
+}
+
+/**
+ * Short name of an operating condition, from the parenthetical of its label: "Noviembre 2026, 13:00 (mediodía solar)"
+ * -> "Mediodía solar"; "(referencia del 25F)" -> "Referencia 25F". Labels without one are returned whole.
+ */
+export function conditionName(label: string): string {
+  const m = /\(([^)]+)\)\s*$/.exec(label);
+  if (!m) return label;
+  const name = m[1].trim().replace(/^referencia del /i, "referencia ");
+  return name ? name[0].toUpperCase() + name.slice(1) : label;
 }
