@@ -7,14 +7,22 @@ import { CascadeLegend } from "./Legend";
 import { NetworkPanel } from "./NetworkPanel";
 import { formatPeople, lineName, narrate } from "./text";
 import type { BusState, Index, Network, Timeline } from "./types";
+import { DataPanel } from "../session/DataPanel";
+import { SessionBar } from "../session/SessionBar";
+import { cutLines, repairLines } from "../session/sessionApi";
+import { useSession } from "../session/useSession";
 
-type Tab = "red" | "sim" | "legend" | "assumptions";
-const TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["legend", "Leyenda"], ["assumptions", "Supuestos"]];
+type Tab = "red" | "sim" | "datos" | "legend" | "assumptions";
+const TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"], ["legend", "Leyenda"], ["assumptions", "Supuestos"]];
 const STAGE_MS = 1400;
 const FLOW_PERIOD_S = 3.0;
 const FLOW_CYCLE = 1 + 2 / 3;
 
-/** Mapa 3: click a line to cut it and watch the cascade computed by the engine (precomputed in web/public/cache). */
+/**
+ * Mapa 3: click a line to cut it and watch the cascade computed by the engine. Without a session it reads the
+ * precomputed web/public/cache and never calls /api; with ?sesion=<sid> the network, the cut and the timeline come
+ * from the sessions API and every revision event refetches them (docs/mapa3.md section 11).
+ */
 export function CascadeApp() {
   const mapRef = useRef<HTMLDivElement>(null);
   const baseMap = useRef<BaseMap | null>(null);
@@ -32,12 +40,20 @@ export function CascadeApp() {
   const [railOpen, setRailOpen] = useState(localStorage.getItem("rail") !== "closed");
   const [mode, setMode] = useState<ViewMode>(params.get("vista") === "2d" ? "2d" : "3d");
   const [error, setError] = useState<string | null>(null);
-  const view = useRef({ network, buses, timeline, stage, cut, mode });
-  view.current = { network, buses, timeline, stage, cut, mode };
+  const s = useSession();
+  const [picking, setPicking] = useState(false);
+  const pickRef = useRef<((lon: number, lat: number) => void) | null>(null);  // map pick mode of the Datos tab
+  const onLine = (id: string) => (s.sid ? _sessionCut(id) : setCut(id));
+  const view = useRef({ network, buses, timeline, stage, cut, mode, onLine });
+  view.current = { network, buses, timeline, stage, cut, mode, onLine };
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
-  useEffect(() => { _loadPoint(); }, [pointId, index]);
-  useEffect(() => { _loadTimeline(); }, [pointId, cut, network]);
+  useEffect(() => { if (!s.sid) _loadPoint(); }, [pointId, index, s.sid]);
+  useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, cut, network, s.sid]);
+  useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
+  useEffect(() => { if (s.state) { setTimeline(s.state.timeline); setStage(0); setPlaying(s.state.open_lines.length > 0); } }, [s.state]);
+  const wasSession = useRef(false);
+  useEffect(() => { if (s.sid) wasSession.current = true; else if (wasSession.current) { wasSession.current = false; setCut(null); } }, [s.sid]);  // a session line id has no cached timeline
   useEffect(() => _mountMap(), []);
   useEffect(() => { if (cut) setTab("sim"); }, [cut]);
   useEffect(() => { baseMap.current?.setMode(mode); }, [mode]);
@@ -55,12 +71,29 @@ export function CascadeApp() {
     loadTimeline(pointId, cut ?? "baseline").then((t) => { setTimeline(t); setStage(0); setPlaying(!!cut); }).catch((e) => setError(String(e.message)));
   }
 
+  function _sessionCut(id: string) {
+    setCut(id);
+    setTab("sim");
+    if (!s.state?.open_lines.includes(id)) s.edit((sid, rev) => cutLines(sid, [id], rev));
+  }
+
+  function _pick(onPoint: (lon: number, lat: number) => void) {
+    pickRef.current = onPoint;
+    setPicking(true);
+  }
+
   function _mountMap() {
     const map = createBaseMap(mapRef.current!, {
       onClick: (info: PickingInfo) => {
+        if (pickRef.current && info.coordinate) {
+          pickRef.current(info.coordinate[0], info.coordinate[1]);
+          pickRef.current = null;
+          setPicking(false);
+          return;
+        }
         const id = (info.object as { id: string } | undefined)?.id;
         if (!id) return;
-        if (info.layer?.id === "lines") setCut(id);
+        if (info.layer?.id === "lines") view.current.onLine(id);
         else if (info.layer?.id === "nodes" || info.layer?.id === "load" || info.layer?.id === "load-2d") { setNode(id); setTab("red"); }
       },
       getTooltip: (info: PickingInfo) => _tooltip(info),
@@ -124,7 +157,7 @@ export function CascadeApp() {
           <Icon d={railOpen ? "m15 6-6 6 6 6" : "m9 6 6 6-6 6"} /><span className="label">Contraer</span>
         </button>
       </nav>
-      <select className="case-pill" aria-label="Hora del caso base" value={pointId} onChange={(e) => { setCut(null); setPointId(e.target.value); }}>
+      <select className="case-pill" aria-label="Hora del caso base" value={pointId} disabled={!!s.sid} title={s.sid ? "La sesión fija su punto de operación" : undefined} onChange={(e) => { setCut(null); setPointId(e.target.value); }}>
         {index?.points.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
       </select>
       <div className="map-controls">
@@ -135,17 +168,23 @@ export function CascadeApp() {
       </div>
       <section className="sidebar">
         <header><h1>Chile</h1><span>Sistema Eléctrico Nacional</span></header>
+        <SessionBar s={s} />
         <div className="tabs" role="tablist">
           {TABS.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{label}</button>)}
         </div>
         <div className="tab-body">
-          {error && <p className="note warn">{error}</p>}
-          {tab === "red" && network && <NetworkPanel network={network} buses={buses} frame={frame} node={node} line={cut} clearNode={() => setNode(null)} cutLine={(id) => { setNode(null); setCut(id); }} />}
+          {(s.error ?? error) && <p className="note warn">{s.error ?? error} {s.error && <button className="link" onClick={s.clearError}>Cerrar</button>}</p>}
+          {tab === "red" && network && <NetworkPanel network={network} buses={buses} frame={frame} node={node} line={cut} clearNode={() => setNode(null)} cutLine={(id) => { setNode(null); onLine(id); }} />}
           {tab === "sim" && <>
             <p className="muted">Haz clic en una línea del mapa para cortarla y mira cómo se propaga la falla. Haz clic en una subestación para ver su detalle en Red.</p>
-            {cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
-            {timeline && network && <Results timeline={timeline} network={network} events={visibleEvents} cut={cut} />}
+            {s.sid
+              ? s.state && network && <SessionCut network={network} open={s.state.open_lines} notice={s.state.notice} repair={(lines) => s.edit((sid, rev) => repairLines(sid, lines ? { lines } : { all: true }, rev))} />
+              : cut && network && <button className="reset" onClick={() => setCut(null)}>Volver al caso base</button>}
+            {timeline && network && <Results timeline={timeline} network={network} events={visibleEvents} cuts={s.sid ? s.state?.open_lines ?? [] : cut ? [cut] : []} />}
           </>}
+          {tab === "datos" && (s.network
+            ? <DataPanel network={s.network} edit={s.edit} pick={_pick} picking={picking} />
+            : <p className="muted">Los datos se editan dentro de una sesión compartida: crea una o únete con su enlace. El caso base no cambia.</p>)}
           {tab === "legend" && network && <CascadeLegend network={network} buses={buses} mode={mode} />}
           {tab === "assumptions" && <ul className="assumptions">{(timeline?.assumptions ?? index?.assumptions ?? []).map((a) => <li key={a}>{a}</li>)}</ul>}
         </div>
@@ -176,12 +215,23 @@ function TimelineCard(p: { timeline: Timeline | null; stage: number; playing: bo
   );
 }
 
-function Results(p: { timeline: Timeline; network: Network; events: Timeline["events"]; cut: string | null }) {
+/** Sandbox cut of a session: the lines open for everyone in it, each with its repair button. */
+function SessionCut(p: { network: Network; open: string[]; notice: string; repair(lines?: string[]): void }) {
+  return (
+    <div className="card">
+      <div className="card-head"><h3>Líneas abiertas en la sesión · {p.open.length}</h3>{p.open.length > 0 && <button className="link" onClick={() => p.repair()}>Reparar todo</button>}</div>
+      {p.open.map((id) => <div className="data-line" key={id}><span>{lineName(p.network, id)}</span><button className="link" onClick={() => p.repair([id])}>Reparar</button></div>)}
+      <p className="muted">{p.notice}</p>
+    </div>
+  );
+}
+
+function Results(p: { timeline: Timeline; network: Network; events: Timeline["events"]; cuts: string[] }) {
   const s = p.timeline.summary;
   const pct = s.load_total_mw ? Math.round((s.load_shed_mw / s.load_total_mw) * 100) : 0;
   return (
     <section className="results">
-      <h2>{p.cut ? `Corte: ${lineName(p.network, p.cut)}` : "Caso base (sin corte)"}</h2>
+      <h2>{p.cuts.length ? `Corte: ${p.cuts.map((id) => lineName(p.network, id)).join(", ")}` : "Caso base (sin corte)"}</h2>
       <div className="stats">
         <div><b>{formatPeople(s.people_without_power)}</b><span>personas sin luz</span></div>
         <div><b>{s.load_shed_mw.toLocaleString("es-CL")} MW</b><span>{pct}% de la demanda</span></div>

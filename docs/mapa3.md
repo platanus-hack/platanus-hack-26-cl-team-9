@@ -275,3 +275,24 @@ interface TheaterSnapshot {                         // one per 5-min cycle: POST
 **Offline index** (`cache/theater/index.json`): `{points, runs: [{file, point, template, policy, seed, adversary}], notice}`. Each run file holds `{run, recipe, snapshots, report, after_action, trace_head}`.
 
 Never shown: the adversary's learned weights or any ranking of areas or elements. Every run carries the notice "Escenario hipotético: se modela el efecto, no el ataque."
+
+## 11. Session mode: a shared, editable copy of the network
+Without a session, mapa 3 reads only the static cache (`web/public/cache/`) and makes no `/api` request, so it works with no backend. With a session it reads the sessions API (`docs/sessions-api.md`) through `/api`, which the Vite dev server proxies to the backend (`VITE_API_TARGET`, default `http://localhost:8000`; docker compose sets `http://backend:8000`). The deployed static site has no backend behind `/api` yet, so session mode needs the local stack until the sessions bucket and task role are applied (`docs/infrastructure.md`).
+
+**Sources.**
+| Mode | Network and buses | Timeline | Point |
+|---|---|---|---|
+| No session (`/`) | `cache/network-<year>.json`, `cache/<point>/buses.json` | `cache/<point>/<cut>.json` | Case pill |
+| Session (`/?sesion=<sid>`) | `GET /api/v1/sessions/{sid}/network` | `GET /api/v1/sessions/{sid}/state` (the shared sandbox cut) | Pinned by the session; the pill is disabled |
+
+**Session bar** (top of the panel): **Crear sesión** (`POST /sessions`), **Unirse** (paste the id or the link), **Copiar enlace** (`<origin>/?sesion=<sid>`), **Salir**, the revision (`rev. N`) and the live mode: **en vivo** (SSE stream `GET /{sid}/events`) or **sondeo** (no `EventSource`, or the stream gave up: `GET /{sid}` every 2 s with `If-None-Match`). The id is kept in localStorage (`sub50_session`) and in the URL; `?sesion=` wins. A session that no longer exists (404) is forgotten and the map falls back to the cache. On every revision the page refetches the session, the network and the state.
+
+**Cuts in a session.** A click on a line calls `POST /{sid}/cut` with that line: it opens for everyone in the session and stays open until someone repairs it. **Simulación** lists the open lines with **Reparar** (`POST /{sid}/repair {lines}`) and **Reparar todo** (`{all: true}`) and shows the notice the API returns.
+
+**Tab Datos** (only in a session): the session's copy of the network.
+- Header: the session's base case without cuts (`baseline`: highest line loading, overloaded lines, MW shed), each redispatch (`balance`) and every warning. **Restablecer** (`POST /{sid}/reset`) drops all session edits after a confirmation.
+- Sub-tabs **Barras**, **Líneas**, **Generadores** and **Cargas y datacenters**: add forms, a list with an origin badge (`base` or `sesión`) and the label **supuesto (sesión)** on every session or overridden value, and per element a form that sends only the changed fields (`PATCH`), **Fuera de servicio** / **Poner en servicio** (`in_service`) and **Borrar** for session elements (base elements cannot be deleted).
+- **Elegir en el mapa** turns the next map click into the latitude and longitude of the form. For a load or datacenter, **Conectar a la subestación ≥220 kV más cercana** picks the nearest in-service bus of 220 kV or more (`web/src/session/geo.ts`, great-circle distance). That is the only geometry the browser computes; balance and cascades come from the API.
+- Edits send `If-Match` with the revision on screen. If another client changed the session first (412), the page reloads and asks you to retry.
+
+**Files.** `web/src/session/sessionApi.ts` (typed calls for every session route, `ApiError`, `sessionIdFrom`, `subscribe`), `useSession.ts` (state and refetch), `SessionBar.tsx`, `DataPanel.tsx`, `geo.ts`.

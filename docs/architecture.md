@@ -139,7 +139,8 @@ Vite + React + TypeScript; deck.gl layers over an offline base map or Mapbox (to
 
 | Folder | Responsibility |
 |---|---|
-| `src/cascade/` | Mapa 3 (`CascadeApp.tsx`): Red, Simulación, Leyenda and Supuestos tabs; line cut, cascade layers, network panel, timeline player. Data from `web/public/cache/` (`api.ts`) |
+| `src/cascade/` | Mapa 3 (`CascadeApp.tsx`): Red, Simulación, Datos, Leyenda and Supuestos tabs; line cut, cascade layers, network panel, timeline player. Data from `web/public/cache/` (`api.ts`), or from the sessions API with `?sesion=` |
+| `src/session/` | Session mode of mapa 3: API client with SSE and polling (`sessionApi.ts`), `useSession`, session bar, Datos tab, nearest-bus geometry. Calls `/api`, proxied by the Vite dev server (`VITE_API_TARGET`) |
 | `src/map/` | Base map (offline or Mapbox), shared layers, node detail |
 | `src/assets/icons/` | 2D icons |
 

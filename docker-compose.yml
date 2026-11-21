@@ -36,6 +36,10 @@ services:
     build: ./web
     ports:
       - "${WEB_PORT:-5173}:5173"
+    environment:
+      - VITE_API_TARGET=http://backend:8000  # the dev server proxies /api to the backend (session mode, ?sesion=)
+    depends_on:
+      - backend
     volumes:
       - ./web:/app/web
       - ./data:/app/data
