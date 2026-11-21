@@ -35,3 +35,7 @@ output "acm_certificate_arn" {
   description = "ACM certificate (us-east-1) for sub50.cl and *.sub50.cl. Attached to CloudFront. Reuse it for alb_certificate_arn if origin_https is enabled."
   value       = aws_acm_certificate_validation.main.certificate_arn
 }
+output "sessions_bucket" {
+  description = "S3 bucket of shared sessions and persisted runs (CASCADASEN_SESSION_BUCKET)."
+  value       = aws_s3_bucket.sessions.bucket
+}

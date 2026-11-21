@@ -19,6 +19,7 @@ resource "aws_ecs_task_definition" "app" {
   cpu                      = 2048
   memory                   = 4096
   execution_role_arn       = aws_iam_role.task_execution.arn
+  task_role_arn            = aws_iam_role.task.arn
 
   runtime_platform {
     operating_system_family = "LINUX"
@@ -31,6 +32,13 @@ resource "aws_ecs_task_definition" "app" {
       image        = "${c.repository_url}:${var.image_tag}"
       essential    = true
       portMappings = [{ containerPort = c.port, protocol = "tcp" }]
+      # Shared sessions in S3 (docs/infrastructure.md). Only the backend gets settings.
+      environment = name == "backend" ? [
+        { name = "CASCADASEN_SESSION_STORE", value = "s3" },
+        { name = "CASCADASEN_SESSION_BUCKET", value = aws_s3_bucket.sessions.bucket },
+        { name = "CASCADASEN_AWS_REGION", value = data.aws_region.current.region },
+        { name = "CASCADASEN_VERSION", value = var.image_tag },
+      ] : []
       logConfiguration = {
         logDriver = "awslogs"
         options = {

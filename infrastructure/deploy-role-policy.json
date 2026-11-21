@@ -39,7 +39,8 @@
       "Action": "iam:PassRole",
       "Resource": [
         "arn:aws:iam::402909940511:role/cascadasen-task-execution",
-        "arn:aws:iam::402909940511:role/cascadasen-ecs-infrastructure"
+        "arn:aws:iam::402909940511:role/cascadasen-ecs-infrastructure",
+        "arn:aws:iam::402909940511:role/cascadasen-task"
       ],
       "Condition": {
         "StringEquals": {
