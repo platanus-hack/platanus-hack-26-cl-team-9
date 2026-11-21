@@ -1,0 +1,96 @@
+# Cascade engine parameters (docs/engine.md, docs/stack.md section 4).
+# Every number sits in `value` with a `source` or `is_assumption: true` (docs/datasets.md section 6);
+# the loader in domain/simulation/params.py rejects bare numbers. [n] refers to datasets.md section 7.
+version: 1
+
+frequency:
+  f0_hz: {value: 50.0, source: "NTSyCS nominal frequency"}
+  step_s: {value: 0.01, source: "stack.md 4.4 (10 ms step)"}
+  horizon_s: {value: 20.0, source: "stack.md 4.4 (20 s horizon)"}
+  sample_every: {value: 20, is_assumption: true, note: "Steps between curve samples (5 Hz curve, keeps files small)"}
+  blackout_low_hz: {value: 47.5, source: "NTSyCS art. 3-10, per [4] (stack.md 4.4)"}
+  blackout_high_hz:
+    value: 52.0
+    is_assumption: true
+    note: "Generator over-frequency protection limit; not published for the SEN"
+  overfrequency_curtailment:
+    value: {start_hz: 50.2, share_per_hz: 0.55}
+    source: "NTSyCS (55 % of available power per Hz above 50.2 Hz)"
+    note: "Solar and wind only; applied instantly"
+  load_damping_pct_per_hz:
+    value: 1.5
+    is_assumption: true
+    note: "D in the 1-2 %/Hz range (stack.md 4.4); not calibrated on the 188-bus network"
+  reserve_share_of_sync:
+    value: 0.04
+    is_assumption: true
+    note: "Primary reserve = 4 % of online synchronous MW when no published value exists"
+  reserve_droop:
+    value: 0.05
+    is_assumption: true
+    note: "Governor droop R in the typical 4-5 % range: P = df / (R f0) x synchronous MW, capped at the reserve"
+  reserve_time_constant_s:
+    value: 3.0
+    is_assumption: true
+    note: "First-order primary response, inside the typical 2-10 s range"
+  battery_delay_s: {value: 0.2, source: "[18] per stack.md 4.5"}
+  battery_ramp_s: {value: 0.3, source: "[18] per stack.md 4.5"}
+  battery_trigger_hz:
+    value: 49.8
+    is_assumption: true
+    note: "Batteries in fast-frequency mode start when the island crosses this frequency"
+
+edac:
+  low_demand_mw:
+    value: 8500.0
+    is_assumption: true
+    note: "System demand that maps to the 'low demand' column of the centro-sur table"
+  high_demand_mw:
+    value: 11500.0
+    is_assumption: true
+    note: "System demand that maps to the 'high demand' column of the centro-sur table"
+  max_step_share:
+    value: 0.5
+    is_assumption: true
+    note: "A single step never sheds more than half of the zone's load in the island"
+  gradient_hz_s: {value: -0.6, source: "[4] centro-sur EDAC table (steps 1 and 3 also act on df/dt)"}
+  gradient_max_hz:
+    value: 49.5
+    is_assumption: true
+    note: "The gradient trigger only counts below this frequency"
+  centro_sur:
+    value:
+      steps_hz: [49.0, 48.9, 48.8, 48.7, 48.5, 48.3]
+      gradient: [true, false, true, false, false, false]
+      # MW per zone and step as [low demand, high demand]
+      zones:
+        Atacama: [[10, 22], [23, 13], [10, 19], [16, 23], [12, 26], [2, 1]]
+        Coquimbo: [[16, 40], [18, 23], [15, 34], [9, 11], [3, 18], [1, 2]]
+        "Quinta Región": [[21, 56], [23, 22], [37, 48], [19, 12], [34, 23], [8, 10]]
+        Metropolitana: [[65, 207], [61, 142], [42, 170], [75, 143], [104, 145], [58, 117]]
+        "Troncal Centro": [[9, 10], [2, 8], [7, 12], [8, 8], [3, 7], [1, 6]]
+        "Sistema 154-66 kV": [[26, 74], [28, 49], [52, 88], [28, 21], [11, 18], [9, 19]]
+        "Charrúa": [[16, 53], [5, 4], [15, 10], [11, 13], [12, 39], [2, 7]]
+        "Concepción": [[65, 57], [17, 17], [27, 46], [14, 30], [12, 9], [7, 8]]
+        "Araucanía": [[11, 30], [7, 9], [24, 46], [9, 16], [2, 8], [14, 8]]
+    source: "[4] centro-sur EDAC table, pages 26-27"
+  norte_grande:
+    value: [[48.9, 52.0], [48.8, 102.9], [48.7, 90.9], [48.6, 104.8], [48.5, 117.9], [48.4, 119.7], [48.3, 119.2]]
+    source: "[4] Table 3-9 (step 1 at 49.0 Hz is disabled)"
+  extreme:
+    value: {zone: centro_sur, threshold_hz: 49.5, gradients_hz_s: [-0.9, -1.2, -1.9], mw: 671.55}
+    source: "[4] Tables 3-10 and 3-11 (stack.md 4.4)"
+    note: "Split in three equal tranches, one per gradient stage (assumption)"
+
+cascade:
+  overload_factor: {value: 1.2, source: "stack.md 4.3 (120 % of capacity, parameter)"}
+  max_stages: {value: 20, source: "stack.md 4.3"}
+  stage_spacing_s: {value: 1.0, is_assumption: true, note: "Illustrative time between cascade stages"}
+  local_cut_mw: {value: 200.0, source: "stack.md 4.5 (islands without synchronous generation, parameter)"}
+
+voltage_limit:
+  value: {north: "Nueva Maitencillo", south: "Nueva Pan de Azúcar", limit_ns_mw: 1600.0, limit_sn_mw: 1000.0}
+  source: "[4] defence-scheme validity range (stack.md 4.6)"
+  note: >-
+    Pre-fault flow across the 25F boundary above these limits gives 'voltage_limited (uncertain)'
+    instead of a frequency verdict. The DC model has no voltage; this is the only corridor with published limits.
