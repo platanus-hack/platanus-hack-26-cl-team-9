@@ -5,15 +5,15 @@ export const BASE = "/api/v1/sessions";
 export const AGENT = "web";
 const SID = /^[A-Za-z0-9_-]{22}$/;
 export type Kind = "buses" | "lines" | "loads" | "generators";
-export interface LastOp { op: string; ids: string[]; by: string; revision: number }
+export interface LastOp { op: string; ids: string[]; by: string; revision: number; dataset_revision?: number }
 export interface SessionDoc {
-  session_id: string; label: string | null; point: string; revision: number; open_lines: string[];
+  session_id: string; label: string | null; point: string; revision: number; dataset_revision: number; open_lines: string[];
   runs: Record<string, { created_at: string; dataset_revision: number; cycle: number; status: string }>;
   last_op: LastOp; share_path: string; expires_at: string; created_at: string; updated_at: string;
 }
-export interface EditResult { id?: string; revision: number; warnings: SessionWarning[]; balance: Balance[] }
-export interface CutState { revision: number; open_lines: string[]; timeline: Timeline; notice: string }
-export interface RevisionEvent { type?: "revision"; revision: number; op?: string; ids?: string[]; by?: string }
+export interface EditResult { id?: string; revision: number; dataset_revision: number; warnings: SessionWarning[]; balance: Balance[] }
+export interface CutState { revision: number; dataset_revision: number; open_lines: string[]; timeline: Timeline; notice: string }
+export interface RevisionEvent { type?: "revision"; revision: number; dataset_revision?: number; op?: string; ids?: string[]; by?: string }
 type Json = Record<string, unknown>;
 
 export class ApiError extends Error {

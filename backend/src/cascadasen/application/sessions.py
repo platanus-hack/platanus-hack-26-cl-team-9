@@ -2,7 +2,9 @@
 over the 188-bus network, pinned to one operating point, plus a sandbox cut state and the index of
 its runs. Documents live in a `DocumentStore` (`sessions/<sid>.json`) and are written with
 conditional writes, so several instances can serve the same session. Every change bumps the
-document's `revision`; session runs reuse `RunManager` on a `SessionWorld` that pins the overlay
+document's `revision`; changes of the dataset (overlay edits, reset, cut, repair) also bump its
+`dataset_revision`, which `If-Match` and the network view use, so run activity does not invalidate
+them. Session runs reuse `RunManager` on a `SessionWorld` that pins the overlay
 the run was created with (`sessions/<sid>/runs/<rid>.json`)."""
 
 from __future__ import annotations
@@ -94,8 +96,8 @@ class SessionService:
         self.interpreter, self.advisor, self.spec = interpreter, advisor, spec
         self.ttl_s, self.version, self.clock = ttl_s, version, clock
         self._docs = _Lru(256)  # sid -> (doc, etag): what SSE polls between store heads
-        self._worlds = _Lru(CACHE_SIZE)  # (sid, revision) -> SessionWorld
-        self._views = _Lru(CACHE_SIZE)  # (sid, revision) -> network view
+        self._worlds = _Lru(CACHE_SIZE)  # (sid, dataset_revision) -> SessionWorld
+        self._views = _Lru(CACHE_SIZE)  # (sid, dataset_revision) -> network view
 
     # --------------------------------------------------------------- store
     @staticmethod
@@ -121,7 +123,7 @@ class SessionService:
         return {**copy.deepcopy(doc), "share_path": f"/?sesion={doc['session_id']}", "expires_at": expires}
 
     def _world(self, doc: dict[str, Any]) -> SessionWorld:
-        key = (doc["session_id"], doc["revision"])
+        key = (doc["session_id"], doc["dataset_revision"])
         world = self._worlds.get(key)
         if world is None:
             world = SessionWorld(self.world, doc["point"], doc["overlay"], self.spec)
@@ -144,12 +146,13 @@ class SessionService:
             "label": label,
             "point": point,
             "revision": 0,
+            "dataset_revision": 0,
             "overlay": ov.empty_overlay(),
             "open_lines": [],
             "runs": {},
             "created_at": now,
             "updated_at": now,
-            "last_op": {"op": "created", "ids": [], "by": by, "revision": 0},
+            "last_op": {"op": "created", "ids": [], "by": by, "revision": 0, "dataset_revision": 0},
         }
         etag = self.store.put(self._key(sid), doc, if_none_match=True)
         self._docs.put(sid, (doc, etag))
@@ -176,19 +179,28 @@ class SessionService:
         ids: list[str] | None,
         by: str = "anon",
         if_revision: int | None = None,
+        dataset: bool = False,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Apply `fn` to a copy of the current document and write it conditionally, retrying on a
         concurrent write. `fn` edits the document in place and may return extra output; its `id`
-        (or `ids`) becomes the operation's ids when `ids` is None."""
+        (or `ids`) becomes the operation's ids when `ids` is None. `dataset` marks a change of the
+        dataset (bumps `dataset_revision`); `if_revision` is checked against `dataset_revision`."""
         for _ in range(WRITE_RETRIES + 1):
             doc, etag = self._fetch(sid)
-            if if_revision is not None and doc["revision"] != if_revision:
+            if if_revision is not None and doc["dataset_revision"] != if_revision:
                 raise PreconditionFailedError(sid)
             new = copy.deepcopy(doc)
             out = fn(new) or {}
             new["revision"] = doc["revision"] + 1
+            new["dataset_revision"] = doc["dataset_revision"] + int(dataset)
             op_ids = ids if ids is not None else out.get("ids") or ([out["id"]] if "id" in out else [])
-            new["last_op"] = {"op": op, "ids": op_ids, "by": by, "revision": new["revision"]}
+            new["last_op"] = {
+                "op": op,
+                "ids": op_ids,
+                "by": by,
+                "revision": new["revision"],
+                "dataset_revision": new["dataset_revision"],
+            }
             new["updated_at"] = self._now()
             try:
                 new_etag = self.store.put(self._key(sid), new, if_match=etag)
@@ -215,9 +227,15 @@ class SessionService:
             doc["open_lines"] = [lid for lid in doc["open_lines"] if lid in live]
             return out
 
-        doc, out = self.mutate(sid, fn, op, ids, by, if_revision)
+        doc, out = self.mutate(sid, fn, op, ids, by, if_revision, dataset=True)
         applied = self._world(doc).applied
-        return {**out, "revision": doc["revision"], "warnings": applied.warnings, "balance": applied.balance}
+        return {
+            **out,
+            "revision": doc["revision"],
+            "dataset_revision": doc["dataset_revision"],
+            "warnings": applied.warnings,
+            "balance": applied.balance,
+        }
 
     def add(
         self, sid: str, kind: str, fields: dict[str, Any], by: str = "anon", if_revision: int | None = None
@@ -256,12 +274,12 @@ class SessionService:
     # -------------------------------------------------------------- views
     def network_view(self, sid: str) -> dict[str, Any]:
         doc, _ = self._fetch(sid)
-        key = (sid, doc["revision"])
+        key = (sid, doc["dataset_revision"])
         view = self._views.get(key)
         if view is None:
             view = self._network_view(doc)
             self._views.put(key, view)
-        return copy.deepcopy(view)
+        return {**copy.deepcopy(view), "revision": doc["revision"]}
 
     def _network_view(self, doc: dict[str, Any]) -> dict[str, Any]:
         world = self._world(doc)
@@ -303,7 +321,7 @@ class SessionService:
         view["generators"] = [{**r, "origin": "session", "is_assumption": True} for r in o["generators"]]
         view["warnings"], view["balance"] = applied.warnings, applied.balance
         view["baseline"] = self._baseline(net.buses, op)
-        view["revision"], view["session_id"] = doc["revision"], doc["session_id"]
+        view["dataset_revision"], view["session_id"] = doc["dataset_revision"], doc["session_id"]
         return view
 
     @staticmethod
@@ -333,6 +351,7 @@ class SessionService:
     def _sandbox(self, doc: dict[str, Any]) -> dict[str, Any]:
         return {
             "revision": doc["revision"],
+            "dataset_revision": doc["dataset_revision"],
             "open_lines": doc["open_lines"],
             "timeline": self._timeline(doc),
             "notice": NOTICE,
@@ -348,7 +367,7 @@ class SessionService:
             self._check_lines(doc, lines)
             doc["open_lines"] = sorted(set(doc["open_lines"]) | set(lines))
 
-        doc, _ = self.mutate(sid, fn, "cut", sorted(lines), by, if_revision)
+        doc, _ = self.mutate(sid, fn, "cut", sorted(lines), by, if_revision, dataset=True)
         return self._sandbox(doc)
 
     def repair(
@@ -368,7 +387,7 @@ class SessionService:
             doc["open_lines"] = [] if all else sorted(set(doc["open_lines"]) - set(lines))
             return {"ids": sorted(repaired)}
 
-        doc, _ = self.mutate(sid, fn, "repair", None if all else sorted(lines), by, if_revision)
+        doc, _ = self.mutate(sid, fn, "repair", None if all else sorted(lines), by, if_revision, dataset=True)
         return self._sandbox(doc)
 
     def state(self, sid: str) -> dict[str, Any]:
@@ -394,7 +413,7 @@ class SessionService:
                 "session_id": sid,
                 "point": doc["point"],
                 "overlay": doc["overlay"],
-                "dataset_revision": doc["revision"],
+                "dataset_revision": doc["dataset_revision"],
             },
             version=self.version,
             clock=self.clock,
@@ -429,7 +448,7 @@ class SessionService:
             raise RunInputError("point", "la sesión fija su punto de operación", [doc["point"]])
         config = run_config({**data, "point": doc["point"], "operating_point": doc["point"]})
         run = self.runs(sid, doc).create(config, auto_run)
-        revision = self._register(sid, run, doc["revision"], by)
+        revision = self._register(sid, run, doc["dataset_revision"], by)
         return {**run, "session_revision": revision}
 
     def run_command(self, sid: str, rid: str, name: str, *args: Any, by: str = "anon", **kwargs: Any) -> Any:
@@ -451,7 +470,10 @@ class SessionService:
                 if rid in d["runs"]:
                     d["runs"][rid].update(cycle=run["cycle"], status=run["status"])
 
-            out["session_revision"] = self.mutate(sid, fn, "run_updated", [rid], by)[0]["revision"]
+            try:
+                out["session_revision"] = self.mutate(sid, fn, "run_updated", [rid], by)[0]["revision"]
+            except ConflictError:  # the step is persisted; only the index summary missed this write
+                out["session_revision"] = self._fetch(sid)[0]["revision"]
         return out
 
     # ---------------------------------------------------------------- SSE
@@ -462,6 +484,7 @@ class SessionService:
         last = doc.get("last_op") or {}
         return {
             "revision": doc["revision"],
+            "dataset_revision": doc["dataset_revision"],
             "op": last.get("op"),
             "ids": last.get("ids", []),
             "by": last.get("by"),

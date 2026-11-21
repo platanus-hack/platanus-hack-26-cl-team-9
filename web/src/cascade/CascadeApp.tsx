@@ -21,7 +21,7 @@ const FLOW_CYCLE = 1 + 2 / 3;
 /**
  * Mapa 3: click a line to cut it and watch the cascade computed by the engine. Without a session it reads the
  * precomputed web/public/cache and never calls /api; with ?sesion=<sid> the network, the cut and the timeline come
- * from the sessions API and every revision event refetches them (docs/mapa3.md section 11).
+ * from the sessions API and every dataset change refetches them (docs/mapa3.md section 11).
  */
 export function CascadeApp() {
   const mapRef = useRef<HTMLDivElement>(null);

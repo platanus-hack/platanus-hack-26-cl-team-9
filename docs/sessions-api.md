@@ -121,7 +121,7 @@ curl -s -X POST "$API/sessions/$SID/runs/$RID/replay" -H 'Content-Type: applicat
 curl -s "$API/sessions/$SID/runs/$RID/trace" | jq '{verified, head}'
 ```
 
-Run actions: `action` comes from `GET /api/v1/sim/catalog` (`actions`), `role` must be one of that action's proposers (for `restore_element`: `operations`), and `target` an area (`A01`-`A13`) or corridor (`A06-A07`). The action is checked for structure at once (unknown action or role gives 422, unknown target 404) and runs in the next cycle through the same validator, attention and resource checks as the commander's own actions; the stabilisation and logistics vetoes, which act on C2's proposals, do not apply to it. A finished run gives 409.
+Run actions: `action` comes from `GET /api/v1/sim/catalog` (`actions`), `role` must be one of that action's proposers (for `restore_element`: `operations`), and `target` an area (`A01`-`A13`) or corridor (`A06-A07`). The action is checked for structure at once (unknown action or role gives 422, unknown target 404) and runs in the next cycle. When it executes it goes through the same validator, resource and crew checks as the commander's own actions and spends one unit of operator attention. It is not capped by C2's operator attention capacity (4 per cycle) and it skips C2's choice, the conflict rules between actions and the stabilisation and logistics vetoes: it executes even when C2 rejected the same action, and several external actions in one cycle all execute. Rate limits (section 8) are the only bound on how many an agent submits. A finished run gives 409.
 
 ## 6. Live updates (SSE)
 
@@ -131,7 +131,7 @@ Run actions: `action` comes from `GET /api/v1/sim/catalog` (`actions`), `role` m
 retry: 2000
 id: 3
 event: revision
-data: {"type": "revision", "revision": 3, "op": "load_added", "ids": ["D001"], "by": "bot-1"}
+data: {"type": "revision", "revision": 3, "dataset_revision": 2, "op": "load_added", "ids": ["D001"], "by": "bot-1"}
 
 : ping
 ```
@@ -141,15 +141,16 @@ data: {"type": "revision", "revision": 3, "op": "load_added", "ids": ["D001"], "
 - The server closes the stream after 55 s (`CASCADASEN_SSE_MAX_S`). `EventSource` reconnects by itself after `retry` (2 s) and sends `Last-Event-ID`; the server ignores it and starts again with the current revision, which is all a client needs.
 - The stream ends when the session is deleted or expires.
 - At most 5 open streams per session and client IP (`CASCADASEN_SSE_PER_SESSION_IP`), else 429.
-- Rule for clients: when the revision moved, refetch what you show (`GET /{sid}/network`, `GET /{sid}/state`). If it jumped by more than 1, you missed changes: refetch everything, including `GET /{sid}`.
+- Rule for clients: when `dataset_revision` moved, refetch what you show (`GET /{sid}/network`, `GET /{sid}/state`). When only `revision` moved (`run_created`, `run_updated`), the dataset is the same: refetch `GET /{sid}` if you show its `runs`. If you cannot tell, refetch everything, including `GET /{sid}`.
 - Polling fallback (no `EventSource`, or a proxy that buffers): `GET /{sid}` every 2 s with `If-None-Match: "<last ETag>"`; 304 means nothing changed.
 
 The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agent that cannot hold a stream polls `GET /{sid}` with `If-None-Match`.
 
 ## 7. Revisions, ETag and If-Match
 
-- Responses about the session carry `ETag: "<revision>"`: `GET /{sid}`, `/network`, `/state` and every mutation. Run commands that change the session return `session_revision` and the same header.
-- Send `If-Match: "<revision>"` on an edit to make it conditional: if someone else changed the session first, the edit is refused with 412 and nothing changes. Re-read, decide again, retry. Without `If-Match` the edit applies to whatever the current revision is (last writer wins per operation; operations never overwrite each other's elements, because each edit is applied to the freshly read document).
+- A session document has two counters. `revision` moves on every change, run activity included. `dataset_revision` moves only on what changes the dataset or the sandbox: element edits, reset, cut and repair.
+- `GET /{sid}` carries `ETag: "<revision>"` (for `If-None-Match` polling). `/network`, `/state`, every edit, reset, cut and repair carry `ETag: "<dataset_revision>"`. Run commands that change the session return `session_revision` (the `revision`) and the same header.
+- Send `If-Match: "<dataset_revision>"` on an edit, reset, cut or repair to make it conditional: if someone else changed the dataset first, the request is refused with 412 and nothing changes. A run stepped by another agent does not cause a 412. Re-read, decide again, retry. Without `If-Match` the edit applies to whatever the current revision is (last writer wins per operation; operations never overwrite each other's elements, because each edit is applied to the freshly read document).
 - Between instances, writes are conditional on the store's etag and retried 3 times; after that the API answers 409 and the client retries.
 
 ## 8. Limits and expiry

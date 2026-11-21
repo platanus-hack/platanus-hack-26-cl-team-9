@@ -22,7 +22,7 @@ export interface SessionWarning { code: string; ids: string[]; message: string }
 export interface Balance { buses: Record<string, number>; redispatch_mw: number; is_assumption: true; rule: string }
 /** GET /api/v1/sessions/{sid}/network: the mapa 3 network edited by the session overlay (docs/sessions-api.md section 10). */
 export interface SessionNetwork extends Network {
-  session_id: string; revision: number; point: string; buses: Record<string, BusState>;
+  session_id: string; revision: number; dataset_revision: number; point: string; buses: Record<string, BusState>;
   loads: SessionElement[]; generators: SessionElement[]; out_of_service: { buses: string[]; lines: string[] };
   warnings: SessionWarning[]; balance: Balance[];
   baseline: { max_loading: number; overloaded: string[]; load_shed_mw: number; islands: Timeline["summary"]["islands"] };

@@ -105,3 +105,22 @@ def test_runs_without_actions_keep_their_trace(toy_world):
 
     a, b = run(), run()
     assert a.log.head == b.log.head and a.recipe()["actions"] == [] and a.recipe()["cycle"] == 10
+
+
+def test_external_actions_are_not_capped_by_operator_attention(toy_world):
+    """Documented in docs/sessions-api.md section 5: external actions skip C2's attention cap and
+    conflict rules; each one still spends one unit of operator attention when it executes."""
+    sim = _sim(toy_world, stochastic=False)
+    assert sim.ledger.capacity["operator_attention"] == 4
+    for action, target in [
+        ("field_verification", "T1"),
+        ("field_verification", "T2"),
+        ("field_verification", "T3"),
+        ("backup_comms", "T1"),
+        ("backup_comms", "T2"),
+    ]:
+        sim.submit_action(action, target, "operations")
+    snap = sim.step(1)[0]
+    assert sum(e["ok"] for e in snap["executed"]) == 5
+    assert sim.ledger.used_this_cycle["operator_attention"] == 5
+    assert sim.trace()["verified"]

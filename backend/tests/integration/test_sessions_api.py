@@ -1,6 +1,10 @@
 """Shared sessions over HTTP (docs/sessions-api.md) on the toy world: CRUD, revisions and ETags,
 limits, sandbox cuts, nested runs, the SSE stream and the agent OpenAPI conventions."""
 
+import json
+import threading
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -212,6 +216,43 @@ def test_the_event_stream_starts_with_the_current_revision(client):
     data = next(line for line in lines if line.startswith("data: "))
     assert '"revision": 1' in data and '"op": "load_added"' in data
     assert client.get(f"{BASE}/{'A' * 22}/events").status_code == 404
+
+
+def test_run_activity_does_not_invalidate_if_match(client):
+    sid = _create(client)
+    added = client.post(f"{BASE}/{sid}/loads", json=DC)
+    assert added.headers["ETag"] == '"1"' and added.json()["dataset_revision"] == 1
+    rid = client.post(f"{BASE}/{sid}/runs", json={"template": "open_field", "seed": 3, "horizon": 8}).json()[
+        "run_id"
+    ]
+    stepped = client.post(f"{BASE}/{sid}/runs/{rid}/step", json={"cycles": 1})
+    assert stepped.headers["ETag"] == '"3"'
+    net = client.get(f"{BASE}/{sid}/network")
+    assert net.headers["ETag"] == '"1"' and net.json()["revision"] == 3
+    again = client.post(f"{BASE}/{sid}/loads", json=DC, headers={"If-Match": '"1"'})
+    assert again.status_code == 201 and again.headers["ETag"] == '"2"'
+
+
+def test_the_event_stream_reports_a_change_made_while_open(app, client):
+    sid = _create(client)
+    slots = app.state.sse_slots
+
+    def edit_once_the_stream_is_open():
+        for _ in range(200):
+            if slots._open:
+                break
+            time.sleep(0.005)
+        assert TestClient(app).post(f"{BASE}/{sid}/loads", json=DC).status_code == 201
+
+    editor = threading.Thread(target=edit_once_the_stream_is_open)
+    with client.stream("GET", f"{BASE}/{sid}/events") as r:
+        editor.start()
+        lines = list(r.iter_lines())
+    editor.join()
+    data = [json.loads(line[len("data: ") :]) for line in lines if line.startswith("data: ")]
+    assert [d["revision"] for d in data] == [0, 1]
+    assert data[1]["op"] == "load_added" and data[1]["dataset_revision"] == 1
+    assert lines.count("event: revision") == 2 and "id: 1" in lines
 
 
 def test_global_runs_still_work(client):

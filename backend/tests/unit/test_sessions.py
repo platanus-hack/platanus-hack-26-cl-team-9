@@ -37,7 +37,45 @@ def test_edits_bump_the_revision_and_show_in_the_network(service):
     assert view["balance"] and view["revision"] == 1
     assert view["loads"][0]["id"] == "D001" and view["loads"][0]["origin"] == "session"
     assert view["baseline"]["load_shed_mw"] == 0
-    assert service.get(sid)["last_op"] == {"op": "load_added", "ids": ["D001"], "by": "anon", "revision": 1}
+    assert service.get(sid)["last_op"] == {
+        "op": "load_added",
+        "ids": ["D001"],
+        "by": "anon",
+        "revision": 1,
+        "dataset_revision": 1,
+    }
+
+
+def test_run_activity_does_not_move_the_dataset_revision(service):
+    sid = service.create()["session_id"]
+    edit = service.add(sid, "load", DC)
+    view = service.network_view(sid)
+    rid = service.create_run(sid, RUN)["run_id"]
+    stepped = service.run_command(sid, rid, "step", 1)
+    doc = service.get(sid)
+    assert stepped["session_revision"] == doc["revision"] == 3
+    assert doc["dataset_revision"] == edit["dataset_revision"] == 1
+    again = service.network_view(sid)
+    assert again["revision"] == 3 and again["dataset_revision"] == view["dataset_revision"] == 1
+    # an editor holding dataset_revision 1 is not refused because of the run
+    assert service.add(sid, "load", DC, if_revision=1)["dataset_revision"] == 2
+    with pytest.raises(PreconditionFailedError):
+        service.add(sid, "load", DC, if_revision=1)
+
+
+def test_a_lost_run_index_write_does_not_fail_the_step(service, monkeypatch):
+    sid = service.create()["session_id"]
+    rid = service.create_run(sid, RUN)["run_id"]
+    put = service.store.put
+
+    def busy(key, doc, **kw):
+        if key == f"sessions/{sid}.json":
+            raise ConflictError(key)
+        return put(key, doc, **kw)
+
+    monkeypatch.setattr(service.store, "put", busy)
+    out = service.run_command(sid, rid, "step", 1)
+    assert out["run"]["cycle"] == 1 and out["session_revision"] == 1
 
 
 def test_a_stale_if_revision_is_rejected(service):
@@ -94,6 +132,7 @@ def test_cut_then_repair_all(service):
     repaired = service.repair(sid, all=True)
     assert repaired["open_lines"] == [] and repaired["timeline"]["failed_elements"] == []
     assert service.state(sid)["revision"] == repaired["revision"] == 2
+    assert repaired["dataset_revision"] == 2
 
 
 def test_delete_removes_the_session(service):

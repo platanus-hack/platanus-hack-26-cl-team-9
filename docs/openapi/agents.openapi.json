@@ -779,7 +779,7 @@
           "sessions"
         ],
         "summary": "Read a session document",
-        "description": "Returns the session document: point, revision, overlay (the edits), open_lines (sandbox cut), runs (id -> created_at, dataset_revision, cycle, status), last_op, share_path and expires_at. The ETag header is the revision; send it as If-None-Match to get 304 when nothing changed (polling fallback when SSE is not available). No side effects.",
+        "description": "Returns the session document: point, revision (bumped by every change, runs included), dataset_revision (bumped only by edits, reset, cut and repair), overlay (the edits), open_lines (sandbox cut), runs (id -> created_at, dataset_revision, cycle, status), last_op, share_path and expires_at. The ETag header is the revision; send it as If-None-Match to get 304 when nothing changed (polling fallback when SSE is not available). No side effects.",
         "operationId": "get_session",
         "parameters": [
           {
@@ -922,7 +922,7 @@
           "sessions"
         ],
         "summary": "Drop every network edit of a session",
-        "description": "Replaces the overlay with an empty one, so the network is the base dataset again. Runs keep the dataset they were created with; the sandbox cut keeps the lines that still exist. Bumps the revision.",
+        "description": "Replaces the overlay with an empty one, so the network is the base dataset again. Runs keep the dataset they were created with; the sandbox cut keeps the lines that still exist. Bumps revision and dataset_revision; the ETag is the dataset_revision.",
         "operationId": "reset_session",
         "parameters": [
           {
@@ -952,13 +952,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -1011,7 +1011,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1050,7 +1050,7 @@
           "session-network"
         ],
         "summary": "Read the session's 188-bus network",
-        "description": "Returns the edited network: nodes and lines (origin base|session, is_assumption, overridden), buses with load and generation, loads[] and generators[] added by the session, areas, corridors, out_of_service, warnings, balance (the redispatch assumption) and baseline (loading and load shed with no cut). With no edits it is the base dataset. Use it to get bus (B###) and line (R###, U###) ids before editing or cutting.",
+        "description": "Returns the edited network: nodes and lines (origin base|session, is_assumption, overridden), buses with load and generation, loads[] and generators[] added by the session, areas, corridors, out_of_service, warnings, balance (the redispatch assumption) and baseline (loading and load shed with no cut). With no edits it is the base dataset. Use it to get bus (B###) and line (R###, U###) ids before editing or cutting. The ETag is the dataset_revision, to send as If-Match on edits.",
         "operationId": "get_session_network",
         "parameters": [
           {
@@ -1111,7 +1111,7 @@
           "session-network"
         ],
         "summary": "Add a bus to the session network",
-        "description": "Adds a substation bus (B### after the base buses) at lat/lon with a base voltage. Connect it with add_line; a bus with no line gives an isolated_bus warning. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Adds a substation bus (B### after the base buses) at lat/lon with a base voltage. Connect it with add_line; a bus with no line gives an isolated_bus warning. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "add_bus",
         "parameters": [
           {
@@ -1141,13 +1141,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -1210,7 +1210,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1249,7 +1249,7 @@
           "session-network"
         ],
         "summary": "Change a bus",
-        "description": "Changes a base bus (stored as an override) or a session bus: name, kv, position, load, generation, synchronous MW, inertia or in_service. Only the fields sent change; null clears a session value. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Changes a base bus (stored as an override) or a session bus: name, kv, position, load, generation, synchronous MW, inertia or in_service. Only the fields sent change; null clears a session value. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "update_bus",
         "parameters": [
           {
@@ -1293,13 +1293,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -1362,7 +1362,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1399,7 +1399,7 @@
           "session-network"
         ],
         "summary": "Delete a session bus",
-        "description": "Deletes a bus the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Deletes a bus the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "delete_bus",
         "parameters": [
           {
@@ -1443,13 +1443,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -1502,7 +1502,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1541,7 +1541,7 @@
           "session-network"
         ],
         "summary": "Add a line to the session network",
-        "description": "Adds a transmission line (U###) between two in-service buses with a base voltage. x_pu defaults from the length and voltage. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Adds a transmission line (U###) between two in-service buses with a base voltage. x_pu defaults from the length and voltage. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "add_line",
         "parameters": [
           {
@@ -1571,13 +1571,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -1640,7 +1640,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1679,7 +1679,7 @@
           "session-network"
         ],
         "summary": "Change a line",
-        "description": "Changes capacity_mw, x_pu or in_service of a base line (R###) or a session line (U###). Only the fields sent change; null clears a session value. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Changes capacity_mw, x_pu or in_service of a base line (R###) or a session line (U###). Only the fields sent change; null clears a session value. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "update_line",
         "parameters": [
           {
@@ -1723,13 +1723,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -1792,7 +1792,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1829,7 +1829,7 @@
           "session-network"
         ],
         "summary": "Delete a session line",
-        "description": "Deletes a line the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Deletes a line the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "delete_line",
         "parameters": [
           {
@@ -1873,13 +1873,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -1932,7 +1932,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1971,7 +1971,7 @@
           "session-network"
         ],
         "summary": "Add a load or datacenter to the session network",
-        "description": "Adds a demand (D###) on a bus: kind datacenter or consumo. Pick the bus from the network, for example the nearest 220 kV or higher substation. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Adds a demand (D###) on a bus: kind datacenter or consumo. Pick the bus from the network, for example the nearest 220 kV or higher substation. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "add_load",
         "parameters": [
           {
@@ -2001,13 +2001,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -2070,7 +2070,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2109,7 +2109,7 @@
           "session-network"
         ],
         "summary": "Change a load or datacenter",
-        "description": "Changes mw, kind, name or in_service of a session load (D###). Only the fields sent change; null clears a session value. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Changes mw, kind, name or in_service of a session load (D###). Only the fields sent change; null clears a session value. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "update_load",
         "parameters": [
           {
@@ -2153,13 +2153,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -2222,7 +2222,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2259,7 +2259,7 @@
           "session-network"
         ],
         "summary": "Delete a session load or datacenter",
-        "description": "Deletes a load or datacenter the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Deletes a load or datacenter the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "delete_load",
         "parameters": [
           {
@@ -2303,13 +2303,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -2362,7 +2362,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2401,7 +2401,7 @@
           "session-network"
         ],
         "summary": "Add a generator to the session network",
-        "description": "Adds a generator (G###) on a bus. hidro, termica, bioenergia and geotermica units are synchronous and add inertia (H default 4 s, an assumption). Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Adds a generator (G###) on a bus. hidro, termica, bioenergia and geotermica units are synchronous and add inertia (H default 4 s, an assumption). Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "add_generator",
         "parameters": [
           {
@@ -2431,13 +2431,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -2500,7 +2500,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2539,7 +2539,7 @@
           "session-network"
         ],
         "summary": "Change a generator",
-        "description": "Changes mw, tech, synchronous, inertia_h, name or in_service of a session generator (G###). Only the fields sent change; null clears a session value. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Changes mw, tech, synchronous, inertia_h, name or in_service of a session generator (G###). Only the fields sent change; null clears a session value. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "update_generator",
         "parameters": [
           {
@@ -2583,13 +2583,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -2652,7 +2652,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2689,7 +2689,7 @@
           "session-network"
         ],
         "summary": "Delete a session generator",
-        "description": "Deletes a generator the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
+        "description": "Deletes a generator the session added. Base elements are never deleted (409): PATCH them with in_service=false instead. Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, warnings, balance}; the island of the edit is rebalanced by redispatching base synchronous units (an assumption).",
         "operationId": "delete_generator",
         "parameters": [
           {
@@ -2733,13 +2733,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -2792,7 +2792,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2831,7 +2831,7 @@
           "session-sandbox"
         ],
         "summary": "Open 1 to 3 lines in the session sandbox",
-        "description": "Adds 1 to 3 line ids (R### or U###, from get_session_network) to the open lines. This shows the physical consequence of losing those lines; it does not search for the worst cut. Re-runs the cascade from the base case with every open line and returns {revision, open_lines, timeline, notice}; all clients of the session see the same cut. Bumps the revision.",
+        "description": "Adds 1 to 3 line ids (R### or U###, from get_session_network) to the open lines. This shows the physical consequence of losing those lines; it does not search for the worst cut. Re-runs the cascade from the base case with every open line and returns {revision, dataset_revision, open_lines, timeline, notice}; all clients of the session see the same cut. Bumps revision and dataset_revision (the ETag).",
         "operationId": "cut_lines",
         "parameters": [
           {
@@ -2861,13 +2861,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -2930,7 +2930,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2969,7 +2969,7 @@
           "session-sandbox"
         ],
         "summary": "Close open lines in the session sandbox",
-        "description": "Closes the given open lines, or all of them with all=true. Re-runs the cascade from the base case with every open line and returns {revision, open_lines, timeline, notice}; all clients of the session see the same cut. Bumps the revision.",
+        "description": "Closes the given open lines, or all of them with all=true. Re-runs the cascade from the base case with every open line and returns {revision, dataset_revision, open_lines, timeline, notice}; all clients of the session see the same cut. Bumps revision and dataset_revision (the ETag).",
         "operationId": "repair_lines",
         "parameters": [
           {
@@ -2999,13 +2999,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412.",
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
               "examples": [
                 "\"3\""
               ],
               "title": "If-Match"
             },
-            "description": "Optional session revision the edit is based on, as returned in ETag (\"3\"). A different current revision gives 412."
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
           },
           {
             "name": "X-Sub50-Agent",
@@ -3068,7 +3068,7 @@
             }
           },
           "412": {
-            "description": "If-Match does not match the current session revision; re-read the session and retry.",
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3107,7 +3107,7 @@
           "session-sandbox"
         ],
         "summary": "Read the session sandbox state",
-        "description": "Returns {revision, open_lines, timeline, notice}: the cascade timeline with the current open lines (the baseline when none). No side effects.",
+        "description": "Returns {revision, dataset_revision, open_lines, timeline, notice}: the cascade timeline with the current open lines (the baseline when none). The ETag is the dataset_revision. No side effects.",
         "operationId": "get_cut_state",
         "parameters": [
           {
@@ -3592,7 +3592,7 @@
           "session-runs"
         ],
         "summary": "Submit an external agent's action to a session run",
-        "description": "Queues a course of action (action id from the catalog, a target area or corridor, a role among the action's proposers) for the next cycle. It runs through the same validation and resource checks as the commander's own actions and is recorded in the audit log. Returns {accepted, applies_at_cycle, action, target, role, notice}. The run must belong to the session (GET /sessions/{sid} lists runs).",
+        "description": "Queues a course of action (action id from the catalog, a target area or corridor, a role among the action's proposers) for the next cycle. It runs through the same validation, resource and crew checks as the commander's own actions and is recorded in the audit log. It is not capped by the commander's operator attention and skips its choice, conflict rules and vetoes. Returns {accepted, applies_at_cycle, action, target, role, notice}. The run must belong to the session (GET /sessions/{sid} lists runs).",
         "operationId": "submit_run_action",
         "parameters": [
           {

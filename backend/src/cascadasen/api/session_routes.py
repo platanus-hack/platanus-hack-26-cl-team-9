@@ -52,7 +52,7 @@ router = APIRouter(prefix="/api/v1/sessions")
 ERRORS = {
     404: "The session, run or element does not exist, or the id is malformed.",
     409: "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
-    412: "If-Match does not match the current session revision; re-read the session and retry.",
+    412: "If-Match does not match the current dataset_revision; re-read the network and retry.",
     422: "Invalid input: detail names the field and, when useful, the valid values.",
     429: "Rate limit reached; wait the seconds in Retry-After.",
 }
@@ -117,8 +117,9 @@ IfMatch = Annotated[
     str | None,
     Header(
         alias="If-Match",
-        description='Optional session revision the edit is based on, as returned in ETag ("3"). '
-        "A different current revision gives 412.",
+        description="Optional dataset_revision the edit is based on, as returned in the ETag of "
+        'GET /network, /state or an edit ("3"). A different current dataset_revision gives 412; run '
+        "activity does not change it.",
         examples=['"3"'],
     ),
 ]
@@ -204,7 +205,9 @@ def create_session(
     tags=["sessions"],
     operation_id="get_session",
     summary="Read a session document",
-    description="Returns the session document: point, revision, overlay (the edits), open_lines "
+    description="Returns the session document: point, revision (bumped by every change, runs "
+    "included), dataset_revision (bumped only by edits, reset, cut and repair), overlay (the edits), "
+    "open_lines "
     "(sandbox cut), runs (id -> created_at, dataset_revision, cycle, status), last_op, share_path and "
     "expires_at. The ETag header is the revision; send it as If-None-Match to get 304 when nothing "
     "changed (polling fallback when SSE is not available). No side effects.",
@@ -255,7 +258,7 @@ def delete_session(request: Request, sid: Sid, svc: Sessions) -> Response:
     summary="Drop every network edit of a session",
     description="Replaces the overlay with an empty one, so the network is the base dataset again. "
     "Runs keep the dataset they were created with; the sandbox cut keeps the lines that still exist. "
-    "Bumps the revision.",
+    "Bumps revision and dataset_revision; the ETag is the dataset_revision.",
     responses=WRITE_ERRORS,
     openapi_extra=AGENT,
 )
@@ -269,7 +272,7 @@ def reset_session(
 ) -> dict[str, Any]:
     limit(request, "write", sid)
     out = session_call(svc.reset, sid, agent, if_revision(if_match))
-    etag(response, out["revision"])
+    etag(response, out["dataset_revision"])
     return out
 
 
@@ -283,13 +286,14 @@ def reset_session(
     "overridden), buses with load and generation, loads[] and generators[] added by the session, "
     "areas, corridors, out_of_service, warnings, balance (the redispatch assumption) and baseline "
     "(loading and load shed with no cut). With no edits it is the base dataset. Use it to get bus "
-    "(B###) and line (R###, U###) ids before editing or cutting.",
+    "(B###) and line (R###, U###) ids before editing or cutting. The ETag is the dataset_revision, "
+    "to send as If-Match on edits.",
     responses=READ_ERRORS,
     openapi_extra=AGENT,
 )
 def get_session_network(sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
     view = session_call(svc.network_view, sid)
-    etag(response, view["revision"])
+    etag(response, view["dataset_revision"])
     return view
 
 
@@ -308,7 +312,8 @@ def _element_routes(
         Path(description=f"Id of the {noun}, from GET /sessions/{{sid}}/network.", examples=[example_id]),
     ]
     edit = (
-        " Bumps the revision. Returns {id, revision, warnings, balance}; the island of the edit is "
+        " Bumps revision and dataset_revision (the ETag). Returns {id, revision, dataset_revision, "
+        "warnings, balance}; the island of the edit is "
         "rebalanced by redispatching base synchronous units (an assumption)."
     )
 
@@ -334,7 +339,7 @@ def _element_routes(
         limit(request, "write", sid)
         fields = body.model_dump(exclude_unset=True)
         out = session_call(svc.add, sid, kind, fields, agent, if_revision(if_match))
-        etag(response, out["revision"])
+        etag(response, out["dataset_revision"])
         return out
 
     @router.patch(
@@ -359,7 +364,7 @@ def _element_routes(
         limit(request, "write", sid)
         fields = body.model_dump(exclude_unset=True)
         out = session_call(svc.patch, sid, kind, element_id, fields, agent, if_revision(if_match))
-        etag(response, out["revision"])
+        etag(response, out["dataset_revision"])
         return out
 
     @router.delete(
@@ -383,7 +388,7 @@ def _element_routes(
     ) -> dict[str, Any]:
         limit(request, "write", sid)
         out = session_call(svc.remove, sid, kind, element_id, agent, if_revision(if_match))
-        etag(response, out["revision"])
+        etag(response, out["dataset_revision"])
         return out
 
 
@@ -436,8 +441,9 @@ _element_routes(
 
 # ------------------------------------------------------------------ sandbox
 SANDBOX = (
-    " Re-runs the cascade from the base case with every open line and returns {revision, open_lines, "
-    "timeline, notice}; all clients of the session see the same cut. Bumps the revision."
+    " Re-runs the cascade from the base case with every open line and returns {revision, "
+    "dataset_revision, open_lines, timeline, notice}; all clients of the session see the same cut. "
+    "Bumps revision and dataset_revision (the ETag)."
 )
 
 
@@ -463,7 +469,7 @@ def cut_lines(
 ) -> dict[str, Any]:
     limit(request, "cut", sid)
     out = session_call(svc.cut, sid, body.lines, agent, if_revision(if_match))
-    etag(response, out["revision"])
+    etag(response, out["dataset_revision"])
     return out
 
 
@@ -489,7 +495,7 @@ def repair_lines(
         raise HTTPException(422, {"field": "lines", "message": "Indica las líneas o all=true."})
     limit(request, "cut", sid)
     out = session_call(svc.repair, sid, body.lines, body.all, agent, if_revision(if_match))
-    etag(response, out["revision"])
+    etag(response, out["dataset_revision"])
     return out
 
 
@@ -498,14 +504,15 @@ def repair_lines(
     tags=["session-sandbox"],
     operation_id="get_cut_state",
     summary="Read the session sandbox state",
-    description="Returns {revision, open_lines, timeline, notice}: the cascade timeline with the "
-    "current open lines (the baseline when none). No side effects.",
+    description="Returns {revision, dataset_revision, open_lines, timeline, notice}: the cascade "
+    "timeline with the current open lines (the baseline when none). The ETag is the dataset_revision. "
+    "No side effects.",
     responses=READ_ERRORS,
     openapi_extra=AGENT,
 )
 def get_cut_state(sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
     out = session_call(svc.state, sid)
-    etag(response, out["revision"])
+    etag(response, out["dataset_revision"])
     return out
 
 
@@ -547,7 +554,7 @@ async def _revisions(
     tags=["sessions"],
     summary="Stream session revisions (Server-Sent Events)",
     description="text/event-stream: on connect and after every change, `event: revision` with data "
-    "{type, revision, op, ids, by}; `: ping` comments as heartbeat. The server closes the stream "
+    "{type, revision, dataset_revision, op, ids, by}; `: ping` comments as heartbeat. The server closes the stream "
     "after about a minute and EventSource reconnects. Not an agent tool: see docs/sessions-api.md.",
     response_class=StreamingResponse,
     responses={
@@ -674,8 +681,10 @@ def step_run(
     operation_id="submit_run_action",
     summary="Submit an external agent's action to a session run",
     description="Queues a course of action (action id from the catalog, a target area or corridor, a "
-    "role among the action's proposers) for the next cycle. It runs through the same validation and "
-    "resource checks as the commander's own actions and is recorded in the audit log. Returns "
+    "role among the action's proposers) for the next cycle. It runs through the same validation, "
+    "resource and crew checks as the commander's own actions and is recorded in the audit log. It is "
+    "not capped by the commander's operator attention and skips its choice, conflict rules and "
+    "vetoes. Returns "
     "{accepted, applies_at_cycle, action, target, role, notice}." + RUN_TEXT,
     responses=RUN_WRITE_ERRORS,
     openapi_extra=AGENT,

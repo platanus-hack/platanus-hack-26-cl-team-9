@@ -230,7 +230,7 @@ A session edits the 188-bus engine network (`domain/cascade/network.py`) of one 
 ```json
 {
   "session_id": "<22 chars, secrets.token_urlsafe(16)>", "label": null, "point": "nov2026-1300",
-  "revision": 3, "open_lines": ["R014"],
+  "revision": 3, "dataset_revision": 2, "open_lines": ["R014"],
   "overlay": {
     "buses": [{"id": "B188", "name": "Nueva SE", "lat": -33.5, "lon": -70.7, "kv": 220}],
     "lines": [{"id": "U001", "a": "B010", "b": "B188", "kv": 220, "capacity_mw": 500, "x_pu": 0.0123}],
@@ -242,7 +242,7 @@ A session edits the 188-bus engine network (`domain/cascade/network.py`) of one 
   },
   "runs": {"<run_id>": {"created_at": "...", "dataset_revision": 1, "cycle": 5, "status": "running"}},
   "created_at": "...", "updated_at": "...",
-  "last_op": {"op": "load_added", "ids": ["D001"], "by": "web", "revision": 3}
+  "last_op": {"op": "load_added", "ids": ["D001"], "by": "web", "revision": 3, "dataset_revision": 2}
 }
 ```
 - **Ids.** Added buses continue the base numbering (`B188`, `B189`… on the real network). Added lines are `U###`, loads and datacenters `D###`, generators `G###`; the `seq` counters never reuse an id. Element references use these ids (`a`, `b`, `bus`).
@@ -250,9 +250,9 @@ A session edits the 188-bus engine network (`domain/cascade/network.py`) of one 
 - **Bounds.** `kv` in the base set (66, 110, 154, 220, 500); line ends distinct, existing and in service; `capacity_mw` in (0, 5000]; `x_pu` in [5e-4, 1.0], default `haversine_km × mean(X_PER_KM[kv]) / (kv²/100)` (`domain/validation.py`); load and generator `mw` in (0, 3000]; bus overrides `load_mw`, `gen_mw`, `sync_mw` in [0, base value + 3000] with `sync_mw ≤ gen_mw` and `inertia_mws ≤ 10 s × sync_mw`; lat in [-56, -17], lon in [-76, -66]; at most 50 added elements and 5000 MW of added load plus generation plus the absolute `load_mw` and `gen_mw` change of bus overrides. Generator `tech` is `hidro`, `termica`, `bioenergia`, `geotermica` (synchronous by default, inertia `inertia_h × mw`, `inertia_h` default 4 s, an assumption) or `solar`, `eolica`; load `kind` is `datacenter` or `consumo`.
 - **Balance rule (`is_assumption: true`).** Per island of the edited network, `delta = Σ(gen'−load') − Σ(gen−load)` (edited versus base arrays) is redispatched as `−delta` over the base synchronous units of the island in proportion to their base `sync_mw`; `gen` and `sync_mw` change, inertia does not; a unit is clamped at 0. A bus whose `gen_mw` or `sync_mw` the overlay sets keeps that value and takes no share. A bus out of service loses its base load and generation; when it (or a group of adjacent out-of-service buses) touched a single live island through its in-service base lines, that island redispatches the loss, so the base case stays balanced. When it touched several islands it split them, and each part keeps its base imbalance (`unbalanced_island`). Out-of-service buses get no warnings of their own. Each redispatch is reported as `balance: [{buses: {"B000": 54.5, …}, redispatch_mw, is_assumption: true, rule}]`. It is not an OPF: a large added load can overload lines in the base case, and the baseline shows it.
 - **Warnings** `{code, ids, message}`: `isolated_bus` (a bus with no line in service), `no_sync_to_redispatch` (no base synchronous generation, or clamped units, so the island stays unbalanced), `unbalanced_island` (a topology split, e.g. a line or bus taken out of service, keeps its base imbalance of ≥ 1 MW; splits belong in the sandbox cut).
-- **Concurrency.** Every change bumps `revision` and records `last_op`. Writes are conditional on the store etag and retried 3 times, then 409; a client revision that does not match gives 412.
+- **Concurrency.** Every change bumps `revision` and records `last_op`. Edits, reset, cut and repair also bump `dataset_revision`; run activity (`run_created`, `run_updated`) does not. Writes are conditional on the store etag and retried 3 times, then 409; a client `If-Match` that does not match `dataset_revision` gives 412. The network view and the session world are cached by `(sid, dataset_revision)`. A `run_updated` index write that loses 3 retries is skipped (the run record is already persisted) instead of answering 409.
 - **Sandbox and runs.** `open_lines` holds the sandbox cut (1-3 lines per cut, repair some or all); each call re-runs the cascade from the edited base case. Edits that drop a line also drop it from `open_lines`. Runs are nested under the session (`sessions/<sid>/runs/<rid>.json`, at most 20) and pin the overlay of their creation in the run record's `extra`, so later edits never change them and a rebuilt run uses the same dataset.
-- **Network view.** The `theater_network` shape (`GET /api/v1/sim/network`) on the edited network plus `origin` (`base`/`session`), `overridden`, `in_service` and `is_assumption` on nodes and lines, `loads`, `generators`, `out_of_service {buses, lines}`, `warnings`, `balance`, `baseline {max_loading, overloaded, islands, load_shed_mw}` (the edited base case with no cut), `revision` and `session_id`.
+- **Network view.** The `theater_network` shape (`GET /api/v1/sim/network`) on the edited network plus `origin` (`base`/`session`), `overridden`, `in_service` and `is_assumption` on nodes and lines, `loads`, `generators`, `out_of_service {buses, lines}`, `warnings`, `balance`, `baseline {max_loading, overloaded, islands, load_shed_mw}` (the edited base case with no cut), `revision`, `dataset_revision` and `session_id`.
 
 ## 7. API
 
@@ -310,7 +310,7 @@ Shared, persistent sessions under `/api/v1/sessions` (`api/session_routes.py`). 
 
 | Group | Routes | Notes |
 |---|---|---|
-| Session | `POST /sessions`, `GET`/`DELETE /sessions/{sid}`, `POST /{sid}/reset` | One pinned operating point; `ETag: "<revision>"`, `If-None-Match` → 304; 24 h TTL after the last change |
+| Session | `POST /sessions`, `GET`/`DELETE /sessions/{sid}`, `POST /{sid}/reset` | One pinned operating point; `GET` has `ETag: "<revision>"`, `If-None-Match` → 304; edits, `/network`, `/state`, cut and repair use `ETag`/`If-Match` with `dataset_revision`; 24 h TTL after the last change |
 | Network | `GET /{sid}/network`; POST, PATCH, DELETE on `/{sid}/buses`, `/lines`, `/loads`, `/generators` | Overlay edits (6.2); `If-Match` → 412; base elements are never deleted (409) |
 | Sandbox | `POST /{sid}/cut`, `POST /{sid}/repair`, `GET /{sid}/state` | Shared `open_lines`, cascade from the edited base case |
 | Runs | `POST /{sid}/runs`, `GET /{sid}/runs/{rid}` and `events`, `step`, `actions`, `replay`, `snapshots`, `trace`, `report`, `after_action` | Same bodies as 7.1; the run pins the session dataset; `actions` queues an external agent's COA |

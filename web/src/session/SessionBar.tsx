@@ -27,7 +27,7 @@ export function SessionBar({ s }: { s: Session }) {
   return (
     <div className="session-bar on">
       <span title={s.sid}>Sesión {s.session?.label ?? s.sid.slice(0, 6)}</span>
-      {s.session && <span className="badge">rev. {s.network?.revision ?? s.session.revision}</span>}
+      {s.session && <span className="badge">rev. {s.session.revision}</span>}
       {s.live && <span className={`badge ${s.live}`} title={s.live === "sse" ? "Cambios recibidos por SSE" : "Consulta la sesión cada 2 s"}>{s.live === "sse" ? "en vivo" : "sondeo"}</span>}
       <button onClick={copy} disabled={!s.session}>{copied ? "Copiado" : "Copiar enlace"}</button>
       <button onClick={s.leave}>Salir</button>

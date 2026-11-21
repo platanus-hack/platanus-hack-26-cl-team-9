@@ -88,7 +88,7 @@ C2 still decides on the rules plus the optional LLM pick (`strategy.md` section 
 
 ### 2.4 External agents
 
-An agent running on another machine works through a shared session (`docs/sessions-api.md`): it creates or joins a session, then passes the session id in the path of every call (`/api/v1/sessions/{sid}/...`). It can edit the session network, open and repair lines in the sandbox, and drive runs nested in the session, including `POST /sessions/{sid}/runs/{rid}/actions`, which queues its own course of action for the next cycle. That action skips C2's choice but goes through the same validator, operator attention, resources and crews as the commander's approved actions when it executes, and is logged with the agent's name. The guardrails of section 3 apply to it.
+An agent running on another machine works through a shared session (`docs/sessions-api.md`): it creates or joins a session, then passes the session id in the path of every call (`/api/v1/sessions/{sid}/...`). It can edit the session network, open and repair lines in the sandbox, and drive runs nested in the session, including `POST /sessions/{sid}/runs/{rid}/actions`, which queues its own course of action for the next cycle. That action skips C2's choice, its operator attention cap and the conflict rules, but goes through the same validator, resources and crews as the commander's approved actions when it executes (it still spends one unit of operator attention), and is logged with the agent's name. The guardrails of section 3 apply to it.
 
 ## 3. Guardrails
 

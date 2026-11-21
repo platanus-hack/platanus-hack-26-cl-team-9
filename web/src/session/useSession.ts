@@ -10,7 +10,10 @@ export interface Session {
   create(): Promise<void>; join(text: string): void; leave(): void; refresh(): Promise<void>; edit: Edit; clearError(): void;
 }
 
-/** Shared session of mapa 3: id from ?sesion= or localStorage, data from the API, refetched on every revision event. */
+/**
+ * Shared session of mapa 3: id from ?sesion= or localStorage, data from the API. A revision event that changed the
+ * dataset (dataset_revision) refetches session, network and state; run activity refetches only the session document.
+ */
 export function useSession(): Session {
   const [sid, setSid] = useState(() => sessionIdFrom(location.search, localStorage.getItem(KEY)));
   const [session, setSession] = useState<SessionDoc | null>(null);
@@ -18,19 +21,28 @@ export function useSession(): Session {
   const [state, setState] = useState<CutState | null>(null);
   const [live, setLive] = useState<LiveMode | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const loaded = useRef(-1);  // revision of the network on screen
-  const seq = useRef(0);      // only the newest refresh is applied
+  const loaded = useRef(-1);  // revision of the session on screen
+  const data = useRef(-1);    // dataset_revision of the network on screen
+  const seq = useRef(0);      // only the newest full refresh is applied
+  const docSeq = useRef(0);   // only the newest document read is applied
   const load = useCallback(async (id: string) => {
-    const mine = ++seq.current;
+    const mine = ++seq.current, mineDoc = ++docSeq.current;
     const [doc, net, st] = await Promise.all([getSession(id), getNetwork(id), getState(id)]);
-    if (mine !== seq.current) return;
-    loaded.current = net.revision;
+    if (mine !== seq.current || mineDoc !== docSeq.current) return;
+    loaded.current = doc.revision; data.current = net.dataset_revision;
     setSession(doc); setNetwork(net); setState(st);
+  }, []);
+  const loadDoc = useCallback(async (id: string) => {
+    const mine = ++docSeq.current;
+    const doc = await getSession(id);
+    if (mine !== docSeq.current) return;
+    loaded.current = doc.revision;
+    setSession(doc);
   }, []);
   const leave = useCallback(() => {
     localStorage.removeItem(KEY);
     _setUrl(null);
-    seq.current++; loaded.current = -1;
+    seq.current++; docSeq.current++; loaded.current = -1; data.current = -1;
     setSid(null); setSession(null); setNetwork(null); setState(null); setLive(null);
   }, []);
   useEffect(() => {
@@ -43,16 +55,19 @@ export function useSession(): Session {
       if (e instanceof ApiError && e.status === 404) { leave(); setError("La sesión no existe o expiró (24 h sin cambios). Se volvió al caso base."); }
       else { setSid(null); setError(`No se pudo conectar con el servidor de sesiones: ${e.message}. Se muestra el caso base.`); }
     });
-    const sub = subscribe(sid, (e) => { if (alive && e.revision !== loaded.current) load(sid).catch((err) => setError(err.message)); }, {
+    const sub = subscribe(sid, (e) => {
+      if (!alive || e.revision === loaded.current) return;
+      (e.dataset_revision === data.current ? loadDoc(sid) : load(sid)).catch((err) => setError(err.message));
+    }, {
       onMode: (m) => alive && setLive(m),
       onGone: () => { if (alive) { leave(); setError("La sesión fue borrada o expiró."); } },
     });
     return () => { alive = false; sub.close(); };
-  }, [sid, load, leave]);
+  }, [sid, load, loadDoc, leave]);
   const edit: Edit = useCallback(async (fn) => {
     if (!sid || !network) return false;
     try {
-      await fn(sid, network.revision);
+      await fn(sid, network.dataset_revision);
       setError(null);
       await load(sid);
       return true;
