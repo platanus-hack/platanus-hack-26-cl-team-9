@@ -24,6 +24,19 @@ Checks an agent should run before committing: `npx tsc --noEmit`, `npm test` and
 
 To stop a dev server started in the background: `pkill -f "vite"`.
 
+## Operation mode (mapa 3 + backend)
+
+The tab "Operación" of mapa 3 (`/?modo=operacion`) plays the strategic theatre. It calls the backend through the Vite proxy (`/api` → `VITE_API_TARGET`, default `http://localhost:8000`) and falls back to precomputed runs when the backend is down.
+
+```bash
+cd backend && uv run cascadasen-api              # terminal 1: API on :8000
+cd backend && uv run cascadasen-cache            # once: cut cache of mapa 3 (web/public/cache)
+cd backend && uv run cascadasen-sim-fixtures     # once: offline theatre runs (web/public/cache/theater)
+cd web && npm run dev                            # terminal 2: http://localhost:5173/?modo=operacion
+```
+
+Code: `src/operation/` (`api.ts`, `layers.ts`, `OperationPanel.tsx`, `text.ts`). Contract: `docs/mapa3.md` section 10.
+
 ## Maps (1 and 2 are deprecated)
 
 `/` is mapa 3, the main map (below). The two maps in this table are deprecated and kept as reference.

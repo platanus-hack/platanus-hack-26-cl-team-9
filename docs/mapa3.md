@@ -229,9 +229,17 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 - **Ride-through**: ability of a plant to stay connected during a short disturbance. Not modelled.
 - **25F**: the 25 February 2025 national blackout.
 
-## 10. Operation mode: the strategic theatre on this map (backend contract)
+## 10. Operation mode: the strategic theatre on this map
 
-The strategic theatre (`docs/strategy.md`) now runs on the same network and engine as this map. A run lasts 24-36 cycles of 5 minutes. In each cycle, digital degradation (telemetry loss, delayed or unreliable data, communications loss, false alarms), an adaptive adversary acting by area, unplanned external events, and the defenders' decisions and field crews play out. A physical event runs the same cascade engine as a line cut here. This section is the contract for the frontend. The backend is done; the visual layer is not.
+The strategic theatre (`docs/strategy.md`) now runs on the same network and engine as this map. A run lasts 24-36 cycles of 5 minutes. In each cycle, digital degradation (telemetry loss, delayed or unreliable data, communications loss, false alarms), an adaptive adversary acting by area, unplanned external events, and the defenders' decisions and field crews play out. A physical event runs the same cascade engine as a line cut here. **Implemented** (2026-11-21): tab "Operación" of the main map (`/?modo=operacion`), code in `web/src/operation/` (`api.ts` live or offline source, `layers.ts`, `OperationPanel.tsx`, `text.ts`). What the user does:
+
+1. Pick the hour (shared selector), scenario, defence policy and adaptive or static adversary, then "Iniciar corrida". The seed of the run is shown.
+2. "Reproducir" or "+1 ciclo": the map draws the cycle's grid (same layers as the cut viewer, in 2D or 3D), operating areas (circle colour = posture, opacity = how little supervision sees), effect labels per area and field crews moving toward their target.
+3. When a physical event happened in the cycle, "Ver cascada" replays it in seconds with events and the frequency chart.
+4. Click a line to open it, or a substation for generation, telemetry or communications loss. The event applies next cycle and is listed with source "Tú".
+5. At the end: result, after-action and "repeat with the same seed and another policy".
+
+Without the backend the tab plays the precomputed runs of `web/public/cache/theater/` and refuses events. The contract below is what the panel consumes.
 
 **Sources.**
 - Live: the API under `/api/v1/sim/*` (`docs/stack.md` 7.1). Every run without `seed` is a different random run.

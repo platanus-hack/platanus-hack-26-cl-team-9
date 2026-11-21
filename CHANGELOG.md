@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(web): operation mode of mapa 3
+
+- **Changed:** `docs/mapa3.md` section 10 now describes the implemented operation tab (user flow, offline behaviour); `web/README.md` gets a "Operation mode (mapa 3 + backend)" section with the commands to run API, caches and Vite.
+- **Why:** Close the frontend-backend integration with instructions to test it.
+- **Agents:** Keep `mapa3.md` section 10 in sync with `web/src/operation/` and `cycle._snapshot`.
+- **Files:** `docs/mapa3.md`, `web/README.md`.
+
 ## 2026-11-21 · feat(llm): Amazon Bedrock provider with an AWS profile
 
 - **Changed:** `Settings` gains `llm_provider` (`anthropic` | `bedrock`), `aws_region` and `aws_profile` (`CASCADASEN_LLM_PROVIDER`, `CASCADASEN_AWS_REGION`, `CASCADASEN_AWS_PROFILE`). With Bedrock, `infrastructure/llm.py` builds `anthropic.AnthropicBedrockMantle(aws_profile, aws_region)`, prefixes the model (`anthropic.claude-opus-5-5`) and sends no `betas`/`fallbacks` (not supported on Bedrock); structured JSON output stays. A client that cannot be built (e.g. unknown profile) disables the LLM with a warning. Extra `llm` is now `anthropic[bedrock]` (adds boto3); `uv.lock` updated. Docker: optional `WITH_LLM=1` build arg, `backend/.env` as optional `env_file`, commented `~/.aws` read-only volume.
