@@ -73,11 +73,11 @@ class SessionLocks:
     """One request at a time per session: a lock per session id, dropped when no request holds or
     waits for it. A request that waits longer than `timeout_s` gets 409 with Retry-After. At most
     `max_waiters` requests wait behind the one in progress; more get the 409 at once. Each waiter
-    blocks one of AnyIO's 40 default sync workers, so with the default of 5 one busy session holds
-    at most 6 and several busy sessions still leave workers for other routes and the health check;
-    the web and MCP clients retry the busy 409 instead of queueing more."""
+    blocks one of AnyIO's 40 default sync workers for up to `timeout_s`, so one busy session holds at
+    most `max_waiters + 1` of them; with the default of 10 (a user decision), four sessions busy at
+    once can fill the pool and delay every sync route, including the health check."""
 
-    def __init__(self, timeout_s: float, max_waiters: int = 5) -> None:
+    def __init__(self, timeout_s: float, max_waiters: int = 10) -> None:
         self.timeout_s, self.max_waiters = timeout_s, max_waiters
         self._locks: dict[str, list[Any]] = {}  # sid -> [Lock, requests holding or waiting]
         self._guard = threading.Lock()

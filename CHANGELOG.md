@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(api): keep the waiter cap of 10 and document the threadpool trade-off
+- **Changed:** Reverts the cap of 5 from the entry below: `session_lock_max_waiters` and `SessionLocks` default to 10 again, and the 409 text, agent spec, `docs/sessions-api.md` and `docs/stack.md` say 10 (spec regenerated). The `SessionLocks` docstring and `docs/sessions-api.md` section 7 now state the trade-off: one busy session holds up to 11 of AnyIO's 40 sync workers, and four busy sessions can delay every sync route, including the health check.
+- **Why:** The cap of 10 is a user decision (entry "retry the busy 409 in the web client and raise the waiter cap to 10"); review pass 3 allowed keeping it if the trade-off is written down.
+- **Agents:** Do not change the cap without asking the user. If the pool fills in production, lower `CASCADASEN_SESSION_LOCK_MAX_WAITERS` or raise the AnyIO thread limit.
+- **Files:** `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`, `CHANGELOG.md`.
 ## 2026-11-21 · fix(api): lower the per-session waiter cap to 5
 - **Changed:** `SessionLocks` and `session_lock_max_waiters` (`CASCADASEN_SESSION_LOCK_MAX_WAITERS`) default to 5 waiters instead of 10. The 409 text in `session_routes.ERRORS`, the agent spec description, `docs/sessions-api.md` and `docs/stack.md` say 5; the spec is regenerated.
 - **Why:** Review pass 3: each waiter blocks one of AnyIO's 40 sync workers for up to 10 s, so with 10 four busy sessions could stall every sync route, including the health check. The web and MCP clients now retry the busy 409, so a small cap no longer leaves a browser on a stale network.
