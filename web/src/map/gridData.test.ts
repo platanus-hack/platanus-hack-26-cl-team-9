@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { aggregatePlantsByNode, type Substation } from "./gridData";
+import { describeTopology, formatNumber } from "./nodeDetail";
 
 const SUBS: Substation[] = [
   { id: "A", name: "S/E A", kv: 220, position: [-70, -30] },
@@ -18,8 +19,8 @@ describe("aggregatePlantsByNode", () => {
       SUBS,
     );
     expect(nodes).toEqual([
-      { name: "S/E A", position: [-70, -30], tech: "termica", mw: 210 },
-      { name: "S/E B", position: [-71, -33], tech: "hidro", mw: 20 },
+      { id: "A", name: "S/E A", position: [-70, -30], tech: "termica", mw: 210 },
+      { id: "B", name: "S/E B", position: [-71, -33], tech: "hidro", mw: 20 },
     ]);
   });
 
@@ -32,5 +33,18 @@ describe("aggregatePlantsByNode", () => {
       SUBS,
     );
     expect(nodes).toEqual([]);
+  });
+});
+
+describe("node popup helpers", () => {
+  it("labels where a line topology comes from", () => {
+    expect(describeTopology("CEN Infotecnica (tramo oficial)", false)).toBe("oficial CEN");
+    expect(describeTopology("inferida (geometría + nombre)", false)).toBe("inferida");
+    expect(describeTopology("supuesto de acople", true)).toBe("supuesto de acople");
+  });
+
+  it("prints s/d for missing numbers", () => {
+    expect(formatNumber(null)).toBe("s/d");
+    expect(formatNumber(2800)).toBe("2.800");
   });
 });

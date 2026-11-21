@@ -1,6 +1,7 @@
 import { Deck, MapView, WebMercatorViewport, type PickingInfo } from "@deck.gl/core";
 import { loadGridDataWorkflow } from "./gridData";
 import { buildGridLayers } from "./layers";
+import { createNodePopup } from "./nodeDetail";
 
 // The SEN runs Arica to Chiloe; frame it first. Aysen and Magallanes stay reachable by panning.
 const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
@@ -10,18 +11,21 @@ const PANEL_CLEARANCE_PX = 400;
 
 /** Why: the demo's base is a good 2D map of Chile with the grid elements in 3D on top. */
 export function mountChileMapWorkflow(container: HTMLDivElement): () => void {
-  const deck = _createDeck(container);
+  const popup = createNodePopup(container);
+  const deck = _createDeck(container, popup.onClick);
   _drawGridWhenLoaded(deck);
-  return () => _destroyDeck(deck);
+  return () => { popup.dispose(); _destroyDeck(deck); };
 }
 
-function _createDeck(container: HTMLDivElement): Deck<MapView> {
+function _createDeck(container: HTMLDivElement, onClick: (info: PickingInfo) => void): Deck<MapView> {
   return new Deck({
     canvas: _appendCanvas(container),
     views: new MapView({ repeat: false }),
     controller: true,
     initialViewState: _viewStateFitting(container),
     getTooltip: _tooltip,
+    onClick,
+    pickingRadius: 6,
   });
 }
 
