@@ -26,12 +26,13 @@ from .scenario import OperatingPoint
 
 MAX_ADDED = 50  # buses + lines + loads + generators added by one session
 MAX_ELEMENT_MW = 3000.0  # one added load or generator
-MAX_ADDED_MW = 5000.0  # sum of added load and generation
+MAX_ADDED_MW = 5000.0  # sum of added load and generation, plus the MW changed by bus overrides
 MAX_CAPACITY_MW = 5000.0
 LAT = (-56.0, -17.0)
 LON = (-76.0, -66.0)
 X_MAX_PU = 1.0
 DEFAULT_INERTIA_H = 4.0  # assumption: typical H (s) of a synchronous unit
+MAX_INERTIA_H = 10.0  # upper bound of H (s) for added generators and bus inertia overrides
 SYNC_TECH = frozenset({"hidro", "termica", "bioenergia", "geotermica"})
 TECHS = SYNC_TECH | {"solar", "eolica"}
 LOAD_KINDS = frozenset({"datacenter", "consumo"})
@@ -208,8 +209,11 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
     people = np.concatenate([point.people, pad])
     in_service = [True] * total
     removed = [False] * total
+    pinned: set[int] = set()  # buses whose generation the overlay sets: not redispatched
+    added_mw = 0.0
 
     def edit_bus(i: int, rec: dict[str, Any], where: str) -> None:
+        nonlocal added_mw
         if "name" in rec:
             names[i] = _name(rec["name"], f"{where}.name")
         if "kv" in rec:
@@ -218,11 +222,21 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
             lat[i] = _number(rec["lat"], f"{where}.lat", *LAT)
         if "lon" in rec:
             lon[i] = _number(rec["lon"], f"{where}.lon", *LON)
-        for key, arr in zip(_BUS_VALUES, (load, gen, sync, inertia), strict=True):
+        for key, arr, ref in zip(
+            _BUS_VALUES[:3], (load, gen, sync), (base["load"], base["gen"], base["sync"]), strict=True
+        ):
             if key in rec:
-                arr[i] = _number(rec[key], f"{where}.{key}", 0.0, None)
+                arr[i] = _number(rec[key], f"{where}.{key}", 0.0, float(ref[i]) + MAX_ELEMENT_MW)
+                if key != "sync_mw":
+                    added_mw += abs(arr[i] - float(ref[i]))
+        if "gen_mw" in rec or "sync_mw" in rec:
+            pinned.add(i)
         if sync[i] > gen[i] + 1e-9:
             raise OverlayError(f"{where}.sync_mw", "sync_mw no puede superar gen_mw en la barra.")
+        if "inertia_mws" in rec:
+            inertia[i] = _number(
+                rec["inertia_mws"], f"{where}.inertia_mws", 0.0, MAX_INERTIA_H * float(sync[i])
+            )
         if "in_service" in rec:
             in_service[i] = _flag(rec["in_service"], f"{where}.in_service")
 
@@ -260,6 +274,7 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         return i
 
     lines: list[Line] = []
+    dropped: list[tuple[int, int]] = []  # in-service base lines dropped because a bus is out of service
     line_overrides = overlay.get("line_overrides") or {}
     base_lines = {ln.id for ln in net.lines}
     for lid in line_overrides:
@@ -281,6 +296,8 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         on = _flag(over.get("in_service", True), f"{ln.id}.in_service")
         if on and in_service[ln.a] and in_service[ln.b]:
             lines.append(ln)
+        elif on:
+            dropped.append((ln.a, ln.b))
     for rec in overlay.get("lines") or []:
         lid = rec["id"]
         for key in ("a", "b", "kv", "capacity_mw", "x_pu"):
@@ -301,7 +318,6 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         if _flag(rec.get("in_service", True), f"{lid}.in_service"):
             lines.append(line)
 
-    added_mw = 0.0
     for rec in overlay.get("loads") or []:
         lid = rec["id"]
         for key in ("bus", "mw", "kind", "name"):
@@ -323,7 +339,9 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         if rec["tech"] not in TECHS:
             raise OverlayError(f"{gid}.tech", "Tecnología desconocida.", sorted(TECHS))
         synchronous = _flag(rec.get("synchronous", rec["tech"] in SYNC_TECH), f"{gid}.synchronous")
-        h = _number(rec.get("inertia_h", DEFAULT_INERTIA_H), f"{gid}.inertia_h", 0.0, 10.0, open_lo=True)
+        h = _number(
+            rec.get("inertia_h", DEFAULT_INERTIA_H), f"{gid}.inertia_h", 0.0, MAX_INERTIA_H, open_lo=True
+        )
         added_mw += mw
         if _flag(rec.get("in_service", True), f"{gid}.in_service"):
             gen[i] += mw
@@ -337,7 +355,9 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
     if count > MAX_ADDED:
         raise OverlayError("overlay", f"Máximo {MAX_ADDED} elementos agregados por sesión.")
     if added_mw > MAX_ADDED_MW:
-        raise OverlayError("overlay", f"Máximo {MAX_ADDED_MW:.0f} MW agregados (carga + generación).")
+        raise OverlayError(
+            "overlay", f"Máximo {MAX_ADDED_MW:.0f} MW agregados o cambiados (carga + generación)."
+        )
 
     index = dict(net.index)
     for i in range(n, total):
@@ -354,7 +374,7 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         bus_of_model_bus=net.bus_of_model_bus,
     )
     warnings: list[dict[str, Any]] = []
-    balance = _rebalance(edited, base, load, gen, sync, in_service, warnings)
+    balance = _rebalance(edited, base, load, gen, sync, in_service, dropped, pinned, warnings)
     edited_point = OperatingPoint(point.id, point.label, load, gen, sync, inertia, people)
     return Applied(edited, edited_point, warnings, balance)
 
@@ -366,12 +386,46 @@ def _rebalance(
     gen: np.ndarray,
     sync: np.ndarray,
     in_service: list[bool],
+    dropped: list[tuple[int, int]],
+    pinned: set[int],
     warnings: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Redispatch, per island, the change in generation minus load caused by the edit (in place)."""
+    """Redispatch, per island, the change in generation minus load caused by the edit (in place).
+
+    Out-of-service buses lose their base injection. When a group of them touched a single live
+    island through its base lines, that island redispatches the loss; when it touched several, the
+    outage split the island and each part keeps its base imbalance. Buses whose generation the
+    overlay sets (`pinned`) take no share of the redispatch."""
     connected = {ln.a for ln in net.lines} | {ln.b for ln in net.lines}
+    islands = find_islands(net, set())
+    island_of = {i: k for k, island in enumerate(islands) for i in island}
+    extra = [0.0] * len(islands)
+    neighbours: dict[int, set[int]] = {}
+    for a, b in dropped:
+        neighbours.setdefault(a, set()).add(b)
+        neighbours.setdefault(b, set()).add(a)
+    seen: set[int] = set()
+    for start in (i for i in range(len(in_service)) if not in_service[i]):
+        if start in seen:
+            continue
+        seen.add(start)
+        group, stack, touched = [], [start], set()
+        while stack:
+            i = stack.pop()
+            group.append(i)
+            for j in neighbours.get(i, ()):
+                if in_service[j]:
+                    touched.add(island_of[j])
+                elif j not in seen:
+                    seen.add(j)
+                    stack.append(j)
+        if len(touched) == 1:
+            idx = np.array(group)
+            extra[touched.pop()] -= float((base["gen"][idx] - base["load"][idx]).sum())
     balance = []
-    for island in find_islands(net, set()):
+    for k, island in enumerate(islands):
+        if not any(in_service[i] for i in island):
+            continue  # out-of-service buses carry nothing; their loss is counted in a live island
         if len(island) == 1 and in_service[island[0]] and island[0] not in connected:
             warnings.append(
                 {
@@ -381,10 +435,11 @@ def _rebalance(
                 }
             )
         idx = np.array(island)
-        delta = float((gen[idx] - load[idx]).sum() - (base["gen"][idx] - base["load"][idx]).sum())
+        delta = float((gen[idx] - load[idx]).sum() - (base["gen"][idx] - base["load"][idx]).sum()) + extra[k]
         flagged = False
         if abs(delta) > 1e-9:
-            weights = np.where(np.array([in_service[i] for i in island]), base["sync"][idx], 0.0)
+            free = np.array([in_service[i] and i not in pinned for i in island])
+            weights = np.where(free, base["sync"][idx], 0.0)
             if weights.sum() <= 0:
                 warnings.append(_no_sync(island, delta))
                 flagged = True

@@ -2,6 +2,14 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(sessions): rebalance out-of-service buses and bound bus overrides
+
+- **Changed:** `overlay._rebalance`: the lost base injection of an out-of-service bus (or a group of adjacent ones) is redispatched in the single live island its in-service base lines touched; when they touched several islands the outage split them and each part keeps its base imbalance (`unbalanced_island`). Out-of-service islands get no warnings. Buses whose `gen_mw`/`sync_mw` the overlay sets take no share of the redispatch (toy: B000 at 600 MW stays at 600).
+- **Changed:** Bus overrides are bounded: `load_mw`, `gen_mw`, `sync_mw` ≤ base value + 3000 MW, `inertia_mws` ≤ 10 s × `sync_mw`; the absolute `load_mw` and `gen_mw` change counts toward the 5000 MW budget. `BusPatch` adds a coarse `le=20000` (MW) guard.
+- **Why:** Review findings 1, 2 and 7: taking a bus out of service left the base case off-balance (toy B001: 51.4 Hz), while `load_mw=0` was rebalanced; `load_mw=1e9` was accepted; a generation edit was partly undone by its own redispatch. User decision 2 and "the system must stay correct".
+- **Agents:** The FEAT entry `feat(sessions): session overlay…` below is wrong where it says an out-of-service base bus leaves its island unbalanced. On the 188-bus network, B010, B050 or B100 out of service leave gen − load at −0.03 MW (base rounding); B100 still sheds 639 MW in the baseline from line overloads (the rule is not an OPF). Contract: `docs/stack.md` 6.2, `docs/sessions-api.md` sections 8 and 10. Verification: `uv run pytest -q` 237 passed, 2 skipped, 1 failed (only the Bedrock test); lint clean; agent spec regenerated.
+- **Files:** `backend/src/cascadasen/domain/cascade/overlay.py`, `backend/src/cascadasen/api/session_schemas.py`, `backend/tests/unit/test_overlay.py`, `docs/openapi/agents.openapi.json`, `docs/{stack,sessions-api}.md`.
+
 ## 2026-11-21 · chore(api): regenerate the agent OpenAPI spec with session routes
 
 - **Changed:** After merging `main` (`92256c6`), `session_routes.py` imports `AGENT` and `errors()` from `api/agent_openapi.py`; the duplicate `ErrorResponse` in `api/schemas.py` is gone. `docs/openapi/agents.openapi.json` regenerated: it now holds every session route except the SSE stream. The spec description and the `global_create_run` description say runs are persisted 24 h and rebuilt from the recipe (was "live in server memory, the most recent 100"). `test_request_bodies_describe_every_field` follows `$ref`s inside `anyOf`, because `POST /sessions` takes an optional body.

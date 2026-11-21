@@ -161,7 +161,7 @@ The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agen
 | Cut and repair | 30 per minute per session | `CASCADASEN_RATE_CUTS_PER_MINUTE` |
 | Other edits and run commands | 60 per minute per session | `CASCADASEN_RATE_WRITES_PER_MINUTE` |
 | SSE streams | 5 per session and client IP | `CASCADASEN_SSE_PER_SESSION_IP` |
-| Added elements | 50 per session (buses + lines + loads + generators), 3000 MW each, 5000 MW of added load plus generation | `domain/cascade/overlay.py` |
+| Added elements | 50 per session (buses + lines + loads + generators), 3000 MW each, 5000 MW of added load plus generation plus the MW changed by bus overrides; bus `load_mw`/`gen_mw`/`sync_mw` at most the base value + 3000 MW, `inertia_mws` at most 10 s × `sync_mw` | `domain/cascade/overlay.py` |
 | Lines per cut call | 1 to 3 | |
 | Runs per session | 20 (422 above) | |
 | Session lifetime | 24 h after the last change | `CASCADASEN_SESSION_TTL_HOURS` |
@@ -186,7 +186,7 @@ Errors are JSON `{"detail": ...}` with a Spanish message (`ErrorResponse` in the
 ## 10. Physics rules
 
 - The network view (`GET /{sid}/network`) has the shape of `GET /api/v1/sim/network` plus `origin` (`base`/`session`), `overridden` and `is_assumption` on nodes and lines, `loads`, `generators`, `out_of_service`, `warnings`, `balance` and `baseline {max_loading, overloaded, islands, load_shed_mw}`.
-- **Rebalance (an assumption).** An edit changes generation minus load in its island. That difference is redispatched over the base synchronous units of the island in proportion to their synchronous MW; inertia does not change. Each redispatch appears in `balance` with `is_assumption: true` and the rule text. It is not an optimal power flow.
+- **Rebalance (an assumption).** An edit changes generation minus load in its island. That difference is redispatched over the base synchronous units of the island in proportion to their synchronous MW; inertia does not change. A bus whose generation you set keeps it. Taking a bus out of service removes its load and generation, and its island redispatches the difference unless the outage splits the island. Each redispatch appears in `balance` with `is_assumption: true` and the rule text. It is not an optimal power flow.
 - **Warnings**: `isolated_bus` (a bus with no line in service), `no_sync_to_redispatch` (nothing to redispatch, the island stays unbalanced), `unbalanced_island` (taking a line or bus out of service split an island; use the sandbox cut for splits).
 - **The base case can overload.** A large datacenter can overload lines before any cut: on the real network, 300 MW at `B010` overloads 14 lines and sheds 373 MW in the baseline. Read `baseline` after each edit.
 - Voltages are those of the base network (66, 110, 154, 220, 500 kV). `x_pu` defaults from the line length and voltage. Synchronous technologies (`hidro`, `termica`, `bioenergia`, `geotermica`) add inertia with H = 4 s by default (an assumption).

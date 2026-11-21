@@ -105,3 +105,50 @@ def test_a_removed_session_bus_keeps_later_ids(base):
     with pytest.raises(ov.OverlayError) as err:
         ov.patch(o, "bus", first, {"name": "otra"}, *base)
     assert err.value.not_found
+
+
+def test_an_out_of_service_bus_is_redispatched_in_its_island(base):
+    net, point = base
+    o = ov.patch(ov.empty_overlay(), "bus", "B001", {"in_service": False}, *base)  # not a cut vertex
+    applied = ov.apply_overlay(net, point, o)
+    p = applied.point
+    assert p.load[1] == 0 and abs(p.gen.sum() - p.load.sum()) < 1e-6
+    [entry] = applied.balance
+    assert entry["redispatch_mw"] == pytest.approx(-100) and set(entry["buses"]) == {"B000", "B004"}
+    assert applied.warnings == []
+    summary = run_cascade_workflow(applied.net, p, [])["summary"]
+    assert summary["load_shed_mw"] == 0
+    assert all(i["result"] == "maintains" for i in summary["islands"])
+
+
+def test_an_out_of_service_cut_vertex_keeps_the_split_imbalance(base):
+    net, point = base
+    o = ov.patch(ov.empty_overlay(), "bus", "B004", {"in_service": False}, *base)  # isolates B005
+    applied = ov.apply_overlay(net, point, o)
+    assert applied.balance == []
+    codes = {(w["code"], tuple(w["ids"])) for w in applied.warnings}
+    assert ("unbalanced_island", ("B005",)) in codes
+    assert not any("B004" in w["ids"] for w in applied.warnings)
+
+
+def test_a_generation_override_is_not_redispatched_back(base):
+    net, point = base
+    o = ov.patch(ov.empty_overlay(), "bus", "B000", {"gen_mw": 600, "sync_mw": 500}, *base)
+    applied = ov.apply_overlay(net, point, o)
+    p = applied.point
+    assert p.gen[0] == pytest.approx(600) and p.gen[4] == pytest.approx(50)
+    assert set(applied.balance[0]["buses"]) == {"B004"}
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"load_mw": 1e9},
+        {"load_mw": 150 + 3001},
+        {"inertia_mws": 10 * 300 + 1},
+        {"load_mw": 150 + 2900, "gen_mw": 400 + 2200, "sync_mw": 300},  # 5100 MW changed
+    ],
+)
+def test_bus_overrides_are_bounded(base, fields):
+    with pytest.raises(ov.OverlayError):
+        ov.patch(ov.empty_overlay(), "bus", "B000", fields, *base)

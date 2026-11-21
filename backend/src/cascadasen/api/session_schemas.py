@@ -13,6 +13,7 @@ LoadKind = Literal["datacenter", "consumo"]
 _MW = {"gt": 0, "le": 3000}
 _LAT = {"ge": -56, "le": -17}
 _LON = {"ge": -76, "le": -66}
+_BUS_MW_MAX = 20000  # coarse schema guard; the overlay checks base value + MAX_ELEMENT_MW
 
 
 class _Body(BaseModel):
@@ -48,15 +49,34 @@ class BusPatch(_Body):
     lat: float | None = Field(None, **_LAT, description="New latitude in degrees.", examples=[-33.4])
     lon: float | None = Field(None, **_LON, description="New longitude in degrees.", examples=[-70.6])
     load_mw: float | None = Field(
-        None, ge=0, description="Bus demand in MW (replaces the base value).", examples=[150]
+        None,
+        ge=0,
+        le=_BUS_MW_MAX,
+        description="Bus demand in MW (replaces the base value; at most the base value + 3000 MW).",
+        examples=[150],
     )
     gen_mw: float | None = Field(
-        None, ge=0, description="Bus generation in MW (replaces the base value).", examples=[300]
+        None,
+        ge=0,
+        le=_BUS_MW_MAX,
+        description="Bus generation in MW (replaces the base value; at most the base value + 3000 MW). "
+        "The bus keeps this value: it takes no share of the redispatch.",
+        examples=[300],
     )
     sync_mw: float | None = Field(
-        None, ge=0, description="Synchronous part of gen_mw in MW (at most gen_mw).", examples=[200]
+        None,
+        ge=0,
+        le=_BUS_MW_MAX,
+        description="Synchronous part of gen_mw in MW (at most gen_mw).",
+        examples=[200],
     )
-    inertia_mws: float | None = Field(None, ge=0, description="Inertia at the bus in MW·s.", examples=[800])
+    inertia_mws: float | None = Field(
+        None,
+        ge=0,
+        le=10 * _BUS_MW_MAX,
+        description="Inertia at the bus in MW·s (at most 10 s × sync_mw).",
+        examples=[800],
+    )
     in_service: bool | None = Field(
         None, description="false takes the bus out of service (its lines drop out).", examples=[False]
     )
