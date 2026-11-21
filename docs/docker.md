@@ -1,0 +1,30 @@
+# Running locally with Docker
+Last updated: 2026-11-21. Needs only Docker with Compose (Docker Desktop, or Colima on macOS).
+
+```
+docker compose up --build        # first run builds both images
+docker compose down              # stop
+```
+| Service | URL | What it is |
+|---|---|---|
+| `web` | http://localhost:5173 | Vite dev server (npm). `./web` and `./data` are bind-mounted, so edits hot-reload. `node_modules` lives in the container |
+| `backend` | http://localhost:8000 | Grid data API (`/docs`, `/map`, `/api/v1/*`). Reads `./data/processed/` mounted at `/data` |
+
+The two services are independent: the web app reads the committed files in `data/processed/` and does not call the backend.
+
+`?mapa=2` (Mapbox basemap) needs a public token. Create `web/.env.local` with `VITE_MAPBOX_TOKEN=pk...` (see `web/.env.example`); it is git-ignored and the bind mount makes it visible in the container. Restart `web` after changing it. Without a token the offline map is used.
+
+Port already in use? Set `WEB_PORT` and `BACKEND_PORT`, for example `WEB_PORT=5180 docker compose up`.
+
+## Optional: rebuild the data
+`data/processed/` is committed, so the stack runs offline. To rebuild it from the public sources (needs internet, overwrites committed files):
+```
+docker compose --profile data run --rm data-build              # uses the cache in data/raw/
+docker compose --profile data run --rm data-build cascadasen-build --refresh
+```
+Restart `backend` or call `POST /api/v1/admin/reload` afterwards.
+
+## Notes
+- The backend image uses `uv sync --locked`, so `backend/uv.lock` must be current.
+- `web` runs the dev server, not a production build.
+- Compose may warn that buildx is missing (Colima); the build still works with the classic builder.
