@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · revert(web): remove the operation tab; this PR is backend only
+
+- **Changed:** `web/` is back to the state merged from main (`5c62e7b`): removed `web/src/operation/`, the Corte/Operación tabs and `FrequencyChart.tsx` extraction in `CascadeApp.tsx`, the operation styles, the Vite `/api` proxy and the README section. `docker-compose.yml` drops the web→backend wiring (`VITE_API_TARGET`, `depends_on`); the backend LLM options (env file, AWS variables, `WITH_LLM`) stay. `docs/mapa3.md` section 10 is again the backend contract (now listing `llm` in snapshots, `GET /sim/runs/{id}/snapshots` and `catalog.llm`); `docs/docker.md` says the web does not call the backend yet.
+- **Why:** Ricardo: the scope of this PR is the backend; the visual layer is separate frontend work.
+- **Agents:** Earlier entries describing the operation tab (`feat(web): ...`, `chore(web): proxy ...`, `docs(web): ...`) are superseded by this one; the code is in git history (`fbf8ef9`, `5b19c2f`) if the frontend work wants to reuse it. Backend endpoints and the `llm` snapshot field remain.
+- **Files:** `web/**`, `docker-compose.yml`, `docs/mapa3.md`, `docs/docker.md`.
+
 ## 2026-11-21 · fix(web): Spanish ISR cause in the operation panel
 
 - **Changed:** The ISR line shows "sin anomalía", "falla" or "intencional" instead of the raw `none` / `failure` / `intentional`.
