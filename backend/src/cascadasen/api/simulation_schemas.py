@@ -162,3 +162,9 @@ class CampaignIn(BaseModel):
     horizon: int | None = Field(None, ge=1, le=72)
     objective: str | None = None
     budget: float | None = Field(None, ge=0, le=50)
+    random_seeds: int | None = Field(
+        None,
+        ge=1,
+        le=10,
+        description="Sortear n semillas nuevas (se devuelven en spec.seeds) en vez de `seeds`",
+    )

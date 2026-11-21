@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(theater): campaigns with random seeds and spread across seeds
+
+- **Changed:** `POST /sim/campaigns` accepts `random_seeds` (1-10): fresh seeds drawn per campaign, returned in `spec.seeds`, the same in every cell. Each row adds `spread` with p10/p50/p90 of mission continuity and recoverability. New API guardrail test: no run, trace, report or campaign payload carries adversary `weights`, `arms`, `probs` or a `ranking`.
+- **Why:** With chance in the world, a policy is judged by its distribution over many runs, not by one seed.
+- **Agents:** Explicit `seeds` still work and are the way to get stable numbers. `CampaignSpec.random_seeds`.
+- **Files:** `backend/src/cascadasen/application/run_campaign.py`, `backend/src/cascadasen/api/simulation_schemas.py`, `backend/src/cascadasen/api/simulation_routes.py`, `backend/tests/integration/test_campaigns_api.py`, `docs/stack.md`.
+
 ## 2026-11-21 · feat(theater): field crews with home bases and road travel
 
 - **Changed:**

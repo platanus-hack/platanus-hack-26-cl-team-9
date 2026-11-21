@@ -79,3 +79,50 @@ def test_campaign_errors(client):
         == 422
     )
     assert client.get("/api/v1/sim/campaigns/nope").status_code == 404
+
+
+def test_random_seeds_are_drawn_returned_and_paired(client):
+    r = _campaign(
+        client, mode="adversarial", policies=["A", "C"], random_seeds=3, adversary_variants=["adaptive"]
+    )
+    assert r.status_code == 201
+    res = r.json()
+    seeds = res["spec"]["seeds"]
+    assert len(seeds) == 3 and len(set(seeds)) == 3 and seeds != [1, 2, 3]
+    for row in res["table"]:
+        assert row["runs"] == 3  # the same seeds in every cell
+        s = row["spread"]["mission_continuity"]
+        assert s["p10"] <= s["p50"] <= s["p90"]
+    assert _campaign(client, random_seeds=11).status_code == 422
+
+
+def _keys(obj):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield k
+            yield from _keys(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _keys(v)
+
+
+def test_no_response_exposes_adversary_weights(client):
+    """cyber.md 8 item 7: the adversary's learned preferences over areas never leave the engine."""
+    body = {
+        "template": "open_field",
+        "horizon": 8,
+        "adversary": {"enabled": True, "objective": "complicate_recovery", "budget": 10, "adaptive": True},
+    }
+    run = client.post("/api/v1/sim/runs", json=body).json()
+    rid = run["run_id"]
+    payloads = [
+        run,
+        client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 8}).json(),
+        client.get(f"/api/v1/sim/runs/{rid}").json(),
+        client.get(f"/api/v1/sim/runs/{rid}/trace").json(),
+        client.get(f"/api/v1/sim/runs/{rid}/report").json(),
+        _campaign(client, mode="adversarial", policies=["C"], adversary_variants=["adaptive"]).json(),
+    ]
+    forbidden = {"weights", "arms", "probs", "ranking"}
+    for p in payloads:
+        assert forbidden.isdisjoint(_keys(p))

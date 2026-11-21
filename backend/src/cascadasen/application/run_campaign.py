@@ -10,7 +10,9 @@ A campaign runs a matrix of runs and compares them under equivalent conditions:
 - Mode III, capability: capability variants x policies, against the adaptive adversary. Reports
   the change of each indicator against the first (baseline) variant.
 
-Runs are synchronous and bounded (`MAX_RUNS`).
+With `random_seeds: n` the campaign draws n fresh seeds (returned in `spec.seeds`) and uses the same
+ones in every cell, so comparisons stay paired. Each row also carries the p10/p50/p90 spread of
+mission continuity and recoverability across seeds. Runs are synchronous and bounded (`MAX_RUNS`).
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from statistics import mean
 from typing import Any
 
@@ -27,6 +29,7 @@ from cascadasen.domain.simulation.network import ReducedNetwork
 from cascadasen.domain.simulation.timeline import NOTICE
 from cascadasen.domain.theater.config import theater_config
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunConfig, RunInputError, Simulation
+from cascadasen.domain.theater.rng import new_seed
 
 MODES = ("diagnostic", "adversarial", "capability")
 MAX_RUNS = 240
@@ -49,6 +52,7 @@ class CampaignSpec:
     horizon: int | None = None
     objective: str | None = None
     budget: float | None = None
+    random_seeds: int | None = None  # draw this many fresh seeds instead of `seeds`
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +85,15 @@ def _avg(values: list[float | None]) -> float | None:
     return round(mean(vals), 4) if vals else None
 
 
+def _spread(values: list[float | None]) -> dict[str, float] | None:
+    """p10 / p50 / p90 across seeds (nearest rank)."""
+    vals = sorted(v for v in values if v is not None)
+    if not vals:
+        return None
+    last = len(vals) - 1
+    return {f"p{int(q * 100)}": round(vals[round(q * last)], 4) for q in (0.1, 0.5, 0.9)}
+
+
 def _row(c: Cell) -> dict[str, Any]:
     ind = [r["indicators"] for r in c.reports]
     con = [r["consequence"] for r in c.reports]
@@ -107,6 +120,10 @@ def _row(c: Cell) -> dict[str, Any]:
         "conflicts": _avg([c_["conflicts"] for c_ in coord]),
         "unserved_energy_mwh": _avg([x["unserved_energy_mwh"] for x in con]),
         "failure_cost_usd": _avg([x["failure_cost_usd"] for x in con]),
+        "spread": {
+            "mission_continuity": _spread([i["mission_continuity"] for i in ind]),
+            "recoverability_cycles": _spread([i["recoverability_cycles"] for i in ind]),
+        },
     }
 
 
@@ -172,6 +189,10 @@ class CampaignRunner:
         )
 
     def run(self, spec: CampaignSpec) -> dict[str, Any]:
+        if spec.random_seeds:
+            if not 1 <= spec.random_seeds <= 10:
+                raise RunInputError("random_seeds", "entre 1 y 10")
+            spec = replace(spec, seeds=tuple(new_seed() for _ in range(spec.random_seeds)))
         levels = self._validate(spec)
         started = time.perf_counter()
         variants = spec.capability_variants or (("baseline", ()),)
