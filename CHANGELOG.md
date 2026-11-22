@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(backend): explain the why of the 14 largest undocumented functions
+- **Changed:** Docstrings only, no code line changed. Functions: `validate_snapshot`, `_cycle` and `__post_init__` (theatre `Simulation`), `infer_line_topology`, `GridUnifier.unify`, `_reconcile_cen_sections`, `_plants`, `_electrical`, `run_transient`, `simulate_island` (simulation), `ISRAgent.step`, `IdeEnergiaSource.contribute`, `create_app`, `PhysicsSimulator.simulate`.
+- **Why:** Review R-16. These were the largest functions without a docstring (40 to 325 lines). Each docstring gives the order of the steps and why, thresholds and what a caller may assume, checked against the code.
+- **Agents:** Check that a docstring-only commit leaves the code unchanged by comparing `ast.dump` of each changed file before and after with docstrings removed (done here: 10 files, 0 differences).
+- **Files:** `backend/src/cascadasen/{api/app.py,application/simulate.py,domain/{validation,unify,topology_inference}.py,domain/agents/isr.py,domain/simulation/{engine,frequency}.py,domain/theater/cycle.py,infrastructure/sources/ide_energia.py}`.
 ## 2026-11-22 · test(architecture): enforce the layer import rules
 - **Changed:** New `backend/tests/unit/test_architecture.py` parses `src/cascadasen` with `ast` (stdlib only, no package import) and asserts: `domain` imports no outer layer (api, application, infrastructure, mcp, cli, sim_fixtures); `application` and `infrastructure` import neither `api` nor `mcp`; no module cycle among top-level imports; the application to infrastructure imports equal the set `KNOWN_EXCEPTIONS`.
 - **Why:** Review R-21. The hexagonal rule in `docs/architecture.md` had no check. Measured on this base: 0 violations for the first four rules. A temporary `from cascadasen.api import app` in a domain module made 2 tests fail.

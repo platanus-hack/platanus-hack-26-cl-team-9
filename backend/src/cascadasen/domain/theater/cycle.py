@@ -133,6 +133,15 @@ class Simulation:
     light: bool = False  # campaigns: skip the per-cycle map frame (no effect on the run itself)
 
     def __post_init__(self) -> None:
+        """Build the whole run from `config` and the world, without simulating any cycle.
+
+        Order: a fresh seed when none was given (stored in `config`, so the recipe replays the run), config
+        validation, template and horizon, the adversary config (the request's, else the template's), the
+        operating point (`RunInputError` when unknown) and its network, the real state, the resource ledger
+        (catalog resources plus the requested capabilities), the agents, and last the scheduled events (scenario
+        first, then the user's), each checked by `_check_event` and indexed by cycle. All randomness comes from
+        named streams of the seed (`Chance`, `rng_for`), so the same config and seed give the same run. Writes
+        the first audit entry, `run_created`. `light` only skips the per-cycle map frame."""
         if self.config.seed is None:
             self.config = replace(self.config, seed=new_seed())
         cfg, conf = self.cfg, self.config
@@ -491,6 +500,25 @@ class Simulation:
     # ---------------------------------------------------------------- cycle
 
     def _cycle(self) -> dict[str, Any]:
+        """Run one decision cycle and return its snapshot. The steps are ordered because each reads what the
+        previous one wrote.
+
+        0. Let the executor advance the actions already in force and free the resources it releases.
+        1. Events: the ones scheduled for this cycle, the queued injections, background failures (stochastic
+           runs only, from cycle 1) and the adversary's. They hit the real state before anything is observed, so
+           the cycle sees its own events.
+        2. Observe: agents never read the real state. `observe` builds what the digital layer lets through
+           (delay, bias, false alarms) from the real history.
+        3. ISR builds the picture, C2 sets the intent, and the staff (operations, stabilization, logistics)
+           propose courses of action (COA). Duplicates by key keep the highest benefit.
+        4. Validate every COA against the real state and the resources, collect the vetoes of stabilization and
+           logistics, and let C2 decide (with an LLM pick when one is configured). Actions queued by an external
+           agent are approved too, unless C2 already approved the same key.
+        5. Execute the approved COAs one by one. Each approval spends operator attention and is validated again,
+           because earlier actions of this cycle change the state. A failed validation, a stochastic action
+           failure or a missing crew becomes `ActionFeedback`, not an exception.
+        6. Evaluate, audit, let the adversary learn, write the audit log, build the snapshot and advance
+           `self.cycle`."""
         k, real, net = self.cycle, self.real, self.network
         real.cycle = k
         self.ledger.new_cycle(k)

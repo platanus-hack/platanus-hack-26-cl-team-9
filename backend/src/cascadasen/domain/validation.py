@@ -93,6 +93,18 @@ def comuna_of_point(lon: float, lat: float, shapes: list[tuple[str, tuple, dict]
 
 
 def validate_snapshot(s: GridSnapshot) -> dict[str, Any]:
+    """Run every data check on a built snapshot. Returns `{"summary": {status: count}, "checks": [...]}`.
+
+    Checks are appended in four blocks that follow the module docstring: coverage, connectivity, agreement
+    between sources and physical plausibility. The thresholds (90 % of substations located, 95 % of power
+    connected, 85 % of line names matching their ends, 60 % of CEN sections confirmed, and so on) are warning
+    levels. Only `regions_covered` and `north_south_path` can return `fail`; every other check returns `ok`
+    or `warn`, and nothing here raises on bad data. Some checks are skipped when their input is missing
+    (`latitude_span` without located SEN substations, `comuna_consistency` without comuna polygons).
+
+    "Main network" is the largest connected component of the multigraph of all edges. "Located" means the
+    node has coordinates. The reactance check multiplies each line's x by the number of parallel edges that
+    share the PyPSA-CL branch, because `ElectricalParams` carries the value of the whole corridor."""
     checks: list[dict] = []
     nodes = {n.id: n for n in s.nodes}
     subs = [n for n in s.nodes if n.kind == NodeKind.SUBSTATION]

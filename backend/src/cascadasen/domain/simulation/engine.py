@@ -406,6 +406,25 @@ def run_transient(
     scenario: str | None = None,
     full: bool = True,
 ) -> TransientResult:
+    """Apply `changes` to a copy of `state` and simulate what follows. `state` itself is not modified.
+
+    1. Take the DC flows before the changes (`pre_flows`), apply the changes and note the corridors they open.
+    2. `_separate_weak_links` returns the corridors that separate under the new flows, each with the time at
+       which it separates. If the grid then splits into several islands because of them or an opened corridor, an
+       `island_formed` event is added.
+    3. For each island, `_island_input` collects what the frequency model needs. `simulate_island` runs when
+       the island is disturbed (imbalance above 1 MW, a coupling or a ramp), otherwise `steady_trace`.
+    4. Islands that end in `blackout`, `local_cut` or `no_load` are collapsed. The others settle at their
+       final state, and an `island_stable` event is added when the frequency left the +-0.05 Hz band.
+    5. Take the flows after the changes. A corridor above its effective limit gets a `thermal_overload`
+       event, but it is not tripped here. Events are sorted by time and keep their order on ties, so causes
+       stay before consequences.
+
+    With `behavior="as_happened"` and `scenario="25F"` the documented trips are replayed as ramps on the
+    south island, and the later collapse of the north island is marked as documented, not computed
+    (docs/idea.md section 6). For other scenarios, islands that hold a PDCE area are marked `uncertain` when
+    a PDCE corridor is lost and the PDCE flow before the event was outside its limits. `full=False` lets island simulations stop early
+    once the frequency settles."""
     pre_flows = dc_flow(network, state)
     post = state.copy()
     events: list[dict[str, Any]] = []
