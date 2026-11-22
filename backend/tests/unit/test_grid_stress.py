@@ -63,9 +63,11 @@ def test_the_failure_runs_in_the_simulation_on_the_prepared_grid(sim):
     assert set(supply["by_zone"]) <= {"NG", "NC", "CE", "CS", "SU"}
 
 
-def test_simulation_still_needs_a_failure(sim):
+def test_changes_alone_are_simulated_but_nothing_at_all_is_rejected(sim):
+    out = sim.simulate_workflow(POINT, [], [], PUENTE_ALTO_X3)
+    assert out["open_lines"] == [] and out["timeline"]["failed_elements"] == []
     with pytest.raises(GridError) as exc:
-        sim.simulate_workflow(POINT, [], [], PUENTE_ALTO_X3)
+        sim.simulate_workflow(POINT, [], [], [])
     assert exc.value.kind == "invalid"
 
 

@@ -8,6 +8,12 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** `.mini-figures` is unchanged for the other cards. No test: CSS only.
 - **Files:** `web/src/cyber/cyber.css`.
 
+## 2026-11-22 · feat: el mapa simula un escenario sin fallas (apagar todas las hidro) y el asistente tiene un solo encabezado
+- **Changed:** `GridSimulator.simulate_workflow` and `cost_workflow` accept changes with no failure (`prepare_edits(allow_empty=bool(changes))`); nothing at all is still 422. The cascade starts by opening the lines the redispatch overloads. The web simulates every prepared scenario (`cached = fromCache(edits)`), so the map and Estado de la red show that cascade. `prepare_scenario` (MCP) simulates changes alone too, with `without_changes` at 0. The assistant prompt no longer says "nada queda en rojo si no hay falla". Asistente: the card with the repeated title is gone; "Nueva conversación" sits in the panel header next to Cerrar (`.head-actions`).
+- **Why:** Issue #145. "Apaga todas las hidroeléctricas" changed the grid (−2,340 MW, 11 lines over their limit at nov2026-1300) but the map showed the base case. The engine opens 12 lines and leaves 17.85 M people without power.
+- **Agents:** `test_simulation_still_needs_a_failure` became `test_changes_alone_are_simulated_but_nothing_at_all_is_rejected`. Each change now costs one `/grids/simulate` (rate limit `simulate`). `GridHealth` reads the cascade whenever `countEdits > 0`. `docs/openapi/agents.openapi.json` regenerated (route description). Not checked in a browser.
+- **Files:** `backend/src/cascadasen/{application/grid_simulation.py,api/grid_routes.py,api/assistant_routes.py,mcp/tools.py,mcp/digest.py}`, `backend/tests/unit/{test_grid_simulation.py,test_grid_stress.py,test_mcp_tools.py,test_prepare_scenario_tool.py}`, `web/src/cascade/{CascadeApp.tsx,NetworkState.tsx,cascade.css}`, `web/src/assistant/{AssistantPanel.tsx,GridHealth.tsx}`, `docs/{stress.md,openapi/agents.openapi.json,index/repo-index.json}`, `CHANGELOG.md`.
+
 ## 2026-11-22 · fix(web): bring back the Asistente "Salud de la red" tab lost in the #142 merge
 
 - **Changed:** `AssistantPanel` has Chat / Salud de la red tabs again (`.seg` style from #142) and takes a `health` node; `CascadeApp` passes `GridHealth` as before. `GridHealth.tsx` is restored and uses `EndOfRun` (was `EventHealth`); `PrefaultHealth` and `EndOfRun` are exported from `SimulationPanel.tsx`.
