@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(mapa3): document Prender todo
+
+- **Changed:** `docs/mapa3.md`. §3 places the control next to the layers button. §4 gets new item 9, **Prender todo**: what it clears, what it keeps, when it is disabled. The placeholder tabs become item 10. §8 adds `powerAll.ts` to the file table. §11 adds the session behaviour: confirm, repair every open line for everyone, dataset edits kept.
+- **Why:** The docs have to match the button from the previous commit.
+- **Agents:** No new rules beyond the previous two entries.
+- **Files:** `docs/mapa3.md`.
+
 ## 2026-11-21 · feat(web): add Prender todo button to mapa 3
 
 - **Changed:** `CascadeApp.tsx` renders a labelled button **Prender todo** (bolt icon) at the top right, left of the `.map-controls` column, on the layers button's row. It sits outside every tab/view branch, so it shows from Red, Simulación, Datos, Ayuda, Fuentes and Sesión. It is enabled when `canPowerAll({ cuts, edited: false })` holds, i.e. while any cut is in force (local cut or the session's open lines).
