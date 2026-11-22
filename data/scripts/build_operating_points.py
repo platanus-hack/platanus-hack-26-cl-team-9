@@ -74,9 +74,7 @@ NON_SYNCHRONOUS = {"solar PV", "onshore wind", "CSP"}
 
 
 def build_operating_points_workflow() -> dict:
-    snapshot = json.loads(
-        (DATA / "processed" / "grid_snapshot.json").read_text(encoding="utf-8")
-    )
+    snapshot = json.loads((DATA / "processed" / "grid_snapshot.json").read_text(encoding="utf-8"))
     buses = _bus_dictionary(snapshot)
     plant_bus = _plants_to_buses(snapshot, buses)
     demand = _read_demand()
@@ -86,9 +84,7 @@ def build_operating_points_workflow() -> dict:
         "version": 2,
         "assumptions": ASSUMPTIONS,
         "source": "PyPSA-CL (Ministerio de Energía): Loads, Topology, Profiles, Costs",
-        "buses": {
-            name: {"node": b["node"], "kv": b["kv"]} for name, b in buses.items()
-        },
+        "buses": {name: {"node": b["node"], "kv": b["kv"]} for name, b in buses.items()},
         "plant_bus": plant_bus,
         "load_bus": demand["load_bus"],
         "points": points,
@@ -102,9 +98,7 @@ def _bus_dictionary(snapshot: dict) -> dict:
 def _plants_to_buses(snapshot: dict, buses: dict) -> dict:
     node_bus = {}
     for b in buses.values():
-        if b["node"] and (
-            b["node"] not in node_bus or b["kv"] > buses[node_bus[b["node"]]]["kv"]
-        ):
+        if b["node"] and (b["node"] not in node_bus or b["kv"] > buses[node_bus[b["node"]]]["kv"]):
             node_bus[b["node"]] = b["name"]
     adjacency = collections.defaultdict(list)
     for e in snapshot["edges"]:
@@ -117,9 +111,7 @@ def _plants_to_buses(snapshot: dict, buses: dict) -> dict:
             if other not in nearest:
                 nearest[other] = nearest[node]
                 queue.append(other)
-    return {
-        p["id"]: nearest[p["node"]] for p in snapshot["plants"] if p["node"] in nearest
-    }
+    return {p["id"]: nearest[p["node"]] for p in snapshot["plants"] if p["node"] in nearest}
 
 
 def _read_demand() -> dict:
@@ -130,29 +122,20 @@ def _read_demand() -> dict:
     rows = wb["loads"].iter_rows(values_only=True)
     columns = list(next(rows)[2:])
     series = {
-        (str(r[1]), str(r[0])[:16]): r[2:]
-        for r in rows
-        if r[0] is not None and str(r[1]) == "Media - N2"
+        (str(r[1]), str(r[0])[:16]): r[2:] for r in rows if r[0] is not None and str(r[1]) == "Media - N2"
     }
-    load_bus = {
-        load: node
-        for load, node, _ in list(wb["loads-nodes"].iter_rows(values_only=True))[1:]
-    }
+    load_bus = {load: node for load, node, _ in list(wb["loads-nodes"].iter_rows(values_only=True))[1:]}
     return {"columns": columns, "series": series, "load_bus": load_bus}
 
 
 def _ensure_loads_file() -> None:
     RAW.mkdir(parents=True, exist_ok=True)
     jar = Path(tempfile.gettempdir()) / "pypsa_cookies.txt"
-    subprocess.run(
-        ["curl", "-sL", "-c", str(jar), "-o", "/dev/null", SHARE_URL], check=True
-    )
+    subprocess.run(["curl", "-sL", "-c", str(jar), "-o", "/dev/null", SHARE_URL], check=True)
     for name in FILES:
         if not (RAW / name).exists():
             url = FILE_URL.replace("Loads.xlsx", name)
-            subprocess.run(
-                ["curl", "-sL", "-b", str(jar), "-o", str(RAW / name), url], check=True
-            )
+            subprocess.run(["curl", "-sL", "-b", str(jar), "-o", str(RAW / name), url], check=True)
 
 
 def _read_generation() -> dict:
@@ -162,21 +145,14 @@ def _read_generation() -> dict:
     wb = load_workbook(RAW / "Topology.xlsx", read_only=True, data_only=True)
     rows = list(wb["Generators"].iter_rows(values_only=True))
     header = list(rows[0])
-    generators = [dict(zip(header, r)) for r in rows[1:] if r[0]]
+    generators = [dict(zip(header, r, strict=False)) for r in rows[1:] if r[0]]
     profiles = load_workbook(RAW / "Profiles.xlsx", read_only=True, data_only=True)
-    profile_of = {
-        g: p
-        for g, p in list(profiles["profiles-generators"].iter_rows(values_only=True))[
-            1:
-        ]
-    }
+    profile_of = {g: p for g, p in list(profiles["profiles-generators"].iter_rows(values_only=True))[1:]}
     wanted = {spec[3] for spec in POINTS}
     table = profiles["profiles"].iter_rows(values_only=True)
     names = list(next(table)[2:])
     availability = {
-        str(r[0])[:16]: dict(zip(names, r[2:]))
-        for r in table
-        if str(r[0])[:16] in wanted
+        str(r[0])[:16]: dict(zip(names, r[2:], strict=False)) for r in table if str(r[0])[:16] in wanted
     }
     costs = load_workbook(RAW / "Costs.xlsx", read_only=True, data_only=True)
     fuel_rows = list(costs["Fuel price"].iter_rows(values_only=True))
@@ -199,10 +175,7 @@ def _point(spec: tuple, buses: dict, demand: dict, generation: dict) -> dict:
     point_id, label, scenario, when = spec
     load_by_bus, unassigned = _loads(demand, scenario, when, buses)
     total_load = sum(load_by_bus.values()) + unassigned
-    scaled = {
-        bus: mw * total_load / sum(load_by_bus.values())
-        for bus, mw in load_by_bus.items()
-    }
+    scaled = {bus: mw * total_load / sum(load_by_bus.values()) for bus, mw in load_by_bus.items()}
     units, unmet = _dispatch(generation, buses, when, total_load)
     gen_by_bus, carrier_mw, inertia = (
         collections.defaultdict(float),
@@ -222,9 +195,7 @@ def _point(spec: tuple, buses: dict, demand: dict, generation: dict) -> dict:
         "unassigned_load_mw": round(unassigned, 1),
         "total_gen_mw": round(sum(gen_by_bus.values()), 1),
         "unmet_mw": round(unmet, 1),
-        "gen_by_carrier_mw": {
-            c: round(v) for c, v in sorted(carrier_mw.items(), key=lambda x: -x[1])
-        },
+        "gen_by_carrier_mw": {c: round(v) for c, v in sorted(carrier_mw.items(), key=lambda x: -x[1])},
         "inertia_online_mws": round(sum(inertia.values())),
         "load_by_bus": {b: round(v, 2) for b, v in scaled.items()},
         "gen_by_bus": {b: round(v, 2) for b, v in gen_by_bus.items() if v > 0},
@@ -235,7 +206,7 @@ def _point(spec: tuple, buses: dict, demand: dict, generation: dict) -> dict:
 def _loads(demand: dict, scenario: str, when: str, buses: dict) -> tuple[dict, float]:
     values = demand["series"][(scenario, when)]
     by_bus, unassigned = collections.defaultdict(float), 0.0
-    for column, mw in zip(demand["columns"], values):
+    for column, mw in zip(demand["columns"], values, strict=False):
         if not isinstance(mw, (int, float)):
             continue
         bus = demand["load_bus"].get(column)
@@ -246,16 +217,10 @@ def _loads(demand: dict, scenario: str, when: str, buses: dict) -> tuple[dict, f
     return dict(by_bus), unassigned
 
 
-def _dispatch(
-    generation: dict, buses: dict, when: str, target: float
-) -> tuple[list, float]:
+def _dispatch(generation: dict, buses: dict, when: str, target: float) -> tuple[list, float]:
     """Commit enough synchronous units for inertia, then merit order. Returns dispatched units and unmet MW."""
     year = when[:4]
-    candidates = [
-        c
-        for g in generation["generators"]
-        if (c := _candidate(g, generation, buses, when, year))
-    ]
+    candidates = [c for g in generation["generators"] if (c := _candidate(g, generation, buses, when, year))]
     candidates.sort(key=lambda c: c["cost"])
     output = _commit_for_inertia(candidates)
     remaining = target - sum(output.values())
@@ -265,9 +230,7 @@ def _dispatch(
             output[i] = output.get(i, 0.0) + extra
             remaining -= extra
     units = [
-        {**candidates[i], "mw": mw, "inertia": candidates[i]["inertia"]}
-        for i, mw in output.items()
-        if mw > 0
+        {**candidates[i], "mw": mw, "inertia": candidates[i]["inertia"]} for i, mw in output.items() if mw > 0
     ]
     return units, max(remaining, 0.0)
 
@@ -283,9 +246,7 @@ def _commit_for_inertia(candidates: list) -> dict:
     return output
 
 
-def _candidate(
-    g: dict, generation: dict, buses: dict, when: str, year: str
-) -> dict | None:
+def _candidate(g: dict, generation: dict, buses: dict, when: str, year: str) -> dict | None:
     active = str(g["initial_snapshot"])[:16] <= when <= str(g["final_snapshot"])[:16]
     pnom = _num(g["p_nom"])
     if not active or not pnom or g["node"] not in buses:
@@ -304,9 +265,7 @@ def _candidate(
 def _availability(g: dict, generation: dict, when: str) -> float:
     profile = generation["profile_of"].get(g["name"])
     if profile:
-        return min(
-            1.0, max(0.0, _num(generation["availability"][when].get(profile)) or 0.0)
-        )
+        return min(1.0, max(0.0, _num(generation["availability"][when].get(profile)) or 0.0))
     return {"hydro reservoir": RESERVOIR_SHARE, "hydro ROR": RUN_OF_RIVER_SHARE}.get(
         g["carrier"], _num(g["p_max_pu"]) or 1.0
     )
@@ -314,9 +273,7 @@ def _availability(g: dict, generation: dict, when: str) -> float:
 
 def _cost(g: dict, generation: dict, year: str) -> float:
     price = _num(generation["fuel"].get((year, g["fuel/water node"]))) or 0.0
-    return (_num(g["marginal_cost"]) or 0.0) + price * (
-        _num(g["heat_rate/efficiency"]) or 0.0
-    )
+    return (_num(g["marginal_cost"]) or 0.0) + price * (_num(g["heat_rate/efficiency"]) or 0.0)
 
 
 def _num(value) -> float | None:
@@ -329,9 +286,7 @@ def _num(value) -> float | None:
 def _self_check(result: dict) -> None:
     for p in result["points"]:
         assert p["unmet_mw"] < 1, f"{p['id']}: not enough generation"
-        assert abs(p["total_gen_mw"] - p["total_load_mw"]) < 5, (
-            f"{p['id']}: generation and load differ"
-        )
+        assert abs(p["total_gen_mw"] - p["total_load_mw"]) < 5, f"{p['id']}: generation and load differ"
         assert abs(sum(p["load_by_bus"].values()) - p["total_load_mw"]) < 5
         assert p["inertia_online_mws"] > 0
     assert len(result["load_bus"]) == 259
@@ -341,9 +296,7 @@ if __name__ == "__main__":
     out = build_operating_points_workflow()
     _self_check(out)
     path = DATA / "processed" / "operating_points.json"
-    path.write_text(
-        json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-    )
+    path.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(
         f"{len(out['points'])} points, {len(out['plant_bus'])} plants and {len(out['load_bus'])} loads mapped -> {path} ({path.stat().st_size / 1e3:.0f} KB)"
     )

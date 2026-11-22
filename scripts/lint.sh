@@ -39,6 +39,8 @@ status=0
 
 # --- Python: ruff -----------------------------------------------------------
 if ((${#py_files[@]})); then
+  # Run from backend/ so files outside it (data/scripts) use the same ruff config (backend/pyproject.toml).
+  cd "$ROOT/backend" || exit 1
   if [[ -x "$ROOT/backend/.venv/bin/ruff" ]]; then
     RUFF=("$ROOT/backend/.venv/bin/ruff")
   elif command -v uv >/dev/null 2>&1; then
