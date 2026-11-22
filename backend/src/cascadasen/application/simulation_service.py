@@ -3,7 +3,7 @@ strategic runs and campaigns. Built once per snapshot."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from cascadasen.application.run_campaign import CampaignRunner
 from cascadasen.application.run_experiment import RunCache, RunManager, catalog
@@ -34,10 +34,12 @@ class SimulationService:
         self.network = network  # 13-area network of POST /simulate (domain/simulation)
         self.physics = physics or Physics.load()
         self.simulator = PhysicsSimulator(network, self.physics)
-        self.world = world  # mapa 3 network and operating points: the strategic theatre runs here
+        # mapa 3 network and operating points: the strategic theatre runs here. The API always passes a world;
+        # only tests of the 13-area engine build the service without one and never touch the theatre.
+        self.world = cast("TheaterWorld", world)
         self.run_cache = run_cache if run_cache is not None else RunCache()
         self.runs = RunManager(
-            world,
+            self.world,
             self.physics,
             interpreter=interpreter,
             advisor=advisor,
@@ -46,7 +48,7 @@ class SimulationService:
             version=version,
         )
         self.store = self.runs.store  # persisted run records (and, later, sessions)
-        self.campaigns = CampaignRunner(world, self.physics)
+        self.campaigns = CampaignRunner(self.world, self.physics)
 
     @classmethod
     def from_snapshot(

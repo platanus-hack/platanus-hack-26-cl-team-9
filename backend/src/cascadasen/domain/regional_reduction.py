@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 import numpy as np
@@ -132,7 +132,9 @@ def _clusters(bundle: RegionalBundle, lat0: float) -> list[dict[str, Any]]:
     out = []
     for members in groups.values():
         top = max(members, key=lambda i: (subs[i].kv or 0, bool(subs[i].name)))
-        levels = sorted({k for i in members for k in (subs[i].kv_levels or [subs[i].kv]) if k}, reverse=True)
+        levels = sorted(
+            {k for i in members for k in (subs[i].kv_levels or [cast(float, subs[i].kv)]) if k}, reverse=True
+        )
         names = [subs[i].name for i in members if subs[i].name]
         out.append(
             {

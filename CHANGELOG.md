@@ -1,6 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(types): mypy reports 0 errors and becomes a CI gate
+- **Changed:** The 56 remaining `mypy src` errors are fixed with annotations and `typing.cast`, with no change at run time: `float | None` coordinates guarded by `located` (`domain/unify.py`, `validation.py`, `simulation/network.py`, `regional_reduction.py`, `regional_network.py`, `application/grid_queries.py`), `SimulationService.world` (the API always passes a world), a renamed loop variable in `unify.py`, the typed bus row of `grid_stress.py`. In `regional_network.py` the all-or-nothing check on `r_pu` became `len(rs) == len(group)` over the non-None values, which gives the same result.
+- **Changed:** The `backend-mypy` job of `checks.yml` no longer has `continue-on-error`, so a new type error blocks the deploy. README and `backend/README.md` say so.
+- **Why:** The check was red on PR #100 because the baseline (52) was below the real count (56 after `main` added code), and the user asked to fix mypy first.
+- **Agents:** Run `cd backend && uv run mypy src` before pushing Python changes; it must say "no issues found". Do not raise a baseline: fix the error or add a justified `cast`.
+- **Files:** `backend/src/cascadasen/{domain,application}/*`, `.github/workflows/checks.yml`, `README.md`, `backend/README.md`.
 ## 2026-11-22 · docs(quality): fix the BodyLimitMiddleware docstring and the scipy row in stack.md
 
 - **Changed:** the `BodyLimitMiddleware` docstring says the limit covers declared and chunked bodies. `docs/stack.md` no longer lists scipy in the simulation engine row (only `data/scripts/build_baseline_opf.py` imports it, via the `data` dependency group).

@@ -33,7 +33,7 @@ See [`docs/engine.md`](docs/engine.md) and [`docs/plan.md`](docs/plan.md) sectio
 
 ## Checks (CI)
 
-CI runs backend pytest with a coverage floor, a mypy baseline (non-blocking), web tsc/vitest/build, and the deploy needs them. Lint (ruff) and the `CHANGELOG.md` check run on every pull request. The workflows are in `.github/workflows/`.
+CI runs backend pytest with a coverage floor, mypy (0 errors, blocking), web tsc/vitest/build, and the deploy needs them. Lint (ruff) and the `CHANGELOG.md` check run on every pull request. The workflows are in `.github/workflows/`.
 
 ## Names
 

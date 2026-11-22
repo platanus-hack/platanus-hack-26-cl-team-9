@@ -21,7 +21,7 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 import numpy as np
@@ -274,7 +274,9 @@ class GridUnifier:
 
     # ------------------------------------------------------- CEN reconciliation
 
-    def _resolve_end(self, desc: str, kv: float | None, line_code: str | None, code_idx, name_idx) -> tuple:
+    def _resolve_end(
+        self, desc: str | None, kv: float | None, line_code: str | None, code_idx, name_idx
+    ) -> tuple:
         d = (desc or "").strip()
         kind = d.split(":", 1)[0].strip().upper()
         body = d.split(":", 1)[1].strip() if ":" in d else d
@@ -403,7 +405,7 @@ class GridUnifier:
             if None in ids:
                 counters["unresolved_end"] += 1
                 continue
-            a, c = ids
+            a, c = cast("list[str]", ids)  # no None: unresolved ends were skipped above
             if a == c:
                 counters["self_loop"] += 1
                 continue
@@ -668,11 +670,15 @@ class GridUnifier:
         plant with the same `plant_key` gives `cen_id` and `cen_name`. Counts per method are stored in
         `stats["plant_connection_methods"]`."""
         subs = [n for n in nodes if n.kind == NodeKind.SUBSTATION and n.located]
-        sindex = PointIndex([n.lon for n in subs], [n.lat for n in subs])
+        sindex = PointIndex([cast(float, n.lon) for n in subs], [cast(float, n.lat) for n in subs])
         sub_names = [norm(n.name) for n in subs]
         bus_node = {x.name: x.node for x in buses}
         gens = [g for g in b.model_generators if g.lon is not None]
-        gindex = PointIndex([g.lon for g in gens], [g.lat for g in gens]) if gens else None
+        gindex = (
+            PointIndex([cast(float, g.lon) for g in gens], [cast(float, g.lat) for g in gens])
+            if gens
+            else None
+        )
         cen_by_key: dict[str, list[RawPlant]] = defaultdict(list)
         for c in b.cen_plants:
             cen_by_key[plant_key(c.name)].append(c)
@@ -703,7 +709,7 @@ class GridUnifier:
                     if bus and bus_node.get(bus):
                         node_id, method, dist = bus_node[bus], "barra declarada en PyPSA-CL", None
                         units = [gens[i].name for i in sel]
-                        h = [gens[i].inertia_s for i in sel if gens[i].inertia_s]
+                        h = [cast(float, gens[i].inertia_s) for i in sel if gens[i].inertia_s]
                         inertia = round(float(np.mean(h)), 3) if h else None
                         prov.append(
                             Provenance(
@@ -722,17 +728,28 @@ class GridUnifier:
                     for j in np.where(d <= self.cfg.plant_name_m)[0]
                     if pat
                     and (
-                        pat.search(sub_names[j])
+                        cast(re.Pattern[str], pat).search(sub_names[j])
                         or similarity(sub_names[j].removeprefix("CENTRAL ").strip(), target)
                         >= self.cfg.name_ok
                     )
                 ]
                 if cand:
-                    j = min(cand, key=lambda k: (not pat.search(sub_names[k]), subs[k].component != 0, d[k]))
+                    j = min(
+                        cand,
+                        key=lambda k: (
+                            not cast(re.Pattern[str], pat).search(sub_names[k]),
+                            subs[k].component != 0,
+                            d[k],
+                        ),
+                    )
                     node_id, method, dist = subs[j].id, "nombre de subestación", float(d[j]) / 1000
                 else:
-                    j = int(np.argmin(d))
-                    node_id, method, dist = subs[j].id, "subestación más cercana", float(d[j]) / 1000
+                    nearest = int(np.argmin(d))
+                    node_id, method, dist = (
+                        subs[nearest].id,
+                        "subestación más cercana",
+                        float(d[nearest]) / 1000,
+                    )
                 prov.append(
                     Provenance(
                         "derived",
@@ -783,7 +800,7 @@ class GridUnifier:
     ) -> list[Storage]:
         idx = self._name_index(nodes)
         subs = [n for n in nodes if n.kind == NodeKind.SUBSTATION and n.located]
-        sindex = PointIndex([n.lon for n in subs], [n.lat for n in subs])
+        sindex = PointIndex([cast(float, n.lon) for n in subs], [cast(float, n.lat) for n in subs])
         bus_node = {x.name: x.node for x in buses}
         out: list[Storage] = []
         for s in b.storage:
@@ -792,7 +809,7 @@ class GridUnifier:
             if cands:
                 node, method = cands[0], "subestación declarada"
             elif s.lon is not None:
-                node = subs[int(np.argmin(sindex.distances(s.lon, s.lat)))]
+                node = subs[int(np.argmin(sindex.distances(s.lon, cast(float, s.lat))))]
             out.append(
                 Storage(
                     f"BESS{s.record_id}",
@@ -873,7 +890,7 @@ class GridUnifier:
         geometry = {c.cut: c.geometry for c in b.comunas if c.geometry}
         if not delivery or not b.comunas:
             return [], geometry
-        dindex = PointIndex([n.lon for n in delivery], [n.lat for n in delivery])
+        dindex = PointIndex([cast(float, n.lon) for n in delivery], [cast(float, n.lat) for n in delivery])
         per_comuna: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
         urban_by_comuna: dict[str, float] = defaultdict(float)
         for z in b.census_zones:

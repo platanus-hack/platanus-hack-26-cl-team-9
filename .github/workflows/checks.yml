@@ -27,11 +27,10 @@ jobs:
       - name: pytest with coverage floor
         # Measured TOTAL is 89% (12147 statements, 1311 missed) without the mcp/llm extras; the floor is 2 points below.
         run: uv run pytest -q --cov=cascadasen --cov-report=term --cov-fail-under=87
-  # Baseline, not a gate: 52 known errors (backend/README.md, "Type checking"). It reports and never blocks the deploy.
+  # A gate: `mypy src` reports 0 errors (backend/README.md, "Type checking"), so any new error blocks the deploy.
   backend-mypy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     defaults:
       run:
         working-directory: backend

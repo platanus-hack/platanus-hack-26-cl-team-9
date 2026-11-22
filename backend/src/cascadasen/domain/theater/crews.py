@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from cascadasen.domain.theater.areas import TheaterNetwork
 
@@ -55,7 +55,9 @@ def _km(network: TheaterNetwork, a: str, b: str) -> float | None:
     A, B = network.areas[a], network.areas[b]
     if None in (A.lat, A.lon, B.lat, B.lon):
         return None
-    la1, lo1, la2, lo2 = map(math.radians, (A.lat, A.lon, B.lat, B.lon))
+    la1, lo1, la2, lo2 = map(
+        math.radians, cast("tuple[float, float, float, float]", (A.lat, A.lon, B.lat, B.lon))
+    )
     h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
     return 2 * EARTH_KM * math.asin(math.sqrt(h))
 
