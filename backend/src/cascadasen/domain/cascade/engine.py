@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from cascadasen.domain.simulation.params import value
+from cascadasen.domain.simulation.consequence import outage_cost
+from cascadasen.domain.simulation.params import load_params, value
 
 from .flow import dc_flow, find_islands
 from .frequency import IslandInput, IslandResult, Params, cascade_params, edac_tables, simulate_island
@@ -440,10 +441,24 @@ def _frame(s: _State, islands: list[list[int]], flows: np.ndarray, t: float) -> 
     }
 
 
+def failure_cost(load_shed_mw: float) -> dict:
+    """Failure cost of `load_shed_mw` with the default outage duration (`physics.yaml`, an assumption)
+    and the CNE failure cost [19]; same formula as the theatre's consequence card."""
+    p = load_params("physics")
+    outage = p["default_outage_h"]
+    return outage_cost(
+        load_shed_mw,
+        float(value(outage)),
+        bool(outage.get("is_assumption", False)),
+        float(value(p["voll_usd_per_kwh"])),
+    )
+
+
 def _timeline(s: _State, cut_ids: list[str], truncated: bool, uncertain: bool = False) -> dict:
     initial, final = s.point.load, s.load
     served = np.divide(final, initial, out=np.ones_like(final), where=initial > 0)
     people = float((s.point.people * (1.0 - served)).sum())
+    shed = round(float((initial - final).sum()))
     return {
         "scenario": s.point.id,
         "label": s.point.label,
@@ -455,7 +470,8 @@ def _timeline(s: _State, cut_ids: list[str], truncated: bool, uncertain: bool = 
         "frequency_hz": s.curves,
         "summary": {
             "people_without_power": round(people),
-            "load_shed_mw": round(float((initial - final).sum())),
+            "load_shed_mw": shed,
+            **failure_cost(shed),
             "load_total_mw": round(float(initial.sum())),
             "stages": len(s.frames) - 1,
             "lines_opened": sorted(s.open_lines),

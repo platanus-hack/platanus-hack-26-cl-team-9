@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(cascade): failure cost in the cascade summary
+
+- **Changed:** New pure `outage_cost(load_lost_mw, outage_h, outage_is_assumption, voll)` in `domain/simulation/consequence.py` returns `unserved_energy_mwh`, `failure_cost_usd` and `outage_duration_h: {value, is_assumption}`. `consequence_card` uses it; its output is unchanged.
+- **Changed:** The cascade timeline `summary` (`domain/cascade/engine.py::_timeline`) adds the same three fields through `failure_cost(load_shed_mw)`, with `default_outage_h` (4 h, assumption) and `voll_usd_per_kwh` (8.79, CNE [19]) read from `physics.yaml`.
+- **Why:** Issue #72: show the money next to the health index. The cascade (map 3, cache, sessions) had MW lost but no cost.
+- **Agents:** One formula for both engines: never recompute the cost by hand, call `outage_cost`. The cascade cost uses the rounded `load_shed_mw`, so `failure_cost_usd = load_shed_mw x 4 x 1000 x 8.79` exactly. It is a regulatory valuation, not a measured loss. The cache is not regenerated yet.
+- **Files:** `backend/src/cascadasen/domain/simulation/consequence.py`, `backend/src/cascadasen/domain/cascade/engine.py`, `backend/tests/unit/{test_cascade.py,test_sim_engine.py}`.
+
 ## 2026-11-21 · docs(mapa3): document Prender todo
 
 - **Changed:** `docs/mapa3.md`. §3 places the control next to the layers button. §4 gets new item 9, **Prender todo**: what it clears, what it keeps, when it is disabled. The placeholder tabs become item 10. §8 adds `powerAll.ts` to the file table. §11 adds the session behaviour: confirm, repair every open line for everyone, dataset edits kept.
