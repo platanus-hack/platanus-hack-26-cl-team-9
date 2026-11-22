@@ -124,32 +124,41 @@ def battery_output(t_since_trigger: float | None, p_max: float, params: Params) 
 
 
 def simulate_island(island: IslandInput, params: Params = Params()) -> IslandResult:
+    """Explicit Euler over `horizon_s` in steps of `step_s`. The loop runs once per substation in the criticality
+    map, so it is written for speed: constants are read once, the EDAC steps not yet fired are kept in a list
+    and the shed total is summed only when a step fires. Same arithmetic in the same order as the plain form."""
     f, reserve, shed, dfdt = F0, 0.0, {z: 0.0 for z in island.zone_load_mw}, 0.0
-    done: set[tuple[str, int]] = set()
     steps_log: list[dict] = []
     curve: list[list[float]] = []
     cap = params.reserve_share_of_sync * island.sync_mw + island.extra_reserve_mw
     gain = island.sync_mw / (params.reserve_droop * F0) if params.reserve_droop > 0 else float("inf")
     min_hz, collapse, rocof, bat_t0, bat = F0, None, 0.0, None, 0.0
-    for k in range(int(params.horizon_s / params.step_s) + 1):
-        t = k * params.step_s
-        if k % params.sample_every == 0:
+    step_s, tau, sample = params.step_s, params.reserve_time_constant_s, params.sample_every
+    damping, two_e = params.load_damping_pct_per_hz / 100, 2 * island.inertia_mws
+    gen, load_mw, nonsync, battery_mw = island.gen_mw, island.load_mw, island.nonsync_mw, island.battery_mw
+    # (zone, index, step) in table order; a step leaves the list when it fires, so it fires once
+    pending = [(zone, j, st) for zone, steps in island.edac.items() for j, st in enumerate(steps)]
+    shed_total = sum(shed.values())
+    for k in range(int(params.horizon_s / step_s) + 1):
+        t = k * step_s
+        if k % sample == 0:
             curve.append([round(t, 2), round(f, 3)])
-        target = _clamp((F0 - f) * gain, -cap, cap) if cap > 0 else 0.0
-        reserve += (target - reserve) / params.reserve_time_constant_s * params.step_s
+        target = max(-cap, min(cap, (F0 - f) * gain)) if cap > 0 else 0.0
+        reserve += (target - reserve) / tau * step_s
         if bat_t0 is None and f < params.battery_trigger_hz:
             bat_t0 = t
-        bat = battery_output(None if bat_t0 is None else t - bat_t0, island.battery_mw, params)
-        curtailed = min(
-            island.nonsync_mw, OVERFREQ_SLOPE * island.nonsync_mw * max(0.0, f - OVERFREQ_START_HZ)
-        )
-        load = (island.load_mw - sum(shed.values())) * (1 + params.load_damping_pct_per_hz / 100 * (f - F0))
-        dfdt = F0 * (island.gen_mw + reserve + bat - curtailed - load) / (2 * island.inertia_mws)
+        if battery_mw > 0:
+            bat = battery_output(None if bat_t0 is None else t - bat_t0, battery_mw, params)
+        curtailed = min(nonsync, OVERFREQ_SLOPE * nonsync * max(0.0, f - OVERFREQ_START_HZ))
+        load = (load_mw - shed_total) * (1 + damping * (f - F0))
+        dfdt = F0 * (gen + reserve + bat - curtailed - load) / two_e
         if k == 0:
             rocof = dfdt
-        f += dfdt * params.step_s
-        min_hz = min(min_hz, f)
-        _trigger_edac(island, f, dfdt, t, shed, done, steps_log)
+        f += dfdt * step_s
+        if f < min_hz:
+            min_hz = f
+        if pending and _trigger_edac(island, pending, f, dfdt, t, shed, steps_log):
+            shed_total = sum(shed.values())
         if f < BLACKOUT_LOW_HZ or f > BLACKOUT_HIGH_HZ:
             collapse = t
             break
@@ -171,20 +180,26 @@ def simulate_island(island: IslandInput, params: Params = Params()) -> IslandRes
 
 
 def _trigger_edac(
-    island: IslandInput, f: float, dfdt: float, t: float, shed: dict, done: set, log: list
-) -> None:
-    for zone, steps in island.edac.items():
-        for j, step in enumerate(steps):
-            hit = f <= step.threshold_hz or (
-                step.gradient and dfdt <= GRADIENT_HZ_PER_S and f < GRADIENT_MAX_HZ
-            )
-            if hit and (zone, j) not in done:
-                done.add((zone, j))
-                mw = step.fraction * island.zone_load_mw.get(zone, 0.0)
-                shed[zone] = shed.get(zone, 0.0) + mw
-                if mw >= 0.5:  # steps with nothing to shed in this island stay out of the narration
-                    log.append({"t": round(t, 2), "zone": zone, "step": j + 1, "mw": round(mw, 1)})
-
-
-def _clamp(x: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, x))
+    island: IslandInput,
+    pending: list[tuple[str, int, EdacStep]],
+    f: float,
+    dfdt: float,
+    t: float,
+    shed: dict,
+    log: list,
+) -> bool:
+    """Fire, in order, every pending step that `f` or `dfdt` reaches and drop it from `pending`. True if any fired."""
+    left = []
+    for item in pending:
+        zone, j, step = item
+        if f <= step.threshold_hz or (step.gradient and dfdt <= GRADIENT_HZ_PER_S and f < GRADIENT_MAX_HZ):
+            mw = step.fraction * island.zone_load_mw.get(zone, 0.0)
+            shed[zone] = shed.get(zone, 0.0) + mw
+            if mw >= 0.5:  # steps with nothing to shed in this island stay out of the narration
+                log.append({"t": round(t, 2), "zone": zone, "step": j + 1, "mw": round(mw, 1)})
+        else:
+            left.append(item)
+    if len(left) == len(pending):
+        return False
+    pending[:] = left
+    return True

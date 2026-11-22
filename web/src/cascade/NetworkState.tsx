@@ -184,7 +184,7 @@ function useOutageCost(point: string, edits: Edits, enabled: boolean): CostState
   return cost;
 }
 
-const TARGET_NAME: Record<StressChange["target"], string> = { population: "Personas", demand: "Demanda", generation: "Generación", lines: "Capacidad" };
+const TARGET_NAME: Record<StressChange["target"], string> = { population: "Personas", demand: "Demanda", generation: "Generación", lines: "Capacidad", substation: "Subestación nueva" };
 const TECH_NAME: Record<string, string> = {
   hidro: "hidro", solar: "solar", eolica: "eólica", carbon: "carbón", gas: "gas", diesel: "diésel", bioenergia: "bioenergía",
   geotermica: "geotérmica", termica: "térmica", bateria: "batería",

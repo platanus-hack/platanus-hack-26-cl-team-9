@@ -4,11 +4,13 @@
  * changes by filters (zones, technologies, comunas).
  */
 export interface StressChange {
-  target: "population" | "demand" | "generation" | "lines";
+  target: "population" | "demand" | "generation" | "lines" | "substation";
   buses?: string[]; zones?: string[]; areas?: string[]; comunas?: string[]; tech?: string[]; lines?: string[]; kv?: number[];
   /** Places as the person named them; the server resolves each to one substation (docs/stress.md section 3). */
   places?: string[];
   factor?: number; add?: number; x_factor?: number;
+  /** A new substation (target "substation"): built next to the one that serves `places[0]`, with its own lines. */
+  name?: string; lat?: number; lon?: number; load_mw?: number; generator_mw?: number;
 }
 export type Target = StressChange["target"];
 

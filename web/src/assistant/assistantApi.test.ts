@@ -23,6 +23,13 @@ describe("assistantApi", () => {
     expect(JSON.parse(init.body)).toEqual({ message: "hola", session_id: "s1" });
   });
 
+  it("sends the grid on the map with the message", async () => {
+    fetchMock.mockResolvedValue(stream(['event: done\ndata: {"reply": "ok"}\n\n']));
+    const grid = { point: "nov2026-1300", changes: [{ target: "generation" as const, tech: ["hidro"], factor: 0.5 }], open_lines: [], out_buses: ["B039"] };
+    await streamChat({ message: "hola", grid }, () => undefined);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).grid).toEqual(grid);
+  });
+
   it("reports a stream that closed before done", async () => {
     fetchMock.mockResolvedValue(stream(['event: assistant_text\ndata: {"step": 1, "text": "x"}\n\n']));
     expect(await streamChat({ message: "hola" }, () => undefined)).toBe(false);

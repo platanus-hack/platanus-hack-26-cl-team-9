@@ -25,8 +25,9 @@ from .network import X_MIN_PU, Line, ReducedNetwork
 from .scenario import OperatingPoint
 
 MAX_ADDED = 80  # buses + lines + loads + generators added by one session
-MAX_ELEMENT_MW = 3000.0  # one added load or generator
-MAX_ADDED_MW = 5000.0  # sum of added load and generation, plus the MW changed by bus overrides
+MAX_ELEMENT_MW = (
+    20000.0  # one added load or generator (above the whole national demand: the user may stress freely)
+)
 MAX_CAPACITY_MW = 5000.0
 MAX_CONNECTIONS = 6  # lines of one add_substation
 FAR_KM = 300.0  # a connection longer than this gets a coherence warning
@@ -315,10 +316,8 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
     in_service = [True] * total
     removed = [False] * total
     pinned: set[int] = set()  # buses whose generation the overlay sets: not redispatched
-    added_mw = 0.0
 
     def edit_bus(i: int, rec: dict[str, Any], where: str) -> None:
-        nonlocal added_mw
         if "name" in rec:
             names[i] = _name(rec["name"], f"{where}.name")
         if "kv" in rec:
@@ -334,8 +333,6 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
                 # a base value below zero (net injection of embedded generation) may stay, never go lower
                 low = min(0.0, float(ref[i]))
                 arr[i] = _number(rec[key], f"{where}.{key}", low, float(ref[i]) + MAX_ELEMENT_MW)
-                if key != "sync_mw":
-                    added_mw += abs(arr[i] - float(ref[i]))
         if "gen_mw" in rec or "sync_mw" in rec:
             pinned.add(i)
         if sync[i] > gen[i] + 1e-9:
@@ -436,7 +433,6 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         if rec["kind"] not in LOAD_KINDS:
             raise OverlayError(f"{lid}.kind", "Tipo de carga desconocido.", sorted(LOAD_KINDS))
         _name(rec["name"], f"{lid}.name")
-        added_mw += mw
         if _flag(rec.get("in_service", True), f"{lid}.in_service"):
             load[i] += mw
     for rec in overlay.get("generators") or []:
@@ -451,7 +447,6 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         h = _number(
             rec.get("inertia_h", DEFAULT_INERTIA_H), f"{gid}.inertia_h", 0.0, MAX_INERTIA_H, open_lo=True
         )
-        added_mw += mw
         if _flag(rec.get("in_service", True), f"{gid}.in_service"):
             gen[i] += mw
             if synchronous:
@@ -463,10 +458,6 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
     )
     if count > MAX_ADDED:
         raise OverlayError("overlay", f"Máximo {MAX_ADDED} elementos agregados por sesión.")
-    if added_mw > MAX_ADDED_MW:
-        raise OverlayError(
-            "overlay", f"Máximo {MAX_ADDED_MW:.0f} MW agregados o cambiados (carga + generación)."
-        )
 
     index = dict(net.index)
     for i in range(n, total):

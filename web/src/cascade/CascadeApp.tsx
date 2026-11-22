@@ -458,7 +458,7 @@ export function CascadeApp() {
     setHeatError(null);
     const key = heatKey;
     heatRequest.current = key;
-    loadDependency({ point: pointId, open_lines: cuts, out_buses: outBuses, changes })
+    loadDependency({ point: pointId, open_lines: cuts, out_buses: outBuses, changes, criticality: heat === "criticality" })
       .then((r) => { if (live.current.heatKey === key) setDependency({ key, nodes: r.nodes }); })
       .catch((e) => { if (live.current.heatKey === key) setHeatError(errorText(e)); })
       .finally(() => { if (heatRequest.current === key) heatRequest.current = null; });

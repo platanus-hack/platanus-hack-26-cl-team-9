@@ -167,7 +167,7 @@ The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agen
 | Other edits and run commands | 60 per minute per session | `CASCADASEN_RATE_WRITES_PER_MINUTE` |
 | SSE streams | 5 per session and client IP | `CASCADASEN_SSE_PER_SESSION_IP` |
 | Requests in progress per session | 1 per backend process; up to 10 others wait up to 10 s, then 409 with `Retry-After: 1`; an eleventh waiter gets 409 at once | `CASCADASEN_SESSION_LOCK_TIMEOUT_S`, `CASCADASEN_SESSION_LOCK_MAX_WAITERS` |
-| Added elements | 80 per session (buses + lines + loads + generators; each counts 1, so a substation with 6 lines and a load counts 8), 3000 MW each, 5000 MW of added load plus generation plus the MW changed by bus overrides; bus `load_mw`/`gen_mw`/`sync_mw` at most the base value + 3000 MW, `inertia_mws` at most 10 s × `sync_mw` | `domain/cascade/overlay.py` |
+| Added elements | 80 per session (buses + lines + loads + generators; each counts 1, so a substation with 6 lines and a load counts 8), 20000 MW each, no total MW cap (removed 2026-11-22 so the assistant can stress the grid freely); bus `load_mw`/`gen_mw`/`sync_mw` at most the base value + 20000 MW, `inertia_mws` at most 10 s × `sync_mw` | `domain/cascade/overlay.py` |
 | Lines per cut call | 1 to 3 | |
 | Runs per session | 20 (422 above) | |
 | Session lifetime | 24 h after the last change | `CASCADASEN_SESSION_TTL_HOURS` |

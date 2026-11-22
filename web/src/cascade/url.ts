@@ -3,7 +3,7 @@ import { changesOf, type Edits } from "./edits";
 import { SUBSTATION_PREFIX } from "./text";
 
 /** The operating point a bare `/` opens. */
-export const DEFAULT_POINT = "nov2026-1300";
+export const DEFAULT_POINT = "feb2025-0300"; // Demanda mínima: where the app always starts
 
 export interface UrlState {
   pointId: string;

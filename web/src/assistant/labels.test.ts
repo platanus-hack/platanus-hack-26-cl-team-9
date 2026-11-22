@@ -61,6 +61,11 @@ describe("prepare_scenario in the chat", () => {
     expect(argsText("prepare_scenario", args)).toBe("+120 MW demanda en Antofagasta · +80 MW solar en Iquique · × 0,5 hidro · líneas fuera: R239");
   });
 
+  it("reads a new substation as its megawatts and place", () => {
+    const args = { changes: [{ target: "substation", places: ["Vallenar"], name: "S/E Solar", generator_mw: 120, tech: ["solar"] }] };
+    expect(argsText("prepare_scenario", args)).toBe("+120 MW solar en Vallenar");
+  });
+
   it("says where each place went and when a change touched nothing", () => {
     const result = {
       prepared: { changes: [{ matched: 1, places: [{ bus_name: "S/E ANTOFAGASTA" }] }, { matched: 0 }] },

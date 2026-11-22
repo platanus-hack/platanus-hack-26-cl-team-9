@@ -1,6 +1,6 @@
 import type { RegionalCountry, RegionalLine, RegionalPlant, RegionalSubstation } from "../map/regional";
 import type { StressChange } from "./edits";
-import type { BusState, DependencyNode, Network, Timeline } from "./types";
+import type { BusState, DependencyNode, HealthReport, Network, Timeline } from "./types";
 
 /** Grid documents served by the backend from S3 (docs/grids.md): catalogue, compose and the context documents. */
 export interface CatalogPoint { key: string; point: string; label: string; year: number; snapshot: string }
@@ -62,17 +62,19 @@ export async function loadOutageCost(body: GridChanges): Promise<OutageCost | nu
   return r.json();
 }
 
-/** Heat-map data of the grid as it stands after the changes (`POST /grids/dependency`): about 2 s per new set of changes. */
-export const loadDependency = (body: GridChanges) =>
+/** Heat-map data of the grid as it stands after the changes (`POST /grids/dependency`). With `criticality: false` only
+ *  who feeds whom comes back, in milliseconds; criticality runs one cascade per substation and takes seconds. */
+export const loadDependency = (body: GridChanges & { criticality: boolean }) =>
   request<{ point: string; open_lines: string[]; nodes: Record<string, DependencyNode> }>("dependency", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 /** One element a change touched, before and after (`[before, after]`). */
-export interface PreparedElement { id: string; name?: string; load_mw?: [number, number]; gen_mw?: [number, number]; people?: number; capacity_mw?: [number, number] }
+export interface PreparedElement { id: string; name?: string; lat?: number; lon?: number; kv?: number; load_mw?: [number, number]; gen_mw?: [number, number]; people?: number; capacity_mw?: [number, number] }
 /** Where a place of a change went: the one substation it resolved to, and how (Spanish, shown as is). */
 export interface PreparedPlace { place: string; bus: string; bus_name: string; how: string }
 export interface PreparedChange {
   target: string; matched: number; people_delta?: number; load_delta_mw?: number; gen_delta_mw?: number; elements?: PreparedElement[];
   places?: PreparedPlace[]; tech?: string[]; new_plant?: boolean;
+  new_substation?: boolean; connects_to?: string[]; load_mw?: number | null; gen_mw?: number | null;
 }
 /** The grid of a prepared scenario with no failure (`POST /grids/prepare`, docs/stress.md). */
 export interface Prepared {
@@ -81,6 +83,8 @@ export interface Prepared {
   overloaded_lines: { id: string; kv: number; loading_pct: number }[];
   should_feed: Supply;
   assumptions: { id: string; text: string; source?: string; is_assumption: boolean }[];
+  /** Health index of the prepared grid before any failure (no N-1); absent from an older backend. */
+  health?: HealthReport;
 }
 export const prepareScenario = (body: { point: string; changes: StressChange[] }) =>
   request<Prepared>("prepare", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

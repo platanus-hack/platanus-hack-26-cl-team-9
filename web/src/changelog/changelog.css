@@ -1,0 +1,14 @@
+/* Historial de cambios: blue = the network was modified, red (--fault) = something went down. */
+.shell .changelog { --chg-ajuste: #5aa9ff; --chg-caida: var(--fault); display: flex; flex-direction: column; gap: 10px; }
+.shell .chg-legend { margin: 0; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+.shell .chg-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.shell .chg-item { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 8px; padding: 7px 10px; border-left: 3px solid; background: var(--card); }
+.shell .chg-item.ajuste { border-left-color: var(--chg-ajuste); }
+.shell .chg-item.caida { border-left-color: var(--chg-caida); }
+.shell .chg-tag { padding: 0 5px; border: 1px solid; font-size: 11px; line-height: 16px; font-weight: 600; }
+.shell .chg-tag.ajuste { color: var(--chg-ajuste); border-color: var(--chg-ajuste); }
+.shell .chg-tag.caida { color: var(--chg-caida); border-color: var(--chg-caida); }
+.shell .chg-text { color: var(--fg-2); font-size: 13px; line-height: 18px; }
+.shell .chg-when { color: var(--faint); font: 12px/16px var(--font-condensed); white-space: nowrap; }
+.shell .chg-item.pick { cursor: pointer; }
+.shell .chg-item.pick:hover, .shell .chg-item.pick:focus-visible { background: var(--selected); outline: none; }
