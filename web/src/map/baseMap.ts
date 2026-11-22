@@ -4,12 +4,13 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import chileUrl from "../../../data/processed/chile.geojson?url";
+import { PITCH_DEGREES, MAPBOX_STYLE, SEN_BOUNDS } from "./constants";
 import { regionalOutlineUrl } from "./regional";
 import type { CameraTarget } from "./countryBounds";
 import { nearLand, viewportRadiusDeg } from "./regionLimit";
 
 // Until the first network loads: today's Chile frame. Every later target comes from the network's data (countryBounds.ts).
-const START_TARGET: CameraTarget = { frame: [[-75.5, -43.8], [-66.5, -17.4]], maxBounds: [[-110, -62], [-30, 8]], land: null };
+const START_TARGET: CameraTarget = { frame: SEN_BOUNDS, maxBounds: [[-110, -62], [-30, 8]], land: null };
 // Experiment: keep the camera near the selected country and drop heavy Standard-style features. `?limite=0` turns it all off to compare.
 const LIMITED = new URLSearchParams(location.search).get("limite") !== "0";
 const MAX_ZOOM = 13;
@@ -18,11 +19,9 @@ const ZOOM_OUT_LEVELS = 1.5;
 const FLY_MS = 1200;
 const LAND_MARGIN = 0.25; // fraction of the shorter viewport side the center may be offshore
 const LITE_BASEMAP = { show3dObjects: false, showPointOfInterestLabels: false, showTransitLabels: false, showPedestrianRoads: false };
-const PITCH_DEGREES = 45;
 // Design v5: flat neutral gray land on a dark gray ground (Electricity Maps look).
 const LAND_FILL: [number, number, number] = [58, 59, 63];
 const LAND_LINE: [number, number, number] = [84, 86, 91];
-const STYLE = "mapbox://styles/mapbox/standard";
 // Mapbox's public country polygons (Mapbox Countries v1), used only to paint the land in the design's gray.
 const LAND_TILESET = "mapbox://mapbox.country-boundaries-v1";
 const LAND_SOURCE_LAYER = "country_boundaries";
@@ -65,7 +64,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   mapboxgl.accessToken = token;
   const map = new mapboxgl.Map({
     // Logo and attribution sit bottom-left; styles move that corner right of the timeline card (the legend owns bottom-right).
-    container, style: STYLE, logoPosition: "bottom-left", attributionControl: false,
+    container, style: MAPBOX_STYLE, logoPosition: "bottom-left", attributionControl: false,
      projection: "mercator", config: { basemap: { lightPreset: "night", theme: "monochrome", ...(LIMITED ? LITE_BASEMAP : {}) } },
     ...(LIMITED ? { maxZoom: MAX_ZOOM } : {}),
     pitch: pitchOf(initialMode),

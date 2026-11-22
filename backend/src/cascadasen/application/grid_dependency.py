@@ -10,12 +10,12 @@ an M4, several times that on production). Dependencia alone (`criticality=False`
 from __future__ import annotations
 
 import json
-import threading
-from collections import OrderedDict
 
+from cascadasen.application.cache import BoundedMap
 from cascadasen.application.grid_simulation import prepare_edits
 from cascadasen.domain.cascade.criticality import criticality_workflow
 from cascadasen.domain.cascade.engine import run_cascade_state
+from cascadasen.domain.cascade.network import bus_id
 from cascadasen.domain.cascade.scenario import OperatingPoint
 from cascadasen.domain.cascade.tracing import dependency_workflow
 from cascadasen.domain.theater.world import TheaterWorld
@@ -33,8 +33,8 @@ DISASTERS: list[tuple[str, list[str], list[str]]] = [
 class GridDependency:
     def __init__(self, world: TheaterWorld) -> None:
         self.world = world
-        self._cache: OrderedDict[tuple, dict] = OrderedDict()
-        self._lock = threading.Lock()  # request threads and the startup warm-up share the cache
+        # request threads and the startup warm-up share the cache
+        self._cache: BoundedMap[tuple, dict] = BoundedMap(CACHE_SIZE)
 
     def dependency_workflow(
         self,
@@ -54,19 +54,13 @@ class GridDependency:
             json.dumps(changes or [], sort_keys=True),
             criticality,
         )
-        with self._lock:
-            hit = self._cache.get(key)
-            if hit is not None:
-                self._cache.move_to_end(key)
-                return hit
+        hit = self._cache.get(key)
+        if hit is not None:
+            return hit
         out = self._compute(
             point, open_lines, out_buses, changes, criticality=criticality
         )  # not under the lock
-        with self._lock:
-            self._cache[key] = out
-            self._cache.move_to_end(key)
-            if len(self._cache) > CACHE_SIZE:
-                self._cache.popitem(last=False)
+        self._cache.put(key, out)
         return out
 
     def warm_workflow(self) -> None:
@@ -99,7 +93,7 @@ class GridDependency:
             rows = {bus: {} for bus in sorted(in_service)}
         nodes = {}
         for bus, row in rows.items():
-            key = f"B{bus:03d}"
+            key = bus_id(bus)
             extra = fed.get(key, {})
             nodes[key] = {
                 **row,

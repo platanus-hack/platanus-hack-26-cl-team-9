@@ -1,5 +1,6 @@
 import type { Layer } from "@deck.gl/core";
 import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { fetchJson } from "../lib/fetchJson";
 import { hex, NODE_COLOR, tierOf, type ColorMode } from "../cascade/layers";
 import chileUrl from "../../../data/processed/chile.geojson?url";
 import { outlineOf } from "./countryBounds";
@@ -51,12 +52,12 @@ export function loadCountryGrid(iso: string): Promise<RegionalGrid> {
 
 async function _loadCountry(iso: string): Promise<RegionalGrid> {
   const manifestUrl = urlOf("/latam/manifest.json");
-  if (manifestUrl && !manifest) manifest = _fetchJson(manifestUrl);
+  if (manifestUrl && !manifest) manifest = fetchJson(manifestUrl);
   const [entry, lines, substations, plants] = await Promise.all([
     manifest ? manifest.then((m) => m.countries[iso]).catch(() => undefined) : Promise.resolve(undefined),
     ...["lines", "substations", "plants"].map((layer) => {
       const url = urlOf(`/latam/${iso}/${layer}.geojson`);
-      return url ? _fetchJson<Collection<{ coordinates: unknown }, Props>>(url) : Promise.resolve({ features: [] });
+      return url ? fetchJson<Collection<{ coordinates: unknown }, Props>>(url) : Promise.resolve({ features: [] });
     }),
   ]) as [RegionalCountry | undefined, ...Collection<{ coordinates: unknown }, Props>[]];
   const country = (p: Props) => p.country || iso;
@@ -134,11 +135,6 @@ export function regionalTooltip(layerId: string, object: unknown): string | null
   return null;
 }
 
-async function _fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`No se pudo cargar ${url}: ${response.status}`);
-  return response.json() as Promise<T>;
-}
 
 const outlines = new Map<string, Promise<OutlineFile | null>>();
 
@@ -147,7 +143,7 @@ export function loadOutline(iso: string): Promise<OutlineFile | null> {
   let out = outlines.get(iso);
   if (!out) {
     const url = iso === "CHL" ? chileUrl : regionalOutlineUrl;
-    out = url ? _fetchJson<OutlineFile>(url).then((file) => outlineOf(file, iso)).then((o) => (o.features.length ? o : null)).catch(() => null) : Promise.resolve(null);
+    out = url ? fetchJson<OutlineFile>(url).then((file) => outlineOf(file, iso)).then((o) => (o.features.length ? o : null)).catch(() => null) : Promise.resolve(null);
     outlines.set(iso, out);
   }
   return out;

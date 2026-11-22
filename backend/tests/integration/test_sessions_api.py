@@ -16,7 +16,6 @@ from cascadasen.application.grid_queries import GridQueryService
 from cascadasen.application.run_experiment import RunCache
 from cascadasen.application.sessions import SessionService
 from cascadasen.application.simulation_service import SimulationService
-from cascadasen.domain.simulation.grid import Physics
 from cascadasen.infrastructure.document_store import MemoryDocumentStore
 from cascadasen.infrastructure.settings import Settings
 
@@ -57,11 +56,6 @@ OPERATION_IDS = {
     "start_incident_run",
 }
 TAGS = {"sessions", "session-network", "session-sandbox", "session-runs", "incidents"}
-
-
-@pytest.fixture(scope="module")
-def physics():
-    return Physics.load()
 
 
 @pytest.fixture

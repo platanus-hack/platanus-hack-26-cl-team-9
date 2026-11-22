@@ -10,7 +10,11 @@ Comuna 1 (pop 1000) sits around C, comuna 2 (pop 500) around D.
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
 
+from cascadasen.api.app import create_app
+from cascadasen.application.grid_queries import GridQueryService
+from cascadasen.application.simulation_service import SimulationService
 from cascadasen.domain.model import (
     RawBranch,
     RawBus,
@@ -23,6 +27,7 @@ from cascadasen.domain.model import (
     SourceBundle,
     SourceInfo,
 )
+from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.unify import GridUnifier
 
 
@@ -250,3 +255,19 @@ def toy_world(toy_spec):
     )
     net = build_theater_network(buses, point.people, point.load, toy_spec)
     return StaticWorld(net, {"nov2026-1300": point})
+
+
+@pytest.fixture(scope="session")
+def physics():
+    """The default physics constants; read-only, so one instance serves the whole run."""
+    return Physics.load()
+
+
+@pytest.fixture
+def sim_client(toy_snapshot, toy_network, toy_world):
+    """HTTP client over the toy grid and the toy theatre world, with the default services."""
+    return TestClient(
+        create_app(
+            service=GridQueryService(toy_snapshot), simulation=SimulationService(toy_network, world=toy_world)
+        )
+    )

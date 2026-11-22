@@ -12,20 +12,20 @@ from __future__ import annotations
 import copy
 import re
 import secrets
-import threading
 import time
-from collections import OrderedDict
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
+from cascadasen.application.cache import BoundedMap
 from cascadasen.application.grid_stress import scenario_overrides
-from cascadasen.application.run_experiment import RunCache, RunManager, RunNotFoundError, run_config
+from cascadasen.application.run_experiment import RunCache, RunManager, RunNotFoundError, iso_utc, run_config
 from cascadasen.application.simulation_service import theater_network_view
 from cascadasen.application.theater_world import SessionWorld
 from cascadasen.domain.cascade import overlay as ov
 from cascadasen.domain.cascade.engine import run_cascade_workflow
 from cascadasen.domain.cascade.health import with_event_health
+from cascadasen.domain.cascade.network import bus_id
 from cascadasen.domain.ports import CommanderAdvisor, ConflictError, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.network import NetworkSpec
@@ -37,7 +37,6 @@ SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{22}$")
 DEFAULT_POINT = "nov2026-1300"
 MAX_RUNS_PER_SESSION = 20
 WRITE_RETRIES = 3
-MAX_CUT_LINES = 3
 CACHE_SIZE = 32
 RUN_COMMANDS = ("state", "inject", "step", "action", "replay", "snapshots", "trace", "report", "after_action")
 MUTATING = frozenset({"inject", "step", "action", "replay"})
@@ -53,31 +52,6 @@ class PreconditionFailedError(RuntimeError):
 
 class SessionLimitError(ValueError):
     """A per-session limit was reached (HTTP 422)."""
-
-
-class _Lru:
-    def __init__(self, size: int) -> None:
-        self.size, self._lock = size, threading.Lock()
-        self._items: OrderedDict[Any, Any] = OrderedDict()
-
-    def get(self, key: Any) -> Any:
-        with self._lock:
-            if key in self._items:
-                self._items.move_to_end(key)
-                return self._items[key]
-            return None
-
-    def put(self, key: Any, value: Any) -> None:
-        with self._lock:
-            self._items[key] = value
-            self._items.move_to_end(key)
-            while len(self._items) > self.size:
-                self._items.popitem(last=False)
-
-    def drop(self, match: Callable[[Any], bool]) -> None:
-        with self._lock:
-            for key in [k for k in self._items if match(k)]:
-                del self._items[key]
 
 
 class SessionService:
@@ -102,9 +76,15 @@ class SessionService:
         self.world, self.physics, self.store, self.cache = world, physics, store, cache
         self.interpreter, self.advisor, self.spec = interpreter, advisor, spec
         self.ttl_s, self.version, self.clock = ttl_s, version, clock
-        self._docs = _Lru(256)  # sid -> (doc, etag): what SSE polls between store heads
-        self._worlds = _Lru(CACHE_SIZE)  # (sid, dataset_revision) -> SessionWorld
-        self._views = _Lru(CACHE_SIZE)  # (sid, dataset_revision) -> network view
+        self._docs: BoundedMap[str, tuple[dict[str, Any], str]] = BoundedMap(
+            256
+        )  # sid -> (doc, etag): what SSE polls between store heads
+        self._worlds: BoundedMap[tuple[str, int], SessionWorld] = BoundedMap(
+            CACHE_SIZE
+        )  # (sid, dataset_revision) -> SessionWorld
+        self._views: BoundedMap[tuple[str, int], dict[str, Any]] = BoundedMap(
+            CACHE_SIZE
+        )  # (sid, dataset_revision) -> network view
 
     # --------------------------------------------------------------- store
     @staticmethod
@@ -114,7 +94,7 @@ class SessionService:
         return f"sessions/{sid}.json"
 
     def _now(self) -> str:
-        return datetime.fromtimestamp(self.clock(), UTC).isoformat(timespec="seconds")
+        return iso_utc(self.clock())
 
     def _fetch(self, sid: str) -> tuple[dict[str, Any], str]:
         found = self.store.get(self._key(sid))
@@ -126,7 +106,7 @@ class SessionService:
 
     def _public(self, doc: dict[str, Any]) -> dict[str, Any]:
         updated = datetime.fromisoformat(doc["updated_at"]).timestamp()
-        expires = datetime.fromtimestamp(updated + self.ttl_s, UTC).isoformat(timespec="seconds")
+        expires = iso_utc(updated + self.ttl_s)
         return {**copy.deepcopy(doc), "share_path": f"/?sesion={doc['session_id']}", "expires_at": expires}
 
     def _world(self, doc: dict[str, Any]) -> SessionWorld:
@@ -232,7 +212,7 @@ class SessionService:
             if "set_open_lines" in out:  # a scenario reset replaces the sandbox cut in the same write
                 doc["open_lines"] = out.pop("set_open_lines")
             applied = SessionWorld(self.world, doc["point"], doc["overlay"], self.spec).applied
-            live = {ln.id for ln in applied.net.lines}
+            live = self._live_lines(applied)
             doc["open_lines"] = [lid for lid in doc["open_lines"] if lid in live]
             return out
 
@@ -314,7 +294,7 @@ class SessionService:
                 raise ov.OverlayError(
                     "scenario.open_lines", f"No existen estas líneas: {', '.join(unknown)}.", not_found=True
                 )
-            bad = sorted(set(scenario.get("out_buses") or []) - {f"B{i:03d}" for i in range(net.size)})
+            bad = sorted(set(scenario.get("out_buses") or []) - {bus_id(i) for i in range(net.size)})
             if bad:
                 raise ov.OverlayError(
                     "scenario.out_buses", f"No existen estas barras: {', '.join(bad)}.", not_found=True
@@ -368,7 +348,7 @@ class SessionService:
             ln["origin"] = "session" if session else "base"
             ln["overridden"] = not session and ln["id"] in line_overrides
             ln["is_assumption"] = session or ln["overridden"]
-        live = {ln.id for ln in applied.net.lines}
+        live = self._live_lines(applied)
         view["out_of_service"] = {
             "buses": [nd["id"] for nd in view["nodes"] if not nd["in_service"]],
             "lines": sorted({ln.id for ln in base_net.lines} - live)
@@ -397,8 +377,12 @@ class SessionService:
         net, op = self._world(doc).load(doc["point"])
         return with_event_health(run_cascade_workflow(net.buses, op, sorted(doc["open_lines"])))
 
+    @staticmethod
+    def _live_lines(applied: Any) -> set[str]:
+        return {ln.id for ln in applied.net.lines}
+
     def _check_lines(self, doc: dict[str, Any], lines: list[str]) -> None:
-        live = {ln.id for ln in self._world(doc).applied.net.lines}
+        live = self._live_lines(self._world(doc).applied)
         unknown = sorted(set(lines) - live)
         if unknown:
             raise ov.OverlayError(
@@ -417,8 +401,8 @@ class SessionService:
     def cut(
         self, sid: str, lines: list[str], by: str = "anon", if_revision: int | None = None
     ) -> dict[str, Any]:
-        if not 1 <= len(lines) <= MAX_CUT_LINES:
-            raise ov.OverlayError("lines", f"Corta entre 1 y {MAX_CUT_LINES} líneas por llamada.")
+        if not 1 <= len(lines) <= ov.MAX_CUT_LINES:
+            raise ov.OverlayError("lines", f"Corta entre 1 y {ov.MAX_CUT_LINES} líneas por llamada.")
 
         def fn(doc: dict[str, Any]) -> None:
             self._check_lines(doc, lines)
@@ -480,8 +464,8 @@ class SessionService:
         rid = run["run_id"]
 
         def fn(doc: dict[str, Any]) -> None:
-            if rid not in doc["runs"] and len(doc["runs"]) >= MAX_RUNS_PER_SESSION:
-                raise SessionLimitError(f"Máximo {MAX_RUNS_PER_SESSION} corridas por sesión.")
+            if rid not in doc["runs"]:
+                self._check_room(doc)
             doc["runs"][rid] = {
                 "created_at": self._now(),
                 "dataset_revision": dataset_revision,

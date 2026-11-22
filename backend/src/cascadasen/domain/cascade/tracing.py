@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 
 from .flow import dc_flow, find_islands
-from .network import ReducedNetwork
+from .network import ReducedNetwork, bus_id
 
 _EPS = 1e-6  # MW; flows below this do not carry a share
 
@@ -54,7 +54,7 @@ def dependency_workflow(
     total_people = float(people.sum()) or 1.0
     return [
         {
-            "bus": f"B{g:03d}",
+            "bus": bus_id(g),
             "gen_mw": round(float(gen[g]), 1),
             "people_fed": round(float(people_fed[g])),
             "share_of_people": round(float(people_fed[g]) / total_people, 4),

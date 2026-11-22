@@ -1,6 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · merge: upstream/main (free map camera, #143) into cleanup/dedupe
+- **Changed:** merged `upstream/main` 99539ca8 again. Conflicts: `CHANGELOG.md` (both sides kept), `docs/index/repo-index.json` (regenerated with `build_index.py`) and `web/src/map/baseMap.ts` (main's free-camera code wins, `START_TARGET` keeps `SEN_BOUNDS` from `map/constants.ts`, which still fits).
+- **Why:** main moved after the first merge with 250101b7, so the PR would have conflicted.
+- **Agents:** nothing new beyond the previous merge entry below. `docs/openapi/agents.openapi.json` is unchanged against main.
+- **Files:** `CHANGELOG.md`, `docs/index/repo-index.json`, `web/src/map/baseMap.ts`.
+
 ## 2026-11-22 · fix(web): Salud de la red lists its figures one per row
 
 - **Changed:** `.cy-figures` (the Cyber "Salud de la red" card) is a column, label left and value right, instead of the 2-column grid.
@@ -90,6 +96,130 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** the panel is still as tall as its content; only the upper bound changed. `docs/design.md` section on the grid no longer says "max 742 px". No test asserts the old cap. Not checked in a browser.
 - **Files:** `web/src/cascade/cascade.css`, `docs/design.md`, `docs/index/repo-index.json`.
 
+## 2026-11-22 · merge: upstream/main into cleanup/dedupe
+
+- **Changed:** `cleanup/dedupe` merged with `upstream/main` (250101b7, 248 commits ahead of the branch's base). Every refactor was re-applied on main's current code. Main wins wherever they differ: cascade engine events now carry `stage` and `load_mw` is clamped, MW bounds (20000 per element, `MAX_ADDED` 80, no `MAX_ADDED_MW`), `serial()` around session writes, new `cache_builder` (health, substations, comunas), new web shell.
+- **Changed:** `domain/cascade/network_json.py` now holds `network_json(net)` (nodes and lines with `country`, the same bytes main's `cache_builder.network_json` wrote) and `buses_json(net, op)`. `cache_builder`, `grids` and `theater_network_view` use them (`cache_builder.network_json` is still importable). `mapa3_network` is gone. `bus_id`, `dumps_compact` and `BoundedMap` also replace main's new copies in `cache_builder`, `grids`, `build_regional`, `grid_dependency`, `grid_stress`, `grid_simulation`, `places`, `sessions`, `tracing`, `overlay`. `src/lib/fetchJson.ts` replaces the private copies in `networkSummary.ts` and `map/regional.ts`; `cascade/text.ts` `int` is `lib/format` `fmt`.
+- **Why:** bring the duplication cleanup up to date with main so it can be a PR. No behavior change: golden hashes (cascade events, network JSON, view) were re-taken from plain upstream/main before the refactor was re-applied.
+- **Agents:** Dropped because main changed them: the shared `mapa3_network` builder with the old node and line shape, `ProcessedWorld.records()` (cache_builder reads `operating_points.json` itself again), `lib/format.formatPeople` (main's `cascade/text.formatPeople` prints "M"), the exported `ZONES` and the `NetworkPanel` edits (main rewrote that component), `LogisticsAgent.freedom` (main removed it). `geo.polyline_km` was restored because main uses it. `application` must not import `infrastructure` (`tests/unit/test_architecture.py`): `cache_builder` and `grids` use `domain.serialization.dumps_compact`, not `infrastructure.files.write_json`. Test fixture for the sim API is `sim_client` (conftest), not `client`. Details: `.agents/tasks/cleanup-dedupe-merge/merge-report.md`.
+- **Files:** `backend/src/cascadasen/{application,domain,api}` (conflict files and converted copies), `backend/tests/unit/{test_cascade_golden,test_network_json}.py`, `backend/tests/integration/test_runs_api.py`, `web/src/{cascade,map,lib}`, `docs/index/repo-index.json`.
+
+## 2026-11-22 · refactor(web): lib/format.ts and lib/fetchJson.ts, DataPanel uses Kind, NetworkPanel uses ZONES
+
+- **Changed:** New `web/src/lib/format.ts` (`fmt`, `formatNumber`, `formatPeople`) and `lib/fetchJson.ts`. `formatPeople` left `cascade/text.ts` and `formatNumber` left `map/nodeDetail.ts`; `gridData.test.ts` imports them from `lib/format`. `gridData.ts` and `cascade/networkSummary.ts` call the shared `fetchJson` instead of their private copies. `DataPanel` drops its `Sub` type for `Kind` from `sessionApi.ts` and its own `fmt`; `NetworkPanel` drops its `fmt` and reads the zone label from the now exported `ZONES` (`ZONES[n.zone] ?? ZONES.centro_sur`, same output as the old ternary).
+- **Why:** F13 of the duplication report. No output changes. The three geojson URL imports stay in both modules (not shared).
+- **Agents:** Put number formatting in `lib/format.ts`. Verification: web `tsc --noEmit` pass, `vitest run` 5 files 22 tests pass, `npm run build` pass (chunk-size warning only), same as baseline.
+- **Files:** `web/src/lib/{format,fetchJson}.ts`, `cascade/{text,NetworkPanel,networkSummary,CascadeApp}`, `map/{gridData,gridData.test,nodeDetail}`, `session/DataPanel.tsx`.
+## 2026-11-22 · refactor(web): map/constants.ts and map/tooltip.ts shared by the three map modules
+
+- **Changed:** New `web/src/map/constants.ts` (`SEN_BOUNDS`, `PITCH_DEGREES`, `MAPBOX_STYLE`) and `map/tooltip.ts` (`gridTooltip`). `chileMap.ts`, `mapboxMap.ts` and `baseMap.ts` import them instead of keeping their own copies. The panel clearances stay local: 400 in `chileMap.ts`/`mapboxMap.ts`, 640 in `baseMap.ts`.
+- **Why:** F13 of the duplication report. Values and tooltip text are unchanged. `?mapa=1/2` is not removed (F14 stays a team decision).
+- **Agents:** Verification: web `tsc --noEmit` pass, `vitest run` 5 files 22 tests pass, `npm run build` pass (chunk-size warning only), same as baseline.
+- **Files:** `web/src/map/{constants,tooltip,chileMap,mapboxMap,baseMap}.ts`.
+## 2026-11-22 · refactor(theater): TheaterNetwork.sites_of replaces two copies of the crew-site lookup
+
+- **Changed:** New `TheaterNetwork.sites_of(target)`: `[area]` for an area, `[a, b]` for a corridor, `None` otherwise. `LogisticsAgent._sites` and `Simulation._sites` call it and keep their own fallback (`self.sites.get(target, [])`; `defense_areas.get(target) or all areas`).
+- **Why:** F17 of the duplication report. Fallbacks are unchanged because `sites_of` never returns an empty list.
+- **Agents:** Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped (coverage run: both `_sites` lines executed).
+- **Files:** `backend/src/cascadasen/domain/theater/areas.py`, `domain/agents/logistics.py`, `domain/theater/cycle.py`.
+## 2026-11-22 · refactor(api): page() helper and shared Limit/Offset query types in app.py
+
+- **Changed:** `api/app.py` gets `page((total, items))` for the four `{"total", "items"}` responses and `Limit = Annotated[int, Query(ge=1, le=5000)]`, `Offset = Annotated[int, Query(ge=0)]` for the three list routes (defaults stay 100 for nodes/edges and 2000 for plants).
+- **Why:** F17 of the duplication report. `app.openapi()` of the whole app is byte-identical before and after (dumped with sorted keys), and `docs/openapi/agents.openapi.json` is unchanged.
+- **Agents:** Use `Limit`/`Offset`/`page` for a new paginated route. Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/api/app.py`.
+## 2026-11-22 · refactor(agents): one add_unless_active helper builds the COA and checks its key
+
+- **Changed:** New `theater/decisions.py::add_unless_active(coas, active, proposer, action, target, rationale_key, benefit, risk=0.0)`. It builds the `COA` and skips it when `coa.key` is in `active`, instead of rebuilding `f"{action}:{target}"`. `OperationsAgent.propose` uses it through `functools.partial`; `StabilizationAgent.propose` keeps its own one-line `add` (extra rule: one COA per action) that calls it.
+- **Why:** F17 of the duplication report. Same COAs in the same order. `auditor.py` is untouched: its four `f"{action}:{target}"` strings key plain dicts, not COA objects, so `COA.key` does not apply there.
+- **Agents:** Use `add_unless_active` for a new agent that proposes COAs. Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped (coverage run: `decisions.py` 100%, both agents' `add` lines executed).
+- **Files:** `backend/src/cascadasen/domain/theater/decisions.py`, `domain/agents/operations.py`, `domain/agents/stabilization.py`.
+## 2026-11-22 · refactor(theater): remove the two unused `param` helpers on COA and EventRequest
+
+- **Changed:** Deleted `COA.param` and `EventRequest.param` (`dict(self.params).get(name, default)`). Both were identical and neither had a caller in src, tests, scripts or docs.
+- **Why:** F17 of the duplication report named them as a repeated pattern; with zero callers, deleting is simpler than sharing a helper. Read `dict(coa.params)` directly if a param is needed.
+- **Agents:** Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/theater/decisions.py`, `execution.py`.
+## 2026-11-22 · refactor(dead-code): remove unreferenced backend symbols and unused arguments
+
+- **Changed:** Deleted `geo.polyline_km`, `theater.catalog.DEFENDERS`, `TheaterGrid.island_inertia_mws`, `TheaterGrid.release_hold`, `ISRReport.trust_of`, `simulation.grid.RENEWABLE`, `GridState.add_inertia` and `simulation.engine.CHANGE_KINDS` (each had zero references in src, tests, scripts, docs and YAML outside its definition).
+- **Changed:** Dropped unused arguments: `network` from `digital.corridor_status` and `validator.restorable`, `by_id` from `Unifier._electrical` and `_plants` (callers updated). The `lambda o, net, point` in `sessions.reset` stays: it must match the `_edit` callback signature.
+- **Why:** F15 of the duplication report. No behavior change. The web dead code of F15 (`CITIES`, 11 `sessionApi.ts` wrappers) is kept pending a product decision.
+- **Agents:** Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped. Older CHANGELOG entries still name `release_hold` and the others; they are gone.
+- **Files:** `backend/src/cascadasen/domain/{geo,unify}.py`, `domain/simulation/{engine,grid}.py`, `domain/theater/{catalog,decisions,digital,grid,validator}.py`.
+## 2026-11-22 · refactor(mapa3): one network builder for the web cache and GET /sim/network
+- **Changed:** New `domain/cascade/network_json.py::mapa3_network(net, op)` returning `{nodes, lines, buses}`. `simulation_service.theater_network_view` extends it (adds `area` to nodes, `corridor` to lines, then `areas`, `corridors`, `defenses`, `zones`); `cache_builder` writes `network-<year>.json` (`nodes`, `lines`) and `<point>/buses.json` from it. `cache_builder._network_json` and its inline buses dict are gone.
+- **Changed:** `cache_builder` loads through `ProcessedWorld` (new `ProcessedWorld.records()` for the raw point entries) instead of `load_network_and_point`. That function stays, used only by `tests/unit/test_cascade.py`.
+- **Changed:** New `backend/tests/unit/test_network_json.py`: golden sha256 of the toy-world cache network, buses and `theater_network_view` (taken on the old code before the refactor).
+- **Why:** F9 of the duplication report. Output is byte-identical: `cascadasen-cache` for all four points gives 1103 files identical (`diff -r`) to the old code, and the real-data view hashes of `theater_network_view` are unchanged.
+- **Agents:** Change node/line/bus fields in `mapa3_network` only. Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/cascade/network_json.py`, `application/cache_builder.py`, `application/simulation_service.py`, `application/theater_world.py`, `backend/tests/unit/test_network_json.py`.
+## 2026-11-22 · refactor(cache): one BoundedMap for the session caches, the run cache and the campaign store
+- **Changed:** New `application/cache.py::BoundedMap[K, V]` (`get(key, *, touch=True)`, `put`, `pop`, `drop(match)`, `len`, `RLock`, evicts the oldest past `size`). `sessions._Lru` is deleted (`SessionService._docs/_worlds/_views` use `BoundedMap`); `RunCache` stores its runs in one and keeps its 64 striped `lock(key)` locks unchanged; `CampaignRunner.campaigns` is a `BoundedMap(MAX_CAMPAIGNS)`.
+- **Changed:** New `backend/tests/unit/test_cache.py` (written against `_Lru` first: miss, oldest eviction, `get` renews, `put` renews, `drop`).
+- **Why:** F10 of the duplication report. Eviction order is unchanged. Campaign reads use `touch=False` so the campaign store stays FIFO as before; the only difference is that its dict is now lock-protected.
+- **Agents:** Use `BoundedMap` for any new bounded cache. Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 266 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/application/cache.py`, `sessions.py`, `run_experiment.py`, `run_campaign.py`, `backend/tests/unit/test_cache.py`.
+## 2026-11-22 · refactor(serialization): dumps_compact and write_json replace nine copies of the compact JSON dump
+- **Changed:** New `domain/serialization.py::dumps_compact(obj, **kw)` (`ensure_ascii=False`, `separators=(",", ":")`) and `infrastructure/files.py::write_json(path, obj) -> int` (creates parent folders, writes UTF-8, returns bytes). Used by `document_store._encode`, `theater/audit.canonical` (`sort_keys=True, default=str`), `snapshot_repository.save`, `exporters`, `sim_fixtures._write` and `cache_builder`; the private `_write` of `cache_builder` is gone.
+- **Changed:** New `backend/tests/unit/test_serialization_golden.py` with literal golden bytes for `_encode` and `canonical` (written and passing before the refactor) and a `write_json` check.
+- **Why:** F3 of the duplication report. Output is byte-identical, so S3 etags / `If-Match` and the audit hash chain (`trace_matches`) of stored runs do not change.
+- **Agents:** Use `dumps_compact` for any new compact JSON. `application/cache_builder.py` now imports `infrastructure.files` (it is a CLI entry point). Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 262 passed 2 skipped, test_document_store 19 passed.
+- **Files:** `backend/src/cascadasen/domain/serialization.py`, `infrastructure/files.py`, `infrastructure/document_store.py`, `infrastructure/snapshot_repository.py`, `infrastructure/exporters.py`, `domain/theater/audit.py`, `application/cache_builder.py`, `sim_fixtures.py`, `backend/tests/unit/test_serialization_golden.py`.
+## 2026-11-22 · refactor(cascade): shared make_event and frame_edges / island_summary
+- **Changed:** New `domain/events.py::make_event(t, kind, ids, text_key=None, *, ndigits=3, **params)`. `simulation/engine.py` calls it instead of its private `_event`; `cascade/engine.py` builds its seven event dicts with it (`ndigits=2`, `text_key` defaults to the kind).
+- **Changed:** `cascade/engine.py` gains public `frame_edges(lines, flows, open_lines)` and `island_summary(islands, gen, load)`; `_frame` and `theater/grid.py::TheaterGrid.frame` call them instead of repeating the loops.
+- **Why:** F5 and F6 of the duplication report. Output is byte-identical: `tests/unit/test_cascade_golden.py` (added in the previous commit, hashes taken before the refactor) passes unchanged.
+- **Agents:** Rounding stays per engine: 13-area events `round(t, 3)`, cascade events `round(t, 2)`. `docs/minimum-dataset.md` now says bus ids come from `bus_id` in `domain/cascade/network.py`. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 259 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/events.py`, `domain/simulation/engine.py`, `domain/cascade/engine.py`, `domain/theater/grid.py`, `docs/minimum-dataset.md`.
+## 2026-11-22 · test(cascade): golden hashes of the cascade engine events, frames and theatre frame
+- **Changed:** New `backend/tests/unit/test_cascade_golden.py`: sha256 of the canonical JSON of `run_cascade_workflow` for the baseline, every single-line cut and one 3-line cut on the toy network and on the real network at `nov2026-1300` and `feb2025-0300` (skipped when `data/processed` is missing), plus the toy `TheaterGrid.frame()` after a corridor opening.
+- **Why:** F5 and F6 of the duplication report: the event dicts, `round(t, 2)` timestamps and frame/edge blocks must stay byte-identical when they move to shared helpers. The real-network case emits all seven cascade event kinds.
+- **Agents:** Test only. The hashes were taken on the unrefactored code. If you change cascade output on purpose, regenerate the constants at the bottom of the file. `web/public/cache` does not match current engine output (82 of 82 compared files differ), so it is not a usable golden; do not rely on it.
+- **Files:** `backend/tests/unit/test_cascade_golden.py`.
+## 2026-11-22 · refactor(domain): one level_of rule and an AreaGraph mixin shared by the 13-area and theatre networks
+- **Changed:** `level_of(n_counted, n_collapsed, load_lost_mw)` in `domain/simulation/consequence.py` holds the L0-L3 ladder; `consequence_level` there and `theater/execution.py::consequence_level` map their data to the three numbers and call it.
+- **Changed:** `AreaGraph[A, C]` mixin in `domain/simulation/network.py` (`order`, `zones`, `zone_areas`, `incident`, no dataclass fields) is inherited by `ReducedNetwork` and `TheaterNetwork`; `_band` becomes `band_of` there and `theater/areas.py` imports it. `build_reduced_network` uses `_nearest_class(kv, X_PER_KM)` instead of the inline `min(...)`.
+- **Changed:** New table test `test_theater_consequence_level_table` in `tests/unit/test_theater.py` (the theatre version had no direct test); it passed before the refactor.
+- **Why:** F7 and F8 of the duplication report.
+- **Agents:** Change the level ladder in `level_of` only. The shared `typical_x_per_km(kv)` was not added: `overlay.py` needs an exact kV class match and `validation.py` cannot import `simulation.network` (cycle). `docs/openapi/agents.openapi.json` is unchanged. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 256 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/simulation/consequence.py`, `domain/simulation/network.py`, `domain/theater/execution.py`, `domain/theater/areas.py`, `backend/tests/unit/test_theater.py`.
+## 2026-11-22 · refactor(sessions): bus_id, iso_utc, session_ttl_s, LAYERS and the live-lines check have one home
+- **Changed:** `bus_id` moves from `domain/theater/areas.py` to `domain/cascade/network.py`; `theater/{areas,cycle,grid,execution}.py`, `cascade/overlay.py`, `cascade/engine.py`, `application/{cache_builder,simulation_service}.py` import it from there. The inline `f"B{i:03d}"` in `cache_builder.py` (twice) and `cascade/engine.py` now call it. `cascade/overlay.py` no longer imports from `theater`.
+- **Changed:** `iso_utc(ts)` in `application/run_experiment.py` replaces the two `_now()` bodies and the `expires_at` formatting in `sessions.py`. `Settings.session_ttl_s` (property) replaces `session_ttl_hours * 3600` in `api/session_routes.py` and `infrastructure/container.py`. `LAYERS` lives in `domain/model.py` and `api/app.py` and `infrastructure/exporters.py` import it.
+- **Changed:** `SessionService._register` calls `_check_room` (same condition and message, only when the run id is new); `_live_lines(applied)` replaces three copies of the live-line set.
+- **Why:** F11 of the duplication report: small repeats, and a cascade to theater import in the wrong direction.
+- **Agents:** Import `bus_id` from `cascadasen.domain.cascade.network`; `theater.areas` no longer exports it. `SessionService.__init__` still defaults `ttl_s` to 86400 (tests rely on it); the 24 h default is therefore written in `Settings` and there. `docs/openapi/agents.openapi.json` is unchanged. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 247 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/cascade/network.py`, `domain/theater/areas.py`, `application/run_experiment.py`, `application/sessions.py`, `infrastructure/settings.py`, `domain/model.py`, `api/app.py`, plus the importers listed above.
+## 2026-11-22 · refactor(api): ReplayIn.overrides() and RunCreate.config_dict() replace the copied route bodies
+- **Changed:** `api/simulation_schemas.py`: `ReplayIn.overrides()` builds the replay overrides (policy, uncertainty, seed, adversary as `AdversaryConfig`, capabilities as a sorted tuple) and `RunCreate.config_dict()` builds the `run_config` input (`model_dump` without `auto_run`, events dumped).
+- **Changed:** `replay_run` and `create_run` in `api/simulation_routes.py` and the session replay and create-run handlers in `api/session_routes.py` call them instead of repeating the blocks.
+- **Why:** F4 of the duplication report: the global and session run routes carried identical copies of both blocks.
+- **Agents:** Change replay overrides or run-config prep in `simulation_schemas.py` only. The rate-limit table (`limit()` / `global_run_limit`) was left as is, and the two `RunId` path definitions stay separate on purpose. `docs/openapi/agents.openapi.json` regenerated byte-identical; the replay characterization test from the previous commit passes unchanged. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 247 passed 2 skipped, openapi regenerated with no diff; scripts/lint.sh --check clean.
+- **Files:** `backend/src/cascadasen/api/simulation_schemas.py`, `backend/src/cascadasen/api/simulation_routes.py`, `backend/src/cascadasen/api/session_routes.py`.
+## 2026-11-22 · test(api): characterize replay with adversary and capability overrides
+- **Changed:** New `test_replay_applies_adversary_and_capability_overrides` in `backend/tests/integration/test_runs_api.py` replays a run through `POST /api/v1/sim/runs/{id}/replay` with `seed`, `uncertainty`, `adversary` and `capabilities` overrides and asserts the returned `overrides` and the new run summary.
+- **Why:** F4 of the duplication report flagged this path as untested; it pins the current output before the replay-override builder moves onto `ReplayIn`.
+- **Agents:** Test only, no production change. The test passes on the unrefactored code. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 247 passed 2 skipped; scripts/lint.sh --check clean.
+- **Files:** `backend/tests/integration/test_runs_api.py`.
+## 2026-11-22 · refactor(api): session request bounds come from the overlay constants
+- **Changed:** `api/session_schemas.py` imports `MAX_ELEMENT_MW`, `MAX_CAPACITY_MW`, `LAT`, `LON`, `X_MAX_PU`, `MAX_INERTIA_H` from `domain/cascade/overlay.py` instead of retyping them; `int()` keeps the generated OpenAPI numbers identical.
+- **Changed:** `domain/cascade/overlay.py` gains `MAX_NAME_LEN = 80` (used by `_name` and every name field) and `MAX_CUT_LINES = 3` (moved from `application/sessions.py`, used by `SessionService.cut` and `CutIn`).
+- **Changed:** New `test_session_schema_literals_match_the_overlay_sets` asserts `set(get_args(Tech)) == ov.TECHS` and the same for `LoadKind` and `ov.LOAD_KINDS`.
+- **Why:** F2 of the duplication report: the request bounds mirrored the overlay validation by hand, so a change in one place could drift from the other.
+- **Agents:** Change a session bound in `overlay.py` only. The `Tech` and `LoadKind` literals stay literal (a type checker cannot build them from a set); the new test fails when they drift from `TECHS` and `LOAD_KINDS`. The 3000/5000/80-character numbers inside Field descriptions are still text. `docs/openapi/agents.openapi.json` regenerated byte-identical. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 246 passed 2 skipped (baseline 245/2 plus the new test), openapi regenerated with no diff; scripts/lint.sh --check clean.
+- **Files:** `backend/src/cascadasen/api/session_schemas.py`, `backend/src/cascadasen/domain/cascade/overlay.py`, `backend/src/cascadasen/application/sessions.py`, `backend/tests/unit/test_overlay.py`.
+## 2026-11-22 · refactor(domain): one InputError base for the three input-error classes
+- **Changed:** New `backend/src/cascadasen/domain/errors.py` with `InputError(ValueError)`: fields `field`, `message`, `valid`, `not_found`, `conflict` and `detail()`.
+- **Changed:** `SimulationInputError` (application/simulate.py), `RunInputError` (domain/theater/cycle.py) and `OverlayError` (domain/cascade/overlay.py) keep their names and become empty subclasses, so imports and `except` clauses are unchanged. Constructor argument order is unchanged (`field, message, valid, not_found, conflict`).
+- **Why:** F1 of the duplication report: the same `__init__` and `detail()` were written three times.
+- **Agents:** Raise or catch the existing class names as before; add new input errors by subclassing `InputError`. The optional shared status mapping (404/409/422) was not added: `run_call` and `session_call` stay as they are. `docs/openapi/agents.openapi.json` is unchanged. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 245 passed 2 skipped (baseline 245/2), openapi file hash unchanged; scripts/lint.sh --check clean.
+- **Files:** `backend/src/cascadasen/domain/errors.py`, `backend/src/cascadasen/application/simulate.py`, `backend/src/cascadasen/domain/theater/cycle.py`, `backend/src/cascadasen/domain/cascade/overlay.py`.
+## 2026-11-22 · refactor(tests): share the physics and sim_client fixtures in conftest
+- **Changed:** `tests/conftest.py` gains a session-scoped `physics` fixture and a `sim_client` fixture (TestClient over the toy grid and toy world). The module-scoped `physics` copies in `unit/test_sessions.py`, `unit/test_run_persistence.py`, `integration/test_sessions_api.py` and the three identical `client` fixtures in `test_campaigns_api.py`, `test_simulate_api.py`, `test_runs_api.py` are deleted (those tests now take `sim_client`).
+- **Why:** F12 of the duplication report: the same fixtures were copied across test files.
+- **Agents:** Use `sim_client` for HTTP tests over the toy world and `physics` for the default constants. Not merged on purpose: the `_sim` helpers (different call sites, 22 uses), the module-level `PH`/`SNAP` constants (used at import time for `skipif`) and the two store+cache wirings. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 245 passed 2 skipped (baseline 245/2); scripts/lint.sh --check clean.
+- **Files:** `backend/tests/{conftest.py,unit/test_sessions.py,unit/test_run_persistence.py,integration/test_campaigns_api.py,integration/test_simulate_api.py,integration/test_runs_api.py,integration/test_sessions_api.py}`.
 ## 2026-11-22 · feat(assistant): siempre sobre la grilla cargada, sin tope de MW, pestaña Salud de la red e historial ubicable (#139)
 
 - **Changed:** the web sends `grid` (point, changes, open lines, substations off) with every chat message; the backend appends it to the system prompt for that turn (`grid_context`) and the prompt says every request is about it, never ask for the point. The overlay's 5000 MW total cap is gone and one element or bus override goes up to 20000 MW. `/grids/prepare` returns `health` (prefault index of the prepared grid, no N-1) and the assistant digest carries it.

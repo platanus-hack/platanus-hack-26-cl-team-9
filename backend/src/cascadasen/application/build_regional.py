@@ -23,6 +23,7 @@ from cascadasen.domain.regional_network import (
     network_document,
 )
 from cascadasen.domain.regional_reduction import feature_collections, manifest_entry, reduce_bundle
+from cascadasen.domain.serialization import dumps_compact
 from cascadasen.domain.simulation.params import load_params, value
 from cascadasen.domain.validation import X_PER_KM
 
@@ -71,9 +72,7 @@ class BuildRegionalGrid:
             folder = self.out_dir / iso
             folder.mkdir(parents=True, exist_ok=True)
             for layer, collection in feature_collections(reduced).items():
-                (folder / f"{layer}.geojson").write_text(
-                    json.dumps(collection, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-                )
+                (folder / f"{layer}.geojson").write_text(dumps_compact(collection), encoding="utf-8")
             entry = manifest_entry(reduced)
             if "flow" in manifest["countries"].get(iso, {}):  # built by BuildFlowNetwork, keep it
                 entry["flow"] = manifest["countries"][iso]["flow"]
@@ -110,9 +109,7 @@ class BuildFlowNetwork:
         doc["deduction_error"] = entry["deduction_error"]
         folder = self.out_dir / iso
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / "network.json").write_text(
-            json.dumps(doc, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-        )
+        (folder / "network.json").write_text(dumps_compact(doc), encoding="utf-8")
         manifest = _read_manifest(self.out_dir)
         manifest["countries"].setdefault(iso, {"country": iso})["flow"] = entry
         _write_manifest(self.out_dir, manifest)

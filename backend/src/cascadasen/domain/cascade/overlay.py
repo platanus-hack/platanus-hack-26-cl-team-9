@@ -16,12 +16,12 @@ from typing import Any, cast
 
 import numpy as np
 
+from cascadasen.domain.errors import InputError
 from cascadasen.domain.geo import haversine_km
-from cascadasen.domain.theater.areas import bus_id
 from cascadasen.domain.validation import X_PER_KM
 
 from .flow import BASE_MVA, find_islands
-from .network import X_MIN_PU, Line, ReducedNetwork
+from .network import X_MIN_PU, Line, ReducedNetwork, bus_id
 from .scenario import OperatingPoint
 
 MAX_ADDED = 80  # buses + lines + loads + generators added by one session
@@ -29,6 +29,8 @@ MAX_ELEMENT_MW = (
     20000.0  # one added load or generator (above the whole national demand: the user may stress freely)
 )
 MAX_CAPACITY_MW = 5000.0
+MAX_NAME_LEN = 80  # characters of a display name
+MAX_CUT_LINES = 3  # lines one sandbox cut may open
 MAX_CONNECTIONS = 6  # lines of one add_substation
 FAR_KM = 300.0  # a connection longer than this gets a coherence warning
 RATIO_WARN = 3.0  # capacity versus the median line at the other end
@@ -65,27 +67,9 @@ _PATCH_FIELDS = {
 }
 
 
-class OverlayError(ValueError):
+class OverlayError(InputError):
     """Invalid overlay edit: HTTP 422, 404 when it names something that does not exist, 409 on a
     conflict (removing a base element or a bus that is still referenced)."""
-
-    def __init__(
-        self,
-        field: str,
-        message: str,
-        valid: list[str] | None = None,
-        not_found: bool = False,
-        conflict: bool = False,
-    ) -> None:
-        super().__init__(message)
-        self.field, self.message, self.valid = field, message, valid or []
-        self.not_found, self.conflict = not_found, conflict
-
-    def detail(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"field": self.field, "message": self.message}
-        if self.valid:
-            out["valid"] = self.valid
-        return out
 
 
 @dataclass
@@ -625,7 +609,7 @@ def _bus_ref(ref: Any, total: int) -> int | None:
 
 def _bus_kv(overlay: dict[str, Any], net: ReducedNetwork, i: int) -> float:
     if i < net.size:
-        rec = overlay["bus_overrides"].get(f"B{i:03d}", {})
+        rec = overlay["bus_overrides"].get(bus_id(i), {})
         return float(rec.get("kv", net.kv[i]))
     return float(overlay["buses"][i - net.size]["kv"])
 
@@ -712,6 +696,6 @@ def _flag(value: Any, where: str) -> bool:
 
 
 def _name(value: Any, where: str) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > 80:
-        raise OverlayError(where, "Nombre obligatorio de hasta 80 caracteres.")
+    if not isinstance(value, str) or not value.strip() or len(value) > MAX_NAME_LEN:
+        raise OverlayError(where, f"Nombre obligatorio de hasta {MAX_NAME_LEN} caracteres.")
     return value.strip()

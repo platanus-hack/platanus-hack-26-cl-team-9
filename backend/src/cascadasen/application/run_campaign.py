@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from statistics import mean
 from typing import Any
 
+from cascadasen.application.cache import BoundedMap
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
 from cascadasen.domain.theater.config import theater_config
@@ -134,12 +134,13 @@ class CampaignRunner:
     def __init__(self, world: TheaterWorld, physics: Physics) -> None:
         self.world, self.physics = world, physics
         self.network: Any = None  # network of the last campaign's runs (for the per-area table)
-        self.campaigns: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self.campaigns: BoundedMap[str, dict[str, Any]] = BoundedMap(MAX_CAMPAIGNS)
 
     def get(self, campaign_id: str) -> dict[str, Any]:
-        if campaign_id not in self.campaigns:
+        found = self.campaigns.get(campaign_id, touch=False)  # FIFO: reading does not renew
+        if found is None:
             raise CampaignNotFoundError(campaign_id)
-        return self.campaigns[campaign_id]
+        return found
 
     def _validate(self, spec: CampaignSpec) -> list[float]:
         cfg = theater_config()
@@ -245,9 +246,7 @@ class CampaignRunner:
             result["capability_deltas"] = self._deltas(result["table"], variants[0][0])
         campaign_id = uuid.uuid4().hex[:12]
         result["campaign_id"] = campaign_id
-        self.campaigns[campaign_id] = result
-        while len(self.campaigns) > MAX_CAMPAIGNS:
-            self.campaigns.popitem(last=False)
+        self.campaigns.put(campaign_id, result)
         return result
 
     def _area_continuity(self, sim: Simulation) -> dict[str, float]:

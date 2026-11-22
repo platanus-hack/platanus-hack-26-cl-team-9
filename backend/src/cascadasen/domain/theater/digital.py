@@ -38,7 +38,7 @@ def _poisson(rng: random.Random, lam: float) -> int:
         k += 1
 
 
-def corridor_status(network: TheaterNetwork, real: RealState, cid: str) -> str:
+def corridor_status(real: RealState, cid: str) -> str:
     return "closed" if real.grid.corridor_closed(cid) else "open"
 
 
@@ -145,7 +145,7 @@ class _Observer:
         for cid, c in self.network.corridors.items():
             seen = [x for x in (c.a, c.b) if by_area[x].served_mw is not None]
             trusted = self.oracle or any(self.real.digital[x].reliable for x in seen)
-            status = corridor_status(self.network, self.real, cid) if seen and trusted else None
+            status = corridor_status(self.real, cid) if seen and trusted else None
             corridors.append((cid, status))
             if status == "open" and self.prev is not None and self.prev.corridor(cid) == "closed":
                 self.alarms.append(Alarm(seen[0], "breaker_open"))

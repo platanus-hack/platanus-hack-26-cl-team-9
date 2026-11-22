@@ -2,15 +2,13 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { loadGridDataWorkflow } from "./gridData";
+import { SEN_BOUNDS, PITCH_DEGREES, MAPBOX_STYLE } from "./constants";
 import { buildGridLayers } from "./layers";
 import { mountChileMapWorkflow } from "./chileMap";
 import { createNodePopup } from "./nodeDetail";
+import { gridTooltip } from "./tooltip";
 
-const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
-const MAP_PITCH_DEGREES = 45;
 const PANEL_CLEARANCE_PX = 400;
-// Standard style: vector basemap with 3D buildings and landmarks at city zoom.
-const MAPBOX_STYLE = "mapbox://styles/mapbox/standard";
 
 /** Why: mapa2 puts the grid on a vector Mapbox basemap with 3D, and falls back to the offline map without a token. */
 export function mountMapboxMapWorkflow(container: HTMLDivElement): () => void {
@@ -37,8 +35,8 @@ function _createMap(container: HTMLDivElement, token: string): mapboxgl.Map {
     projection: "mercator",
     config: { basemap: { lightPreset: "night" } },
     bounds: SEN_BOUNDS,
-    fitBoundsOptions: { padding: { top: 20, bottom: 20, left: 20, right: PANEL_CLEARANCE_PX }, pitch: MAP_PITCH_DEGREES },
-    pitch: MAP_PITCH_DEGREES,
+    fitBoundsOptions: { padding: { top: 20, bottom: 20, left: 20, right: PANEL_CLEARANCE_PX }, pitch: PITCH_DEGREES },
+    pitch: PITCH_DEGREES,
     attributionControl: true,
   });
   return map;
@@ -46,12 +44,6 @@ function _createMap(container: HTMLDivElement, token: string): mapboxgl.Map {
 
 function _drawGridWhenLoaded(overlay: MapboxOverlay) {
   loadGridDataWorkflow()
-    .then((grid) => overlay.setProps({ layers: buildGridLayers(grid, { withOutline: false }), getTooltip: _tooltip }))
+    .then((grid) => overlay.setProps({ layers: buildGridLayers(grid, { withOutline: false }), getTooltip: gridTooltip }))
     .catch((error) => console.error("No se pudo dibujar la red", error));
-}
-
-function _tooltip({ object, layer }: { object?: { name?: string; mw?: number; tech?: string; kv?: number | null }; layer?: { id: string } | null }): string | null {
-  if (!object || !layer) return null;
-  if (layer.id === "generation") return `${object.name}\n${Math.round(object.mw ?? Number.NaN)} MW · ${object.tech}`;
-  return `${object.name}\n${object.kv ?? "?"} kV`;
 }

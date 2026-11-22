@@ -34,7 +34,7 @@ from cascadasen.application.run_experiment import RunCache, RunConflictError, Ru
 from cascadasen.application.simulate import SimulateCommand, SimulationInputError, SimulationTimeoutError
 from cascadasen.application.simulation_service import SimulationService
 from cascadasen.application.theater_world import default_world
-from cascadasen.domain.theater.cycle import AdversaryConfig, RunFinishedError, RunInputError
+from cascadasen.domain.theater.cycle import RunFinishedError, RunInputError
 from cascadasen.domain.theater.narrative import templates
 from cascadasen.infrastructure.llm import llm_adapters
 
@@ -222,9 +222,7 @@ def sim_catalog(sim: Sim) -> dict[str, Any]:
     openapi_extra=AGENT,
 )
 def create_run(sim: Sim, body: RunCreate) -> dict[str, Any]:
-    data = body.model_dump(exclude={"auto_run"})
-    data["initial_events"] = [e.model_dump() for e in body.initial_events]
-    return run_call(lambda: sim.runs.create(run_config(data), body.auto_run))
+    return run_call(lambda: sim.runs.create(run_config(body.config_dict()), body.auto_run))
 
 
 @router.get(
@@ -306,15 +304,7 @@ def step_run(sim: Sim, run_id: RunId, body: StepIn) -> dict[str, Any]:
     openapi_extra=AGENT,
 )
 def replay_run(sim: Sim, run_id: RunId, body: ReplayIn) -> dict[str, Any]:
-    overrides: dict[str, Any] = {}
-    for key in ("policy", "uncertainty", "seed"):
-        if getattr(body, key) is not None:
-            overrides[key] = getattr(body, key)
-    if body.adversary is not None:
-        overrides["adversary"] = AdversaryConfig(**body.adversary.model_dump())
-    if body.capabilities is not None:
-        overrides["capabilities"] = tuple(sorted(body.capabilities.items()))
-    return run_call(sim.runs.replay, run_id, overrides, body.cycles)
+    return run_call(sim.runs.replay, run_id, body.overrides(), body.cycles)
 
 
 @router.get(

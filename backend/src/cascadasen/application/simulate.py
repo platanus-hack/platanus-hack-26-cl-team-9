@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from cascadasen.domain.errors import InputError
 from cascadasen.domain.simulation.consequence import consequence_card
 from cascadasen.domain.simulation.defenses import DefenseSet, defense_sets, documented_trips_25f
 from cascadasen.domain.simulation.engine import Change, run_transient
@@ -19,18 +20,8 @@ MAX_OUTAGE_H = 2160.0
 TIMEOUT_S = 2.0
 
 
-class SimulationInputError(ValueError):
+class SimulationInputError(InputError):
     """Invalid input; maps to HTTP 422 with the valid values when there is a closed set."""
-
-    def __init__(self, field: str, message: str, valid: list[str] | None = None) -> None:
-        super().__init__(message)
-        self.field, self.message, self.valid = field, message, valid or []
-
-    def detail(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"field": self.field, "message": self.message}
-        if self.valid:
-            out["valid"] = self.valid
-        return out
 
 
 class SimulationTimeoutError(RuntimeError):

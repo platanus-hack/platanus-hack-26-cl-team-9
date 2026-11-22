@@ -1,4 +1,5 @@
 import type { PickingInfo } from "@deck.gl/core";
+import { formatNumber } from "../lib/format";
 import nodeIndexUrl from "../../../data/processed/node_index.json?url";
 
 // Tuples come from data/scripts/build_node_index.py.
@@ -24,10 +25,6 @@ let nodeIndex: Promise<Record<string, NodeRecord>> | null = null;
 export function describeTopology(source: string, assumption: boolean): string {
   if (assumption) return "supuesto de acople";
   return source.startsWith("CEN") ? "oficial CEN" : "inferida";
-}
-
-export function formatNumber(value: number | null | undefined, digits = 0): string {
-  return value == null ? "s/d" : value.toLocaleString("es-CL", { maximumFractionDigits: digits });
 }
 
 /** Why: clicking a substation or generation column must answer "what is this node?" with everything the repo knows. */

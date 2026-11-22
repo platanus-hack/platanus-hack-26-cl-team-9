@@ -16,6 +16,7 @@ from cascadasen.application.grids import GridError
 from cascadasen.domain.cascade.engine import failure_cost, run_cascade_state
 from cascadasen.domain.cascade.frequency import cascade_params
 from cascadasen.domain.cascade.health import with_event_health
+from cascadasen.domain.cascade.network import bus_id
 from cascadasen.domain.cascade.overlay import OverlayError, add_substation, apply_overlay, empty_overlay
 from cascadasen.domain.simulation.params import load_params, value
 from cascadasen.domain.theater.world import TheaterWorld
@@ -148,7 +149,7 @@ def _check_size(open_lines: list[str], out_buses: list[str]) -> None:
 
 def _check_known(net, open_lines: list[str], out_buses: list[str]) -> None:
     lines = {ln.id for ln in net.lines}
-    buses = {f"B{i:03d}" for i in range(net.size)}
+    buses = {bus_id(i) for i in range(net.size)}
     for kind, wanted, known in (("líneas", open_lines, lines), ("subestaciones", out_buses, buses)):
         unknown = sorted(set(wanted) - known)
         if unknown:

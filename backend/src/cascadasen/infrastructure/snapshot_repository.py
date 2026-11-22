@@ -25,6 +25,7 @@ from cascadasen.domain.model import (
     SourceInfo,
     Storage,
 )
+from cascadasen.infrastructure.files import write_json
 
 
 def _plain(obj: Any) -> Any:
@@ -97,13 +98,8 @@ class JsonSnapshotRepository:
         self.geometry_path = path.with_name("comunas_geometry.json")
 
     def save(self, snapshot: GridSnapshot) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps(to_dict(snapshot), ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-        )
-        self.geometry_path.write_text(
-            json.dumps(snapshot.comuna_geometry, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-        )
+        write_json(self.path, to_dict(snapshot))
+        write_json(self.geometry_path, snapshot.comuna_geometry)
 
     def load(self) -> GridSnapshot | None:
         if not self.path.exists():

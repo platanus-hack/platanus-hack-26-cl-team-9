@@ -30,10 +30,11 @@ from cascadasen.domain.agents.propagation import (
     propagation_params,
 )
 from cascadasen.domain.agents.stabilization import StabilizationAgent
+from cascadasen.domain.cascade.network import bus_id
+from cascadasen.domain.errors import InputError
 from cascadasen.domain.ports import CommanderAdvisor
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
-from cascadasen.domain.theater.areas import bus_id
 from cascadasen.domain.theater.audit import AuditLog
 from cascadasen.domain.theater.catalog import ACTIONS, EVENTS, OBJECTIVES
 from cascadasen.domain.theater.config import TheaterConfig, theater_config
@@ -60,20 +61,8 @@ from cascadasen.domain.theater.world import DEFENSES_ID, TheaterWorld
 UNCERTAINTY_RANGE = (0.0, 2.0)
 
 
-class RunInputError(ValueError):
+class RunInputError(InputError):
     """Invalid run input: HTTP 422, or 404 when it names something that does not exist."""
-
-    def __init__(
-        self, field: str, message: str, valid: list[str] | None = None, not_found: bool = False
-    ) -> None:
-        super().__init__(message)
-        self.field, self.message, self.valid, self.not_found = field, message, valid or [], not_found
-
-    def detail(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"field": self.field, "message": self.message}
-        if self.valid:
-            out["valid"] = self.valid
-        return out
 
 
 class RunFinishedError(RuntimeError):
@@ -515,12 +504,7 @@ class Simulation:
 
     def _sites(self, target: str) -> list[str]:
         """Areas where a crew can carry out an action on `target`."""
-        net = self.network
-        if target in net.areas:
-            return [target]
-        if target in net.corridors:
-            return [net.corridors[target].a, net.corridors[target].b]
-        return self.defense_areas.get(target) or list(net.order)
+        return self.network.sites_of(target) or self.defense_areas.get(target) or list(self.network.order)
 
     def _crews_view(self) -> list[dict[str, Any]]:
         """Crews with the map position of their area's anchor substation (mapa 3 bus id and lon/lat)."""

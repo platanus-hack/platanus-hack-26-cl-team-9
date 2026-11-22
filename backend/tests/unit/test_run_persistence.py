@@ -10,14 +10,8 @@ from cascadasen.application.run_experiment import (
     RunManager,
     RunNotFoundError,
 )
-from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.theater.cycle import RunConfig
 from cascadasen.infrastructure.document_store import MemoryDocumentStore
-
-
-@pytest.fixture(scope="module")
-def physics():
-    return Physics.load()
 
 
 def _run_a(manager):

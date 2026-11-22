@@ -16,17 +16,19 @@ from typing import Any
 from cascadasen.domain.simulation.engine import IslandResult
 
 
+def level_of(n_counted: int, n_collapsed: int, load_lost_mw: float) -> str:
+    """The L0-L3 ladder from the islands with load (`n_counted`), how many of them collapse and the MW lost."""
+    if n_counted and n_collapsed == n_counted:
+        return "L3"
+    if n_collapsed:
+        return "L2"
+    return "L1" if load_lost_mw > 0.5 else "L0"
+
+
 def consequence_level(islands: list[IslandResult], load_lost_mw: float) -> tuple[str, bool]:
     counted = [i for i in islands if i.result != "no_load"]
     collapsed = [i for i in counted if i.result == "blackout" or i.documented_collapse]
-    uncertain = any(i.uncertain for i in islands)
-    if counted and len(collapsed) == len(counted):
-        return "L3", uncertain
-    if collapsed:
-        return "L2", uncertain
-    if load_lost_mw > 0.5:
-        return "L1", uncertain
-    return "L0", uncertain
+    return level_of(len(counted), len(collapsed), load_lost_mw), any(i.uncertain for i in islands)
 
 
 def outage_cost(

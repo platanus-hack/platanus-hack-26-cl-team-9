@@ -20,9 +20,6 @@ class Role(StrEnum):
     ADVERSARY = "adversary"
 
 
-DEFENDERS = (Role.C2, Role.ISR, Role.OPS, Role.STAB, Role.LOG, Role.AUDITOR)
-
-
 @dataclass(frozen=True)
 class EventSpec:
     id: str

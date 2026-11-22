@@ -118,8 +118,8 @@ class GridUnifier:
 
         edges += self._reconcile_cen_sections(b, nodes, by_id, edges)
         edges += self._sites(nodes)
-        model_buses, model_branches = self._electrical(b, nodes, by_id, edges)
-        plants = self._plants(b, nodes, by_id, model_buses)
+        model_buses, model_branches = self._electrical(b, nodes, edges)
+        plants = self._plants(b, nodes, model_buses)
         storage = self._storage(b, nodes, by_id, model_buses)
         self._graph_stats(nodes, edges)
         for p in plants:
@@ -569,7 +569,7 @@ class GridUnifier:
 
     # -------------------------------------------------------------- electrical
 
-    def _electrical(self, b: SourceBundle, nodes: list[Node], by_id: dict, edges: list[Edge]):
+    def _electrical(self, b: SourceBundle, nodes: list[Node], edges: list[Edge]):
         """Match PyPSA-CL buses to substations and attach the model's branch parameters to the lines.
 
         Buses are matched by `_match_bus`, which records the method. A branch is attached when both its end buses
@@ -658,7 +658,7 @@ class GridUnifier:
 
     # ------------------------------------------------------------------ plants
 
-    def _plants(self, b: SourceBundle, nodes: list[Node], by_id: dict, buses: list[ModelBus]) -> list[Plant]:
+    def _plants(self, b: SourceBundle, nodes: list[Node], buses: list[ModelBus]) -> list[Plant]:
         """Connect every IDE plant to a node and record how in `connection_method`. The first strategy that finds
         a node wins:
 

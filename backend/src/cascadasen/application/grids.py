@@ -14,11 +14,12 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cascadasen.application.cache_builder import network_json
 from cascadasen.domain import grids as layout
-from cascadasen.domain.cascade.network import reduce_network
+from cascadasen.domain.cascade.network import bus_id, reduce_network
+from cascadasen.domain.cascade.network_json import network_json
 from cascadasen.domain.cascade.scenario import operating_point_from_docs
 from cascadasen.domain.ports import GridStore
+from cascadasen.domain.serialization import dumps_compact
 
 
 class GridError(Exception):
@@ -209,7 +210,7 @@ def _chile_documents(snapshot: dict, ops: dict, base: dict) -> list[layout.GridF
         op = operating_point_from_docs(net, ops, base, snapshot, p["id"])
         meta = {"point": p["id"], "label": op.label, "year": year, "snapshot": p["snapshot"]}
         buses = {
-            f"B{i:03d}": {
+            bus_id(i): {
                 "gen_mw": round(float(op.gen[i]), 1),
                 "load_mw": round(float(op.load[i]), 1),
                 "sync_mw": round(float(op.sync_mw[i]), 1),
@@ -291,7 +292,7 @@ def _countries(processed: Path) -> dict:
 
 
 def _encode(doc: dict) -> bytes:
-    return json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode()
+    return dumps_compact(doc).encode()
 
 
 def _now() -> str:

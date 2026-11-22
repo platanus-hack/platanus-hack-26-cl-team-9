@@ -1,3 +1,4 @@
+import { fmt } from "../lib/format";
 import type { Event, Network } from "./types";
 
 const ZONES: Record<string, string> = { centro_sur: "Centro-sur", norte_grande: "Norte Grande" };
@@ -81,7 +82,7 @@ export function narrate(event: Event, network: Network): string {
 /** Short title for the map callout: the history row's wording up to the first colon or sentence end ("7.872" stays). */
 export const shortTitle = (s: string) => s.replace(/(: |\. |\.$).*$/, "");
 
-export const int = (n: number) => Math.round(n).toLocaleString("es-CL");
+export const int = fmt;
 export const mw = (n: unknown) => int(Number(n ?? 0));
 export const hz = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const secs = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
