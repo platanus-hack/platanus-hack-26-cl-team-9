@@ -116,6 +116,26 @@ stochastic:
   is_assumption: true
   note: "Chance in the world (strategy.md 4): event sizes around catalog defaults (Beta with concentration, lognormal sigma), defence functions failing to act per transient, unplanned external events per cycle, first-attempt action success, repair-time and restoration-speed spread, field crews missing a digital issue"
 
+cyber_attack:
+  value:
+    strike_delay: 2
+    spread_cooldown: 3
+    spread_p: 0.45
+    isolation_p: 0.85
+    eradicate_p: 0.6
+    generation_share: 0.35
+    attack_win_lost_share: 0.8
+    min_neighbours: 2
+    clean_after_segmented: 2
+    crew_max_eta_cycles: 48
+  is_assumption: true
+  note: >-
+    Propagating cyberattack scenario (docs/attack-sim.md 3.2), all at operating-area level and in 5-minute cycles:
+    10 min from compromise to strike (remote dispatch lost and 35 % of the area's generation tripped), a spread
+    attempt per neighbour every 15 min with p 0.45, segmentation stops a jump with p 0.85, an area kept segmented
+    10 min or fully restored is eradicated with p 0.6 (else it strikes again). The attack wins when 80 % of the demand is lost. Crews up to 4 h away are sent (48 cycles; 90 min in other runs). Chosen so a
+    run shows several jumps and the defence's response within the 72-cycle horizon; not calibrated on any incident
+
 restoration:
   value: {load_share_per_cycle: 0.3, gen_share_per_cycle: 0.34, manual_slowdown: 0.5, reserve_recovery: 0.5}
   is_assumption: true

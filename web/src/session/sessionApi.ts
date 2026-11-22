@@ -78,6 +78,8 @@ export const getRunAfterAction = (id: string, rid: string) => call<Json>("GET", 
 
 // Documented-incident scenarios (docs/attack-sim.md section 3.1): only catalog ids, no free effects.
 export interface IncidentRunBody { scenario: string; policy: "A" | "B" | "C"; seed?: number }
+// Catalog of the strategic theatre; its `cyber_attack` block drives the Ciberataque form (docs/attack-sim.md 3.2).
+export const getSimCatalog = () => callAt<Json>(API, "GET", "/sim/catalog");
 export const getIncidentCatalog = () => callAt<Json>(API, "GET", "/attacks/catalog");
 export const startIncidentRun = (id: string, body: IncidentRunBody) => call<Json>("POST", `${sid(id)}/attacks/runs`, { body });
 export type LiveMode = "sse" | "poll";

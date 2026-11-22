@@ -41,12 +41,14 @@ import { AssistantPanel } from "../assistant/AssistantPanel";
 import { useAssistant } from "../assistant/useAssistant";
 import { IncidentPanel } from "../incidents/IncidentPanel";
 import { useIncident } from "../incidents/useIncident";
+import { CyberPanel } from "../cyber/CyberPanel";
+import { useCyber } from "../cyber/useCyber";
 import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
 import "../session/session.css";
 
 type Tab = "estado" | "red" | "sim" | "datos";
-type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "upload";
+type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "cyber" | "upload";
 // "Qué lo habría evitado" and "Validación" are not built yet and left out so the four tabs fit the 440 px panel.
 const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"]];
 // In a session Datos replaces Estado de la red: the session owns its changes.
@@ -79,6 +81,7 @@ export function CascadeApp() {
   const s = useSession();
   const a = useAssistant(s, (sc) => applyScenario(sc)); // owned here so the chat survives view changes
   const inc = useIncident(s); // likewise for the incident result and the cascade it plays
+  const cyb = useCyber(); // and for the Ciberataque run
   // ?pais=<ISO3> opens that country's network; a session is always Chile's (its API is Chile-only).
   const startNetwork = s.sid ? DEFAULT_COUNTRY : networkFromParam(params.get("pais"), AVAILABLE.map((n) => n.id));
   const startCut = s.sid || startNetwork !== DEFAULT_COUNTRY ? null : params.get("cut"); // a session owns its cut
@@ -134,7 +137,7 @@ export function CascadeApp() {
 
   const point = index?.points.find((p) => p.id === pointId);
   // An incident cycle's cascade (its snapshot `transient`, a Timeline) plays over the session's own timeline.
-  const incidentTl = inc.playing != null ? inc.cascadeAt(inc.playing) : null;
+  const incidentTl = inc.playing != null ? inc.cascadeAt(inc.playing) : cyb.mapCycle != null ? cyb.cascadeAt(cyb.mapCycle) : null;
   // In a session the timeline is the session state's, keyed "session".
   // Zero or one line: the precalculated cascade; more changes or a prepared scenario: the server simulates them together.
   // A prepared scenario with no failure has no cascade: the map shows the base case and the panel the prepared grid.
@@ -607,8 +610,9 @@ export function CascadeApp() {
    * after a confirmation; session dataset edits stay ("Restablecer" in Datos drops them).
    */
   function powerAllOn() {
-    if (inc.playing != null) { // the incident cascade leaves the map first; open session lines still need a repair
+    if (inc.playing != null || cyb.mapCycle != null) { // the incident cascade leaves the map first; open session lines still need a repair
       inc.stop();
+      cyb.showOnMap(null);
       seek(0);
       setPlaying(false);
       if (!cuts.length) return;
@@ -716,6 +720,9 @@ export function CascadeApp() {
         <button className={view === "incidents" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "incidents" ? "tabs" : "incidents")}>
           <Icon><path d="M8 1.8l6.2 11.2H1.8z M8 6.2v3.3M8 11.3v.1" /></Icon><span>Incidentes</span>
         </button>
+        <button className={view === "cyber" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "cyber" ? "tabs" : "cyber")}>
+          <Icon><path d="M8 1.5l5.5 2v4c0 3.2-2.3 5.8-5.5 7-3.2-1.2-5.5-3.8-5.5-7v-4z M5.5 8l1.8 1.8L10.8 6.3" /></Icon><span>Ciberataque</span>
+        </button>
         <div className="rail-spacer" />
         <button className={view === "help" ? "rail-item faint on" : "rail-item faint"} onClick={() => setView(view === "help" ? "tabs" : "help")}>
           <Icon><circle cx="8" cy="8" r="5.8" /><path d="M6.3 6.3a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1M8 11.3v.1" /></Icon><span>Ayuda</span>
@@ -750,6 +757,7 @@ export function CascadeApp() {
           {view === "session" && <SessionBar s={s} />}
           {view === "assistant" && <AssistantPanel a={a} />}
           {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
+          {view === "cyber" && <CyberPanel c={cyb} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}
           {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={shownGrid} />}
@@ -829,7 +837,7 @@ export function CascadeApp() {
   );
 }
 
-const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", incidents: "Incidentes", upload: "Subir una red" };
+const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", incidents: "Incidentes", cyber: "Ciberataque", upload: "Subir una red" };
 
 /** Where a view-only network's figures come from: the manifest's sources for a country, the file for an upload. */
 function originOf(n: NetworkInfo, grid: RegionalGrid): Origin {

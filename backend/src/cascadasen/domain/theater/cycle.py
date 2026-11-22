@@ -24,6 +24,11 @@ from cascadasen.domain.agents.commander import CommanderAgent
 from cascadasen.domain.agents.isr import ISRAgent
 from cascadasen.domain.agents.logistics import LogisticsAgent
 from cascadasen.domain.agents.operations import OperationsAgent
+from cascadasen.domain.agents.propagation import (
+    PropagatingAdversary,
+    PropagationParamError,
+    propagation_params,
+)
 from cascadasen.domain.agents.stabilization import StabilizationAgent
 from cascadasen.domain.ports import CommanderAdvisor
 from cascadasen.domain.simulation.grid import Physics
@@ -81,6 +86,8 @@ class AdversaryConfig:
     objective: str = "reduce_observability"
     budget: float = 8.0
     adaptive: bool = True
+    mode: str = "exp3"  # exp3 | propagation (the Ciberataque scenario, docs/attack-sim.md 3.2)
+    propagation: dict[str, float] | None = None  # overrides of theater.yaml → cyber_attack
 
 
 @dataclass(frozen=True)
@@ -154,8 +161,20 @@ class Simulation:
             objective=self.template.adversary.get("objective", "reduce_observability"),
             budget=float(self.template.adversary.get("budget", cfg.adversary["budget"])),
             adaptive=bool(self.template.adversary.get("adaptive", True)),
+            mode=self.template.adversary.get("mode", "exp3"),
         )
         self.adversary_config = adv
+        self.propagation = (
+            propagation_params(cfg.cyber_attack, adv.propagation)
+            if adv.enabled and adv.mode == "propagation"
+            else None
+        )
+        # a propagating intrusion lasts hours: far crews are still worth sending
+        crews_cfg = (
+            {**cfg.crews, "max_eta_cycles": int(self.propagation["crew_max_eta_cycles"])}
+            if self.propagation and cfg.crews
+            else cfg.crews
+        )
         self.operating_point = conf.operating_point or self.template.operating_point
         if self.operating_point not in self.world.points():
             raise RunInputError(
@@ -190,7 +209,7 @@ class Simulation:
             CrewRoster.build(
                 net,
                 int(self.ledger.capacity.get("field_crews", 0)),
-                cfg.crews,
+                crews_cfg,
                 cfg.clock["cycle_minutes"],
                 rng=self.chance.field if self.chance else None,
             )
@@ -198,11 +217,20 @@ class Simulation:
             else None
         )
         self.logistics = LogisticsAgent(
-            net, self.crew_actions, cfg.crews.get("max_eta_cycles"), self.defense_areas
+            net, self.crew_actions, crews_cfg.get("max_eta_cycles"), self.defense_areas
         )
         self.auditor = AuditorAgent()
-        self.adversary: AdversaryAgent | None = None
-        if adv.enabled:
+        self.adversary: AdversaryAgent | PropagatingAdversary | None = None
+        self.outcome: str | None = None  # propagation runs: attack | defense once one side wins
+        if self.propagation:
+            self.adversary = PropagatingAdversary(
+                neighbours={
+                    a: sorted({c.b if c.a == a else c.a for c in net.incident(a)}) for a in net.order
+                },
+                params=self.propagation,
+                rng=rng_for(cast(int, conf.seed), "adversary"),
+            )
+        elif adv.enabled:
             self.adversary = AdversaryAgent(
                 targets={
                     "area": list(net.order),
@@ -278,6 +306,13 @@ class Simulation:
             raise RunInputError("adversary.objective", "objetivo desconocido", list(OBJECTIVES))
         if conf.adversary and not 0 <= conf.adversary.budget <= 50:
             raise RunInputError("adversary.budget", "entre 0 y 50")
+        if conf.adversary and conf.adversary.mode not in ("exp3", "propagation"):
+            raise RunInputError("adversary.mode", "modo desconocido", ["exp3", "propagation"])
+        if conf.adversary and conf.adversary.propagation:
+            try:
+                propagation_params(cfg.cyber_attack, conf.adversary.propagation)
+            except PropagationParamError as exc:
+                raise RunInputError(f"adversary.propagation.{exc.name}", str(exc)) from exc
         for pool, cap in conf.capabilities:
             if pool not in cfg.resources:
                 raise RunInputError("capabilities", f"{pool}: recurso desconocido", sorted(cfg.resources))
@@ -296,7 +331,39 @@ class Simulation:
 
     @property
     def finished(self) -> bool:
-        return self.cycle >= self.horizon
+        return self.cycle >= self.horizon or self.outcome is not None
+
+    def _judge(self) -> None:
+        """Propagation runs end early: the attack wins when the lost share of demand reaches its threshold,
+        the defence when no area is still compromised and every effect the attack caused is repaired."""
+        adv = self.adversary
+        if not isinstance(adv, PropagatingAdversary) or not adv.started:
+            return
+        g = self.real.grid
+        demand = sum(g.load_mw.values())
+        lost = 1 - sum(g.served_mw.values()) / demand if demand else 0.0
+        if lost >= adv.params["attack_win_lost_share"] - 1e-9:
+            self.outcome = "attack"
+        elif not adv.active() and not any(e.source == "adversary" for e in self.real.active_effects()):
+            self.outcome = "defense"  # no intrusion left and every effect it caused repaired
+
+    def _cyber_report(self) -> dict[str, Any] | None:
+        adv = self.adversary
+        if not isinstance(adv, PropagatingAdversary):
+            return None
+        peak = max(
+            (s["cyber"]["counts"]["compromised"] + s["cyber"]["counts"]["struck"] for s in self.snapshots),
+            default=0,
+        )
+        return {
+            "outcome": self.outcome or ("undecided" if self.finished else None),
+            "start_area": adv.start,
+            "params": adv.params,
+            "peak_active_areas": peak,
+            "ever_compromised": sorted(a for a, st in adv.areas.items() if st.state != "clean"),
+            "events": adv.events,
+            "is_assumption": True,
+        }
 
     def inject(
         self, type_: str, target: str, params: dict[str, Any] | None = None, cause: str = "intentional"
@@ -403,6 +470,7 @@ class Simulation:
             feedback=tuple(self.feedback),
             active=tuple(sorted(self.ex.active)),
             crew_eta=self._crew_eta(),
+            containment=isinstance(self.adversary, PropagatingAdversary),
             **extra,
         )
 
@@ -704,6 +772,7 @@ class Simulation:
         )
         if self.adversary:
             self.adversary.learn(self._adversary_view())
+        self._judge()
 
         decisions_out = [d.as_dict() for d in decisions]
         self.log.append(
@@ -731,6 +800,17 @@ class Simulation:
         snapshot = self._snapshot(
             k, applied, obs, isr_report, intent, coas, decisions, executed, notes, findings, metrics.as_dict()
         )
+        if isinstance(self.adversary, PropagatingAdversary):
+            g = self.real.grid
+            demand = sum(g.load_mw.values())
+            snapshot["cyber"] = {
+                **self.adversary.snapshot(),
+                "outcome": self.outcome,
+                "lost_share": round(1 - sum(g.served_mw.values()) / demand, 4) if demand else 0.0,
+                "people_without_power": round(self._people()),
+                "crews_busy": sum(c["status"] == "busy" for c in self._crews_view()),
+                "events": [e for e in self.adversary.events if e["cycle"] == k],
+            }
         self.snapshots.append(snapshot)
         self.cycle += 1
         return snapshot
@@ -947,6 +1027,7 @@ class Simulation:
                 "spent": self.adversary.spent,
                 "strategy_mix": self.adversary.strategy_mix(),
             },
+            "cyber_attack": self._cyber_report(),
             "after_action": sorted(moments, key=lambda m: cast(int, m["cycle"])),
             "trace_head": self.log.head,
         }

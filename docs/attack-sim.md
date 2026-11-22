@@ -85,6 +85,21 @@ API (agent routes, in `docs/openapi/agents.openapi.json`):
 
 Every result carries "Escenario hipotético: se modela el efecto, no el ataque." and "Consecuencia simulada en una red reducida, no una predicción." Tests: `backend/tests/unit/test_incidents.py`.
 
+### 3.2 Ciberataque: an intrusion that spreads between areas (2026-11-22, issue #109)
+
+A theatre template, `ciberataque`, with a new adversary mode `propagation` (`domain/agents/propagation.py`). It stays inside `cyber.md` section 8 item 7: operating-area level only, abstract catalog events, no learning, no objective search, no ranking.
+
+- **Start:** a seeded random operating area with at least `min_neighbours` (2) neighbours. Neighbours are areas that share a corridor (public topology, `cyber_attack.adjacency` in the catalog).
+- **Compromised:** the area loses communications (`D4_comms_loss`).
+- **Struck,** `strike_delay` cycles later: remote dispatch lost (`C5`) and `generation_share` of the area's generation trips (`C1`). The cascade engine runs as for any physical event, so the attack causes a real cascade when the grid gives one.
+- **Spread:** every `spread_cooldown` cycles each compromised area tries each clean neighbour with `spread_p`. A segmented area (source or target) stops the jump with `isolation_p`. An area cut off by segmentation cannot pass the intrusion on.
+- **Clean-up:** an area kept segmented `clean_after_segmented` cycles, or with every effect repaired by crews, is eradicated with `eradicate_p`; else it strikes again. Eradicated areas stay clean. The damage stays until a crew restores the area.
+- **Defence:** the existing rule policies A, B or C, or the LLM commander (`llm_commander: true`, the server's model, the same one the assistant uses when the provider is `bedrock-converse`; it only picks among validated actions). In this mode Operations first segments an area whose supervision is lost, then sends local control and a crew to repair it; C2 treats lost supervision there as suspect (confidence 0.75). Crews up to `crew_max_eta_cycles` (48) away are sent.
+- **End:** `attack` when the lost share of demand reaches `attack_win_lost_share` (0.8); `defense` when no area is compromised and every effect of the attack is repaired; else `undecided` at the 72-cycle horizon.
+- **API:** no new route. `GET /api/v1/sim/catalog` → `cyber_attack` (defaults, bounds, outcomes, adjacency, area names). `POST /sessions/{sid}/runs` with `template: "ciberataque"`, `adversary: {mode: "propagation", propagation: {overrides}}`, `capabilities: {field_crews}`, `policy` or `llm_commander`. Each snapshot carries `cyber` (state per area, counts, lost share, people without power, busy crews, the cycle's events); the report carries `cyber_attack` (outcome, start area, parameters, peak, events).
+- **Web:** the **Ciberataque** view of the rail builds the form from the catalog, opens a fresh session at `nov2026-1300` (original nodes), steps the run in chunks of 6 cycles until it finishes, and replays the area states; a cycle with a cascade plays on the map.
+- All parameters live in `theater.yaml` → `cyber_attack` and are `is_assumption`. With the defaults and 12 seeds, policy C ended 6 runs with a defence win and 6 undecided; with an aggressive attack (`spread_p` 0.8, `generation_share` 0.8, `strike_delay` 1, `spread_cooldown` 2, `isolation_p` 0.5) policy A lost 5 of 12 and C lost 3.
+
 ## 4. Demo
 
 On the map (`web/`):

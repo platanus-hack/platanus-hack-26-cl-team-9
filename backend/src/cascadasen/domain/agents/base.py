@@ -25,6 +25,7 @@ class AgentView:
     feedback: tuple[ActionFeedback, ...] = ()
     active: tuple[str, ...] = ()
     crew_eta: tuple[tuple[str, int], ...] = ()  # (area, cycles until the nearest free crew is there)
+    containment: bool = False  # the run is a propagating-intrusion drill: contain what looks compromised
 
     def available(self, pool: str) -> float:
         return dict(self.resources).get(pool, 0.0)
