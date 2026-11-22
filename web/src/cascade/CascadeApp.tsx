@@ -22,6 +22,7 @@ import { SessionBar } from "../session/SessionBar";
 import { SessionCut } from "../session/SessionCut";
 import { cutLines, repairLines } from "../session/sessionApi";
 import { useSession } from "../session/useSession";
+import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
 import "../session/session.css";
 
@@ -45,11 +46,12 @@ export function CascadeApp() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const scaleRef = useRef<HTMLDivElement>(null);
   const baseMap = useRef<BaseMap | null>(null);
-  const params = useMemo(() => new URLSearchParams(location.search), []); // ?point=<id>&cut=<line id>&vista=3d&sesion=<sid>
+  // ?point=<id>&cut=<line id>&vista=3d&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
+  const params = useMemo(() => new URLSearchParams(location.search), []);
   const s = useSession();
   const startCut = s.sid ? null : params.get("cut"); // a session owns its cut
   const [index, setIndex] = useState<Index | null>(null);
-  const [pointId, setPointId] = useState(params.get("point") ?? "nov2026-1300");
+  const [pointId, setPointId] = useState(params.get("point") ?? DEFAULT_POINT);
   const [network, setNetwork] = useState<Network | null>(null);
   const [buses, setBuses] = useState<Record<string, BusState>>({});
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
@@ -162,11 +164,8 @@ export function CascadeApp() {
     else if (was && !s.sid) { setCut(null); setLoaded(null); setTab((x) => (x === "datos" ? "red" : x)); }
   }
   function _syncUrl() {
-    const q = new URLSearchParams(location.search);
-    q.set("point", pointId);
-    if (cut && !s.sid) q.set("cut", cut); else q.delete("cut");
-    if (mode === "3d") q.set("vista", "3d"); else q.delete("vista");
-    history.replaceState(null, "", `${location.pathname}?${q}`);
+    const search = syncedSearch(location.search, { pointId, cut, mode, sid: s.sid });
+    history.replaceState(null, "", location.pathname + search + location.hash);
   }
 
   function _mountMap() {
