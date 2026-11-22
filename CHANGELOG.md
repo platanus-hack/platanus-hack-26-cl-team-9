@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · test(mcp): run the MCP tests in CI and cover digest.py and tools.py
+- **Changed:** The `backend-test` job now runs `uv sync --locked --group dev --extra mcp`, so `tests/unit/test_mcp_tools.py` and `tests/integration/test_mcp_server.py` run instead of skipping. 10 new tests in `test_mcp_tools.py` cover the branches left: `focus_digest` by bus id and name, `events_applied`, the incident section of `report_digest`, `prepare_digest`, `simulation_digest`, `add_generator`, `add_line`, `add_bus`, `start_run` with adversary, `inject_event` with `share`, `run_status`, `list_options` and `prepare_scenario` (the three call patterns). The coverage floor goes from 87 to 90.
+- **Why:** Without the extra, `mcp/tools.py` sat at 58 % and `mcp/digest.py` at 57 %. Measured with the extra: 484 passed, 3 skipped, TOTAL 90.49 % (12690 statements, 1207 missed), `tools.py` 100 %, `digest.py` 100 %.
+- **Agents:** Run the MCP tests locally with `cd backend && uv sync --locked --group dev --extra mcp`; plain `uv sync` skips them. The `llm` extra is still not installed in CI (1 skipped test). The mypy job does not need the extra (`ignore_missing_imports`); `mypy src` is also clean with it installed. No product code changed.
+- **Files:** `.github/workflows/checks.yml`, `backend/tests/unit/test_mcp_tools.py`, `backend/README.md`.
 ## 2026-11-22 · Merge origin/main (#101, #102) into feature/90-cascada-tiempos
 
 - **Changed:** Integrates the in-place component editing, the prepared scenarios on the map and the context layers of main with issue #90. Conflicts only in `CascadeApp.tsx` (the `live` ref and the `setLayers` call) and this file. Both sides were kept: `warp`, `recent` and the pulse from #90, `pointId`, `changes` and `contextLayers` from main. The context layers are drawn under the cascade layers.

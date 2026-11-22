@@ -14,7 +14,7 @@ uv run cascadasen-build --refresh        # force a new download of every source
 uv run cascadasen-api                    # http://localhost:8000/map  (docs: /docs)
 uv run cascadasen-regional                 # other countries (BRA PER ARG BOL) -> data/processed/latam/ (docs/regional.md)
 uv run cascadasen-regional --countries BRA --ons  # also Brazil's flow network from ONS -> latam/BRA/network.json (docs/network-format.md)
-uv run pytest
+uv run pytest                            # skips the MCP tests without the extra; CI runs `uv sync --locked --group dev --extra mcp` first
 ```
 
 After a rebuild, `POST /api/v1/admin/reload` reloads the snapshot without restarting the server. It answers 404 unless `CASCADASEN_ADMIN_ENABLED=true` (docker compose sets it; leave it off in production).
