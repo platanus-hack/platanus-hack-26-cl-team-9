@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): incident catalog client and pure helpers
+
+- **Changed:** `sessionApi.ts` gains `getIncidentCatalog()` (`GET /api/v1/attacks/catalog`, through a new `callAt(base, ...)` that shares `call`'s busy-409 retries) and `startIncidentRun(sid, {scenario, policy, seed?, duration_h?})`. `useSession().create` accepts `{point, label}`. New `web/src/incidents/incidents.ts`: catalog, card and after-action types, `sessionPlan` (create/reuse/replace by the session hour), `cascadeCycles` (snapshots whose `transient` is a Timeline), `cycleMinutes`, `effectText`, `cardFigures` and `responseFigures` (each figure with its source; duration, MWh and cost flagged as assumptions), `parseDuration` (0.25-720 h).
+- **Why:** First half of the Incidentes view (continuation of issue #74): the logic is pure and tested before the panel uses it.
+- **Agents:** `EVENT_LABELS` in `incidents.ts` copies the five event labels of `narrative_es.yaml`; add a label there when the catalog uses a new event type. Tests: `incidents.test.ts`, `sessionApi.test.ts`.
+- **Files:** `web/src/session/{sessionApi,sessionApi.test,useSession}.ts`, `web/src/incidents/{incidents,incidents.test}.ts`.
+
 ## 2026-11-22 · fix(incidents): require the session point to match the incident
 
 - **Changed:** `POST /api/v1/sessions/{sid}/attacks/runs` answers 422 `{field: "scenario", message, valid: [<point>]}` when the session's `point` differs from the incident's `operating_point`. The catalog and route descriptions name `operating_point`; the MCP `start_incident_run` docstring says 25F needs `start_session(point="feb2025-1500")`. `agents.openapi.json` regenerated.
