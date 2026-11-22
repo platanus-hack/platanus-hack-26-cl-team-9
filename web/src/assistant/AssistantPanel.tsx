@@ -32,10 +32,8 @@ export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode
 
   return (
     <div className="assistant">
-      <div className="chat-intro">
-        <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, avanzar una corrida. El mapa muestra el escenario que prepara el asistente.</p>
-        {(turns.length > 0 || !!a.state.conversationId) && <button className="text-btn" onClick={() => void a.reset()}>Nueva conversación</button>}
-      </div>
+      {/* The title and "Nueva conversación" live in the panel header, next to Cerrar (CascadeApp). */}
+      <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, apagar centrales. El mapa muestra lo que el asistente cambia.</p>
 
       <div className="seg" role="tablist" aria-label="Vista del asistente">
         {([["chat", "Chat"], ["salud", "Salud de la red"]] as const).map(([k, label]) => (

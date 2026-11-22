@@ -125,8 +125,8 @@ def document(key: str, request: Request) -> Response:
     tags=["grid-stress"],
     operation_id="simulate_grid",
     summary="Simulate failures on the default grid, optionally prepared",
-    description="Runs the cascade of the failures (at least one line or substation out) on the grid prepared with "
-    "`changes`. Returns the timeline, the direct loss and `supply`: per generating substation (by id) and per "
+    description="Runs the cascade of the failures on the grid prepared with `changes`. It needs at least one line "
+    "or substation out, or one change: with changes and no failure the cascade starts from the lines they overload. Returns the timeline, the direct loss and `supply`: per generating substation (by id) and per "
     "zone, the people it should feed before the failure against the people it still feeds.",
     responses=ok(SimulateOut) | PREPARE_ERRORS,
     openapi_extra=AGENT,

@@ -5,8 +5,8 @@ import type { HealthReport, Timeline } from "../cascade/types";
 
 /**
  * Asistente → "Salud de la red": how the grid on the map stands after the assistant's (or the user's) changes. With
- * failures it reads the simulated cascade; with changes only, the prepared grid (POST /grids/prepare); otherwise the
- * base point. Every figure comes from the backend; the index is our model's, not a CEN indicator (docs/health.md).
+ * changes or failures it reads the simulated cascade and the prepared grid (POST /grids/prepare); otherwise the base
+ * point. Every figure comes from the backend; the index is our model's, not a CEN indicator (docs/health.md).
  */
 export function GridHealth({ prepared, timeline, failures, base }: {
   prepared: Prepared | null; timeline: Timeline | null; failures: boolean; base: HealthReport | null;

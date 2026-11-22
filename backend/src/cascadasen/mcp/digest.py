@@ -370,13 +370,13 @@ def _health_digest(h: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
-def simulation_digest(stressed: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
+def simulation_digest(stressed: dict[str, Any], base: dict[str, Any] | None) -> dict[str, Any]:
     """The cascade of the failures on the prepared grid against the same failures on the base grid, and the
-    per-zone supply stat."""
+    per-zone supply stat. `base` None: no failure, so the base grid loses nothing."""
     keys = ("people_without_power", "load_shed_mw", "dark_load_mw")
     return {
         "with_changes": {k: stressed["timeline"]["summary"][k] for k in keys},
-        "without_changes": {k: base["timeline"]["summary"][k] for k in keys},
+        "without_changes": {k: base["timeline"]["summary"][k] if base else 0 for k in keys},
         "lines_opened_by_cascade": sorted(
             {i for e in stressed["timeline"]["events"] if e["type"] == "line_overload_open" for i in e["ids"]}
         ),

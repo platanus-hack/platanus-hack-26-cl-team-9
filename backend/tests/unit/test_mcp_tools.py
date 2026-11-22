@@ -467,7 +467,15 @@ def test_prepare_scenario_works_without_a_session_and_only_calls_what_the_input_
     empty = tools.prepare_scenario()
     assert seen == [] and empty["scenario"]["point"] == "nov2026-1300" and "prepared" not in empty
     only_changes = tools.prepare_scenario(changes=[change], point="feb2025-1500")
-    assert [s[1] for s in seen] == ["/grids/prepare"] and "simulation" not in only_changes
+    assert [s[1] for s in seen] == [
+        "/grids/prepare",
+        "/grids/simulate",
+    ]  # changes alone: one run, no base run
+    assert only_changes["simulation"]["without_changes"] == {
+        "people_without_power": 0,
+        "load_shed_mw": 0,
+        "dark_load_mw": 0,
+    }
     assert only_changes["prepared"]["changes"] == [{"target": "demand", "matched": 1, "at": ["B000 S/E A"]}]
     seen.clear()
     both = tools.prepare_scenario(changes=[change], open_lines=["R000"], out_buses=["B001"])
