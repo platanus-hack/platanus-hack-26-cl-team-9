@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MAX_MESSAGE } from "./assistantApi";
 import { argsText, errorMessage, resultText, toolName, truncatedText } from "./labels";
 import { Markdown } from "./markdown";
@@ -14,8 +14,9 @@ const CONTINUE = "continúa";
  * scenario notice goes with each reply because it carries the assumption note (AGENTS.md section 4). Opening the view
  * asks the server once whether the assistant is available; when it is not, one notice says so and the box is disabled.
  */
-export function AssistantPanel({ a }: { a: Assistant }) {
+export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode }) {
   const [text, setText] = useState("");
+  const [sub, setSub] = useState<"chat" | "salud">("chat");
   const endRef = useRef<HTMLDivElement>(null);
   const { turns, restoredTools } = a.state;
   const lastTurn = turns[turns.length - 1];
@@ -36,6 +37,12 @@ export function AssistantPanel({ a }: { a: Assistant }) {
         {(turns.length > 0 || !!a.state.conversationId) && <button className="text-btn" onClick={() => void a.reset()}>Nueva conversación</button>}
       </div>
 
+      <div className="seg" role="tablist" aria-label="Vista del asistente">
+        {([["chat", "Chat"], ["salud", "Salud de la red"]] as const).map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={sub === k} className={sub === k ? "on" : ""} onClick={() => setSub(k)}>{label}</button>
+        ))}
+      </div>
+      {sub === "salud" ? health ?? <p className="meta">Sin datos de salud.</p> : <>
       {!a.enabled && <div className="notice" role="status"><span>{errorMessage(503)}</span></div>}
       {a.restoring && <p className="meta">Recuperando la conversación…</p>}
 
@@ -62,6 +69,7 @@ export function AssistantPanel({ a }: { a: Assistant }) {
           <button type="submit" className="primary-btn" disabled={!a.enabled || a.busy || !text.trim() || tooLong}>{a.busy ? "Trabajando…" : "Enviar"}</button>
         </div>
       </form>
+      </>}
       <div ref={endRef} />
     </div>
   );

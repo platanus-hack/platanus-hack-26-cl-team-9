@@ -69,7 +69,7 @@ function IndexFigure({ report, tip, label }: { report: HealthReport; tip: string
 }
 
 /** Pre-fault index and N-1 money at risk, behind the closed "Indicadores técnicos" disclosure; nothing when health.json is missing. */
-function PrefaultHealth({ health }: { health: HealthReport }) {
+export function PrefaultHealth({ health }: { health: HealthReport }) {
   const cost = isN1(health.cost) ? health.cost : null;
   const hours = cost?.outage_duration_h;
   return (
@@ -130,7 +130,7 @@ export function ColdStartCard({ network, health, select, open25F }: { network: N
 }
 
 /** After-cut index and event cost, read at the end of the simulation (D5); each part hides when an old cache lacks it. */
-function EndOfRun({ timeline }: { timeline: Timeline }) {
+export function EndOfRun({ timeline }: { timeline: Timeline }) {
   const report = timeline.health;
   const fromReport = report && !isN1(report.cost) ? report.cost : undefined;
   const usd = fromReport?.cost_usd ?? timeline.summary.failure_cost_usd;

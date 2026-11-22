@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): bring back the Asistente "Salud de la red" tab lost in the #142 merge
+
+- **Changed:** `AssistantPanel` has Chat / Salud de la red tabs again (`.seg` style from #142) and takes a `health` node; `CascadeApp` passes `GridHealth` as before. `GridHealth.tsx` is restored and uses `EndOfRun` (was `EventHealth`); `PrefaultHealth` and `EndOfRun` are exported from `SimulationPanel.tsx`.
+- **Why:** user request: the merge of #142 (#147) must not drop main's Salud de la red tab.
+- **Agents:** new test in `AssistantPanel.test.tsx` covers the tab.
+- **Files:** `web/src/assistant/{AssistantPanel.tsx,AssistantPanel.test.tsx,GridHealth.tsx}`, `web/src/cascade/{CascadeApp.tsx,SimulationPanel.tsx}`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · chore(web): merge main into the UI audit branch (#142), the audit wins on conflicts
 
 - **Changed:** every file that conflicted keeps #142's version; main's non-conflicting work stays. To compile: `loadDependency` gets `criticality: heat === "criticality"`, `TARGET_NAME` gets `substation`, `HEAT_ENDS` gets `affected`; `assistant/GridHealth.tsx` (main's Salud de la red tab) is removed because #142's panels do not use it.
