@@ -57,6 +57,21 @@ class Template:
 
 
 @dataclass(frozen=True)
+class Incident:
+    """A documented incident replayed as a template (docs/attack-sim.md). Effect only, no technique."""
+
+    id: str
+    title: str
+    date: str
+    kind: str  # cyber_documented | reference_not_cyber
+    verified: bool
+    summary_key: str
+    sources: tuple[dict[str, str], ...]
+    notes: tuple[str, ...]
+    mitigations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TheaterConfig:
     clock: dict[str, int]
     resources: dict[str, float]
@@ -69,6 +84,8 @@ class TheaterConfig:
     adversary: dict[str, Any]
     missions: dict[str, Mission]
     templates: dict[str, Template]
+    incidents: dict[str, Incident] = field(default_factory=dict)
+    incident_duration_h: float = 4.0  # assumption (incidents.yaml `defaults`)
     stochastic: dict[str, Any] = field(default_factory=dict)
     crews: dict[str, Any] = field(default_factory=dict)
     physics_alarms: dict[str, float] = field(default_factory=dict)
@@ -98,6 +115,9 @@ def theater_config() -> TheaterConfig:
         )
         for mid, m in v["missions"].items()
     }
+    inc = load_params("incidents", THEATER_DIR)
+    raw_incidents = value(inc["incidents"])
+    templates_spec = {**value(t["templates"]), **raw_incidents}
     templates = {
         tid: Template(
             id=tid,
@@ -109,7 +129,21 @@ def theater_config() -> TheaterConfig:
             adversary=dict(spec.get("adversary") or {}),
             scenario_events=tuple(spec.get("scenario_events") or ()),
         )
-        for tid, spec in value(t["templates"]).items()
+        for tid, spec in templates_spec.items()
+    }
+    incidents = {
+        iid: Incident(
+            id=iid,
+            title=spec["title"],
+            date=str(spec["date"]),
+            kind=spec["kind"],
+            verified=bool(spec["verified"]),
+            summary_key=spec["summary_key"],
+            sources=tuple(dict(x) for x in spec["sources"]),
+            notes=tuple(spec.get("notes") or ()),
+            mitigations=tuple(spec.get("mitigations") or ()),
+        )
+        for iid, spec in raw_incidents.items()
     }
     return TheaterConfig(
         clock={k: int(x) for k, x in v["clock"].items()},
@@ -124,8 +158,14 @@ def theater_config() -> TheaterConfig:
         adversary=v["adversary"],
         missions=missions,
         templates=templates,
+        incidents=incidents,
+        incident_duration_h=float(value(inc["defaults"])["duration_h"]),
         stochastic=v.get("stochastic", {}),
         crews=v.get("crews", {}),
         physics_alarms={k: float(x) for k, x in v.get("physics_alarms", {}).items()},
-        provenance=tuple(collect_provenance(p, "theater") + collect_provenance(t, "templates")),
+        provenance=tuple(
+            collect_provenance(p, "theater")
+            + collect_provenance(t, "templates")
+            + collect_provenance(inc, "incidents")
+        ),
     )

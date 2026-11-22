@@ -175,3 +175,38 @@ def test_snapshot_digest_computes_unserved_power_and_the_level_label():
     )
     rep = digest.report_digest({"consequence": {"worst_level": "L2"}, "indicators": {}})
     assert rep["consequence"]["worst_level_text"] == "L2 · apagón regional"
+
+
+def test_incident_tools_list_the_catalog_and_start_a_run_without_ids_in_the_answer():
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, request.url.path, request.content))
+        if request.url.path.endswith("/attacks/catalog"):
+            return httpx.Response(
+                200,
+                json={
+                    "notices": ["n"],
+                    "default_duration_h": {"value": 4, "is_assumption": True},
+                    "incidents": [
+                        {
+                            "id": "huatacondo-2026",
+                            "title": "Huatacondo",
+                            "date": "2026-08-26",
+                            "kind": "cyber_documented",
+                            "verified": True,
+                            "notes": [],
+                            "sources": [{"label": "x", "url": "https://x"}],
+                            "effects": [{"cycle": 2, "type": "C1_generation_loss", "target": "A01"}],
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(201, json={"run_id": "r1", "template": "huatacondo-2026", "policy": "C"})
+
+    tools = Sub50Tools(client_for(handler), McpState(session_id="s"))
+    cat = tools.list_incident_scenarios()
+    assert cat["incidents"][0]["effects"] == ["ciclo 2: C1_generation_loss en A01"]
+    run = tools.start_incident_run("huatacondo-2026", duration_h=6)
+    assert tools.state.run_id == "r1" and run["scenario_notices"][0].startswith("Escenario hipotético")
+    assert b'"duration_h":6' in seen[-1][2].replace(b" ", b"") and seen[-1][1].endswith("/s/attacks/runs")

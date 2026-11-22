@@ -1,0 +1,106 @@
+# Catalog of documented incidents replayed as theatre runs (docs/attack-sim.md).
+# Each incident is a theatre template (same shape as templates.yaml) plus public metadata. Only the
+# EFFECT on the grid is modelled, never the technique, and nobody is attributed (cyber.md 8).
+# The adversary is off: the incident is the script. Zones and technologies only, never named plants.
+version: 1
+
+defaults:
+  value:
+    duration_h: 4
+  is_assumption: true
+  note: "Duration used to scale unserved energy and cost in the incident card; editable per run"
+
+incidents:
+  source: "Public reports linked in each entry (docs/attack-sim.md section 2); effect sizes are replay assumptions"
+  value:
+    huatacondo-2026:
+      title: "Huatacondo, Chile (Tarapacá), ago. 2026"
+      date: "2026-08-26"
+      kind: cyber_documented
+      verified: true
+      summary_key: inc_huatacondo
+      sources:
+        - {label: "pv magazine", url: "https://www.pv-magazine.com/2026/11/17/chilean-pv-plant-hit-by-cyberattack-remains-disconnected/"}
+        - {label: "ESS News", url: "https://www.ess-news.com/2026/11/17/chile-solar-plus-storage-plant-remains-offline-after-cyberattack/"}
+        - {label: "T13", url: "https://www.t13.cl/noticia/nacional/ciberataques-chile-ataque-dejo-desconectada-una-planta-electrica-encendio-las-a-16-11-2026"}
+      notes:
+        - "La investigación sigue abierta: no se atribuye a ningún actor."
+        - "Valor del dataset: 88,1 MW. La prensa informa 103 MW; la diferencia no está explicada."
+        - "La batería informada (98 MW / 312 MWh) no aparece en storage.geojson: no se modela."
+      mitigations: [battery_support, fast_reserve, rearm_defense]
+      label_key: tpl_huatacondo
+      question_key: q_huatacondo
+      operating_point: nov2026-1300
+      mission: utility_continuity
+      horizon: 24
+      adversary: {enabled: false, objective: reduce_observability, adaptive: false, budget: 0}
+      scenario_events:
+        - {cycle: 2, type: C1_generation_loss, target: A01, params: {mw: 88.1}, cause: intentional}
+        - {cycle: 2, type: C5_remote_dispatch_loss, target: A08, cause: intentional}
+
+    polonia-2025:
+      title: "Polonia, dic. 2025: pérdida simultánea de generación distribuida"
+      date: "2025-12-29"
+      kind: cyber_documented
+      verified: true
+      summary_key: inc_polonia
+      sources:
+        - {label: "CERT Polska", url: "https://cert.pl/uploads/docs/CERT_Polska_Energy_Sector_Incident_Report_2025.pdf"}
+        - {label: "CISA", url: "https://www.cisa.gov/news-events/alerts/2026/02/10/poland-energy-sector-cyber-incident-highlights-ot-and-ics-security-gaps"}
+        - {label: "Dragos", url: "https://www.dragos.com/blog/poland-power-grid-attack-electrum-targets-distributed-energy-2025"}
+      notes:
+        - "Las fuentes difieren en la atribución; este escenario no atribuye nada."
+        - "Se modela solo el efecto: varias centrales solares y eólicas de una zona pierden control a la vez y la zona pierde comunicaciones."
+      mitigations: [backup_comms, manual_operation, fast_reserve, battery_support]
+      label_key: tpl_polonia
+      question_key: q_polonia
+      operating_point: nov2026-1300
+      mission: utility_continuity
+      horizon: 24
+      adversary: {enabled: false, objective: reduce_observability, adaptive: false, budget: 0}
+      scenario_events:
+        - {cycle: 2, type: C2_common_mode_loss, target: NC, params: {share: 0.5, tech: solar}, cause: intentional}
+        - {cycle: 2, type: C2_common_mode_loss, target: NC, params: {share: 0.5, tech: eolica}, cause: intentional}
+        - {cycle: 2, type: D4_comms_loss, target: A06, cause: intentional}
+
+    reino-unido-2026:
+      title: "Reino Unido, jul. 2026: contraejemplo pequeño y corto"
+      date: "2026-07-01"
+      kind: cyber_documented
+      verified: false
+      summary_key: inc_reino_unido
+      sources:
+        - {label: "Help Net Security", url: "https://www.helpnetsecurity.com/2026/08/24/uk-power-plant-cyberattack/"}
+        - {label: "TrendAI", url: "https://www.trendaisecurity.com/en-us/resources-insights/trendai-security-blog/uk-power-facility-cyberattack-shutdown-what-critical-infrastructure-operators-and-defenders-need-to-know"}
+      notes:
+        - "No verificado: los detalles técnicos son desconocidos y la atribución viene de prensa."
+        - "Un generador pequeño fuera de servicio unos días; el suministro general no se afectó. Se usa como contraejemplo."
+      mitigations: [fast_reserve]
+      label_key: tpl_reino_unido
+      question_key: q_reino_unido
+      operating_point: nov2026-1300
+      mission: utility_continuity
+      horizon: 24
+      adversary: {enabled: false, objective: reduce_observability, adaptive: false, budget: 0}
+      scenario_events:
+        - {cycle: 2, type: C1_generation_loss, target: A09, params: {mw: 40}, cause: intentional}
+
+    25f-referencia:
+      title: "25F, feb. 2025 (referencia, no es un caso ciber)"
+      date: "2025-02-25"
+      kind: reference_not_cyber
+      verified: true
+      summary_key: inc_25f
+      sources:
+        - {label: "docs/idea.md [3]", url: "docs/idea.md"}
+      notes:
+        - "Nada indica que haya sido un ciberataque. Es el ejemplo real más cercano de una protección que abre una línea crítica."
+      mitigations: [rearm_defense, islanding_prep, fast_reserve]
+      label_key: tpl_25f
+      question_key: q_25f
+      operating_point: feb2025-1500
+      mission: utility_continuity
+      horizon: 24
+      adversary: {enabled: false, objective: reduce_observability, adaptive: false, budget: 0}
+      scenario_events:
+        - {cycle: 2, type: C3_transmission_opening, target: A06-A07, cause: failure}

@@ -38,12 +38,14 @@ import { canPowerAll, powerAll } from "./powerAll";
 import { useSession } from "../session/useSession";
 import { AssistantPanel } from "../assistant/AssistantPanel";
 import { useAssistant } from "../assistant/useAssistant";
+import { IncidentPanel } from "../incidents/IncidentPanel";
+import { useIncident } from "../incidents/useIncident";
 import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
 import "../session/session.css";
 
 type Tab = "estado" | "red" | "sim" | "datos";
-type View = "tabs" | "sources" | "help" | "session" | "assistant" | "upload";
+type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "upload";
 // "Qué lo habría evitado" and "Validación" are not built yet and left out so the four tabs fit the 440 px panel.
 const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"]];
 // In a session Datos replaces Estado de la red: the session owns its changes.
@@ -75,6 +77,7 @@ export function CascadeApp() {
   const params = useMemo(() => new URLSearchParams(location.search), []);
   const s = useSession();
   const a = useAssistant(s); // owned here so the chat survives view changes
+  const inc = useIncident(s); // likewise for the incident result and the cascade it plays
   // ?pais=<ISO3> opens that country's network; a session is always Chile's (its API is Chile-only).
   const startNetwork = s.sid ? DEFAULT_COUNTRY : networkFromParam(params.get("pais"), AVAILABLE.map((n) => n.id));
   const startCut = s.sid || startNetwork !== DEFAULT_COUNTRY ? null : params.get("cut"); // a session owns its cut
@@ -124,15 +127,18 @@ export function CascadeApp() {
   const shownGrid = !isChile && shown?.id === networkId ? shown.grid : null;
 
   const point = index?.points.find((p) => p.id === pointId);
+  // An incident cycle's cascade (its snapshot `transient`, a Timeline) plays over the session's own timeline.
+  const incidentTl = inc.playing != null ? inc.cascadeAt(inc.playing) : null;
   // In a session the timeline is the session state's, keyed "session".
   const cached = fromCache(edits); // zero or one line: the precalculated cascade; more changes: the server simulates them together
   const cut = cached ? edits.lines[0] ?? null : null;
   const timelineKey = s.sid ? "session" : cached ? `${pointId}/${cut ?? "baseline"}` : editKey(pointId, edits);
-  const timelineReady = loaded?.key === timelineKey;
-  const timeline = timelineReady ? loaded.timeline : null; // a timeline of another scenario never drives the map
+  const loadedReady = loaded?.key === timelineKey;
+  const timelineReady = !!incidentTl || loadedReady;
+  const timeline = incidentTl ?? (loadedReady ? loaded.timeline : null); // a timeline of another scenario never drives the map
   const cuts = s.sid ? s.state?.open_lines ?? [] : edits.lines;
   const outBuses = s.sid ? [] : edits.buses;
-  const edited = cuts.length + outBuses.length > 0;
+  const edited = !!incidentTl || cuts.length + outBuses.length > 0;
   const offState: Edits = { lines: cuts, buses: outBuses }; // what the user switched off, for the second click and the hints
   const duration = timeline?.duration_s ?? 0;
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
@@ -167,6 +173,7 @@ export function CascadeApp() {
   const controlsRef = useRef<HTMLDivElement>(null);
   const panelBodyRef = useRef<HTMLDivElement>(null);
   const timelineRequest = useRef("");
+  const incidentOn = useRef(false); // an incident cascade is on the map
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
   // Only Chile by default; another network replaces it on the map when picked in the header or in Fuentes de la grilla.
@@ -183,6 +190,11 @@ export function CascadeApp() {
   useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
   useEffect(() => { if (s.state) { timelineRequest.current = "session"; setLoaded({ key: "session", timeline: s.state.timeline }); setT(0); setPlaying(s.state.open_lines.length > 0); } }, [s.state]);
   useEffect(() => _onSessionChange(), [s.sid]);
+  // Choosing an incident cycle plays its cascade from 0; leaving it goes back to the session's timeline, paused at 0.
+  useEffect(() => {
+    if (incidentTl) { incidentOn.current = true; seek(0); setPlaying(true); setColorMode("load"); }
+    else if (incidentOn.current) { incidentOn.current = false; seek(0); setPlaying(false); }
+  }, [incidentTl]);
   useEffect(() => _mountMap(), []);
   useEffect(() => { baseMap.current?.setMode(mode); }, [mode]);
   useEffect(() => _animate(), []);
@@ -497,6 +509,7 @@ export function CascadeApp() {
   function cutLine(id: string) {
     setSelection(null); // the impact card names the cut and stays at the top of the panel
     setNotice(null);
+    inc.stop();
     if (!s.sid) setEdits((e) => addLine(e, id));
     else if (!s.state?.open_lines.includes(id)) s.edit((sid, rev) => cutLines(sid, [id], rev));
     setView("tabs");
@@ -512,6 +525,7 @@ export function CascadeApp() {
   function outBus(id: string) {
     setSelection(null);
     setNotice(null);
+    inc.stop();
     if (!s.sid) setEdits((e) => addBus(e, id));
     else if (network) {
       const closed = substationLines(network, id).filter((l) => !s.state?.open_lines.includes(l));
@@ -551,6 +565,12 @@ export function CascadeApp() {
    * after a confirmation; session dataset edits stay ("Restablecer" in Datos drops them).
    */
   function powerAllOn() {
+    if (inc.playing != null) { // the incident cascade leaves the map first; open session lines still need a repair
+      inc.stop();
+      seek(0);
+      setPlaying(false);
+      if (!cuts.length) return;
+    }
     if (s.sid) {
       if (!confirm("¿Prender toda la red? Repara todas las líneas abiertas para todos los participantes de la sesión.")) return;
       restore();
@@ -600,7 +620,7 @@ export function CascadeApp() {
   const tabs: [Tab, string][] = s.sid ? SESSION_TABS : TABS;
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
   const selectedCut = selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null;
-  const canPower = canPowerAll({ cuts, edited: outBuses.length > 0 });
+  const canPower = canPowerAll({ cuts, edited: outBuses.length > 0 || inc.playing != null });
   const shutDown = selection?.kind === "node" && !!network && isSwitchedOff(selection, network, offState, !!s.sid);
   const sourceNote = hasLabels ? "Mapa base: Mapbox" : isChile ? "Contorno: data/processed/chile.geojson" : "Contornos: data/processed/latam/outlines.geojson (geoBoundaries)";
   const shownSummary = shownGrid ? (shownGrid.countries[0] ? summaryFromManifest(shownGrid.countries[0]) : summaryFromGrid(shownGrid)) : null;
@@ -630,6 +650,9 @@ export function CascadeApp() {
         </button>
         <button className={view === "assistant" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "assistant" ? "tabs" : "assistant")}>
           <Icon><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z M5.5 7h.01M8 7h.01M10.5 7h.01" /></Icon><span>Asistente</span>
+        </button>
+        <button className={view === "incidents" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "incidents" ? "tabs" : "incidents")}>
+          <Icon><path d="M8 1.8l6.2 11.2H1.8z M8 6.2v3.3M8 11.3v.1" /></Icon><span>Incidentes</span>
         </button>
         <div className="rail-spacer" />
         <button className={view === "help" ? "rail-item faint on" : "rail-item faint"} onClick={() => setView(view === "help" ? "tabs" : "help")}>
@@ -664,6 +687,7 @@ export function CascadeApp() {
           {(s.error ?? error) && <p className="note">{s.error ?? error}{s.error && <> <button className="text-btn" onClick={s.clearError}>Cerrar</button></>}</p>}
           {view === "session" && <SessionBar s={s} />}
           {view === "assistant" && <AssistantPanel a={a} />}
+          {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}
           {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={shownGrid} />}
@@ -740,7 +764,7 @@ export function CascadeApp() {
   );
 }
 
-const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", upload: "Subir una red" };
+const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", incidents: "Incidentes", upload: "Subir una red" };
 
 /** Where a view-only network's figures come from: the manifest's sources for a country, the file for an upload. */
 function originOf(n: NetworkInfo, grid: RegionalGrid): Origin {

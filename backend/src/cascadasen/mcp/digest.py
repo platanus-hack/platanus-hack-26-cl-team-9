@@ -232,6 +232,27 @@ def run_digest(run: dict[str, Any]) -> dict[str, Any]:
     return {k: run[k] for k in keys if k in run}
 
 
+INCIDENT_NOTICES = [
+    "Escenario hipotético: se modela el efecto, no el ataque.",
+    "Consecuencia simulada en una red reducida, no una predicción.",
+]
+
+
+def incident_catalog_digest(cat: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "incidents": [
+            {
+                **{k: i[k] for k in ("id", "title", "date", "kind", "verified", "notes")},
+                "sources": [s["url"] for s in i["sources"]],
+                "effects": [f"ciclo {e['cycle']}: {e['type']} en {e['target']}" for e in i["effects"]],
+            }
+            for i in cat["incidents"]
+        ],
+        "default_duration_h": cat["default_duration_h"],
+        "notices": cat["notices"],
+    }
+
+
 def report_digest(rep: dict[str, Any]) -> dict[str, Any]:
     ind = rep.get("indicators", {})
     consequence = dict(rep.get("consequence") or {})
@@ -248,7 +269,15 @@ def report_digest(rep: dict[str, Any]) -> dict[str, Any]:
         "consequence": consequence,
         "coordination": rep.get("coordination"),
         "notice": rep.get("notice", NOTICE),
+        **_incident_digest(rep.get("incident")),
     }
+
+
+def _incident_digest(inc: dict[str, Any] | None) -> dict[str, Any]:
+    if not inc:
+        return {}
+    keys = ("id", "title", "kind", "verified", "mitigations", "notes", "consequence_card")
+    return {"incident": {k: inc[k] for k in keys if k in inc}}
 
 
 def prepare_digest(out: dict[str, Any], changes: list[dict[str, Any]]) -> dict[str, Any]:

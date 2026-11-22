@@ -44,6 +44,7 @@ from cascadasen.domain.theater.execution import (
     UnknownEventTargetError,
 )
 from cascadasen.domain.theater.grid import TheaterGrid
+from cascadasen.domain.theater.incident import incident_card, incident_public
 from cascadasen.domain.theater.resources import Ledger
 from cascadasen.domain.theater.rng import new_seed, rng_for
 from cascadasen.domain.theater.state import AreaDigital, ObservedState, RealState
@@ -95,6 +96,7 @@ class RunConfig:
     initial_events: tuple[dict[str, Any], ...] = ()
     stochastic: bool = True  # False: catalog sizes, no unplanned events, actions always work
     llm_commander: bool = False  # C2 picks among validated COAs with the configured LLM advisor
+    duration_h: float | None = None  # incident runs: outage hours for the card; None = the catalog default
     llm_choices: tuple[tuple[int, tuple[str, ...]], ...] = ()  # recorded picks, replayed verbatim
 
     def as_dict(self) -> dict[str, Any]:
@@ -119,6 +121,7 @@ class RunConfig:
             initial_events=tuple(dict(e) for e in d.get("initial_events") or ()),
             stochastic=bool(d.get("stochastic", True)),
             llm_commander=bool(d.get("llm_commander", False)),
+            duration_h=None if d.get("duration_h") is None else float(d["duration_h"]),
             llm_choices=tuple((int(k), tuple(v)) for k, v in d.get("llm_choices") or ()),
         )
 
@@ -881,7 +884,7 @@ class Simulation:
         rec = ind.get("recoverability_cycles")
         if rec is not None and self.evaluator.onset is not None:
             moments.append({"cycle": self.evaluator.onset + rec, "rationale_key": "aar_recovered"})
-        return {
+        out = {
             "run": {
                 "template": self.template.id,
                 "question_key": self.template.question_key,
@@ -916,3 +919,24 @@ class Simulation:
             "after_action": sorted(moments, key=lambda m: m["cycle"]),
             "trace_head": self.log.head,
         }
+        inc = self.cfg.incidents.get(self.template.id)
+        if inc:
+            custom = self.config.duration_h is not None
+            hours = float(self.config.duration_h) if custom else self.cfg.incident_duration_h
+            out["incident"] = {
+                **incident_public(
+                    inc,
+                    len(self.template.scenario_events),
+                    self.horizon,
+                    self.operating_point,
+                ),
+                "consequence_card": incident_card(
+                    inc,
+                    self.evaluator.series,
+                    self.real.worst_level,
+                    self.evaluator.voll_usd_per_kwh,
+                    hours,
+                    True,
+                ),
+            }
+        return out
