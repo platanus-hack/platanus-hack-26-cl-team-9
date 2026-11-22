@@ -836,7 +836,7 @@ export function CascadeApp() {
           )}
           {view === "tabs" && isChile && tab === "estado" && network && (s.sid
             ? <p className="meta">En una sesión compartida los cambios están en Simulación y Datos.</p>
-            : <NetworkState network={network} buses={buses} point={pointId} edits={edits} result={simResult} timeline={timelineReady ? timeline : null} restoreLine={(id) => restore([id])} restoreBus={restoreBus} restoreAll={() => restore()}
+            : <NetworkState network={network} buses={buses} point={pointId} edits={edits} result={simResult} timeline={timelineReady ? timeline : null} t={t} restoreLine={(id) => restore([id])} restoreBus={restoreBus} restoreAll={() => restore()}
                 prepared={prepared?.value ?? null} dropChange={(i) => setEdits((e) => dropChange(e, i))} />)}
           {view === "tabs" && isChile && tab === "red" && network && <NetworkPanel source={sourceNote} />}
           {view === "tabs" && isChile && tab === "sim" && s.sid && s.state && network && (

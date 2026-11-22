@@ -99,6 +99,23 @@ describe("NetworkState", () => {
     expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ point: "nov2026-1300", open_lines: ["L1"], out_buses: [] });
   });
 
+  it("follows the simulation second: events and islands appear only once t reaches them", () => {
+    setup({ edits: { lines: ["L1"], buses: [] }, timeline, t: 2 });
+    expect(screen.getByRole("heading", { name: "Consecuencias en la red · 1" })).toBeTruthy();
+    expect(screen.getByText("1.5 s")).toBeTruthy();
+    expect(screen.queryByText("4.0 s")).toBeNull();
+    expect(screen.getByText("islas apagadas")).toBeTruthy();
+  });
+
+  it("shows the mean loading of the lines carrying flow, without open lines", () => {
+    const loaded = {
+      ...timeline, frames: [{ t: 0, edges: { A: { flow_mw: 10, status: "ok", loading: 0.4 }, B: { flow_mw: 10, status: "overload", loading: 1.2 }, C: { flow_mw: 0, status: "open", loading: 0 } }, dark: [], islands: [] }],
+    } as unknown as Timeline;
+    setup({ edits: { lines: ["L1"], buses: [] }, timeline: loaded, t: 0 });
+    expect(screen.getByText("80 %")).toBeTruthy();
+    expect(screen.getByText("carga promedio de la red")).toBeTruthy();
+  });
+
   it("says the cost is pending when the backend has no endpoint, and shows the error when it fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
     setup({ edits: { lines: ["L1"], buses: [] }, timeline });

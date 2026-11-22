@@ -271,6 +271,12 @@ export function frameAt(tl: Timeline, t: number): Frame {
   return { ...f, dark: [...darkAt(tl, t)] };
 }
 
+/** Mean loading (share of capacity) of the lines carrying flow in a frame; open lines and lines without flow do not count. Null if none. */
+export function meanLoading(f: Frame): number | null {
+  const on = Object.values(f.edges).filter((e) => e.status !== "open" && e.loading > 0);
+  return on.length ? on.reduce((s, e) => s + e.loading, 0) / on.length : null;
+}
+
 export type LineStatus = "en servicio" | "sobrecargada" | "fuera de servicio" | "sin tensión";
 /**
  * A line at the current frame, as the engine computed it: flow from `from` to `to` (bus ids), loading as a share of
