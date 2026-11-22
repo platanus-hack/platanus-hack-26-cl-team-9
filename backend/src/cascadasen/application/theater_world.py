@@ -6,10 +6,14 @@ from __future__ import annotations
 import json
 from functools import cache
 from pathlib import Path
+from typing import Any
 
 from cascadasen.domain.cascade.network import reduce_network
+from cascadasen.domain.cascade.overlay import Applied, apply_overlay, is_empty
 from cascadasen.domain.cascade.scenario import OperatingPoint, load_operating_point
+from cascadasen.domain.simulation.network import NetworkSpec
 from cascadasen.domain.theater.areas import TheaterNetwork, build_theater_network
+from cascadasen.domain.theater.world import TheaterWorld
 
 
 class ProcessedWorld:
@@ -23,9 +27,6 @@ class ProcessedWorld:
 
     def points(self) -> list[str]:
         return list(self._points)
-
-    def labels(self) -> dict[str, str]:
-        return {pid: p["label"] for pid, p in self._points.items()}
 
     def load(self, point_id: str) -> tuple[TheaterNetwork, OperatingPoint]:
         if point_id not in self._loaded:
@@ -47,3 +48,35 @@ class ProcessedWorld:
 @cache
 def default_world(processed: str) -> ProcessedWorld:
     return ProcessedWorld(Path(processed))
+
+
+class SessionWorld:
+    """A session's dataset as a `TheaterWorld`: one pinned operating point of `base` with the
+    session overlay applied (docs/stack.md 6.2). Runs created on it keep this dataset."""
+
+    def __init__(
+        self, base: TheaterWorld, point_id: str, overlay: dict[str, Any], spec: NetworkSpec | None = None
+    ) -> None:
+        self.base, self.point_id, self.overlay, self.spec = base, point_id, overlay, spec
+        self._applied: Applied | None = None
+        self._loaded: tuple[TheaterNetwork, OperatingPoint] | None = None
+
+    def points(self) -> list[str]:
+        return [self.point_id]
+
+    @property
+    def applied(self) -> Applied:
+        if self._applied is None:
+            net, point = self.base.load(self.point_id)
+            self._applied = apply_overlay(net.buses, point, self.overlay)
+        return self._applied
+
+    def load(self, point_id: str) -> tuple[TheaterNetwork, OperatingPoint]:
+        if point_id != self.point_id:
+            raise KeyError(point_id)
+        if is_empty(self.overlay):
+            return self.base.load(point_id)
+        if self._loaded is None:
+            a = self.applied
+            self._loaded = (build_theater_network(a.net, a.point.people, a.point.load, self.spec), a.point)
+        return self._loaded

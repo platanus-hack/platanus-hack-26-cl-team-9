@@ -2,6 +2,7 @@
 
 import pytest
 
+from cascadasen.domain.simulation.consequence import outage_cost
 from cascadasen.domain.simulation.defenses import DefenseSet
 from cascadasen.domain.simulation.engine import Change, run_transient
 from cascadasen.domain.simulation.frequency import IslandInput, simulate_island
@@ -101,3 +102,10 @@ def test_unknown_island_collapse_loses_load(net):
     south = next(r for r in res.islands if "Y" in r.areas)
     assert south.result == "blackout"
     assert res.state.served_mw["Y"] == 0 and res.people_without_power >= 2_000_000
+
+
+def test_outage_cost_values_unserved_energy_at_the_failure_cost():
+    out = outage_cost(1000.0, 4.0, True, 8.79)
+    assert out["unserved_energy_mwh"] == pytest.approx(4000.0)
+    assert out["failure_cost_usd"] == pytest.approx(4000.0 * 1000 * 8.79)
+    assert out["outage_duration_h"] == {"value": 4.0, "is_assumption": True}

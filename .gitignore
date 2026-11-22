@@ -1,5 +1,8 @@
 # downloaded source cache (rebuild with `cascadasen-build --refresh`)
 data/raw/
+# local session and run records (CASCADASEN_SESSION_STORE=file)
+data/sessions/
+data/grids/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
@@ -26,3 +29,10 @@ tfplan
 *.tfvars
 !*.tfvars.example
 infrastructure/.deploy-tag
+
+# Coverage and generated output
+.coverage
+htmlcov/
+web/coverage/
+# Offline theatre fallback written by cascadasen-sim-fixtures (docs/mapa3.md)
+web/public/cache/theater/

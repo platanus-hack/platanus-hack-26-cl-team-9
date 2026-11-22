@@ -126,6 +126,14 @@ class PhysicsSimulator:
             raise SimulationInputError("outage_duration_h", f"entre 0 y {MAX_OUTAGE_H:.0f} horas")
 
     def simulate(self, cmd: SimulateCommand) -> dict[str, Any]:
+        """Run a `POST /simulate` command on the 13-area network and return the timeline (docs/stack.md section 6).
+
+        Order: validate the input (`SimulationInputError`), build the scenario's initial state and apply the
+        batteries, turn the command into `Change`s (defences off, resolved elements out, groups out), run the
+        transient, build the consequence card (the card is told whether the outage duration was defaulted to
+        `physics.default_outage_h`), collect the provenance, and build the timeline. `elements_resolved` is added
+        so the client sees how each input was read. `TIMEOUT_S` is checked after the run: it reports a timeout but
+        does not interrupt a run."""
         self._validate(cmd)
         started = time.perf_counter()
         net, physics = self.network, self.physics

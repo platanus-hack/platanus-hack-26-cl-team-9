@@ -29,6 +29,27 @@ def compare_workflow(processed: Path, point_ids: list[str], cut: list[str]) -> l
     return reports
 
 
+def usd_m(usd: float) -> str:
+    return f"US$ {usd / 1e6:,.1f} M".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def format_cost(r: HealthReport) -> str | None:
+    """Cost line next to the index: a regulatory valuation, never a measured loss."""
+    cost = r.extra.get("cost")
+    if not cost:
+        return None
+    hours = f"{cost['outage_duration_h']['value']:g} h supuestas"
+    if r.kind == "prefault":
+        return (
+            f"  $ Dinero en riesgo N-1 (modelo): esperado {usd_m(cost['n1_expected_cost_usd'])}, "
+            f"peor {usd_m(cost['n1_worst_cost_usd'])}; {cost['n1_cuts_with_cost']} de {cost['n1_cuts']} cortes "
+            f"con costo, los {cost['n1_cost_share']['count']} más caros suman {cost['n1_cost_share']['share_band']} "
+            f"(costo de falla CNE [19], {hours}, mismo peso por línea)"
+        )
+    rule = "; incluye islas apagadas por la regla de colapso de tensión" if cost.get("voltage_rule") else ""
+    return f"  $ Costo estimado: {usd_m(cost['cost_usd'])} (costo de falla CNE [19], {hours}{rule})"
+
+
 def format_report(r: HealthReport) -> str:
     title = "antes de la falla" if r.kind == "prefault" else f"después del corte {','.join(r.extra['cut'])}"
     flag = "  (INCIERTO: tensión no calculada)" if r.uncertain else ""
@@ -39,6 +60,9 @@ def format_report(r: HealthReport) -> str:
         lines.append(
             f"  {mark} {m.label:<46} {m.value:4.2f} (bruto {m.raw:+.2f})  {m.measured}; límite {m.limit}  [{src}]"
         )
+    cost = format_cost(r)
+    if cost:
+        lines.append(cost)
     return "\n".join(lines)
 
 
@@ -57,6 +81,7 @@ def main() -> int:
         print("\n\n".join(format_report(r) for r in reports))
         print(
             "\n* informativa, no entra en el mínimo. El índice es un modelo propio, no un indicador oficial del CEN."
+            "\n$ valoración regulatoria (costo de falla CNE), no pérdida medida; no entra en el índice."
         )
     return 0
 

@@ -29,6 +29,56 @@ def consequence_level(islands: list[IslandResult], load_lost_mw: float) -> tuple
     return "L0", uncertain
 
 
+def outage_cost(
+    load_lost_mw: float, outage_h: float, outage_is_assumption: bool, voll_usd_per_kwh: float
+) -> dict[str, Any]:
+    """Unserved energy and its regulatory valuation (CNE failure cost [19], stack.md 6.1).
+
+    A valuation for planning, not a measured economic loss. Shared by the consequence card and the
+    cascade timeline summary so the formula lives in one place."""
+    mwh = load_lost_mw * outage_h
+    return {
+        "unserved_energy_mwh": round(mwh, 1),
+        "failure_cost_usd": round(mwh * 1000.0 * voll_usd_per_kwh),
+        "outage_duration_h": {"value": outage_h, "is_assumption": outage_is_assumption},
+    }
+
+
+def blackout_cost(
+    dark_mw: float,
+    shed_mw: float,
+    total_mw: float,
+    voll_usd_per_kwh: float,
+    blackout_h: float,
+    shed_h: float,
+    total_multiplier: float,
+) -> dict[str, Any]:
+    """Failure cost that tells a total blackout from a slow grid (docs/engine.md, "Cost").
+
+        cost = VoLL x [ dark_MW x H_blackout x (1 + (k - 1) x dark_share) + shed_MW x H_shed ]
+
+    `dark_mw`: demand of the buses that went dark (islands that collapsed, substations out): they need a black start,
+    H_blackout hours at full outage. `shed_mw`: load cut by EDAC in islands that survive: back in H_shed. `k` adds the
+    cost of a total blackout beyond the unserved energy and grows with the share of the demand that went dark."""
+    share = min(1.0, dark_mw / total_mw) if total_mw > 0 else 0.0
+    factor = 1.0 + (total_multiplier - 1.0) * share
+    dark_mwh, shed_mwh = dark_mw * blackout_h, shed_mw * shed_h
+    usd_per_mwh = voll_usd_per_kwh * 1000.0
+    return {
+        "unserved_energy_mwh": round(dark_mwh + shed_mwh, 1),
+        "failure_cost_usd": round(usd_per_mwh * (dark_mwh * factor + shed_mwh)),
+        # what one hour of this outage costs while it lasts (dark and shed load both still out)
+        "cost_per_hour_usd": round(usd_per_mwh * (dark_mw * factor + shed_mw)),
+        "outage_duration_h": {"value": blackout_h if dark_mw > 0 else shed_h, "is_assumption": dark_mw <= 0},
+        "cost_breakdown": {
+            "dark_mw": round(dark_mw, 1),
+            "shed_mw": round(shed_mw, 1),
+            "dark_share": round(share, 4),
+            "total_blackout_factor": round(factor, 4),
+        },
+    }
+
+
 def consequence_card(
     islands: list[IslandResult],
     load_lost_mw: float,
@@ -39,15 +89,12 @@ def consequence_card(
     voll_usd_per_kwh: float,
 ) -> dict[str, Any]:
     level, uncertain = consequence_level(islands, load_lost_mw)
-    mwh = load_lost_mw * outage_h
     return {
         "consequence_level": level,
         "uncertain": uncertain,
         "people_without_power": round(people),
         "load_shed_mw": round(load_shed_mw, 1),
         "load_lost_mw": round(load_lost_mw, 1),
-        "unserved_energy_mwh": round(mwh, 1),
-        "failure_cost_usd": round(mwh * 1000.0 * voll_usd_per_kwh),
-        "outage_duration_h": {"value": outage_h, "is_assumption": outage_is_assumption},
+        **outage_cost(load_lost_mw, outage_h, outage_is_assumption, voll_usd_per_kwh),
         "islands": [i.summary() for i in islands],
     }

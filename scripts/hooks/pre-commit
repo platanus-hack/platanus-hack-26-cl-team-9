@@ -2,7 +2,7 @@
 # Git pre-commit hook. Enable once per clone:
 #   git config core.hooksPath scripts/hooks
 #
-# 1. Lints staged files with scripts/lint.sh --check (ruff for Python, eslint/prettier for frontend).
+# 1. Lints staged files with scripts/lint.sh --check (ruff for Python, tsc for web/).
 #    It checks the working-tree copy of each staged file.
 # 2. Requires CHANGELOG.md to be staged, so every commit tells agents what changed.
 #    Skipped for merge commits. For an exceptional commit with no entry:
@@ -13,7 +13,9 @@ ROOT="$(git rev-parse --show-toplevel)"
 GIT_DIR="$(git rev-parse --git-dir)"
 fail=0
 
-mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACMR)
+# No mapfile: macOS ships bash 3.2.
+staged=()
+while IFS= read -r f; do staged+=("$f"); done < <(git diff --cached --name-only --diff-filter=ACMR)
 
 if ((${#staged[@]})); then
   abs=()
@@ -26,7 +28,8 @@ if ((${#staged[@]})); then
 fi
 
 if [[ "${SKIP_CHANGELOG:-0}" != "1" && ! -f "$GIT_DIR/MERGE_HEAD" ]]; then
-  if ! printf '%s\n' "${staged[@]}" | grep -qx 'CHANGELOG.md'; then
+  # Not grep -q: it exits at the first match, printf gets SIGPIPE and pipefail fails the check on big commits.
+  if ! printf '%s\n' ${staged[@]+"${staged[@]}"} | grep -x 'CHANGELOG.md' >/dev/null; then
     echo "" >&2
     echo "pre-commit: CHANGELOG.md is not staged." >&2
     echo "  Add an entry at the top of CHANGELOG.md (format in AGENTS.md section 3) and git add it." >&2

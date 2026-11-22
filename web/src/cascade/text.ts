@@ -4,6 +4,7 @@ const ZONES: Record<string, string> = { centro_sur: "Centro-sur", norte_grande: 
 const REASONS: Record<string, string> = {
   no_generation: "queda sin generación", no_load: "queda sin demanda y su generación se desconecta",
   no_inertia: "no tiene inercia sincrónica", frequency: "la frecuencia cae bajo 47,5 Hz",
+  voltage: "colapsa por tensión al separarse el corredor del 25F con un flujo previo fuera del rango del esquema de defensa",
 };
 
 export const zoneName = (zone: string) => ZONES[zone] ?? zone;
@@ -29,12 +30,36 @@ export function lineName(network: Network, id: string): string {
   return line ? `${node(line.a)} – ${node(line.b)} (${Math.round(line.kv)} kV)` : id;
 }
 
+/** Prefix of a substation shutdown scenario: `sub-B012` opens every line of B012 at t = 0 (cache `<point>/sub-B012.json`). */
+export const SUBSTATION_PREFIX = "sub-";
+
+/** The substation behind a scenario id, or null when the id is a line. */
+export const shutdownNode = (id: string): string | null => (id.startsWith(SUBSTATION_PREFIX) ? id.slice(SUBSTATION_PREFIX.length) : null);
+
+/** Ids of the lines with one end at the substation. */
+export function substationLines(network: Network, nodeId: string): string[] {
+  return network.lines.filter((l) => l.a === nodeId || l.b === nodeId).map((l) => l.id);
+}
+
+/** Name of a scenario cut: "Subestación Cerro Navia" for `sub-B###`, the line name otherwise. */
+export function cutName(network: Network, id: string): string {
+  const node = shutdownNode(id);
+  if (!node) return lineName(network, id);
+  const n = network.nodes.find((x) => x.id === node);
+  return `Subestación ${n ? placeName(n.name) : node}`;
+}
+
+/** "A", "A y B", "A, B y C". */
+const listEs = (items: string[]) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`);
+
 /** Why: every sentence is built from fixed templates, so the narration is reproducible and carries no model text. */
 export function narrate(event: Event, network: Network): string {
   const p = event.params;
   const names = event.ids.map((id) => lineName(network, id)).join(" y ");
   switch (event.text_key) {
-    case "line_cut": return `Sale de servicio la línea ${names}.`;
+    case "line_cut": return event.ids.length > 1
+      ? `Salen de servicio las líneas ${listEs(event.ids.map((id) => lineName(network, id)))}.`
+      : `Sale de servicio la línea ${names}.`;
     case "line_overload_open": return `${names} supera el 120 % de su capacidad y sale de servicio.`;
     case "island_formed": return `Se forma una isla de ${p.buses} subestaciones: ${mw(p.gen_mw)} MW de generación para ${mw(p.load_mw)} MW de demanda.`;
     case "load_shed": return `Corte automático de carga en ${zoneName(String(p.zone))}, escalón ${p.step}: ${mw(p.mw)} MW.`;
@@ -52,6 +77,10 @@ export const mw = (n: unknown) => int(Number(n ?? 0));
 export const hz = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const secs = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 export const pct = (n: number) => `${Math.round(n * 100)} %`;
+/** US$ in millions with one decimal, Chilean format: 69335520 -> "US$ 69,3 M". */
+export const usdM = (n: number) => `US$ ${(n / 1e6).toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M`;
+/** Health index on its 0-1 scale with two decimals: "0,67". */
+export const index2 = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function formatPeople(n: number): string {
   return n >= 1e6 ? `${(n / 1e6).toLocaleString("es-CL", { maximumFractionDigits: 1 })} M` : int(n);

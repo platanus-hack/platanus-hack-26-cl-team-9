@@ -2,6 +2,8 @@
 
 The agents ("bots") of the strategic theatre are described in `strategy.md` section 5: missions, views and permissions. This document covers what they know about the physics and how they act on it. The physics is the 188-bus cascade engine (`engine.md`); parameters for both live in YAML with provenance.
 
+External agents that drive runs over HTTP (not the bots below) use the agent-only OpenAPI spec: `GET /api/v1/agents/openapi.json`, versioned in `docs/openapi/agents.openapi.json`; conventions in `openapi.md`.
+
 Code: `domain/agents/` (agents), `domain/theater/digital.py` (what supervision shows), `domain/theater/grid.py` (per-area physical readings), `domain/theater/params/theater.yaml` → `physics_alarms` (thresholds). Tests: `backend/tests/unit/test_physical_bots.py`.
 
 ## 1. Physical contract
@@ -41,7 +43,7 @@ Between operational cycles, secondary control brings energized islands back to 5
 
 ### 1.3 Voltage: documented, not computed
 
-The DC model has no voltage. When a cut opens the 25F boundary and its pre-fault flow was above 1,600 MW N→S or 1,000 MW S→N ([4], `stack.md` 4.6), the engine returns `voltage_limited` for the islands at its ends. The theatre reads this as `uncertain`, supervision raises `voltage_limited`, and the UI says "limitado por tensión (incierto), evento documentado, no calculado". No agent claims a voltage value.
+The DC model has no voltage. When a cut opens the 25F boundary and its pre-fault flow was above 1,600 MW N→S or 1,000 MW S→N ([4], `stack.md` 4.6), the 188-bus engine collapses the islands at its ends by a rule: `island_blackout` with `reason: "voltage"` and `result: "blackout"` (`domain/cascade/engine.py` `_settle_island`, `docs/engine.md` item 6). It no longer returns a `voltage_limited` result, so the theatre paths that read one (`domain/theater/execution.py` `_islands`, which maps it to `uncertain`; `domain/theater/digital.py`, which raises the `voltage_limited` alarm for an `uncertain` island; the weight in `domain/agents/isr.py`; the branch in `domain/agents/stabilization.py`) are exercised only by tests that build such a view by hand (`tests/unit/test_physical_bots.py`). Whether to remove them or to map the voltage rule onto them is a pending product decision (`docs/for-reviewers.md`, "Pending product decisions"). No agent claims a voltage value.
 
 ### 1.4 Physical alarms
 
@@ -51,7 +53,7 @@ The DC model has no voltage. When a cut opens the 25F boundary and its pre-fault
 | `frequency_out_of_band` | Observed `freq_hz` outside 49.0–51.0 Hz | `digital.band_alarms` |
 | `high_rocof` | Observed \|`rocof_hz_s`\| ≥ 1.0 Hz/s | `digital.band_alarms` |
 | `low_inertia` | Island inertia below the floor after losing synchronous units; one alarm per island, only where supervision is visible and reliable | `digital.band_alarms` |
-| `voltage_limited` | The island's verdict was `uncertain` | `digital.physical_alarms` |
+| `voltage_limited` | The island's verdict was `uncertain` (the 188-bus engine does not return it today, section 1.3) | `digital.physical_alarms` |
 | `load_loss`, `blackout`, `breaker_open` | Unchanged | `digital.physical_alarms` |
 
 Physical alarms are never drawn as false alarms. Their thresholds live in `theater.yaml` → `physics_alarms` and are merged into `TheaterConfig.digital`.
@@ -83,6 +85,10 @@ The new alarms add evidence per area. Weights: `frequency_out_of_band` 0.4, `hig
 ### 2.3 C2 and the LLM
 
 C2 still decides on the rules plus the optional LLM pick (`strategy.md` section 10). The LLM sees only C2's view.
+
+### 2.4 External agents
+
+An agent running on another machine works through a shared session (`docs/sessions-api.md`): it creates or joins a session, then passes the session id in the path of every call (`/api/v1/sessions/{sid}/...`). It can edit the session network, open and repair lines in the sandbox, and drive runs nested in the session, including `POST /sessions/{sid}/runs/{rid}/actions`, which queues its own course of action for the next cycle. That action skips C2's choice, its operator attention cap and the conflict rules, but goes through the same validator, resources and crews as the commander's approved actions when it executes (it still spends one unit of operator attention), and is logged with the agent's name. The guardrails of section 3 apply to it. A client with an LLM can drive the same API in natural language through the MCP server (`docs/mcp.md`).
 
 ## 3. Guardrails
 

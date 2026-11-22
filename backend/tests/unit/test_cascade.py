@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 
 import numpy as np
@@ -134,16 +135,14 @@ def test_edac_totals_match_the_25f_report():
     high = sum(r[1] for rows in CENTRO_SUR_ZONES.values() for r in rows)
     assert low == pytest.approx(1139, abs=5) and high == pytest.approx(2053, abs=10)
     tables = edac_tables({"centro_sur": 8000.0, "norte_grande": 1500.0}, 9500.0)
-    # six frequency steps plus the three extreme-contingency (df/dt) stages of [4] Tables 3-10/3-11
-    assert len(tables["centro_sur"]) == 9 and len(tables["norte_grande"]) == 7
-    extreme = [st for st in tables["centro_sur"] if st.gradient_hz_s is not None]
-    assert [st.gradient_hz_s for st in extreme] == [-0.9, -1.2, -1.9]
-    assert sum(st.fraction for st in extreme) * 8000.0 == pytest.approx(671.55, abs=0.1)
+    # the six frequency steps of the centro-sur table; the extreme-contingency EDAC is not modelled
+    assert len(tables["centro_sur"]) == 6 and len(tables["norte_grande"]) == 7
 
 
 def test_secure_base_case_has_no_cascade():
     timeline = run_cascade_workflow(_toy_net(), _toy_point(), [])
     assert timeline["summary"]["stages"] == 0 and timeline["summary"]["load_shed_mw"] == 0
+    assert timeline["summary"]["failure_cost_usd"] == 0
 
 
 def test_overload_cascade_darkens_the_grid():
@@ -152,6 +151,25 @@ def test_overload_cascade_darkens_the_grid():
     kinds = [e["type"] for e in timeline["events"]]
     assert kinds[0] == "line_cut" and "line_overload_open" in kinds and "island_blackout" in kinds
     assert timeline["summary"]["load_shed_mw"] == 300 and timeline["summary"]["people_without_power"] == 2000
+    # a total blackout: dark MW x 7.34 h of black start [44] x 8.79 US$/kWh (CNE [19]) x 1.375 for a full blackout [44]
+    assert timeline["summary"]["dark_load_mw"] == 300
+    assert timeline["summary"]["unserved_energy_mwh"] == pytest.approx(300 * 7.34)
+    assert timeline["summary"]["failure_cost_usd"] == pytest.approx(
+        300 * 7.34 * 1000 * 8.79 * 1.375, rel=1e-6
+    )
+    assert timeline["summary"]["cost_per_hour_usd"] == pytest.approx(300 * 1000 * 8.79 * 1.375, rel=1e-6)
+    assert timeline["summary"]["outage_duration_h"] == {"value": 7.34, "is_assumption": False}
+
+
+def test_load_shed_in_a_surviving_island_costs_an_hour_and_no_blackout_premium():
+    from cascadasen.domain.cascade.engine import failure_cost
+
+    shed = failure_cost(100.0, 0.0, 1000.0)
+    assert shed["failure_cost_usd"] == pytest.approx(100 * 1.0 * 1000 * 8.79)
+    dark = failure_cost(
+        100.0, 100.0, 1000.0
+    )  # same MW, but dark: black start and 10 % of the blackout premium
+    assert dark["failure_cost_usd"] == pytest.approx(100 * 7.34 * 1000 * 8.79 * (1 + 0.375 * 0.1), rel=1e-6)
 
 
 def test_cut_that_the_network_absorbs_sheds_nothing():
@@ -247,35 +265,6 @@ def test_reserve_follows_the_droop_and_saturates_at_the_cap():
     assert big.reserve_mw == pytest.approx(240.0, rel=0.02)
 
 
-def test_extreme_edac_acts_on_frequency_and_gradient_together():
-    tables = edac_tables({"centro_sur": 8000.0, "norte_grande": 0.0}, 9500.0)
-    extreme = {"centro_sur": [st for st in tables["centro_sur"] if st.gradient_hz_s is not None]}
-    fast = simulate_island(
-        _deficit_island(
-            inertia_mws=10000.0,
-            load_mw=8000.0,
-            gen_mw=6000.0,
-            zone_load_mw={"centro_sur": 8000.0},
-            edac=extreme,
-        )
-    )
-    assert sorted(st["step"] for st in fast.steps if st.get("extreme")) == [
-        1,
-        2,
-        3,
-    ]  # -5 Hz/s fires all three
-    slow = simulate_island(
-        _deficit_island(
-            inertia_mws=200000.0,
-            load_mw=8000.0,
-            gen_mw=7800.0,
-            zone_load_mw={"centro_sur": 8000.0},
-            edac=extreme,
-        )
-    )
-    assert not slow.steps  # -0.05 Hz/s never reaches the first gradient stage
-
-
 def test_deployed_reserve_stays_synchronous():
     from cascadasen.domain.cascade.engine import run_cascade_state
 
@@ -293,7 +282,7 @@ def test_islands_carry_rocof_inertia_and_bus_indices():
     timeline, state = run_cascade_state(net, _toy_point(gen=(300.0, 0.0, 0.0), load=(0.0, 160.0, 160.0)), [])
     isl = timeline["summary"]["islands"][0]
     assert isl["inertia_mws"] == 30000 and isl["rocof_hz_s"] < 0 and isl["final_hz"] < 50.0
-    assert state.islands[0]["bus_idx"] == [0, 1, 2] and timeline["summary"]["uncertain"] is False
+    assert state.islands[0]["bus_idx"] == [0, 1, 2]
 
 
 @pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
@@ -322,19 +311,22 @@ def test_inertia_falls_with_solar():
 
 
 @pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
-def test_loaded_25f_corridor_cut_is_voltage_limited():
-    """stack.md 4.6: opening the 25F boundary with more than 1,600 MW N->S before the fault gives an uncertain
-    (voltage-limited) verdict, not a frequency one. At 03:00 the corridor flows S->N below 1,000 MW: no flag."""
-    from cascadasen.domain.cascade.engine import boundary_lines
-
+def test_loaded_25f_corridor_cut_collapses_both_ends_by_voltage():
+    """stack.md 4.6: separating the 25F corridor with more than 1,600 MW N->S before the fault collapses the islands at
+    both ends by voltage. At 03:00 the corridor flows S->N below 1,000 MW: the frequency verdict stands."""
     net, point = load_network_and_point(PROCESSED, "feb2025-1500")
-    cut = [lid for lid, _ in boundary_lines(net)]
-    loaded = run_cascade_workflow(net, point, cut)
-    assert loaded["summary"]["uncertain"] and loaded["summary"]["prefault_boundary_mw"] > 1600
-    assert any(i["result"] == "voltage_limited" for i in loaded["summary"]["islands"])
+    loaded = run_cascade_workflow(net, point, ["R239"])
+    assert loaded["summary"]["prefault_boundary_mw"] > 1600
+    voltage = [
+        e for e in loaded["events"] if e["type"] == "island_blackout" and e["params"]["reason"] == "voltage"
+    ]
+    assert len(voltage) == 2
+    assert loaded["summary"]["load_shed_mw"] == loaded["summary"]["load_total_mw"]  # the whole SEN goes dark
     net3, night = load_network_and_point(PROCESSED, "feb2025-0300")
-    light = run_cascade_workflow(net3, night, [lid for lid, _ in boundary_lines(net3)])
-    assert not light["summary"]["uncertain"]
+    light = run_cascade_workflow(net3, night, ["R239"])
+    assert all(
+        e["params"].get("reason") != "voltage" for e in light["events"] if e["type"] == "island_blackout"
+    )
 
 
 def test_cascade_parameters_carry_provenance(tmp_path):
@@ -346,3 +338,204 @@ def test_cascade_parameters_carry_provenance(tmp_path):
     (tmp_path / "bad.yaml").write_text("frequency:\n  f0_hz: 50.0\n", encoding="utf-8")
     with pytest.raises(ParameterError):
         load_params("bad", tmp_path)
+
+
+def test_network_json_carries_country_on_every_node_and_line():
+    """Issue #49: every element says which country it belongs to (ISO3), as data/processed/latam does."""
+    from cascadasen.application.cache_builder import network_json
+
+    doc = network_json(_toy_net())
+    assert all(n["country"] == "CHL" for n in doc["nodes"])
+    assert all(ln["country"] == "CHL" for ln in doc["lines"])
+
+
+# --- Cascade invariants (issue #90) -------------------------------------------------------------------------------
+
+_SETTLING = ("load_shed", "island_blackout")
+
+
+def _assert_invariants(timeline: dict, state, point: OperatingPoint, balance: bool = True) -> None:
+    """Invariants every timeline keeps: time order, causality, settled islands balanced, dark never shrinks, blackout
+    ids add up to the final dark set, and people_without_power from the dark buses plus the EDAC share."""
+    events, frames = timeline["events"], timeline["frames"]
+    times = [e["t"] for e in events]
+    assert times == sorted(times)
+    opens = {e["params"]["stage"]: e["t"] for e in events if e["type"] == "line_overload_open"}
+    for e in events:
+        if e["type"] in _SETTLING:
+            later = [t for k, t in opens.items() if k > e["params"]["stage"]]
+            assert not later or e["t"] < min(later), (
+                f"stage {e['params']['stage']} event at {e['t']} after {later}"
+            )
+    for frame in frames if balance else []:
+        for isl in frame["islands"]:
+            # after settling, the residual is what load damping and curtailment absorb (largest in the cache: 3.3 %)
+            assert abs(isl["gen_mw"] - isl["load_mw"]) <= 0.05 * isl["load_mw"] + 5, isl
+    for before, after in itertools.pairwise(frames):
+        assert set(before["dark"]) <= set(after["dark"])
+    blackout_ids = {i for e in events if e["type"] == "island_blackout" for i in e["ids"]}
+    assert blackout_ids == set(frames[-1]["dark"])
+    # A dark bus counts all its people, whatever its net load; a live bus the share of its load shed by EDAC.
+    final_dark = {int(b[1:]) for b in frames[-1]["dark"]}
+    dark = sorted(final_dark)
+    live = [b for b in range(len(point.load)) if b not in final_dark and point.load[b] > 0]
+    edac = sum(point.people[b] * (1 - state.load[b] / point.load[b]) for b in live)
+    assert timeline["summary"]["people_without_power"] == pytest.approx(
+        point.people[dark].sum() + edac, abs=1
+    )
+
+
+def _resplit_net() -> ReducedNetwork:
+    """A(0) feeds B(1) and C(2); D(3) hangs off C on a weak radial line that overloads once the system has shed."""
+    lines = [
+        Line("R0", 0, 1, 2000.0, 0.01, 220, ("ab",), ()),
+        Line("R1", 0, 2, 2000.0, 0.01, 220, ("ac",), ()),
+        Line("R2", 2, 3, 50.0, 0.01, 220, ("cd",), ()),
+    ]
+    return ReducedNetwork(
+        names=["A", "B", "C", "D"],
+        lat=[-33.0] * 4,
+        lon=[-70.0] * 4,
+        kv=[220.0] * 4,
+        model_buses=[["A_220"], ["B_220"], ["C_220"], ["D_220"]],
+        map_nodes=[[], [], [], []],
+        lines=lines,
+        index={"A": 0, "B": 1, "C": 2, "D": 3},
+        bus_of_model_bus={"A_220": 0, "B_220": 1, "C_220": 2, "D_220": 3},
+    )
+
+
+def _resplit_point() -> OperatingPoint:
+    gen = np.array([300.0, 0.0, 0.0, 120.0])
+    return OperatingPoint(
+        "toy",
+        "toy",
+        np.array([0.0, 100.0, 50.0, 400.0]),
+        gen,
+        gen.copy(),
+        np.array([30000.0, 0.0, 0.0, 6000.0]),
+        np.array([0.0, 1000.0, 1000.0, 1000.0]),
+    )
+
+
+def test_toy_cascades_keep_the_invariants():
+    """No balance check on the toys: their EDAC steps fire late (12-19 s), so the 20 s horizon ends before the
+    island settles (docs/engine.md, "Hand-checked cuts"). The real cases below do check it."""
+    from cascadasen.domain.cascade.engine import run_cascade_state
+
+    cases = [
+        (_toy_net(), _toy_point(), ["R1"]),
+        (
+            _toy_net(caps=(400.0, 400.0, 400.0)),
+            _toy_point(gen=(300.0, 0.0, 0.0), load=(0.0, 225.0, 225.0)),
+            [],
+        ),
+        (_resplit_net(), _resplit_point(), []),
+    ]
+    for net, point, cut in cases:
+        timeline, state = run_cascade_state(net, point, cut)
+        _assert_invariants(timeline, state, point, balance=False)
+
+
+def test_next_stage_waits_for_the_islands_of_the_previous_one():
+    """The stage-0 island sheds at 12.67 s, so the weak line can only open 1 s after that, not at 1.0 s."""
+    timeline = run_cascade_workflow(_resplit_net(), _resplit_point(), [])
+    shed0 = max(e["t"] for e in timeline["events"] if e["type"] == "load_shed" and e["params"]["stage"] == 0)
+    opening = next(e for e in timeline["events"] if e["type"] == "line_overload_open")
+    assert shed0 > 1.0
+    assert opening["t"] == pytest.approx(shed0 + CascadeParams().stage_spacing_s)
+    assert timeline["frames"][1]["t"] == opening["t"]
+
+
+def _steps_by_stage(timeline: dict) -> dict[int, set]:
+    steps: dict[int, set] = {0: set(), 1: set()}
+    for e in timeline["events"]:
+        if e["type"] == "load_shed":
+            steps[e["params"]["stage"]].add((e["params"]["zone"], e["params"]["step"]))
+    return steps
+
+
+def test_a_re_split_island_does_not_fire_an_edac_step_again():
+    """Default: the step the parent island already fired sheds nothing in the cut-off D island. The old behaviour
+    (`resplit_memory=False`) fired it again, shedding load that was already off."""
+    old = _steps_by_stage(
+        run_cascade_workflow(_resplit_net(), _resplit_point(), [], CascadeParams(resplit_memory=False))
+    )
+    assert old[0] & old[1]  # step 1 fires in both stages
+    memory = _steps_by_stage(run_cascade_workflow(_resplit_net(), _resplit_point(), []))
+    assert memory[0] and memory[1]  # both the whole system and the cut-off D island shed
+    assert not memory[0] & memory[1]
+
+
+def test_a_re_split_island_counts_the_reserve_already_deployed():
+    from cascadasen.domain.cascade.engine import _island_input, _start
+
+    net, point = _resplit_net(), _resplit_point()
+    s = _start(net, point, CascadeParams(), [])
+    s.reserve_used[:] = [10.0, 0.0, 0.0, 2.0]
+    s.sync[:] = point.sync_mw + s.reserve_used
+    s.edac_fired[3].add(("centro_sur", 0))
+    inp = _island_input(s, [3], 6000.0, float(s.sync[3]), 122.0, 400.0)
+    assert inp.sync_mw == pytest.approx(120.0)  # governor gain from the units, not from the deployed reserve
+    assert inp.extra_reserve_mw == pytest.approx(-2.0)  # cap = 4 % x 120 - 2 MW already deployed
+    assert inp.edac["centro_sur"][0].fraction == 0.0 and inp.edac["centro_sur"][1].fraction > 0
+    s.params = CascadeParams(resplit_memory=False)
+    plain = _island_input(s, [3], 6000.0, float(s.sync[3]), 122.0, 400.0)
+    assert plain.sync_mw == pytest.approx(122.0) and plain.edac["centro_sur"][0].fraction > 0
+
+
+def test_only_the_worst_overload_opens_and_the_rest_is_re_evaluated():
+    """stack.md 4.3 item 5: with A-B at 150 % and A-C at 125 % only A-B opens; A-C is re-evaluated on the new flows
+    (it now carries everything) and opens in the next stage."""
+    net = _toy_net(caps=(100.0, 120.0, 1000.0))
+    timeline = run_cascade_workflow(net, _toy_point(), [])
+    edges = timeline["frames"][0]["edges"]
+    assert edges["R0"]["loading"] == pytest.approx(1.5) and edges["R1"]["loading"] == pytest.approx(1.25)
+    opens = [e for e in timeline["events"] if e["type"] == "line_overload_open"]
+    assert [e["ids"] for e in opens] == [["R0"], ["R1"]]
+    assert [e["params"]["stage"] for e in opens] == [1, 2]
+
+
+def test_truncated_when_the_stage_cap_is_reached():
+    net = _toy_net(caps=(100.0, 120.0, 1000.0))
+    capped = run_cascade_workflow(net, _toy_point(), [], CascadeParams(max_stages=0))
+    assert capped["truncated"] is True and capped["summary"]["stages"] == 0
+    assert run_cascade_workflow(net, _toy_point(), [])["truncated"] is False
+
+
+def test_a_cut_that_splits_nothing_has_only_its_cut_event():
+    timeline = run_cascade_workflow(_toy_net(caps=(400.0, 400.0, 400.0)), _toy_point(), ["R1"])
+    assert [e["type"] for e in timeline["events"]] == ["line_cut"]
+    assert run_cascade_workflow(_toy_net(), _toy_point(), [])["events"] == []
+
+
+def test_island_blackout_lists_its_buses():
+    timeline = run_cascade_workflow(_toy_net(), _toy_point(), ["R1"])
+    blackouts = [e for e in timeline["events"] if e["type"] == "island_blackout"]
+    assert blackouts and all(len(e["ids"]) == e["params"]["buses"] for e in blackouts)
+    assert all(e["params"]["load_mw"] >= 0 for e in blackouts)
+
+
+@pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
+@pytest.mark.parametrize(
+    ("point_id", "cut"),
+    [("feb2025-1500", "R239"), ("nov2026-1300", "R026"), ("nov2026-2000", "R239"), ("feb2025-1500", "R090")],
+)
+def test_real_cascades_keep_the_invariants(point_id, cut):
+    from cascadasen.domain.cascade.engine import run_cascade_state
+
+    net, point = load_network_and_point(PROCESSED, point_id)
+    timeline, state = run_cascade_state(net, point, [cut])
+    _assert_invariants(timeline, state, point)
+
+
+def test_people_in_dark_buses_count_whole_whatever_their_net_load():
+    """Issue #90 user decision: a dark bus with net load <= 0 (distributed generation above demand) still leaves its
+    people without supply. A live bus counts the shed share of its positive load only."""
+    from cascadasen.domain.cascade.engine import people_out_by_bus
+
+    people = np.array([100.0, 50.0, 30.0, 40.0])
+    initial = np.array([10.0, -5.0, 0.0, 20.0])
+    final = np.array([0.0, 0.0, 0.0, 15.0])
+    out = people_out_by_bus(people, initial, final, {0, 1, 2})
+    assert out.tolist() == pytest.approx([100.0, 50.0, 30.0, 10.0])

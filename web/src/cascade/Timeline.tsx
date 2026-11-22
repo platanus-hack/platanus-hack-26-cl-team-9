@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { BLACKOUT_HZ, markerLabel, type IslandFrequency, type Marker } from "./simulation";
+import { BLACKOUT_HZ, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
 import { hz, secs } from "./text";
 import type { Timeline as TimelineData } from "./types";
 import { Chevron, Info } from "./ui";
@@ -12,16 +12,23 @@ const faultCurve = (c: [number, number][]) => Math.min(...c.map((p) => p[1])) < 
 
 interface Props {
   timeline: TimelineData | null; markers: Marker[]; t: number; clock: string; islands: IslandFrequency[]; playing: boolean; speed: number;
+  /** Non-linear track scale (simulation.ts `timeWarp`): x positions, dragging and arrow keys go through it. */
+  warp: TimeWarp;
   setPlaying(b: boolean): void; togglePlay(): void; seek(t: number): void; setSpeed(s: number): void;
   /** A cut is chosen and its timeline is still loading: the empty hint would be wrong. */
   loading?: boolean;
 }
 
-/** Bottom card (Design v5): clock, frequency of each island, play, and the rail with numbered event markers. */
+/**
+ * Bottom card (Design v5): clock, frequency of each island, play, and the rail with numbered event markers. The rail
+ * uses the warped time (each failure gets room, the quiet tail is short); the clock and the position read simulated s.
+ */
 export function TimelineCard(p: Props) {
   const duration = p.timeline?.duration_s ?? 0;
-  const hasCascade = !!p.timeline && p.timeline.events.length > 1;
-  const x = (t: number) => (duration > 0 ? (Math.min(t, duration) / duration) * TRACK_W : 0);
+  const hasCascade = !!p.timeline && p.timeline.events.length > 0;
+  const view = p.warp.viewDuration;
+  const x = (t: number) => (view > 0 ? (Math.min(p.warp.toView(t), view) / view) * TRACK_W : 0);
+  const seekView = (v: number) => p.seek(Math.max(0, Math.min(duration, p.warp.toSim(Math.max(0, Math.min(view, v))))));
   const markers = hasCascade ? p.markers : [];
   const visible = p.timeline?.events.filter((e) => e.t <= p.t + 1e-9).length ?? 0;
   const atEnd = duration > 0 && p.t >= duration - 1e-6;
@@ -29,7 +36,7 @@ export function TimelineCard(p: Props) {
 
   const seekFromPointer = (clientX: number) => {
     const r = track.current!.getBoundingClientRect();
-    p.seek(Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * duration);
+    seekView(Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * view);
   };
 
   return (
@@ -47,7 +54,7 @@ export function TimelineCard(p: Props) {
         </div>
       </div>
       {!p.timeline ? (
-        <p className="timeline-empty">{p.loading ? "Cargando la simulación" : "Sin corte activo. Haz doble clic en una línea del mapa para simular su salida de servicio segundo a segundo."}</p>
+        <p className="timeline-empty">{p.loading ? "Cargando la simulación" : "Sin corte activo. Haz clic en una línea del mapa y clic otra vez para simular su salida de servicio segundo a segundo."}</p>
       ) : (
       <div className="timeline-row">
         <button className="play" disabled={!hasCascade} aria-label={p.playing ? "Pausa" : atEnd ? "Repetir" : "Reproducir"}
@@ -63,9 +70,9 @@ export function TimelineCard(p: Props) {
           onPointerDown={(e) => { if (!hasCascade) return; p.setPlaying(false); e.currentTarget.setPointerCapture(e.pointerId); seekFromPointer(e.clientX); }}
           onPointerMove={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) seekFromPointer(e.clientX); }}
           onKeyDown={(e) => {
-            const step = e.shiftKey ? 1 : 0.1;
-            if (e.key === "ArrowRight") p.seek(Math.min(duration, p.t + step));
-            else if (e.key === "ArrowLeft") p.seek(Math.max(0, p.t - step));
+            const step = e.shiftKey ? 1 : 0.1; // track seconds, so a step moves the same distance anywhere on the rail
+            if (e.key === "ArrowRight") seekView(p.warp.toView(p.t) + step);
+            else if (e.key === "ArrowLeft") seekView(p.warp.toView(p.t) - step);
             else if (e.key === "Home") p.seek(0);
             else if (e.key === "End") p.seek(duration);
             else return;

@@ -48,7 +48,9 @@ export function loadColor(state: EdgeState | undefined): string {
 export interface Toggles { flow: boolean; demand: boolean }
 export interface View {
   network: Network; buses: Record<string, BusState>; frame: Frame; time: number; colorMode: ColorMode;
-  selectedNode: string | null; selectedLine: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[];
+  /** Substations that just lost supply (`recentDarkAt`) and the pulse phase 0-1 of the ring drawn around them. */
+  recent?: Set<string>; pulse?: number;
+  selectedNode: string | null; selectedLine: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[]; heat?: Layer[];
 }
 
 /** Flat network on the basemap; optional moving dots for the flow and demand as columns (3D) or discs (2D). */
@@ -79,6 +81,7 @@ export function buildCascadeLayers(v: View): Layer[] {
   const selected = v.selectedLine ? v.network.lines.find((l) => l.id === v.selectedLine) : undefined;
   return [
     ...(v.regional ?? []),
+    ...(v.heat ?? []), // under the lines and substations, over the context countries
     // Selected line: a white halo under the line, so its own colour (voltage, load or dashed) still reads inside.
     ...(selected ? [new PathLayer<NetLine>({
       id: "selection", data: selectionData(selected), widthUnits: "pixels", getPath: (l) => [pos(l.a), pos(l.b)], capRounded: true,
@@ -115,8 +118,27 @@ export function buildCascadeLayers(v: View): Layer[] {
       getLineColor: (n) => (n.id === v.selectedNode ? [255, 255, 255, 255] : dark.has(n.id) ? [24, 25, 27, 255] : [255, 255, 255, 64]),
       updateTriggers: { getFillColor: [v.frame, v.selectedNode], getRadius: [v.frame, v.selectedNode], getLineWidth: [v.frame, v.selectedNode], getLineColor: [v.frame, v.selectedNode] },
     }),
+    ...(v.recent && v.recent.size ? [_justDark(v, node)] : []),
   ];
 }
+
+/**
+ * A ring in the fault colour that grows and fades around each substation that just lost supply (issue #90), so the
+ * buses of the current blackout stand apart from those that went dark earlier. Radius and opacity are layer props, not
+ * accessors, so the pulse does not rebuild attributes on every tick.
+ */
+function _justDark(v: View, node: Map<string, NetNode>): Layer {
+  const pulse = v.pulse ?? 0;
+  return new ScatterplotLayer<NetNode>({
+    id: "nodes-just-dark", data: recentNodes(v.recent!, node), radiusUnits: "pixels", getPosition: (n) => [n.lon, n.lat],
+    filled: false, stroked: true, lineWidthUnits: "pixels", getLineWidth: 2, getLineColor: hex(FAULT), getRadius: 1,
+    radiusScale: JUST_DARK_RADIUS_PX[0] + (JUST_DARK_RADIUS_PX[1] - JUST_DARK_RADIUS_PX[0]) * pulse, opacity: 1 - 0.85 * pulse,
+  });
+}
+export const JUST_DARK_RADIUS_PX: [number, number] = [5, 14];
+const recentCache = new WeakMap<Set<string>, NetNode[]>();
+const recentNodes = (ids: Set<string>, node: Map<string, NetNode>) =>
+  recentCache.get(ids) ?? recentCache.set(ids, [...ids].map((id) => node.get(id)).filter((n): n is NetNode => !!n)).get(ids)!;
 
 function _demand(v: View, dark: Set<string>): Layer {
   const data = v.network.nodes.filter((n) => (v.buses[n.id]?.load_mw ?? 0) > 20 && !dark.has(n.id));

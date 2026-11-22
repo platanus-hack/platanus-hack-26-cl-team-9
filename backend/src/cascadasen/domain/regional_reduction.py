@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 import numpy as np
+from numpy.typing import ArrayLike
 
 from cascadasen.domain.regional import RegionalBundle, RegionalSource
 
@@ -103,11 +104,11 @@ class _Union:
         self.parent[self.find(i)] = self.find(j)
 
 
-def _km(lon: np.ndarray, lat: np.ndarray, lat0: float) -> np.ndarray:
+def km_xy(lon: ArrayLike, lat: ArrayLike, lat0: float) -> np.ndarray:
     return np.c_[np.asarray(lon) * 111.32 * math.cos(math.radians(lat0)), np.asarray(lat) * 110.57]
 
 
-def _nearest(points: np.ndarray, targets: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def nearest(points: np.ndarray, targets: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Index and distance (km) of the nearest target for every point."""
     if len(targets) == 0:
         return np.zeros(len(points), dtype=int), np.full(len(points), np.inf)
@@ -120,7 +121,7 @@ def _clusters(bundle: RegionalBundle, lat0: float) -> list[dict[str, Any]]:
     subs = bundle.substations
     if not subs:
         return []
-    xy = _km([s.lon for s in subs], [s.lat for s in subs], lat0)
+    xy = km_xy([s.lon for s in subs], [s.lat for s in subs], lat0)
     dist = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1])
     union = _Union(len(subs))
     for i, j in np.argwhere(np.triu(dist < MERGE_KM, k=1)):
@@ -131,7 +132,9 @@ def _clusters(bundle: RegionalBundle, lat0: float) -> list[dict[str, Any]]:
     out = []
     for members in groups.values():
         top = max(members, key=lambda i: (subs[i].kv or 0, bool(subs[i].name)))
-        levels = sorted({k for i in members for k in (subs[i].kv_levels or [subs[i].kv]) if k}, reverse=True)
+        levels = sorted(
+            {k for i in members for k in (subs[i].kv_levels or [cast(float, subs[i].kv)]) if k}, reverse=True
+        )
         names = [subs[i].name for i in members if subs[i].name]
         out.append(
             {
@@ -223,11 +226,11 @@ def reduce_bundle(bundle: RegionalBundle) -> ReducedRegional:
         return out
     lat0 = float(np.mean([c[1] for ln in bundle.lines for c in ln.coords]))
     clusters = _clusters(bundle, lat0)
-    cxy = _km([c["lon"] for c in clusters], [c["lat"] for c in clusters], lat0)
+    cxy = km_xy([c["lon"] for c in clusters], [c["lat"] for c in clusters], lat0)
 
     # 1. every line end goes to the nearest bus within SNAP_KM, otherwise to a free point
     ends = np.array([[ln.coords[i][0], ln.coords[i][1]] for ln in bundle.lines for i in (0, -1)])
-    near, near_km = _nearest(_km(ends[:, 0], ends[:, 1], lat0), cxy)
+    near, near_km = nearest(km_xy(ends[:, 0], ends[:, 1], lat0), cxy)
 
     def node_of(k: int) -> Any:
         if near_km[k] <= SNAP_KM:
@@ -343,9 +346,9 @@ def _attach_plants(bundle: RegionalBundle, out: ReducedRegional, lat0: float) ->
     subs = [b for b in out.buses if b.kind == "substation"]
     if not subs or not bundle.plants:
         return
-    sxy = _km([b.lon for b in subs], [b.lat for b in subs], lat0)
-    pxy = _km([p.lon for p in bundle.plants], [p.lat for p in bundle.plants], lat0)
-    near, km = _nearest(pxy, sxy)
+    sxy = km_xy([b.lon for b in subs], [b.lat for b in subs], lat0)
+    pxy = km_xy([p.lon for p in bundle.plants], [p.lat for p in bundle.plants], lat0)
+    near, km = nearest(pxy, sxy)
     per_bus: dict[int, list[int]] = {}
     lost_mw, lost = 0.0, 0
     for i, p in enumerate(bundle.plants):

@@ -1,19 +1,20 @@
 # Regional grids (context layer)
 
-Last updated: 2026-11-21. The map draws the transmission networks of Argentina, Bolivia, Brazil and Peru under Chile's. They are **context only**: nothing here feeds the cascade engine, and `idea.md` section 4 still leaves international interconnections out of the simulation. Every element carries its source (`datasets.md` section 6). Status labels: **verified** (page or service opened in this project), **not verified** (seen in search or written from memory), **failed** (tried and could not reach).
+Last updated: 2026-11-22. The map can show the transmission networks of Argentina, Bolivia, Brazil and Peru, **one network at a time**: the panel header picks Chile or one of them, and `?pais=PER` opens Peru (issue #49, `mapa3.md` section 4.1). They are **view only**: nothing here feeds the cascade engine (Brazil also has a flow network with real line parameters, section 6, still not wired to the engine), and `idea.md` section 4 still leaves international interconnections out of the simulation. Every element carries its source (`datasets.md` section 6). Status labels: **verified** (page or service opened in this project), **not verified** (seen in search or written from memory), **failed** (tried and could not reach).
 
 ## 1. What is built
 
 | Piece | Where |
 |---|---|
-| Command | `cd backend && uv run cascadasen-regional --countries BRA,PER,ARG,BOL [--osm ARG] [--refresh]` |
-| Output | `data/processed/latam/<ISO3>/{lines,substations,plants}.geojson`, `data/processed/latam/manifest.json`, `data/processed/latam/outlines.geojson` |
+| Command | `cd backend && uv run cascadasen-regional --countries BRA,PER,ARG,BOL [--osm ARG] [--ons] [--refresh]` (`--ons` also builds Brazil's flow network, section 6) |
+| Output | `data/processed/latam/<ISO3>/{lines,substations,plants}.geojson`, `data/processed/latam/manifest.json`, `data/processed/latam/outlines.geojson`; with `--ons`, `data/processed/latam/BRA/network.json` and `manifest.countries.BRA.flow` |
 | Outlines | `data/scripts/build_latam_outlines.sh` (geoBoundaries ADM0) |
 | Domain (pure) | `domain/regional.py`: schema, `parse_kv_levels`, `tech_from_text`, `normalise`, `feature_collections`, `manifest_entry`; port `RegionalGridSource` in `domain/ports.py` |
 | Adapters | `infrastructure/sources/regional/`: `epe_brasil.py`, `osinergmin_peru.py`, `energia_argentina.py`, `osm_overpass.py`; wiring in `infrastructure/container.py` (`regional_use_case`) |
-| Frontend | `web/src/map/regional.ts` (loader, layers `regional-*`, tooltip), legend block in `web/src/cascade/Legend.tsx`. Lines and substations reuse Chile's tokens from `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `NODE_COLOR`) at full opacity; in the Simulación (load) view the lines are neutral gray `REGIONAL_NO_LOAD` (#767B80), outside the load ramp, because they carry no load |
+| Frontend | `web/src/map/regional.ts` (`loadCountryGrid(iso)` fetches one country when it is chosen, `loadOutline(iso)`, layers `regional-*`, tooltip "Red solo para ver: no se simula"), legend block in `web/src/cascade/Legend.tsx`. The camera frame and limits come from each country's substations and outline (`web/src/map/countryBounds.ts`). Users can also upload a network in this schema, or in the v1 JSON, with a declared country; it stays in their browser (`web/src/map/upload.ts`, `mapa3.md` section 4.1). Lines and substations reuse Chile's tokens from `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `NODE_COLOR`) at full opacity; in the Simulación (load) view the lines are neutral gray `REGIONAL_NO_LOAD` (#767B80), outside the load ramp, because they carry no load |
 | Reduction (pure) | `domain/regional_reduction.py` (`reduce_bundle`, `feature_collections`, `manifest_entry`) |
-| Tests | `backend/tests/unit/test_regional.py`, `backend/tests/validation/test_regional_data.py` (skips without the data), `web/src/map/regional.test.ts` |
+| Flow network (pure) | `domain/regional_network.py` (`build_flow_network`, `deduction_error`, `network_document`, `flow_manifest_entry`); adapter `infrastructure/sources/regional/ons_brasil.py`; port `FlowNetworkSource`; use case `BuildFlowNetwork` in `application/build_regional.py` |
+| Tests | `backend/tests/unit/test_regional.py`, `backend/tests/unit/test_ons_brasil.py`, `backend/tests/validation/test_regional_data.py` and `test_ons_network.py` (skip without the data), `web/src/map/regional.test.ts` |
 
 ## 2. Common schema (v2, reduced)
 
@@ -48,13 +49,14 @@ Files: `data/processed/latam/<ISO3>/{lines,substations,plants}.geojson` and `man
 - Every feature has `country`, `source` and `is_assumption` (false: values come from the sources; the reduction thresholds are the only assumption, declared above).
 - Lines and substations from 66 kV up; lines without voltage dropped; plants below 0.1 MW or not operating dropped.
 
-No electrical parameters (r, x, thermal limit) exist in this layer, and the reduced lines are not a topology to simulate: the end points are resolved by distance, not declared by the source.
+No electrical parameters (r, x, thermal limit) exist in this layer, and the reduced lines are not a topology to simulate: the end points are resolved by distance, not declared by the source. Brazil's flow network (section 6) is the one exception, and measured this: about 11 % of the drawn corridors are not direct lines in the operator's data (`network-format.md` section 3.1).
 
 ## 3. Sources used
 
 | Country | Source | Status | Notes |
 |---|---|---|---|
 | Brazil | EPE WebMap, `https://gisepeprd2.epe.gov.br/arcgis/rest/services/WMS_Webmap_EPE_Data/MapServer`: layer 23 lines (`Nome, Tensao, Extensao, Concession, Ano_Opera`), 22 substations, 14-21 plants by technology | **Verified**, built, see section 2 | `potencia` is in **kW** (Itaipú reads 14,000,000). 2,000 records per page. No licence stated |
+| Brazil (flow) | ONS Dados Abertos `LINHA_TRANSMISSAO.csv` and `SUBESTACAO.csv` (CC BY), see section 6 | **Verified** 2026-11-21, built | `;`-separated UTF-8 with space-padded text. Units not stated by ONS (section 6) |
 | Peru | Osinergmin GISEM, `https://gisem.osinergmin.gob.pe/serverosih/rest/services/Electricidad/MapaSEIN_Operacion/MapServer`: lines 28-32 by kV, substations 22-26, plants 6, 9, 12, 17-20 | **Verified**, built, see section 2 | `POT_INST` is in MW except four records typed in kW (Huanza, Callahuanca, Yanango, Carhuac); the adapter reads values above 3,000 as kW. SEIN only (isolated systems excluded). No licence stated |
 | Bolivia | OpenStreetMap through Overpass (`power=line\|cable` with `voltage`, `power=substation`, `power=plant`) | **Verified**, built, see section 2 | No official GIS exists (CNDC publishes single-line diagrams only). ODbL: the legend shows "© OpenStreetMap contributors". OSM may include lines under construction (500 kV near Cochabamba) |
 | Argentina | Secretaría de Energía CSV datasets (lines, transformer stations, plants), `http://datos.energia.gob.ar/dataset/...` (https refuses connections) | **Failed**: the server did not answer from this machine on 2026-11-21. **Built from OpenStreetMap instead** (`--osm ARG`): 390 lines after the reduction | The adapter `energia_argentina.py` detects columns by candidate names and reads GeoJSON, WKT or lat/lon; it is tested only on synthetic CSV. Run `cascadasen-regional --countries ARG` when the server answers and fix the candidate lists to the real header. The committed Argentina data is the OSM fallback; after the reduction it has 26,000 km against 37,293 km officially, so the duplicated circuits are gone but OSM is incomplete |
@@ -82,8 +84,8 @@ Quality check against official length (MapYourGrid index, CC BY 4.0, **not opene
 
 ### Brazil (richest data in the region)
 
-- ONS `linha-transmissao` (`https://dados.ons.org.br/dataset/linha-transmissao`, CC BY): positive-sequence `val_resistencia`, `val_reatancia`, `val_shunt`, operating capacity in amperes, from/to bus numbers and substations, kV, length, AC/DC; lines from 230 kV, updated daily. Files `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv|parquet`. **Verified.** Join to the EPE layers by substation name to get coordinates.
-- ONS substations `dataset/subestacao/SUBESTACAO.csv` (69 kV and up, no coordinates), hourly generation per plant `dataset/geracao_usina_2_ho/GERACAO_USINA-2_{YYYY}_{MM}.csv`, hourly load `curva-carga`. **Verified.**
+- ONS `linha-transmissao` and `subestacao`: **used**, section 6. `SUBESTACAO.csv` **does** have coordinates (`val_latitude`, `val_longitude`), contrary to what this section said before.
+- ONS hourly generation per plant `dataset/geracao_usina_2_ho/GERACAO_USINA-2_{YYYY}_{MM}.csv`, hourly load `curva-carga`. **Verified.**
 - ANEEL SIGEL (`sigel.aneel.gov.br/arcgis/rest/services`) and the SIGA registry refused connections (**failed**). IBGE APIs for municipal boundaries and census: **not verified**.
 
 ### Peru
@@ -126,7 +128,52 @@ Interconnections (from memory, **not verified**): Argentina-Chile 345 kV Interan
 
 ## 5. Limits to keep visible
 
-- A drawn layer, not a model: no topology (line ends are not resolved), no parameters, no demand.
+- A drawn layer, not a model: no topology (line ends are not resolved), no parameters, no demand. Brazil's flow network (section 6) has topology and line parameters, but still no demand, dispatch or people, and it is not wired to the engine.
+- Brazil runs at 60 Hz. The frequency engine has Chile's constants (50 Hz, CEN EDAC tables, 25F corridor): they must change before Brazil is simulated.
+- HVDC links (Brazil's 600 and 800 kV) are kept apart as `dc_links`: a linear DC flow cannot represent them.
 - OSM countries (Bolivia and, for now, Argentina) depend on volunteer mapping and are less complete.
 - No source states a licence except ODbL (OSM), CC BY (ONS, geoBoundaries) and the data-portal terms; for the rest the UI cites the publisher.
 - The first view still frames Chile; the other countries appear when the user pans. The camera limits were widened to Brazil (`web/src/map/baseMap.ts`).
+
+## 6. Brazil flow network (ONS)
+
+Built by `cascadasen-regional --countries BRA --ons`. The file contract and the readiness levels are in `network-format.md`. This section records the source decisions.
+
+**Sources** (ONS Dados Abertos, CC BY, updated daily; downloaded 2026-11-21, cached in `data/raw/regional/bra/ons_*.csv`):
+
+| File | URL | Used columns |
+|---|---|---|
+| Lines from 230 kV | `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv` | `num_barra_de`, `num_barra_para`, `nom_subestacao_de/para`, `val_niveltensao_kv`, `nom_tipolinha`, `cod_equipamento`, `dat_entradaoperacao`, `dat_desativacao`, `val_comprimento`, `val_resistencia`, `val_reatancia`, `val_shunt`, `val_capacoperlongacomlimit` |
+| Busbars from 69 kV | `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/subestacao/SUBESTACAO.csv` | `num_barra`, `id_subestacao`, `nom_subestacao`, `val_niveltensao`, `val_latitude`, `val_longitude` |
+
+Data dictionaries: `DicionarioDados_Linha_Transmissao.{json,pdf}` and `DicionarioDados_Subestacao_Rede_de_Operacao.{json,pdf}` in the same folders.
+
+**Units.** Neither dictionary, JSON or PDF, states the unit of r, x or shunt; length is km and the four main capacity columns are amperes. The magnitudes fit **percent on a 100 MVA base for `val_resistencia` and `val_reatancia`, and Mvar at nominal voltage for `val_shunt`**, the convention of ONS's ANAREDE program. Converted, the median x per circuit-km is:
+
+| kV | x (ohm/km) | r (ohm/km) | Shunt (Mvar/km) |
+|---|---|---|---|
+| 230 | 0.481 | 0.082 | 0.18 |
+| 345 | 0.369 | 0.035 | 0.53 |
+| 440 | 0.310 | 0.025 | 1.00 |
+| 500 | 0.276 | 0.018 | 1.45 |
+| 525 | 0.313 | 0.021 | 1.43 |
+| 765 | 0.336 | 0.014 | 2.87 |
+
+All of them are textbook overhead-line values. Read as ohm, x would be about 0.01 to 0.1 ohm/km, far below any overhead line. `test_ons_network.py` fails if the medians leave `X_PER_KM`.
+
+**Decisions** (2026-11-21, with Ricardo):
+- **Thermal limit.** `val_capacoperlongacomlimit`, long duration with limiting factor. It is lower than the conductor-only value in 154 rows, and it is the operating limit of the whole line.
+- **Missing amperes.** 215 circuits; 0 A counts as missing. They use the ONS median MW per circuit at the same kV and are marked `assumed_fields: ["capacity_mw"]`.
+- **HVDC.** The 12 `LINHA DC` records go to `dc_links` with `dc: true`, outside `lines`. Their MW (`kV × A` per record) are unverified. Xingu gives 4,200 MW per bipole against 4,000 nominal, but Madeira gives 12,600 MW against 6,300. Itaipu's HVDC states no amperes.
+- **Lines in service.** No deactivation date and entry no later than `as_of`, as Chile's `build_year` filter. No active line enters service in the future today.
+- **One bus per ONS substation** (`id_subestacao`). Transformers are not in the data, so the 230 kV and 500 kV levels connect only after this fold. Result: one connected component.
+- **Coordinates.** ONS first: 853 of 855 substations. The fallback is an EPE substation with the same normalised name and voltage, exact or with similarity ≥ 0.85. It found none of the 2 missing ones (USIBA 230 kV, COL BOA SORTE 2 500 kV), which are listed in the warnings with their 2 lines.
+- **Dropped with a warning.**
+  - 18 lines whose end is outside the ONS registry: interconnections with Uruguay, Argentina, Paraguay and Venezuela.
+  - 5 *ramal* rows with no "to" end.
+- **Scope.** The flow model runs from 230 kV, which is what ONS covers. The drawn layer keeps 66 kV.
+
+**Result** (2026-11-21): 853 buses, 1,305 AC lines (1,842 circuits), 4 DC links (12 records) and 495 plant groups.
+- **Length:** AC 174,428 circuit-km (−7.9 % against MapYourGrid's 189,308 km), AC+DC 196,456 km (+3.8 %).
+- **Coordinate check:** ONS against EPE agree within a median of 50 m on the 582 substations with the same name; 9 are more than 10 km apart.
+- **Error of a deduced network** (typical x, typical capacity, distance-snapped topology): `network-format.md` section 3.1.

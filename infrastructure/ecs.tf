@@ -11,14 +11,15 @@ resource "aws_ecs_cluster" "main" {
   name = "cascadasen"
 }
 
-# One task, 2 vCPU / 4 GB shared by both containers (no per-container limits).
+# One task, 4 vCPU / 8 GB shared by both containers (no per-container limits).
 resource "aws_ecs_task_definition" "app" {
   family                   = "cascadasen"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 2048
-  memory                   = 4096
+  cpu                      = 4096
+  memory                   = 8192
   execution_role_arn       = aws_iam_role.task_execution.arn
+  task_role_arn            = aws_iam_role.task.arn
 
   runtime_platform {
     operating_system_family = "LINUX"
@@ -31,6 +32,17 @@ resource "aws_ecs_task_definition" "app" {
       image        = "${c.repository_url}:${var.image_tag}"
       essential    = true
       portMappings = [{ containerPort = c.port, protocol = "tcp" }]
+      # Shared sessions in S3 (docs/infrastructure.md). Only the backend gets settings.
+      environment = name == "backend" ? [
+        { name = "CASCADASEN_SESSION_STORE", value = "s3" },
+        { name = "CASCADASEN_SESSION_BUCKET", value = aws_s3_bucket.sessions.bucket },
+        { name = "CASCADASEN_AWS_REGION", value = data.aws_region.current.region },
+        # Informational: the tag of the last terraform apply. CI swaps images on a copy of this task
+        # definition, so later deploys keep this value (docs/infrastructure.md).
+        { name = "CASCADASEN_VERSION", value = var.image_tag },
+        # CloudFront and the ALB each append to X-Forwarded-For; the client is the 2nd from the right.
+        { name = "CASCADASEN_TRUSTED_PROXY_HOPS", value = "2" },
+      ] : []
       logConfiguration = {
         logDriver = "awslogs"
         options = {

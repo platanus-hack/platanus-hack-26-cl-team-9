@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { darkAt, frequencyAt, groupEvents, impactAt, lineStateAt, markerLabel, sample, withstandsAt } from "./simulation";
+import { darkAt, frequencyAt, groupEvents, impactAt, lineStateAt, MARKER_GAP_PX, markerLabel, MIN_GAP_VIEW_S, recentDarkAt, sample, TAIL_SHARE, timeWarp, withstandsAt } from "./simulation";
 import type { BusState, Event, NetLine, Timeline } from "./types";
 
 const ev = (t: number, type: string, params: Event["params"] = {}): Event => ({ t, type, ids: [], text_key: type, params });
@@ -37,13 +38,108 @@ describe("cascade at time t", () => {
     expect(frequencyAt(timeline, 0.5)[0].hz).toBeNull();
   });
 
-  it("groups close events into one marker", () => {
-    // 20 s on a 290 px track: 0, 1.0 and 1.5 s fall within 22 px and share a marker; the last one stays inside the track.
-    const m = groupEvents(timeline.events, 20, 290);
-    expect(m.map(markerLabel)).toEqual(["1–3", "4", "5"]);
+  it("groups only same-instant events and keeps every marker inside the track", () => {
+    const m = groupEvents(timeline.events, timeWarp(timeline, 290), 290);
+    // the shed at 1.5 s joins the new island at 1.0 s; the cut, the island and the blackout keep their own markers
+    expect(m.map(markerLabel)).toEqual(["1", "2·3", "4", "5"]);
     expect(m[m.length - 1].left + m[m.length - 1].width).toBeLessThanOrEqual(290);
     for (let i = 1; i < m.length; i++) expect(m[i].left).toBeGreaterThanOrEqual(m[i - 1].left + m[i - 1].width);
     expect(markerLabel({ first: 5, last: 8 })).toBe("5–8");
+  });
+});
+
+// A real 4-stage cascade with a re-split island (docs/engine.md "Hand-checked cuts"): openings at 1.0, 2.0, 7.59 and 8.59 s,
+// a 45-bus blackout at 6.59 s and a 1-bus blackout at 8.59 s.
+const r026: Timeline = JSON.parse(readFileSync("public/cache/nov2026-1300/R026.json", "utf8"));
+
+describe("non-linear track scale", () => {
+  const warp = timeWarp(r026, 290);
+  const x = (t: number) => (warp.toView(t) / warp.viewDuration) * 290;
+
+  it("is increasing and goes back and forth", () => {
+    let prev = -1;
+    for (let t = 0; t <= r026.duration_s; t += 0.05) {
+      const v = warp.toView(t);
+      expect(v).toBeGreaterThan(prev);
+      expect(warp.toSim(v)).toBeCloseTo(t, 6);
+      prev = v;
+    }
+    expect(warp.toView(r026.duration_s)).toBeCloseTo(warp.viewDuration, 9);
+  });
+
+  it("keeps every opening and blackout at least a marker apart and squeezes the tail", () => {
+    const keys = [...new Set(r026.events.filter((e) => ["line_cut", "line_overload_open", "island_blackout"].includes(e.type)).map((e) => e.t))].sort((a, b) => a - b);
+    for (let i = 1; i < keys.length; i++) {
+      expect(x(keys[i]) - x(keys[i - 1])).toBeGreaterThanOrEqual(MARKER_GAP_PX - 1e-6);
+      expect(warp.toView(keys[i]) - warp.toView(keys[i - 1])).toBeGreaterThanOrEqual(MIN_GAP_VIEW_S - 1e-9);
+    }
+    const lastEffect = Math.max(...r026.events.filter((e) => e.type !== "island_stable").map((e) => e.t));
+    expect(290 - x(lastEffect)).toBeLessThanOrEqual(290 * TAIL_SHARE + 1e-6);
+    // the 20 s transient tail no longer fills most of the track
+    expect(warp.viewDuration).toBeLessThan(r026.duration_s);
+  });
+
+  it("gives each stage and each blackout its own marker", () => {
+    const m = groupEvents(r026.events, warp, 290);
+    for (const e of r026.events.filter((ev) => ev.type === "line_overload_open" || ev.type === "island_blackout")) {
+      const own = m.find((g) => g.events.includes(e))!;
+      // a marker never holds two different instants that open or darken something
+      expect(new Set(own.events.filter((ev) => ev.type !== "load_shed" && ev.type !== "island_stable").map((ev) => ev.t)).size).toBe(1);
+    }
+    expect(m.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it("numbers markers over the same event list as the history", () => {
+    const m = groupEvents(r026.events, warp, 290);
+    expect(m[0].first).toBe(1);
+    for (let i = 1; i < m.length; i++) expect(m[i].first).toBe(m[i - 1].last + 1);
+    expect(m[m.length - 1].last).toBe(r026.events.length);
+    m.forEach((g) => g.events.forEach((e, k) => expect(r026.events[g.first - 1 + k]).toBe(e)));
+  });
+
+  it("is the identity without a timeline", () => {
+    const id = timeWarp(null, 290);
+    expect(id.toView(3)).toBe(3);
+    expect(id.toSim(3)).toBe(3);
+  });
+});
+
+describe("dark substations at the blackout's own time", () => {
+  const twoBlackouts: Timeline = {
+    ...timeline,
+    events: [ev(0, "line_cut"), ev(1, "island_formed"), { ...ev(1.4, "island_blackout"), ids: ["B1"] }, { ...ev(3.2, "island_blackout"), ids: ["B2", "B3"] }],
+    frames: [{ t: 0, edges: {}, dark: [], islands: [] }, { t: 1, edges: {}, dark: ["B1", "B2", "B3", "B9"], islands: [] }],
+  };
+
+  it("darkens each island of one stage when its own blackout fires", () => {
+    expect([...darkAt(twoBlackouts, 1.2)]).toEqual(["B9"]); // B9: dark in the frame but in no blackout (out of service)
+    expect([...darkAt(twoBlackouts, 1.4)].sort()).toEqual(["B1", "B9"]);
+    expect([...darkAt(twoBlackouts, 3.2)].sort()).toEqual(["B1", "B2", "B3", "B9"]);
+  });
+
+  it("pulses only the substations that just went dark", () => {
+    const warp = timeWarp(twoBlackouts, 290);
+    expect([...recentDarkAt(twoBlackouts, 1.5, warp)]).toEqual(["B1"]);
+    expect([...recentDarkAt(twoBlackouts, 3.3, warp)].sort()).toEqual(["B2", "B3"]);
+    expect(recentDarkAt(twoBlackouts, 0.5, warp).size).toBe(0);
+    expect(recentDarkAt(twoBlackouts, twoBlackouts.duration_s, warp).size).toBe(0);
+  });
+
+  it("falls back to the frame when blackouts carry no ids", () => {
+    expect([...recentDarkAt(timeline, 4, timeWarp(timeline, 290))]).toEqual(["B1"]);
+  });
+});
+
+describe("people in dark substations", () => {
+  it("count whole even when the substation's net load is zero or negative", () => {
+    const tl: Timeline = {
+      ...timeline,
+      events: [ev(0, "line_cut"), { ...ev(2, "island_blackout"), ids: ["B1", "B2"] }, ev(10, "island_stable")],
+      frames: [{ t: 0, edges: {}, dark: ["B1", "B2"], islands: [] }],
+      summary: { ...timeline.summary, people_without_power: 150, load_shed_mw: 100 },
+    };
+    const own: Record<string, BusState> = { B1: { gen_mw: 0, load_mw: 100, people: 100 }, B2: { gen_mw: 30, load_mw: -5, people: 50 } };
+    expect(impactAt(tl, own, 3)).toMatchObject({ people: 150, lostLoadMw: 100 });
   });
 });
 

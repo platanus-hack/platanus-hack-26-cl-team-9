@@ -1,0 +1,9 @@
+{
+  "id": "25f-2026",
+  "name": "Falla 25F en 2026 (nov, 13:00)",
+  "point": "nov2026-1300",
+  "open_lines": [
+    "R239"
+  ],
+  "overlay": {}
+}

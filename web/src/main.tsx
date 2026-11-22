@@ -4,6 +4,7 @@ import { App } from "./App";
 import { mountChileMapWorkflow } from "./map/chileMap";
 import { mountMapboxMapWorkflow } from "./map/mapboxMap";
 import { CascadeApp } from "./cascade/CascadeApp";
+import { ErrorBoundary } from "./ErrorBoundary";
 import "@fontsource-variable/roboto";
 import "@fontsource-variable/roboto-condensed";
 import "@fontsource-variable/roboto-mono";
@@ -18,6 +19,6 @@ const mount = mapa === "2" ? mountMapboxMapWorkflow : mountChileMapWorkflow;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {legacy ? <App mount={mount} /> : <CascadeApp />}
+    {legacy ? <App mount={mount} /> : <ErrorBoundary><CascadeApp /></ErrorBoundary>}
   </StrictMode>,
 );

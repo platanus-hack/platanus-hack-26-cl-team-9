@@ -125,10 +125,6 @@ class GridState:
                 0.0, self.kinetic_mws.get(area, 0.0) - self.h_phys.get(tech, 0.0) * mw
             )
 
-    def add_inertia(self, area: str, tech: str, mw: float) -> None:
-        if tech in self.sync_techs:
-            self.kinetic_mws[area] = self.kinetic_mws.get(area, 0.0) + self.h_phys.get(tech, 0.0) * mw
-
     def reserve_mw(self, area: str) -> float:
         if area in self.no_reserve_areas or area in self.blackout_areas:
             return 0.0
@@ -143,15 +139,6 @@ class GridState:
         if c.a in self.blackout_areas or c.b in self.blackout_areas:
             return None
         return c.effective(self.out_lines)
-
-    def totals(self) -> dict[str, float]:
-        load = sum(self.load_mw.values())
-        served = sum(self.served_mw.values())
-        return {
-            "load_mw": round(load, 1),
-            "served_mw": round(served, 1),
-            "gen_mw": round(sum(map(self.gen, self.gen_mw)), 1),
-        }
 
 
 def operating_points() -> dict[str, dict[str, Any]]:

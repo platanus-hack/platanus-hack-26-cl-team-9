@@ -14,11 +14,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
+from cascadasen.api import agent_openapi
+from cascadasen.api.assistant_routes import router as assistant_router
+from cascadasen.api.grid_routes import router as grid_router
+from cascadasen.api.incident_routes import router as incident_router
+from cascadasen.api.limits import BodyLimitMiddleware, SessionLocks, SseSlots, TokenBucket
 from cascadasen.api.schemas import EdgePage, Health, IslandsRequest, IslandsResponse, NodePage, Page
+from cascadasen.api.session_routes import router as session_router
 from cascadasen.api.simulation_routes import router as simulation_router
 from cascadasen.application.grid_queries import GridQueryService, NotFoundError
+from cascadasen.application.sessions import SessionService
 from cascadasen.application.simulation_service import SimulationService
-from cascadasen.infrastructure.container import repository
+from cascadasen.domain.ports import DocumentStore
+from cascadasen.infrastructure.container import document_store, repository
 from cascadasen.infrastructure.settings import Settings, get_settings
 
 STATIC = Path(__file__).parent / "static"
@@ -39,7 +47,18 @@ def create_app(
     service: GridQueryService | None = None,
     settings: Settings | None = None,
     simulation: SimulationService | None = None,
+    store: DocumentStore | None = None,
+    sessions: SessionService | None = None,
 ) -> FastAPI:
+    """Build the FastAPI app. Every dependency can be injected for tests; otherwise it is built from settings.
+
+    Middleware, from innermost to outermost: the body limit (so its 413 still gets CORS headers), CORS (any
+    origin, GET / POST / PATCH / DELETE) and GZip. `app.state` holds the settings, the document store (shared
+    with an injected simulation service, so runs and sessions use one store) and the grid query service, which
+    is `None` when there is no snapshot (`/api/v1/health` then reports "sin snapshot"). The simulation,
+    sessions, grids and assistant services are built lazily on the first request to their routes. The grid
+    query routes are defined below. The simulation, session and assistant routers are included above, and the
+    agent-only OpenAPI spec is mounted at `/api/v1/agents/openapi.json`."""
     app = FastAPI(
         title="CascadaSEN · Red eléctrica de Chile",
         version="0.1.0",
@@ -49,17 +68,41 @@ def create_app(
             "Cada registro trae su procedencia; los valores inferidos llevan `is_assumption`."
         ),
     )
+    app.add_middleware(BodyLimitMiddleware)  # innermost: its 413 still gets CORS headers
     app.add_middleware(
-        CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"]
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["*"],
+        expose_headers=["ETag"],
     )
     app.add_middleware(GZipMiddleware, minimum_size=2048)
 
+    settings = settings or get_settings()
+    app.state.settings = settings
+    if store is None:  # share the injected service's store, so runs and sessions use one store
+        store = simulation.store if simulation is not None else document_store(settings)
+    app.state.store = store
     if service is None:
-        snap = repository(settings or get_settings()).load()
+        snap = repository(settings).load()
         service = GridQueryService(snap) if snap else None
     app.state.service = service
     app.state.simulation = simulation  # built lazily from the snapshot on the first /sim request
+    app.state.sessions = sessions  # built lazily from the simulation on the first /sessions request
+    app.state.limiter, app.state.sse_slots = TokenBucket(), SseSlots()
+    app.state.session_locks = SessionLocks(  # one request at a time per session
+        settings.session_lock_timeout_s, settings.session_lock_max_waiters
+    )
+    app.state.grids = None  # GridComposer, built lazily on the first /grids request
+    app.state.grid_sim = None  # GridSimulator, built lazily on the first /grids/simulate request
+    app.state.grid_dependency = None  # GridDependency, built lazily on the first /grids/dependency request
+    app.include_router(grid_router)
     app.include_router(simulation_router)
+    app.include_router(session_router)
+    app.include_router(incident_router)
+    app.state.assistant = None  # built lazily on the first /assistant request, only when the LLM is set up
+    app.include_router(assistant_router)
+    agent_openapi.mount(app)  # agent-only spec at /api/v1/agents/openapi.json (docs/openapi.md)
 
     def found(fn, *args, **kwargs):
         try:
@@ -89,12 +132,15 @@ def create_app(
         "/api/v1/admin/reload",
         response_model=Health,
         tags=["general"],
-        summary="Relee el snapshot del disco (tras correr cascadasen-build)",
+        summary="Relee el snapshot del disco (tras correr cascadasen-build; solo en desarrollo)",
     )
     def reload(request: Request) -> dict[str, Any]:
-        snap = repository(settings or get_settings()).load()
+        if not request.app.state.settings.admin_enabled:
+            raise HTTPException(404, "Deshabilitado. Usa CASCADASEN_ADMIN_ENABLED=true en desarrollo.")
+        snap = repository(request.app.state.settings).load()
         request.app.state.service = GridQueryService(snap) if snap else None
         request.app.state.simulation = None
+        request.app.state.sessions = None
         return health(request)
 
     @app.get(

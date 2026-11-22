@@ -1,6 +1,6 @@
 # Cyberattack simulation extension
 
-Status: proposed extension, written 2026-11-21. Not implemented. Needs a team decision (section 9). Read `idea.md` and `stack.md` first.
+Status: **implemented 2026-11-22 (issue #74)** as a thin layer over the strategic theatre; the team decision of section 9 is still pending. Sections 1, 2, 4 and 6-8 stay valid. Sections 3 and 5 describe the first proposal (`plant_out`, `fleet_out`, `/attacks/simulate` with free effects), which was **not** built: see section 3.1 for what exists. Read `idea.md` and `stack.md` first.
 
 > **Overlap with what exists (added 2026-11-21, branch `feat/strategic-sim-api`).** The strategic theatre (`strategy.md`, `mapa3.md` section 10) already runs on the mapa 3 network (188 buses, not 10-14 nodes) and its cascade engine. Through `POST /api/v1/sim/runs/{id}/events` a user or a script can already trigger effect-level events on that network: `C1_generation_loss` on a bus `B###` (its generation, close to E1 `plant_out` at substation level), `C2_common_mode_loss` by zone and technology (close to E2 `fleet_out`), and `C3_transmission_opening` on a line `R###` or corridor (E3 `line_open`). It has no plant-level ids and no storage outage, and it keeps the same guardrails (no ranking, no worst-case search, the adversary acts by area only). If the team approves this extension, build the catalog and `/attacks/*` as a thin layer over those events rather than a second engine path.
 
@@ -61,6 +61,44 @@ Rules for the API:
 - Each request is logged with the agent name and a seed, so a run can be reproduced.
 
 An external agent can still loop over targets by itself. The API cannot prevent that, and the layers it reads are already public. The mitigation is scope: a bounded catalog, small requests, local binding and no aggregate "most dangerous" output.
+
+### 3.1 What is implemented (2026-11-22)
+
+Catalog: `backend/src/cascadasen/domain/theater/params/incidents.yaml`. Each incident is a theatre template (same shape as `templates.yaml`: scenario events with cycle, adversary off, horizon 24, a policy A/B/C chosen at launch) plus public metadata: title, date, `kind` (`cyber_documented` or `reference_not_cyber`), `verified`, linked sources, notes and the mitigations that would have helped (defensive action ids). `theater_config().incidents` holds the metadata and `.templates` also holds every incident, so `POST /sim/runs` with `template: huatacondo-2026` works too.
+
+| Scenario id | Events (all abstract, zone or area level) | Result at `nov2026-1300` (policy C) |
+|---|---|---|
+| `huatacondo-2026` | cycle 2: `C1_generation_loss` A01 with `mw: 88.1` (dataset value; the press says 103 MW), `C5_remote_dispatch_loss` A08. The battery is not modelled (not in `storage.geojson`) | L0 in seeds 1-8, scripted (V10, `cyber.md` section 7) |
+| `polonia-2025` | cycle 2: `C2_common_mode_loss` in zone NC for solar and for wind (share 0.5 each), `D4_comms_loss` A06 | L1 to L2, millions of people at the peak |
+| `reino-unido-2026` | cycle 2: `C1_generation_loss` A09, 40 MW. **Unverified** (press only) | L0, the counter-example |
+| `25f-referencia` | cycle 2: `C3_transmission_opening` corridor A06-A07 at `feb2025-1500`. Labelled "not a cyber case" | L3 |
+
+The sizes of Polonia and Reino Unido are replay assumptions (`is_assumption`), not reconstructions.
+
+API (agent routes, in `docs/openapi/agents.openapi.json`):
+- `GET /api/v1/attacks/catalog` (`get_attack_catalog`): the list, in file order, with sources, effects and notices. Not ranked.
+- `POST /api/v1/sessions/{sid}/attacks/runs` (`start_incident_run`): `{scenario, policy="C", seed?, uncertainty?, stochastic=false, adversary?}`. `stochastic` is **off by default**: the incident is the script, so the card is the incident's own; with the theatre's chance on, unplanned external events also count (seed 6 turned the 40 MW UK counter-example into L2). It builds a normal session run from the template (same limits: 20 runs per session, write rate limit) and returns the run summary. Unknown scenario gives 422 with `valid`. The session's point must equal the incident's `operating_point` (in the catalog): otherwise 422 `{field: "scenario", valid: [<point>]}`, so `25f-referencia` needs a session created with `point: feb2025-1500`. There is no endpoint that accepts free effects, loops over targets or returns a worst case.
+- `step_run`, `get_run_report`, `get_run_after_action`, `replay_run` are the existing routes. The report has an `incident` block: public metadata, mitigations, and a `consequence_card` (level, `people_without_power`, `load_shed_mw`, `unserved_energy_mwh`, `failure_cost_usd`, `cost_per_hour_usd`, `outage_duration_h`, `cost_breakdown`, `cost_basis`). MWh and cost are the **cascade engine's own** (`blackout_cost`, `engine.md` "Cost", issue #82), the same as "Estado de la red": the card takes the most expensive cascade of the run (`transient.summary`). Dark demand pays a black start of 7.34 h and a total-blackout premium (both from the 25F study [44], `is_assumption: false`); load shed in a surviving island pays 1 h (`is_assumption: true`). For the 25F that gives US$ 984 M and 81,443 MWh, matching [44]; only the 25F is checked against a real figure. There is no editable outage duration: the hours are calibrated terms with a source, listed in `cost_basis` (also in the catalog). The first version extrapolated the peak power over an editable 4 h with the flat formula and gave US$ 390 M for the 25F. The standard indicators (TTU, mission continuity, wrong decisions, reserve) stay in `indicators`.
+- The after-action (`TemplateInterpreter`) adds an `incident` section: summary, effect, prevention lines (from `narrative_es.yaml` `prevention`), notes, sources. `ClaudeInterpreter` may still rewrite the narrative; it only explains.
+- Web: the **Incidentes** view of mapa 3 consumes this API. It creates a session at the incident's hour when needed and plays the cycles' `transient` on the map (`mapa3.md` section 4.2).
+- MCP and assistant tools: `list_incident_scenarios` and `start_incident_run(scenario, policy, seed)` (`docs/mcp.md`).
+
+Every result carries "Escenario hipotético: se modela el efecto, no el ataque." and "Consecuencia simulada en una red reducida, no una predicción." Tests: `backend/tests/unit/test_incidents.py`.
+
+### 3.2 Ciberataque: an intrusion that spreads between areas (2026-11-22, issue #109)
+
+A theatre template, `ciberataque`, with a new adversary mode `propagation` (`domain/agents/propagation.py`). It stays inside `cyber.md` section 8 item 7: operating-area level only, abstract catalog events, no learning, no objective search, no ranking.
+
+- **Start:** a seeded random operating area with at least `min_neighbours` (2) neighbours. Neighbours are areas that share a corridor (public topology, `cyber_attack.adjacency` in the catalog).
+- **Compromised:** the area loses communications (`D4_comms_loss`).
+- **Struck,** `strike_delay` cycles later: remote dispatch lost (`C5`) and `generation_share` of the area's generation trips (`C1`). The cascade engine runs as for any physical event, so the attack causes a real cascade when the grid gives one.
+- **Spread:** every `spread_cooldown` cycles each compromised area tries each clean neighbour with `spread_p`. A segmented area (source or target) stops the jump with `isolation_p`. An area cut off by segmentation cannot pass the intrusion on.
+- **Clean-up:** an area kept segmented `clean_after_segmented` cycles, or with every effect repaired by crews, is eradicated with `eradicate_p`; else it strikes again. Eradicated areas stay clean. The damage stays until a crew restores the area.
+- **Defence:** the existing rule policies A, B or C, or the LLM commander (`llm_commander: true`, the server's model, the same one the assistant uses when the provider is `bedrock-converse`; it only picks among validated actions). In this mode Operations first segments an area whose supervision is lost, then sends local control and a crew to repair it; C2 treats lost supervision there as suspect (confidence 0.75). Crews up to `crew_max_eta_cycles` (48) away are sent.
+- **End:** `attack` when the lost share of demand reaches `attack_win_lost_share` (0.8); `defense` when no area is compromised and every effect of the attack is repaired; else `undecided` at the 72-cycle horizon.
+- **API:** no new route. `GET /api/v1/sim/catalog` → `cyber_attack` (defaults, bounds, outcomes, adjacency, area names). `POST /sessions/{sid}/runs` with `template: "ciberataque"`, `adversary: {mode: "propagation", propagation: {overrides}}`, `capabilities: {field_crews}`, `policy` or `llm_commander`. Each snapshot carries `cyber` (state per area, counts, lost share, people without power, busy crews, the cycle's events); the report carries `cyber_attack` (outcome, start area, parameters, peak, events).
+- **Web:** the **Ciberataque** view of the rail builds the form from the catalog, opens a fresh session at `nov2026-1300` (original nodes), steps the run in chunks of 6 cycles until it finishes, and replays the area states; a cycle with a cascade plays on the map.
+- All parameters live in `theater.yaml` → `cyber_attack` and are `is_assumption`. With the defaults and 12 seeds, policy C ended 6 runs with a defence win and 6 undecided; with an aggressive attack (`spread_p` 0.8, `generation_share` 0.8, `strike_delay` 1, `spread_cooldown` 2, `isolation_p` 0.5) policy A lost 5 of 12 and C lost 3.
 
 ## 4. Demo
 

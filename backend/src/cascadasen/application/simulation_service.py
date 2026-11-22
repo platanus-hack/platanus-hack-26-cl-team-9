@@ -3,16 +3,17 @@ strategic runs and campaigns. Built once per snapshot."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from cascadasen.application.run_campaign import CampaignRunner
-from cascadasen.application.run_experiment import RunManager, catalog
+from cascadasen.application.run_experiment import RunCache, RunManager, catalog
 from cascadasen.application.simulate import PhysicsSimulator, SimulateCommand
+from cascadasen.domain.cascade.scenario import OperatingPoint
 from cascadasen.domain.model import GridSnapshot
-from cascadasen.domain.ports import CommanderAdvisor, Interpreter
+from cascadasen.domain.ports import CommanderAdvisor, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics, build_state
 from cascadasen.domain.simulation.network import NetworkSpec, ReducedNetwork, build_reduced_network
-from cascadasen.domain.theater.areas import bus_id
+from cascadasen.domain.theater.areas import TheaterNetwork, bus_id
 from cascadasen.domain.theater.world import TheaterWorld
 
 REFERENCE_OPERATING_POINT = "midday_2026"
@@ -26,13 +27,28 @@ class SimulationService:
         interpreter: Interpreter | None = None,
         advisor: CommanderAdvisor | None = None,
         world: TheaterWorld | None = None,
+        store: DocumentStore | None = None,
+        run_cache: RunCache | None = None,
+        version: str = "dev",
     ) -> None:
         self.network = network  # 13-area network of POST /simulate (domain/simulation)
         self.physics = physics or Physics.load()
         self.simulator = PhysicsSimulator(network, self.physics)
-        self.world = world  # mapa 3 network and operating points: the strategic theatre runs here
-        self.runs = RunManager(world, self.physics, interpreter=interpreter, advisor=advisor)
-        self.campaigns = CampaignRunner(world, self.physics)
+        # mapa 3 network and operating points: the strategic theatre runs here. The API always passes a world;
+        # only tests of the 13-area engine build the service without one and never touch the theatre.
+        self.world = cast("TheaterWorld", world)
+        self.run_cache = run_cache if run_cache is not None else RunCache()
+        self.runs = RunManager(
+            self.world,
+            self.physics,
+            interpreter=interpreter,
+            advisor=advisor,
+            store=store,
+            cache=self.run_cache,
+            version=version,
+        )
+        self.store = self.runs.store  # persisted run records (and, later, sessions)
+        self.campaigns = CampaignRunner(self.world, self.physics)
 
     @classmethod
     def from_snapshot(
@@ -103,62 +119,72 @@ class SimulationService:
         if point not in points:
             raise KeyError(point)
         net, op = self.world.load(point)
-        b = net.buses
-        ids = [bus_id(i) for i in range(b.size)]
-        return {
-            "point": point,
-            "points": points,
-            "nodes": [
-                {
-                    "id": ids[i],
-                    "name": b.names[i],
-                    "lon": b.lon[i],
-                    "lat": b.lat[i],
-                    "kv": b.kv[i],
-                    "zone": b.zone(i),
-                    "map_nodes": b.map_nodes[i],
-                    "area": net.area_of_bus[i],
-                }
-                for i in range(b.size)
-            ],
-            "lines": [
-                {
-                    "id": ln.id,
-                    "a": ids[ln.a],
-                    "b": ids[ln.b],
-                    "kv": ln.kv,
-                    "capacity_mw": round(ln.capacity_mw, 1),
-                    "x_pu": ln.x_pu,
-                    "map_edges": list(ln.map_edges),
-                    "branches": list(ln.branches),
-                    "corridor": net.line_corridor.get(ln.id),
-                }
-                for ln in b.lines
-            ],
-            "buses": {
-                ids[i]: {
-                    "gen_mw": round(float(op.gen[i]), 1),
-                    "load_mw": round(float(op.load[i]), 1),
-                    "people": round(float(op.people[i])),
-                }
-                for i in range(b.size)
-            },
-            "areas": [
-                {
-                    "id": a.id,
-                    "name": a.name,
-                    "zone": a.zone,
-                    "lat": a.lat,
-                    "lon": a.lon,
-                    "population": round(a.population),
-                    "buses": a.bus_ids,
-                    "anchor_bus": bus_id(a.anchor_bus) if a.anchor_bus is not None else None,
-                }
-                for a in (net.areas[k] for k in net.order)
-            ],
-            "corridors": [
-                {"id": c.id, "a": c.a, "b": c.b, "lines": list(c.lines)} for c in net.corridors.values()
-            ],
-            "defenses": {k: v for k, v in net.defense_areas().items()},
-            "zones": net.zones,
-        }
+        return theater_network_view(net, op, point, points)
+
+
+def theater_network_view(
+    net: TheaterNetwork, op: OperatingPoint, point: str, points: list[str]
+) -> dict[str, Any]:
+    """The mapa 3 network of a point (same `Network` shape as web/public/cache/network-<year>.json)
+    plus the operating areas, corridors and defence functions the theatre uses."""
+    b = net.buses
+    ids = [bus_id(i) for i in range(b.size)]
+    return {
+        "point": point,
+        "points": points,
+        "nodes": [
+            {
+                "id": ids[i],
+                "name": b.names[i],
+                "lon": b.lon[i],
+                "lat": b.lat[i],
+                "kv": b.kv[i],
+                "zone": b.zone(i),
+                "map_nodes": b.map_nodes[i],
+                "country": b.country,
+                "area": net.area_of_bus[i],
+            }
+            for i in range(b.size)
+        ],
+        "lines": [
+            {
+                "id": ln.id,
+                "a": ids[ln.a],
+                "b": ids[ln.b],
+                "kv": ln.kv,
+                "capacity_mw": round(ln.capacity_mw, 1),
+                "x_pu": ln.x_pu,
+                "map_edges": list(ln.map_edges),
+                "branches": list(ln.branches),
+                "country": ln.country,
+                "corridor": net.line_corridor.get(ln.id),
+            }
+            for ln in b.lines
+        ],
+        "buses": {
+            ids[i]: {
+                "gen_mw": round(float(op.gen[i]), 1),
+                "load_mw": round(float(op.load[i]), 1),
+                "people": round(float(op.people[i])),
+            }
+            for i in range(b.size)
+        },
+        "areas": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "zone": a.zone,
+                "lat": a.lat,
+                "lon": a.lon,
+                "population": round(a.population),
+                "buses": a.bus_ids,
+                "anchor_bus": bus_id(a.anchor_bus) if a.anchor_bus is not None else None,
+            }
+            for a in (net.areas[k] for k in net.order)
+        ],
+        "corridors": [
+            {"id": c.id, "a": c.a, "b": c.b, "lines": list(c.lines)} for c in net.corridors.values()
+        ],
+        "defenses": {k: v for k, v in net.defense_areas().items()},
+        "zones": net.zones,
+    }

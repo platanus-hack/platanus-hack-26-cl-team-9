@@ -97,5 +97,14 @@ templates:
         - {cycle: 2, type: D6_external_dependency_loss, target: A09, cause: failure}
         - {cycle: 2, type: D6_external_dependency_loss, target: A08, cause: failure}
         - {cycle: 5, type: C1_generation_loss, target: A10, params: {mw: 300}, cause: failure}
+
+    ciberataque:
+      label_key: tpl_ciberataque
+      question_key: q_ciberataque
+      operating_point: nov2026-1300
+      mission: utility_continuity
+      horizon: 72
+      adversary: {enabled: true, mode: propagation, objective: complicate_recovery, adaptive: false, budget: 0}
+      scenario_events: []
   is_assumption: true
   note: "Hypothetical experiment designs; targets are operating areas, never named plants or companies"
