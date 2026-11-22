@@ -39,6 +39,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** It skips `: ping` comments and blocks without `event:`, accepts `\r\n` (also split between chunks), joins multi-line `data:` with `\n`, and passes non-JSON data as a string. Tests in `sse.test.ts`.
 - **Files:** `web/src/assistant/{sse.ts,sse.test.ts}`.
 
+## 2026-11-22 · feat(grids): heat maps of dependency and criticality through the API, on the grid after the changes (#54)
+
+- **Changed:** `domain/cascade/tracing.py` and `criticality.py` (from PR #55) take the lines already open. New use case `GridDependency` (`application/grid_dependency.py`) and `POST /api/v1/grids/dependency` (`{point, open_lines, out_buses}`) measure who feeds whom and how critical each substation is after the user's changes and their cascade; `prepare_edits` in `grid_simulation.py` is shared with `/grids/simulate`. Web: "Mapa de calor" in the Capas menu (Población from the loaded buses; Dependencia and Criticidad from the API). The changes of Estado de la red are saved in localStorage (`sub50.edits.v1`) and come back after a refresh; a link with `?cut=` wins.
+- **Why:** PR #55 precomputed `dependency.json` in the cache for the base case only and was written against the old mapa 3; the new backend serves everything through the API, and the heat maps must describe the grid the user edited.
+- **Agents:** no `dependency.json`, no `population.json` and no `cascadasen-cache --only dependency`. Criticality costs about 2 s per new set of changes (32 results kept per process). New dependency `@deck.gl/aggregation-layers`.
+- **Files:** `backend/src/cascadasen/{domain/cascade/tracing.py,domain/cascade/criticality.py,application/grid_dependency.py,application/grid_simulation.py,api/grid_routes.py,api/app.py}`, `backend/tests/unit/{test_tracing,test_criticality,test_grid_dependency}.py`, `web/src/cascade/{heat.ts,heat.test.ts,edits.ts,edits.test.ts,gridsApi.ts,types.ts,layers.ts,CascadeApp.tsx,cascade.css}`, `web/package.json`, `docs/dependency.md`.
+
 ## 2026-11-22 · feat(web): outage result and cost in Estado de la red; Chile alone by default (#83)
 
 - **Changed:** Estado de la red opens with "Resultado de la caída": people without power and % of the country, MW lost of the hour's demand, generation lost and islands that went dark, read with the same `impactAt` that Simulación uses at its last second. Cost of the outage comes from `POST /api/v1/grids/cost` (issue #82, not built yet): the card says "pendiente" on 404. `/grids/simulate` now adds the demand of substations out of service to `load_total_mw`. The map opens with Chile alone (no context countries until ticked in Fuentes de la grilla) at Mediodía solar; Desastres open on Carga and Benchmark on Tensión.

@@ -85,6 +85,7 @@ def create_app(
     )
     app.state.grids = None  # GridComposer, built lazily on the first /grids request
     app.state.grid_sim = None  # GridSimulator, built lazily on the first /grids/simulate request
+    app.state.grid_dependency = None  # GridDependency, built lazily on the first /grids/dependency request
     app.include_router(grid_router)
     app.include_router(simulation_router)
     app.include_router(session_router)

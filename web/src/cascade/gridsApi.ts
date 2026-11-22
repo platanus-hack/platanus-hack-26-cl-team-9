@@ -1,5 +1,5 @@
 import type { RegionalCountry, RegionalLine, RegionalPlant, RegionalSubstation } from "../map/regional";
-import type { BusState, Network, Timeline } from "./types";
+import type { BusState, DependencyNode, Network, Timeline } from "./types";
 
 /** Grid documents served by the backend from S3 (docs/grids.md): catalogue, compose and the context documents. */
 export interface CatalogPoint { key: string; point: string; label: string; year: number; snapshot: string }
@@ -53,3 +53,7 @@ export async function loadOutageCost(body: { point: string; open_lines: string[]
   if (!r.ok) throw new Error(`No se pudo calcular el costo (${r.status}).`);
   return r.json();
 }
+
+/** Heat-map data of the grid as it stands after the changes (`POST /grids/dependency`): about 2 s per new set of changes. */
+export const loadDependency = (body: { point: string; open_lines: string[]; out_buses: string[] }) =>
+  request<{ point: string; open_lines: string[]; nodes: Record<string, DependencyNode> }>("dependency", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
