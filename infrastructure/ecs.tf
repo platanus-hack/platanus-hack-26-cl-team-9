@@ -11,13 +11,13 @@ resource "aws_ecs_cluster" "main" {
   name = "cascadasen"
 }
 
-# One task, 2 vCPU / 4 GB shared by both containers (no per-container limits).
+# One task, 4 vCPU / 8 GB shared by both containers (no per-container limits).
 resource "aws_ecs_task_definition" "app" {
   family                   = "cascadasen"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 2048
-  memory                   = 4096
+  cpu                      = 4096
+  memory                   = 8192
   execution_role_arn       = aws_iam_role.task_execution.arn
   task_role_arn            = aws_iam_role.task.arn
 

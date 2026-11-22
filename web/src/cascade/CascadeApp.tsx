@@ -17,7 +17,7 @@ import { CASE_25F, ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
-import { clock, formatPeople, lineName, pct, placeName, zoneName } from "./text";
+import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
 import type { BusState, Index, Network, Timeline } from "./types";
 import { Icon, TipLayer, Wordmark } from "./ui";
@@ -25,7 +25,9 @@ import { DataPanel } from "../session/DataPanel";
 import { SessionBar } from "../session/SessionBar";
 import { SessionCut } from "../session/SessionCut";
 import { cutLines, repairLines } from "../session/sessionApi";
+import { canPowerAll, powerAll } from "./powerAll";
 import { useSession } from "../session/useSession";
+import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
 import "../session/session.css";
 
@@ -50,17 +52,18 @@ export function CascadeApp() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const scaleRef = useRef<HTMLDivElement>(null);
   const baseMap = useRef<BaseMap | null>(null);
-  const params = useMemo(() => new URLSearchParams(location.search), []); // ?point=<id>&cut=<line id>&vista=3d&sesion=<sid>
+  // ?point=<id>&cut=<line id | sub-<bus id>>&vista=3d&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
+  const params = useMemo(() => new URLSearchParams(location.search), []);
   const s = useSession();
   const startCut = s.sid ? null : params.get("cut"); // a session owns its cut
   const [index, setIndex] = useState<Index | null>(null);
-  const [pointId, setPointId] = useState(params.get("point") ?? "nov2026-1300");
+  const [pointId, setPointId] = useState(params.get("point") ?? DEFAULT_POINT);
   const [network, setNetwork] = useState<Network | null>(null);
   const [buses, setBuses] = useState<Record<string, BusState>>({});
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
   // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
-  const [edits, setEdits] = useState<Edits>(startCut ? addLine(NO_EDITS, startCut) : NO_EDITS);
+  const [edits, setEdits] = useState<Edits>(() => (!startCut ? NO_EDITS : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -214,11 +217,8 @@ export function CascadeApp() {
     else if (was && !s.sid) { setEdits(NO_EDITS); setLoaded(null); setTab((x) => (x === "datos" ? "red" : x)); }
   }
   function _syncUrl() {
-    const q = new URLSearchParams(location.search);
-    q.set("point", pointId);
-    if (cut && !s.sid) q.set("cut", cut); else q.delete("cut"); // the URL keeps a single cut; more changes live in the page
-    if (mode === "3d") q.set("vista", "3d"); else q.delete("vista");
-    history.replaceState(null, "", `${location.pathname}?${q}`);
+    const search = syncedSearch(location.search, { pointId, cut, mode, sid: s.sid });
+    history.replaceState(null, "", location.pathname + search + location.hash);
   }
 
   function _mountMap() {
@@ -365,12 +365,18 @@ export function CascadeApp() {
     setColorMode("load");
   }
 
-  /** A substation out of service is one more change on the list. Not in a session: its overlay has its own edits (Datos). */
+  /**
+   * Shutting down a substation is one more change on the list (out of service with its load and generation). In a session
+   * its lines that are still closed open for everyone through `POST /{sid}/cut`.
+   */
   function outBus(id: string) {
-    if (s.sid) return;
     setSelection(null);
     setNotice(null);
-    setEdits((e) => addBus(e, id));
+    if (!s.sid) setEdits((e) => addBus(e, id));
+    else if (network) {
+      const closed = substationLines(network, id).filter((l) => !s.state?.open_lines.includes(l));
+      if (closed.length) s.edit((sid, rev) => cutLines(sid, closed, rev));
+    }
     setView("tabs");
     setTab("sim");
     setColorMode("load");
@@ -386,6 +392,33 @@ export function CascadeApp() {
     else s.edit((sid, rev) => repairLines(sid, lines ? { lines } : { all: true }, rev));
   }
   function restoreBus(id: string) { setEdits((e) => dropBus(e, id)); }
+  /** "Encender subestación": puts that substation back; in a session it repairs its lines. */
+  function powerOn(id: string) {
+    if (!s.sid) restoreBus(id);
+    else if (network) restore(substationLines(network, id));
+  }
+
+  /**
+   * "Prender todo": back to the full network at the same point. Clears the cut, the selection and the notice, and puts the
+   * timeline at 0 paused; the tab, the colour mode and the view stay. In a session it repairs every open line for everyone
+   * after a confirmation; session dataset edits stay ("Restablecer" in Datos drops them).
+   */
+  function powerAllOn() {
+    if (s.sid) {
+      if (!confirm("¿Prender toda la red? Repara todas las líneas abiertas para todos los participantes de la sesión.")) return;
+      restore();
+      setSelection(null);
+      seek(0);
+      setPlaying(false);
+      return;
+    }
+    const next = powerAll({ pointId, cut, selection, t: live.current.t, playing: live.current.playing });
+    setEdits(NO_EDITS); // every change goes, lines and substations
+    setSelection(next.selection);
+    seek(next.t);
+    setPlaying(next.playing);
+    setNotice(null);
+  }
 
   function togglePlay() {
     const v = live.current;
@@ -420,6 +453,10 @@ export function CascadeApp() {
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
   const selectedCut = selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null;
   const only25f = s.sid ? cuts.length === 1 && cuts[0] === CASE_25F.cut : edits.buses.length === 0 && edits.lines.length === 1 && edits.lines[0] === CASE_25F.cut;
+  const canPower = canPowerAll({ cuts, edited: outBuses.length > 0 });
+  const shutDown = selection?.kind === "node" && (s.sid
+    ? !!network && substationLines(network, selection.id).length > 0 && substationLines(network, selection.id).every((l) => cuts.includes(l))
+    : edits.buses.includes(selection.id));
   const sourceNote = hasLabels ? "Mapa base: Mapbox" : "Contorno: data/processed/chile.geojson";
 
   return (
@@ -479,8 +516,9 @@ export function CascadeApp() {
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={regional} />}
           {view === "tabs" && !network && !error && <Loading text="Cargando la red" />}
           {view === "tabs" && network && selection && (
-            <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year} outBuses={outBuses}
-              select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut ? [selectedCut] : undefined)} outBus={outBus} restoreBus={restoreBus} />
+            <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year}
+              select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut ? [selectedCut] : undefined)}
+              shutDown={shutDown} shutdown={outBus} powerOn={powerOn} />
           )}
           {view === "tabs" && tab === "estado" && network && (s.sid
             ? <p className="meta">En una sesión compartida los cambios están en Simulación y Datos.</p>
@@ -501,6 +539,11 @@ export function CascadeApp() {
 
       <TimelineCard timeline={edited && timelineReady ? timeline : null} loading={edited && !timelineReady} markers={markers} t={t} clock={clock(point?.snapshot, t).tenths} islands={edited ? islands : []} playing={playing} speed={speed}
         setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />
+
+      <button className="power-all" aria-disabled={!canPower || undefined} onClick={() => canPower && powerAllOn()}
+        data-tip={!canPower ? "No hay nada apagado ni editado." : s.sid ? "Repara todas las líneas abiertas de la sesión y vuelve al caso base de esta hora." : "Repone lo apagado y vuelve al caso base de esta hora."}>
+        <Icon size={14}><path d="M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z" /></Icon><span>Prender todo</span>
+      </button>
 
       <div className="map-controls" ref={controlsRef}>
         <button className={layersOpen ? "ctl on" : "ctl"} aria-label="Capas y vista" aria-expanded={layersOpen} onClick={() => setLayersOpen(!layersOpen)}>

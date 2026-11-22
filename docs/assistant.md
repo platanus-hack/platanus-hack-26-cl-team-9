@@ -44,6 +44,56 @@ curl -s -X POST localhost:8000/api/v1/assistant/chat -H 'content-type: applicati
 | 502 | The model failed or does not support tools (fixed text, no provider detail). The user's turn is kept |
 | 503 | LLM disabled or another provider |
 
+## 2b. Streaming the steps (`POST /chat/stream`)
+
+Same body as `/chat`; the answer is `text/event-stream` with each step as it happens, so a client can draw partial results on the map while the assistant works.
+
+```
+event: start
+data: {"conversation_id": "…", "session_id": null, "run_id": null}
+
+event: assistant_text
+data: {"step": 1, "text": "Agrego el datacenter."}
+
+event: tool_call
+data: {"step": 1, "id": "t1", "name": "add_datacenter", "arguments": {"bus": "Antofagasta", "mw": 120}}
+
+event: tool_result
+data: {"step": 1, "id": "t1", "name": "add_datacenter", "ok": true, "result": {…}, "session_id": "…", "run_id": null}
+
+: ping
+
+event: done
+data: {"conversation_id": "…", "session_id": "…", "run_id": "…", "reply": "…", "steps": 3, "truncated": null, "notice": "…"}
+```
+
+- `error` replaces `done` when the model fails or the conversation changed underneath (`{"status": 502|409|500, "detail"}`). Errors found before the stream starts (422, 404 conversation, 429, 503) are plain HTTP errors.
+- Events are light: `result` is the same compact summary the model saw. To draw, fetch the full data the event points to: after `cut_lines` or `repair_lines`, `GET /api/v1/sessions/{sid}/state` (the cascade `timeline` with its frames); after `step`, `GET /api/v1/sessions/{sid}/runs/{rid}/snapshots?start=N` (`grid`, `transient`, `areas` per cycle); after an edit, `GET /api/v1/sessions/{sid}/network`. The session SSE (`GET /sessions/{sid}/events`) still reports each change too.
+- `: ping` comments go out every `assistant_stream_ping_s` (10 s) without events, and the stream deadline is `assistant_stream_deadline_s` (90 s instead of 25 s), because CloudFront only cuts an origin that sends nothing for 30 s.
+- The loop runs in a worker thread: if the client disconnects, it still finishes and saves the conversation.
+- `EventSource` only does GET, so a browser reads this POST with `fetch` and a stream reader:
+
+```js
+const res = await fetch("/api/v1/assistant/chat/stream", {method: "POST",
+  headers: {"Content-Type": "application/json"}, body: JSON.stringify({message, conversation_id})});
+const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+let buf = "";
+for (;;) {
+  const {value, done} = await reader.read(); if (done) break;
+  buf += value; let i;
+  while ((i = buf.indexOf("\n\n")) >= 0) {
+    const block = buf.slice(0, i); buf = buf.slice(i + 2);
+    const kind = block.match(/^event: (.*)$/m)?.[1]; const data = block.match(/^data: (.*)$/m)?.[1];
+    if (kind) onEvent(kind, JSON.parse(data));   // ": ping" blocks have no event line
+  }
+}
+```
+
+```bash
+curl -N -X POST localhost:8000/api/v1/assistant/chat/stream -H 'content-type: application/json' \
+  -d '{"message": "Agrega un datacenter de 120 MW en Antofagasta y corta R014"}'
+```
+
 ## 3. How it works
 
 - `Assistant.chat` runs a loop: the model answers with text or tool calls, each call runs, the result goes back, until the model answers with text, `assistant_max_steps` is reached or `assistant_deadline_s` passes.
@@ -69,7 +119,7 @@ Same as `cyber.md` section 8, `sessions-api.md` section 11 and `mcp.md` section 
 
 ## 5. Not done
 
-- Streaming (SSE) and the web UI: the response is one JSON document.
+- The web UI (the backend streams the steps; see section 2b).
 - Other providers (`anthropic`, `bedrock` Messages API).
 - Terraform: the task role has no Bedrock permission and CloudFront keeps its default 30 s origin timeout (`infrastructure/iam.tf`, `cloudfront.tf`).
 - Live test on 2026-11-21 against Bedrock and the 188-bus network with a bench of 17 turns in 5 conversations (edit and cut, strategic run with report and replay, guardrail, ambiguous requests, harder multi-step and prompt injection). `qwen.qwen3-next-80b-a3b` needed most of the guards above and still failed intermittently; `deepseek.v3.2` passed every check across several passes (the only flags were false negatives of the bench), with 1-19 s per message, and is the model set in the team's local `.env`. Other models that call tools through Converse on the account: `moonshotai.kimi-k2.5`, `zai.glm-5`, `mistral.mistral-large-3-675b-instruct`, `openai.gpt-oss-120b-1:0` (not benchmarked). The bench script is not in the repo.

@@ -161,3 +161,91 @@ def test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened(ma
     assert [e["type"] for e in first["result"]["events_applied"]] == ["C3_transmission_opening"]
     assert "warning" not in first["result"]
     assert second["result"]["events_applied"] == [] and "No se aplicó" in second["result"]["warning"]
+
+
+STREAM = "/api/v1/assistant/chat/stream"
+
+
+def parse_sse(text):
+    """[(event, data)] from a text/event-stream body; comments (pings) are skipped."""
+    import json
+
+    out = []
+    for block in text.strip().split("\n\n"):
+        lines = [ln for ln in block.splitlines() if not ln.startswith(":")]
+        if not lines:
+            continue
+        kind = next(ln[7:] for ln in lines if ln.startswith("event: "))
+        data = json.loads(next(ln[6:] for ln in lines if ln.startswith("data: ")))
+        out.append((kind, data))
+    return out
+
+
+def test_the_stream_sends_each_step_then_done(make_app):
+    model = ScriptedModel(
+        AssistantTurn(
+            "Agrego el datacenter.", (ToolCall("c1", "add_datacenter", {"bus": "B002", "mw": 100}),)
+        ),
+        calls(("cut_lines", {"lines": ["R1"]})),
+        AssistantTurn("Listo."),
+    )
+    client = TestClient(make_app(model))
+    r = client.post(STREAM, json={"message": "agrega un datacenter de 100 MW y corta R1"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    events = parse_sse(r.text)
+    assert [k for k, _ in events] == [
+        "start",
+        "assistant_text",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "done",
+    ]
+    by = dict(events[:1])
+    assert by["start"]["session_id"] is None
+    dc_result, cut_result = events[3][1], events[5][1]
+    assert dc_result["name"] == "add_datacenter" and dc_result["ok"] and dc_result["session_id"]
+    assert cut_result["result"]["open_lines"] == ["R1"]
+    done = events[-1][1]
+    assert done["reply"] == "Listo." and done["session_id"] == dc_result["session_id"]
+    # the client fetches the full state the event points to
+    state = client.get(f"/api/v1/sessions/{done['session_id']}/state").json()
+    assert state["open_lines"] == ["R1"] and state["timeline"]["frames"]
+    # the conversation is the same one /chat would have stored
+    read = client.get(f"/api/v1/assistant/conversations/{done['conversation_id']}").json()
+    assert [t["name"] for t in read["tool_calls"]] == ["add_datacenter", "cut_lines"]
+
+
+def test_stream_errors_before_and_after_it_starts(make_app):
+    client = TestClient(make_app())
+    assert client.post(STREAM, json={"message": "hola"}).status_code == 503
+    client = TestClient(make_app(ScriptedModel(ToolChatError("El modelo no está disponible"))))
+    assert client.post(STREAM, json={"message": ""}).status_code == 422
+    assert client.post(STREAM, json={"message": "x", "conversation_id": "A" * 22}).status_code == 404
+    events = parse_sse(client.post(STREAM, json={"message": "hola"}).text)
+    assert [k for k, _ in events] == ["start", "error"]
+    assert events[1][1] == {"status": 502, "detail": "El modelo no está disponible"}
+
+
+def test_the_stream_shares_the_chat_rate_limit(make_app):
+    model = ScriptedModel(*[AssistantTurn("ok") for _ in range(5)])
+    client = TestClient(make_app(model, rate_assistant_per_minute=2))
+    codes = [
+        client.post(STREAM, json={"message": "x"}).status_code,
+        client.post(CHAT, json={"message": "x"}).status_code,
+    ]
+    assert codes == [200, 200] and client.post(STREAM, json={"message": "x"}).status_code == 429
+
+
+def test_the_stream_pings_while_the_model_thinks(make_app):
+    import time as _time
+
+    class SlowModel(ScriptedModel):
+        def turn(self, system, messages, tools):
+            _time.sleep(0.3)
+            return super().turn(system, messages, tools)
+
+    client = TestClient(make_app(SlowModel(AssistantTurn("ok")), assistant_stream_ping_s=0.05))
+    body = client.post(STREAM, json={"message": "x"}).text
+    assert ": ping" in body and parse_sse(body)[-1][0] == "done"

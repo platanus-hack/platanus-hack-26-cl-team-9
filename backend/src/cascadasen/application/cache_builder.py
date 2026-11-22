@@ -1,4 +1,4 @@
-"""cascadasen-cache: precompute every single-line cut for each operating point, as static JSON for the web app.
+"""cascadasen-cache: precompute every single-line cut and every substation shutdown for each operating point, as static JSON for the web app.
 
 Why: docs/stack.md answers a click from precomputed files, so the demo works without a server.
 Layout under the output folder:
@@ -7,6 +7,7 @@ Layout under the output folder:
   <point>/buses.json              generation, load and people per bus before the cut
   <point>/baseline.json           the secure base case (no cut)
   <point>/<line id>.json          the cascade for cutting that line
+  <point>/sub-<bus id>.json       the cascade for shutting down that substation: every line of the bus opens at t = 0
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ def _points(processed: Path, wanted: list[str] | None) -> list[dict]:
     ]
 
 
-def _build_point(processed: Path, out: Path, point: dict) -> int:
+def _build_point(processed: Path, out: Path, point: dict) -> dict:
     net, op = load_network_and_point(processed, point["id"])
     _write(out / f"network-{point['year']}.json", network_json(net))
     folder = out / point["id"]
@@ -56,7 +57,13 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
     _write(folder / "baseline.json", run_cascade_workflow(net, op, []))
     for line in net.lines:
         _write(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
-    return len(net.lines)
+    substations = 0
+    for i in range(net.size):
+        ids = [ln.id for ln in net.lines if i in (ln.a, ln.b)]
+        if ids:
+            _write(folder / f"sub-B{i:03d}.json", run_cascade_workflow(net, op, ids))
+            substations += 1
+    return {"lines": len(net.lines), "substations": substations}
 
 
 def network_json(net: ReducedNetwork) -> dict:
@@ -96,7 +103,9 @@ def _write(path: Path, data: dict) -> None:
 
 def main() -> int:
     root = Path(__file__).resolve().parents[4]
-    parser = argparse.ArgumentParser(description="Precalcula todos los cortes simples para la app web.")
+    parser = argparse.ArgumentParser(
+        description="Precalcula los cortes de una línea y el apagado de cada subestación para la app web."
+    )
     parser.add_argument("--processed", type=Path, default=root / "data" / "processed")
     parser.add_argument("--out", type=Path, default=root / "web" / "public" / "cache")
     parser.add_argument("--point", action="append", help="id de un punto de operación (repetible)")

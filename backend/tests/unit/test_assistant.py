@@ -282,3 +282,35 @@ def test_a_call_that_would_end_past_the_deadline_is_not_started():
     model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("no debería llegar"))
     out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r, t: FakeBox())
     assert out["truncated"] == "deadline" and out["steps"] == 1 and len(model.turns) == 1
+
+
+def test_steps_are_emitted_as_they_happen():
+    events = []
+    model = ScriptedModel(AssistantTurn("Creo la sesión.", (call(),)), AssistantTurn("listo"))
+    out = make(model).chat(
+        "x", None, None, lambda s, r, t: FakeBox(), on_event=lambda k, d: events.append((k, d))
+    )
+    assert [k for k, _ in events] == ["start", "assistant_text", "tool_call", "tool_result"]
+    start, text, tool_call, tool_result = (d for _, d in events)
+    assert start["conversation_id"] == out["conversation_id"] and start["session_id"] is None
+    assert text == {"step": 1, "text": "Creo la sesión."}
+    assert tool_call == {"step": 1, "id": "c1", "name": "start_session", "arguments": {}}
+    assert tool_result["ok"] is True and tool_result["result"] == {"ok": "start_session"}
+    assert tool_result["session_id"] == SID  # where the client fetches the new state
+
+
+def test_a_failing_event_callback_does_not_stop_the_conversation():
+    def broken(kind, data):
+        raise BrokenPipeError
+
+    model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("listo"))
+    out = make(model).chat("x", None, None, lambda s, r, t: FakeBox(), on_event=broken)
+    assert out["reply"] == "listo" and out["tool_calls"][0]["ok"] is True
+
+
+def test_a_longer_deadline_can_be_given_per_message():
+    now = iter([0.0, 0.0, 0.0, 30.0, 31.0, 31.0, 40.0])
+    model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("listo"))
+    a = make(model, deadline_s=25, clock=lambda: next(now))
+    out = a.chat("x", None, None, lambda s, r, t: FakeBox(), deadline_s=90)
+    assert out["reply"] == "listo" and out["truncated"] is None

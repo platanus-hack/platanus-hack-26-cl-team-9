@@ -36,6 +36,154 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** documents live under `grids/v1/` of the session bucket (the lifecycle rules only expire `sessions/` and `runs/`). Settings `CASCADASEN_GRIDS_STORE` (`local` default, `s3`), `_GRIDS_BUCKET`, `_GRIDS_PREFIX`. The prod task role `cascadasen-task` cannot read `grids/*` until IAM allows it (no Terraform yet). `operating_point_from_docs` and `network_json` are now public. Compose does not apply `overlay` yet; the simulator will. Details in `docs/grids.md`.
 - **Files:** `backend/src/cascadasen/{domain,application,infrastructure,api}/*grid*`, `domain/cascade/scenario.py`, `application/cache_builder.py`, `data/scenarios/`, `docs/grids.md`.
 
+## 2026-11-21 · docs(mapa3): document Prender todo
+
+- **Changed:** `docs/mapa3.md`. §3 places the control next to the layers button. §4 gets new item 9, **Prender todo**: what it clears, what it keeps, when it is disabled. The placeholder tabs become item 10. §8 adds `powerAll.ts` to the file table. §11 adds the session behaviour: confirm, repair every open line for everyone, dataset edits kept.
+- **Why:** The docs have to match the button from the previous commit.
+- **Agents:** No new rules beyond the previous two entries.
+- **Files:** `docs/mapa3.md`.
+
+## 2026-11-21 · feat(web): add Prender todo button to mapa 3
+
+- **Changed:** `CascadeApp.tsx` renders a labelled button **Prender todo** (bolt icon) at the top right, left of the `.map-controls` column, on the layers button's row. It sits outside every tab/view branch, so it shows from Red, Simulación, Datos, Ayuda, Fuentes and Sesión. It is enabled when `canPowerAll({ cuts, edited: false })` holds, i.e. while any cut is in force (local cut or the session's open lines).
+- **Changed:** `powerAllOn()`. Without a session it applies `powerAll(...)`: no cut, no selection, no notice, timeline at 0 and paused, same point. In a session it asks `confirm(...)` first, then calls the existing `restore()` (`repairLines(sid, { all: true }, rev)` via `s.edit`) and clears the selection and the timeline. Tab, colour mode and view never change. Session dataset edits are kept.
+- **Why:** Before this, "Reponer línea" in the selection or impact card was the only way back to the base case, and it repaired a single cut. With several elements switched off (#42, PR #67) the user needs one always-visible way back to the starting point that keeps the chosen operating point.
+- **Agents:** Disabled is `aria-disabled` with a guarded click, not `disabled`, so `TipLayer` still shows "No hay nada apagado ni editado." (same pattern as the placeholder tabs). `.power-all` has z-index 2, below `.map-controls` (3), so the layers popover covers it while open. No red: red is reserved for failure. Open PR #67 (`sub-<bus>` cut ids) needs no special handling: `cut: null` clears it too, but expect a textual merge conflict in the same area of `CascadeApp.tsx`. When #42 phase B adds local edits, pass them as `edited`. Known nit: after a click the tooltip keeps its old text until the pointer leaves the button (TipLayer reads `data-tip` only on `pointerover`).
+- **Files:** `web/src/cascade/{CascadeApp.tsx,cascade.css}`.
+
+## 2026-11-21 · feat(web): add pure powerAll helpers for mapa 3
+
+- **Changed:** New `web/src/cascade/powerAll.ts` with `canPowerAll({ cuts, edited })` (true when there is at least one cut or `edited`) and `powerAll(view)`, which keeps `pointId` and returns `cut: null`, `selection: null`, `t: 0`, `playing: false`.
+- **Why:** The "Prender todo" button (next commit) needs a tested rule for when it is enabled and for what it resets.
+- **Agents:** A selection or a timeline position alone does not enable the button. `edited` is always `false` for now; #42 phase B (local value edits) plugs in there. Tests are in `web/src/cascade/powerAll.test.ts`.
+- **Files:** `web/src/cascade/{powerAll.ts,powerAll.test.ts}`.
+
+## 2026-11-22 · feat(infra): ECS task of 4 vCPU and 8 GB
+- **Changed:** `aws_ecs_task_definition.app` goes from 2 vCPU / 4 GB to 4 vCPU / 8 GB (`cpu = 4096`, `memory = 8192`, a valid Fargate pair). `docs/infrastructure.md` says so.
+- **Why:** The user asked for a bigger task. The Fargate On-Demand vCPU quota is 30, so two 4 vCPU tasks fit during a blue/green rollout.
+- **Agents:** The service has `ignore_changes = [task_definition]`, so the new size only reaches it after a one-time `aws ecs update-service --task-definition cascadasen:<revision>` that points at the revision Terraform registers; CI deploys copy that revision and keep the size.
+- **Files:** `infrastructure/ecs.tf`, `docs/infrastructure.md`.
+## 2026-11-21 · feat(web): shut down a substation from its card
+
+- **Changed:** The substation card has **Apagar esta subestación** ("Abre sus N líneas en t = 0.") and, while it is shut down, **Encender subestación**. Without a session it sets the cut to `sub-B###` and plays `<point>/sub-B###.json`; in a session it opens the substation's closed lines in one `POST /{sid}/cut` and repairs exactly those lines to power it on.
+- **Changed:** `text.ts` adds `SUBSTATION_PREFIX`, `shutdownNode`, `substationLines`, `cutName` ("Subestación Polpaico" or the line name) and a plural `line_cut` narration ("Salen de servicio las líneas A, B y C."). The impact card (`Corte: Subestación ...`, button **Encender subestación**) and the Escenarios row use `cutName`.
+- **Why:** Second kind of scenario asked by the user: shutting down a substation = opening every line of it at t = 0.
+- **Agents:** A static `cut` is `R###` or `sub-B###`, and `?cut=sub-B012` works; the hour change in Escenarios and the missing-file fallback are unchanged. Sessions have no `sub-` id, only open lines. Verification: `npm test` 55 passed, `npm run build` ok. "Bloquear" is still out of scope.
+- **Files:** `web/src/cascade/{text.ts,text.test.ts,SelectionCard.tsx,CascadeApp.tsx,SimulationPanel.tsx,Scenarios.tsx}`, `docs/mapa3.md`.
+
+## 2026-11-21 · chore(cache): regenerate the cache with substation cuts
+
+- **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache`: 752 new `sub-B###.json` (188 per point) and the 1,097 existing files rewritten. Size went from 23 MB to 42 MB (`du -sh`); the docs say so.
+- **Why:** The web reads substation shutdowns from the cache. The existing files were stale: they lacked the newer summary fields (`final_hz`, `rocof_hz_s`, `inertia_mws`, `shed_mw`, `battery_mw`, `uncertain`, `prefault_boundary_mw`) and the current assumption texts, so line cuts now match the engine too.
+- **Agents:** Checked: `nov2026-1300/sub-B012.json` has `failed_elements` = `["R042","R043"]`, the two lines of B012, and its first event is `line_cut` with both ids at t = 0. A full run takes about a minute.
+- **Files:** `web/public/cache/`, `docs/mapa3.md`, `docs/engine.md`, `web/README.md`.
+
+## 2026-11-21 · fix(hooks): find a staged CHANGELOG.md in commits with many files
+
+- **Changed:** `scripts/hooks/pre-commit` pipes the staged list into `grep -x ... >/dev/null` instead of `grep -qx`.
+- **Why:** With `pipefail`, `grep -q` exits at the first match, `printf` dies of SIGPIPE and the check reported "CHANGELOG.md is not staged" on a commit of ~1,850 files (the cache regeneration) even though it was staged.
+- **Agents:** Large commits such as a regenerated `web/public/cache/` now pass the hook without `SKIP_CHANGELOG`.
+- **Files:** `scripts/hooks/pre-commit`.
+
+## 2026-11-21 · feat(cache): precompute a cut per substation
+
+- **Changed:** `cascadasen-cache` also writes `<point>/sub-B###.json` for each of the 188 substations: the cascade for opening every line of that bus at t = 0 (`run_cascade_workflow(net, op, ids)`). Buses without lines are skipped (none today). The printed count per point is now `{"lines": 273, "substations": 188}`.
+- **Why:** The map gets a second kind of scenario, "Apagar esta subestación" (user decision: shutting down = opening all its lines at t = 0). Without a session the web only reads precomputed files.
+- **Agents:** A scenario id in the cache is now either a line id `R###` or `sub-B###`; both files share the timeline format. The cache is regenerated in the next commit. "Bloquear" (loss of control) is not modelled.
+- **Files:** `backend/src/cascadasen/application/cache_builder.py`, `docs/mapa3.md`, `docs/engine.md`, `web/README.md`.
+
+## 2026-11-21 · docs(mapa3): document the clean default URL
+
+- **Changed:** `docs/mapa3.md` §2: the URL carries only values that differ from the defaults, a bare `/` is the default view, and `?point=nov2026-1300` is normalised away. §11: a session URL drops `point` as well as `cut`.
+- **Why:** The docs have to match `syncedSearch` from the previous commit.
+- **Agents:** No new rules beyond the previous entry.
+- **Files:** `docs/mapa3.md`.
+
+## 2026-11-21 · fix(web): keep the mapa 3 URL clean on defaults
+
+- **Changed:** New `web/src/cascade/url.ts` with `DEFAULT_POINT` (`nov2026-1300`) and the pure `syncedSearch(search, { pointId, cut, mode, sid })`. `_syncUrl` in `CascadeApp.tsx` uses it and keeps `location.hash`. The URL now writes `point` only when it differs from the default and there is no session, `cut` only without a session, and `vista=3d` only in 3D. It keeps every other param (`sesion`, `mapa`, `limite`) and drops the `?` when nothing is left.
+- **Why:** The first render of `/` became `/?point=nov2026-1300`, and an empty search still left a trailing `?`. Explicit `?point=`/`?cut=`/`?vista=3d` links still open the same state.
+- **Agents:** A bare `/` is the default view. A session URL carries `sesion` (and `vista`) but no `point` or `cut`. Tests are in `web/src/cascade/url.test.ts`. No slug or path aliases (such as `/25f`): ids stay the only deep-link format. Note: `scripts/lint.sh` only lints `frontend/*`, so `web/` files are not linted.
+- **Files:** `web/src/cascade/{url.ts,url.test.ts,CascadeApp.tsx}`.
+
+## 2026-11-21 · docs(network): add network-format.md and update regional and datasets docs
+
+- **Changed:** New `docs/network-format.md`, the data contract for adding or uploading a network, in seven sections:
+  1. Fields, types, units, ISO3 and provenance per bus, line, DC link and plant.
+  2. Readiness levels L0 / L1 / L1+ / L2.
+  3. Gap filling, with the error measured on Brazil.
+  4. Worked examples: Chile, Brazil, Peru, Argentina and Bolivia.
+  5. A checklist to add a country.
+  6. Upload safety (#49 part C).
+  7. What each level can claim.
+- **Changed:** `regional.md` gets section 6 (Brazil flow network: sources, units, decisions, result) and fixes section 4: ONS `SUBESTACAO.csv` **has** coordinates. `datasets.md` adds sources [42] and [43] (ONS, CC BY, downloaded 2026-11-21). `architecture.md`, `plan.md` §9 item 14, `backend/README.md` and the AGENTS.md read order (item 10) mention the new pieces.
+- **Why:** Issue part B. The contract has to be followable without reading the code, and it has to say how much a deduced network can be trusted.
+- **Agents:** Expected error of a deduced network, from Brazil:
+  - x: median 15 %, p90 39 %;
+  - capacity with Chile's typical ratings: median 31 %, p90 62 %;
+  - distance-snapped topology: precision 89 %, recall 99 %.
+
+  Treat these as a lower bound for the OSM countries. The proposed upload limits (10 MB, 5,000 buses, 10,000 lines) are not enforced anywhere yet.
+- **Files:** `docs/{network-format,regional,datasets,architecture,plan}.md`, `AGENTS.md`, `backend/README.md`.
+
+## 2026-11-21 · feat(data): build Brazil flow network from ONS
+
+- **Changed:** New `data/processed/latam/BRA/network.json` (730 KB): 853 buses, 1,305 AC lines (1,842 circuits, 230-765 kV), 4 HVDC links (12 records) and 495 plant groups. `manifest.json` gains `countries.BRA.flow`. The drawn BRA geojson files are unchanged, except that the manifest's EPE `fetched_at` was refreshed.
+- **Changed:** New `backend/tests/validation/test_ons_network.py` (skips without the file). It checks provenance on every element, x > 0 and capacity > 0, a unit guard (the median ohm/km per kV must sit inside `X_PER_KM`), the main component ≥ 95 %, length within ±15 % of 189,308 km, coordinate match ≥ 98 %, and that the manifest counts match the file.
+- **Why:** Issue part A3/A4. The figures: AC 174,428 circuit-km (−7.9 %) and AC+DC 196,456 km (+3.8 %) against 189,308 km. Coordinates come from ONS for 853 of 855 substations (USIBA 230 kV and COL BOA SORTE 2 500 kV have none, and neither is in EPE). 215 circuits use an assumed capacity. 18 lines with a foreign end are excluded.
+- **Agents:** A5 result (also in the manifest):
+  - Deduced x is off by a median of 15 % (p90 39 %); deduced capacity by a median of 31 % (p90 62 %).
+  - The distance-snapped drawn corridors have precision 0.89 and recall 0.99 against the ONS corridors, on the 728 substations both layers share.
+  - ONS coordinates match EPE substations of the same name within a median of 50 m (582 pairs, 9 more than 10 km apart).
+  - HVDC MW are `kV × A` per record: Xingu gives 4,200 MW per bipole (4,000 nominal), but Madeira gives 12,600 MW (6,300 nominal), so DC MW are unverified. Itaipu HVDC states no amperes (`capacity_mw: null`).
+- **Files:** `data/processed/latam/{BRA/network.json,manifest.json}`, `backend/tests/validation/test_ons_network.py`.
+
+## 2026-11-21 · feat(regional): write BRA/network.json with cascadasen-regional --ons
+
+- **Changed:** `cd backend && uv run cascadasen-regional --countries BRA --ons` now also builds Brazil's flow network through the new use case `BuildFlowNetwork` (`application/build_regional.py`, wired by `container.flow_network_use_case`). It writes `data/processed/latam/BRA/network.json` and a `flow` block under `manifest.countries.BRA`. That block has counts, circuit-km per kV, the length check against 189,308 km, assumed values, exclusions, the coordinate match rate and `deduction_error`. The command prints a summary and every warning.
+- **Changed:** `BuildRegionalGrid` keeps a country's existing `flow` block when it rewrites the drawn layer.
+- **Why:** Issue part A3: one command produces the network file and the figures the docs cite.
+- **Agents:** `--ons` needs `BRA` in `--countries`. It reads the EPE layer (cached raw) for plants, the name fallback and the A5 topology check. `as_of` defaults to the UTC build date. The ONS CSVs are cached in `data/raw/regional/bra/ons_*.csv` (git-ignored); `--refresh` downloads them again.
+- **Files:** `backend/src/cascadasen/application/build_regional.py`, `backend/src/cascadasen/infrastructure/container.py`, `backend/tests/unit/test_ons_brasil.py`.
+
+## 2026-11-21 · feat(regional): add ONS adapter and pure flow-network builder for Brazil
+
+- **Changed:** New `domain/regional_network.py` (pure). It turns ONS line and substation rows into a flow network: one bus per ONS substation (`id_subestacao`), AC circuits folded like Chile's `_parallel`, HVDC records as `dc_links`, and EPE plants attached by distance. It also holds `deduction_error`, which compares typical x and capacity, and the distance-snapped drawn topology, against the real values (issue part A5). New adapter `infrastructure/sources/regional/ons_brasil.py` reads `LINHA_TRANSMISSAO.csv` and `SUBESTACAO.csv`. New port `FlowNetworkSource`; settings `ons_lines_url` and `ons_substations_url`.
+- **Why:** Brazil was only a drawn layer. ONS declares each line's two bus numbers and positive-sequence r, x and shunt, and `SUBESTACAO.csv` gives each bus a substation **and coordinates** (older docs say it has none). Line ends no longer need to be guessed.
+- **Agents:**
+  - ONS states no units. From the magnitudes, r and x are percent on 100 MVA and shunt is Mvar at nominal voltage (ANAREDE), so `x_pu = val_reatancia / 100` with no kV conversion.
+  - The thermal base is `val_capacoperlongacomlimit` (long duration, with limiting factor). Missing amperes, including 0 A, use the ONS median MW per circuit at the same kV and are marked `assumed_fields: ["capacity_mw"]`.
+  - Lines that are deactivated or enter service after `as_of` are excluded, as in `_built_by`. *Ramal* rows and line ends outside the ONS registry (Uruguay, Argentina, Paraguay, Venezuela) are dropped with a warning naming the substation and kV.
+  - `regional_reduction._km` and `_nearest` are now public as `km_xy` and `nearest`.
+- **Files:** `backend/src/cascadasen/domain/{regional_network,regional_reduction,ports}.py`, `backend/src/cascadasen/infrastructure/{settings.py,sources/regional/ons_brasil.py}`, `backend/tests/unit/test_ons_brasil.py`.
+
+## 2026-11-21 · docs(assistant): document the step stream for map clients
+
+- **Changed:** `docs/assistant.md` section 2b: the events of `POST /chat/stream` with examples, which session routes to fetch after each tool to draw, pings and the 90 s stream deadline, disconnect behaviour, a `fetch` reader for browsers (`EventSource` only does GET) and a `curl -N` example. `docs/stack.md` 7.3 lists the route.
+- **Why:** The frontend will build partial map views on these events.
+- **Agents:** Live check on Bedrock reached only the error path (the temporary credentials had expired): `start` arrives at once and the model failure arrives as an `error` event. The full flow is covered by the toy-world tests.
+- **Files:** `docs/assistant.md`, `docs/stack.md`.
+
+## 2026-11-21 · feat(api): stream the assistant's steps as Server-Sent Events
+
+- **Changed:** `POST /api/v1/assistant/chat/stream` takes the `/chat` body and answers `text/event-stream`: `start`, `assistant_text`, `tool_call`, `tool_result` (compact result plus `session_id` and `run_id`), then `done` (the `/chat` fields without the trace) or `error` (`status`, `detail`). A `: ping` comment goes out after `assistant_stream_ping_s` (10 s) without events. The loop runs in a worker thread and keeps going, and saves the conversation, if the client disconnects. `/chat` is unchanged; both share the rate limit (`admit`) and the tool wiring (`toolbox_factory`).
+- **Changed:** New settings `assistant_stream_deadline_s` (90 s: events and pings keep CloudFront's 30 s origin read timeout from firing) and `assistant_stream_ping_s`.
+- **Why:** The web will draw partial results on the map while the assistant works. Events stay light and point to the existing routes for the full data: after `cut_lines` `GET /sessions/{sid}/state` (timeline with frames), after `step` `GET /sessions/{sid}/runs/{rid}/snapshots?start=N`, after an edit `GET /sessions/{sid}/network` (user decision: references, not map data inside the events).
+- **Agents:** Errors found before streaming (422, 404 conversation, 429, 503) are plain HTTP errors; later ones are `error` events. The route is not marked `x-sub50-agent`. Verification: `uv run --extra mcp pytest -q` 349 passed, 2 skipped; lint clean. Not tried against Bedrock yet.
+- **Files:** `backend/src/cascadasen/api/assistant_routes.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/integration/test_assistant_api.py`.
+
+## 2026-11-21 · feat(assistant): emit each step of the tool loop through a callback
+
+- **Changed:** `Assistant.chat` takes `on_event(kind, data)` and `deadline_s`. It emits `start` (`conversation_id`, `session_id`, `run_id`), `assistant_text` (`step`, `text`) when the model talks while calling tools, `tool_call` (`step`, `id`, `name`, `arguments`) and `tool_result` (`step`, `id`, `name`, `ok`, `result`, plus the current `session_id` and `run_id`). `Emitter` drops a callback that raises, so a client that goes away never stops the loop or the save.
+- **Why:** The web wants to draw partial results on the map while the assistant works (next commit streams these events over SSE).
+- **Agents:** Without `on_event` nothing changes for `/chat`. `deadline_s` overrides `assistant_deadline_s` for one message.
+- **Files:** `backend/src/cascadasen/application/assistant.py`, `backend/tests/unit/test_assistant.py`.
+
+## 2026-11-22 · fix(infra): bake data/processed at /data/processed in the backend image
+- **Changed:** `backend.Dockerfile` copies `data/processed` to `/data/processed` (it copied it to `/data`). `docs/infrastructure.md` says so.
+- **Why:** The code reads `CASCADASEN_DATA_DIR/processed/grid_snapshot.json`, so with the old layout production answered 503 "No hay snapshot de la red" on `/api/v1/nodes`, `/sim/*` and `/sessions` (health said `sin snapshot`). Local compose mounts `./data` at `/data`, so it never showed. Mapa 3 reads the static cache and was not affected.
+- **Agents:** Any endpoint that needs the grid snapshot only works in the deployed image from this commit on. Check `GET /api/v1/health`: `status` must be `ok`.
+- **Files:** `infrastructure/docker/backend.Dockerfile`, `docs/infrastructure.md`.
 ## 2026-11-21 · fix(assistant): guard the tool loop against lost events, invented MW and unkept promises
 
 - **Changed:** `SessionTools` opens an `open_field` run when `inject_event` or `submit_action` arrive with no active run, and refuses `add_datacenter`/`add_generator` with MW the user never wrote (`numbers`, `stated`). `Assistant.loop` adds one hidden nudge when the model promises an action and stops (`announces`, `NUDGE`; hidden turns are left out of `view`), predicts the deadline with the mean call duration, and the trace carries each call's `arguments`. The factory is now `toolbox_for(session_id, run_id, said)`, where `said` is everything the user wrote in the conversation.

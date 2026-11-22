@@ -49,6 +49,7 @@ Dependency rule: `domain/` imports nothing from `api/`, `application/` or `infra
 | `GridDataSource` | One public data source contributing to a `SourceBundle` | `infrastructure/sources/{infotecnica,ide_energia,ine_censo,pypsa_cl}.py` |
 | `SnapshotRepository` | Where the unified snapshot is stored and read | `infrastructure/snapshot_repository.py` (JSON) |
 | `RegionalGridSource` | One country of the regional context layer | `infrastructure/sources/regional/{epe_brasil,osinergmin_peru,energia_argentina,osm_overpass}.py` |
+| `FlowNetworkSource` | Declared line ends and line parameters of one country (`network-format.md`) | `infrastructure/sources/regional/ons_brasil.py` |
 | `ContractExporter` | Static files for the frontend | `infrastructure/exporters.py` |
 | `Interpreter` | Narration and after-action review | `domain/theater/narrative.py` (`TemplateInterpreter`), `infrastructure/llm.py` (`ClaudeInterpreter`) |
 | `CommanderAdvisor` | An LLM that picks among validated COAs for C2 | `infrastructure/llm.py` (Claude API, Bedrock, Bedrock Converse) |
@@ -86,6 +87,7 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 | Precompute every single-line cut | `cache_builder.py` | `cascadasen-cache` → `web/public/cache/` |
 | Grid health index (margin to the limit, `health.md`) | `grid_health.py` over `domain/cascade/health.py` | `cascadasen-health` |
 | Regional context layer (other countries, `regional.md`) | `build_regional.py` over `domain/regional.py` | `cascadasen-regional` → `data/processed/latam/` |
+| Brazil flow network (`regional.md` section 6) | `BuildFlowNetwork` in `build_regional.py` over `domain/regional_network.py` | `cascadasen-regional --countries BRA --ons` → `data/processed/latam/BRA/network.json` |
 | Precompute offline theatre runs | `sim_fixtures.py` | `cascadasen-sim-fixtures` → `web/public/cache/theater/` |
 
 ### 2.4 Infrastructure (`infrastructure/`)

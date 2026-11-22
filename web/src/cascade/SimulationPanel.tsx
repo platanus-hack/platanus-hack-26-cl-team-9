@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
-import { hz, int, lineName, narrate, pct, placeName, secs } from "./text";
+import { cutName, hz, int, narrate, pct, placeName, secs } from "./text";
 import type { Network, Timeline } from "./types";
 import { Chevron, Info } from "./ui";
 
@@ -70,8 +70,8 @@ function ImpactCard(p: Props) {
         </div>
       </div>
       <div className="cut-row">
-        <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => lineName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>
-        <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Reponer subestación"}</button>
+        <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => cutName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>
+        <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Encender subestación"}</button>
       </div>
     </div>
   );
