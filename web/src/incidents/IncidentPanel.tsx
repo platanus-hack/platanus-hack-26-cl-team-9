@@ -57,7 +57,8 @@ export function IncidentPanel({ inc, sessionPoint }: { inc: Incident; sessionPoi
             <label className="inc-hours">
               <span className="meta">Duración de la interrupción (h)</span>
               <input type="number" min={MIN_DURATION_H} max={MAX_DURATION_H} step={0.25} value={hours}
-                onChange={(e) => { setHours(e.target.value); const h = parseDuration(e.target.value); if (h != null) inc.setDurationH(h); }} />
+                onChange={(e) => { setHours(e.target.value); const h = parseDuration(e.target.value); if (h != null) inc.setDurationH(h); }}
+                onBlur={() => { const h = parseDuration(hours); if (h != null) setHours(String(h)); }} />
               <Info tip={`Supuesto, editable: escala los MWh y el costo de la tarjeta (${MIN_DURATION_H}-${MAX_DURATION_H} h). Por defecto ${catalog.default_duration_h.value} h.`} />
               <span className="meta">supuesto</span>
             </label>

@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): show the clamped duration in the incident field
+
+- **Changed:** `IncidentPanel.tsx` rewrites the duration field with the value that is actually sent when it loses focus (`parseDuration` clamps to 0.25-720 h).
+- **Why:** Found in a browser test: typing 1000 left "1000" in the field while the run used 720 h.
+- **Agents:** `parseDuration` is unchanged; only the text shown changed.
+- **Files:** `web/src/incidents/IncidentPanel.tsx`.
+
 ## 2026-11-22 · fix(incidents): scripted by default so the card is the incident's own
 
 - **Changed:** `POST /sessions/{sid}/attacks/runs` now defaults `stochastic` to `false`; the web and the MCP tool did not send it, so they follow. `test_incidents.py` runs scripted by default, checks V10 on seeds 1-8 and a new test checks that scripted Huatacondo and UK runs have only `scenario` events and L0 on seeds 1-8.
