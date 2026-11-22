@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssistantPanel } from "./AssistantPanel";
 import { EMPTY } from "./steps";
@@ -29,5 +29,12 @@ describe("AssistantPanel", () => {
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Enviar" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText("Enter envía · Shift+Enter, nueva línea")).toBeNull();
+  });
+
+  it("the Salud de la red tab shows the health card instead of the chat", () => {
+    render(<AssistantPanel a={assistant()} health={<p>tarjeta de salud</p>} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Salud de la red" }));
+    expect(screen.getByText("tarjeta de salud")).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 });

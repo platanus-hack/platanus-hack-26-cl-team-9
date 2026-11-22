@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cascadasen.api.agent_openapi import AgentOut
-from cascadasen.application.grid_stress import LINE_OUT_HINT, MAX_CHANGES, MAX_FACTOR
+from cascadasen.application.grid_stress import MAX_CHANGES, MAX_FACTOR
 
 POINT = Field(description="Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000).")
 
@@ -46,11 +46,7 @@ class StressChange(BaseModel):
     lines: list[str] = Field(default=[], description="Lines only: line ids R###.")
     kv: list[float] = Field(default=[], description="Lines only: voltage levels (66, 110, 154, 220, 500).")
     factor: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=MAX_FACTOR,
-        description="Multiplies the value (lines: capacity, more than 0; to take a line out of service put it in "
-        "`open_lines`).",
+        default=None, ge=0.0, le=MAX_FACTOR, description="Multiplies the value (lines: capacity)."
     )
     add: float | None = Field(
         default=None, description="Adds this total (people for population, MW otherwise); negative lowers it."
@@ -92,8 +88,6 @@ class StressChange(BaseModel):
         if self.target == "lines":
             if self.add is not None or (self.factor is None and self.x_factor is None):
                 raise ValueError("lines: usa factor y/o x_factor")
-            if self.factor is not None and self.factor <= 0:
-                raise ValueError(LINE_OUT_HINT)
             if self.comunas or self.buses or self.tech or self.places:
                 raise ValueError("lines: filtra por lines, kv, zones o areas")
             return self

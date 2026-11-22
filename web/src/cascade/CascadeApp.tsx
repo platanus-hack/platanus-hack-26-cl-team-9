@@ -38,6 +38,7 @@ import { cutLines, repairLines } from "../session/sessionApi";
 import { canPowerAll, powerAll } from "./powerAll";
 import { useSession } from "../session/useSession";
 import { AssistantPanel } from "../assistant/AssistantPanel";
+import { GridHealth } from "../assistant/GridHealth";
 import { useAssistant } from "../assistant/useAssistant";
 import { IncidentPanel } from "../incidents/IncidentPanel";
 import { useIncident } from "../incidents/useIncident";
@@ -939,7 +940,8 @@ export function CascadeApp() {
         <div className="panel-body" ref={panelBodyRef}>
           {(s.error ?? error) && <p className="note">{s.error ?? error}{s.error && <> <button className="text-btn" onClick={s.clearError}>Cerrar</button></>}</p>}
           {view === "session" && <SessionBar s={s} />}
-          {view === "assistant" && <AssistantPanel a={a} />}
+          {view === "assistant" && <AssistantPanel a={a} health={<GridHealth prepared={prepared?.value ?? null} timeline={loadedReady ? loaded.timeline : null}
+            failures={countFailures(edits) > 0} base={s.sid || composed ? null : health} />} />}
           {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
           {view === "cyber" && <CyberPanel c={cyb} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}

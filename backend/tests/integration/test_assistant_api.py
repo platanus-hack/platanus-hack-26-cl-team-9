@@ -108,17 +108,7 @@ def test_a_named_line_is_found_and_cut_without_opening_a_session(make_app):
     assert prepared["result"]["prepared"]["changes"][0]["places"][0]["bus_name"] == "S/E ANTOFAGASTA"
     assert prepared["result"]["simulation"]["with_changes"]["people_without_power"] > 0
     assert out["session_id"] is None and out["steps"] == 3
-    assert "find_line" in model.systems[0] and "nunca abras una sesión" in model.systems[0]
-
-
-def test_a_line_with_factor_zero_tells_the_model_to_use_open_lines(make_app):
-    zero = {"target": "lines", "lines": ["R239"], "factor": 0}
-    model = ScriptedModel(
-        calls(("prepare_scenario", {"changes": [zero], "open_lines": ["R239"]})), AssistantTurn("Uy.")
-    )
-    out = TestClient(make_app(model)).post(CHAT, json={"message": "corta R239"}).json()
-    tool = out["tool_calls"][0]
-    assert not tool["ok"] and "open_lines" in tool["result"]["error"]
+    assert "find_line" in model.systems[0]
 
 
 def test_the_conversation_continues_and_can_be_read_and_deleted(make_app):

@@ -1,26 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
-## 2026-11-22 · chore(merge): bring main (#125-#138) into the 25F and find_line fixes
 
-- **Changed:** `origin/main` merged into `fix/review-sub50` (PR #120). Kept both sides: `LINE_OUT_HINT` next to the new `substation` target in `grid_stress.py`; the `prepare_scenario` docstring describes the new substation and says a named line comes from `find_line`; the `SYSTEM` prompt says prepare_scenario and find_line use no session, and `TOOL_GUIDE` (from #134) says a line named by its substations is resolved with `find_line`.
-- **Why:** #132-#135 rewrote the assistant prompt and the prepared-scenario code while this PR was open; ten files conflicted.
-- **Changed (second merge):** #147 fixed the 25F "50 Hz" panel on its own (`systemFrequency`, `voltageCollapse`), so this PR's web fix (`frequencyAt` voltage islands) is dropped and the four web files plus `docs/mapa3.md` are taken from main. The PR is backend only: `find_line`, the `factor` 0 error and the prompt. `docs/stress.md` keeps both 422 rows (overlay limit from #140, `factor` 0).
-- **Agents:** `file:line` references to `assistant_routes.py`, `grid_stress.py`, `mcp/tools.py` and `mcp/toolbox.py` in `docs/{README,code-map,for-reviewers}.md` now point at the `def`/`class` line (several were already stale on main after #132-#135). Index regenerated.
-- **Files:** `backend/src/cascadasen/{api/assistant_routes.py,application/grid_stress.py,mcp/tools.py}`, `backend/tests/unit/test_grid_stress.py`, `docs/{README,assistant,code-map,for-reviewers}.md`, `docs/index/repo-index.json`, `CHANGELOG.md`.
+## 2026-11-22 · chore(merge): PR #120 reduced to find_line, on top of current main
 
-## 2026-11-22 · chore(index): move doc line references and regenerate the index after the 25F and assistant fixes
-
-- **Changed:** 17 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` follow the lines that moved in `api/assistant_routes.py`, `api/grid_routes.py`, `application/grid_stress.py`, `mcp/tools.py` and `mcp/toolbox.py`. `docs/index/repo-index.json` regenerated.
-- **Why:** The previous commits inserted lines above the referenced symbols.
-- **Agents:** References were mapped from `origin/main` with a line diff, so they keep the docs' existing convention (several point one line above the `def`, as before). New files `application/line_lookup.py` and `tests/unit/test_line_lookup.py` are in the index.
-- **Files:** `docs/{code-map,for-reviewers,README}.md`, `docs/index/repo-index.json`.
-
-## 2026-11-22 · fix(assistant): no session for prepare_scenario, and a named line goes through find_line
-
-- **Changed:** The assistant's `SYSTEM` (`api/assistant_routes.py`) says prepare_scenario and find_line use no session (never open one for them), to call find_line once for a line named by its substations and put the id in `open_lines`, and never to send a lines change with factor 0. The shared MCP `INSTRUCTIONS` (`mcp/tools.py`) no longer start with "start_session first": map work goes straight to prepare_scenario, session work is the second path. `start_session` and `prepare_scenario` descriptions say the same.
-- **Why:** On production the model called "Abrir sesión" before prepare_scenario because the instructions told it to start every task with start_session, then spent its 8 steps searching the line.
-- **Agents:** Prompt change only; the toolbox already opened a session only for tools outside `NO_SESSION_NEEDED`. Tested with a scripted stand-in (`test_a_named_line_is_found_and_cut_without_opening_a_session`: three steps, `session_id` stays null); the real Bedrock model's choices were not checked (no credentials). `docs/assistant.md` section 3, `docs/mcp.md` section 3.
-- **Files:** `backend/src/cascadasen/{api/assistant_routes.py,mcp/tools.py}`, `backend/tests/integration/test_assistant_api.py`, `docs/{assistant,mcp}.md`.
+- **Changed:** PR #120 now carries only `find_line` (route, MCP tool, web label, docs, OpenAPI). Dropped from it: the web fix for the 25F "50 Hz" panel (#147 fixed it with `systemFrequency`), the `factor` 0 error of `lines` changes and the prompt and `INSTRUCTIONS` rewording about sessions.
+- **Why:** Keep the PR to one reviewable change after #125-#149 landed; the other pieces were covered or are not needed to use `find_line`.
+- **Agents:** The assistant prompt only gains the pointer to `find_line` in `TOOL_GUIDE` and `SYSTEM`. A `lines` change with `factor` 0 still answers the generic "Debe ser mayor que 0". `file:line` references re-pointed; index regenerated.
+- **Files:** `backend/src/cascadasen/{api/assistant_routes.py,mcp/tools.py}`, `docs/{README,code-map,for-reviewers,assistant,mcp,stress}.md`, `docs/index/repo-index.json`.
 
 ## 2026-11-22 · feat(stress): find a line by its name or its two end substations
 
@@ -29,12 +15,12 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** A lookup by name only (`docs/cyber.md` section 8): no ranking and no criticality field; a test checks the id order. Every one of the 273 lines is found by the names of its two ends. A substation named exactly wins over a partial match ("Maitencillo" is S/E MAITENCILLO, R216, not NUEVA MAITENCILLO). `docs/openapi/agents.openapi.json` regenerated; `docs/stress.md` section 3.2, `docs/mcp.md` section 3, `docs/assistant.md` labels row.
 - **Files:** `backend/src/cascadasen/{application/line_lookup.py,api/grid_routes.py,api/stress_schemas.py,mcp/tools.py,mcp/toolbox.py}`, `backend/tests/{unit/test_line_lookup.py,unit/test_mcp_tools.py,integration/test_assistant_api.py}`, `web/src/assistant/{labels.ts,labels.test.ts}`, `docs/{stress,mcp,assistant}.md`, `docs/openapi/agents.openapi.json`.
 
-## 2026-11-22 · fix(stress): a lines change with factor 0 says to use open_lines
+## 2026-11-22 · fix(web): bring back the Asistente "Salud de la red" tab lost in the #142 merge
 
-- **Changed:** `StressChange` (`api/stress_schemas.py`) rejects a `lines` change with `factor` 0 with `LINE_OUT_HINT` (`application/grid_stress.py`): "factor 0 no saca una línea de servicio … pon su id R### en open_lines". `_lines` raises the same `GridError` for callers that skip the schema. The `factor` description says lines need more than 0. Tests in `test_grid_stress.py` (workflow and `/grids/simulate`) and `test_assistant_api.py` (the tool error reaches the model).
-- **Why:** On production the assistant sent `open_lines: ["R239"]` plus a lines change × 0 on R239; the overlay answered 422 "Debe ser mayor que 0", which did not tell the model that `open_lines` alone cuts the line.
-- **Agents:** A line out of service is a failure (`open_lines`), never a capacity change. Other targets keep `factor` 0 (no hydro, for example). `docs/openapi/agents.openapi.json` regenerated (the `factor` description). `docs/stress.md` sections 7 and 8.
-- **Files:** `backend/src/cascadasen/{application/grid_stress.py,api/stress_schemas.py}`, `backend/tests/{unit/test_grid_stress.py,integration/test_assistant_api.py}`, `docs/stress.md`, `docs/openapi/agents.openapi.json`.
+- **Changed:** `AssistantPanel` has Chat / Salud de la red tabs again (`.seg` style from #142) and takes a `health` node; `CascadeApp` passes `GridHealth` as before. `GridHealth.tsx` is restored and uses `EndOfRun` (was `EventHealth`); `PrefaultHealth` and `EndOfRun` are exported from `SimulationPanel.tsx`.
+- **Why:** user request: the merge of #142 (#147) must not drop main's Salud de la red tab.
+- **Agents:** new test in `AssistantPanel.test.tsx` covers the tab.
+- **Files:** `web/src/assistant/{AssistantPanel.tsx,AssistantPanel.test.tsx,GridHealth.tsx}`, `web/src/cascade/{CascadeApp.tsx,SimulationPanel.tsx}`, `docs/index/repo-index.json`.
 
 ## 2026-11-22 · chore(web): merge main into the UI audit branch (#142), the audit wins on conflicts
 

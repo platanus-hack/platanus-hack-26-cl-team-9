@@ -132,22 +132,6 @@ def test_api_prepare_and_simulate_with_changes():
     assert out.status_code == 200 and 0 <= out.json()["health"]["index"] <= 1
 
 
-def test_a_line_with_no_capacity_is_a_failure_not_a_change(world):
-    """The assistant sent open_lines R239 plus a lines change with factor 0, and the overlay answered only "Debe
-    ser mayor que 0". Both the schema and the workflow now say to use open_lines."""
-    with pytest.raises(GridError, match="open_lines") as exc:
-        prepare_workflow(world, POINT, [{"target": "lines", "lines": ["R239"], "factor": 0}])
-    assert exc.value.kind == "invalid"
-    client = TestClient(create_app(settings=Settings(data_dir=REPO_ROOT / "data")))
-    zero = {
-        "point": POINT,
-        "open_lines": ["R239"],
-        "changes": [{"target": "lines", "lines": ["R239"], "factor": 0}],
-    }
-    answer = client.post("/api/v1/grids/simulate", json=zero)
-    assert answer.status_code == 422 and "open_lines" in str(answer.json()["detail"])
-
-
 VALLENAR_SOLAR = {
     "target": "substation",
     "places": ["Vallenar"],
