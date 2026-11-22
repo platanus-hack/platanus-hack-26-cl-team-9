@@ -189,6 +189,16 @@ class TheaterGrid:
         """Dark buses count all their people, whatever their net load; live buses the share of load shed."""
         return float(people_out_by_bus(self.people, self.plan_load, self.load, self.dark).sum())
 
+    def people_out_by_area(self) -> dict[str, float]:
+        """`people_without_power` split by operating area (the Ciberataque monitor lists it per area)."""
+        idx, names = self.net.area_index
+        per = np.bincount(
+            idx,
+            weights=people_out_by_bus(self.people, self.plan_load, self.load, self.dark),
+            minlength=len(names),
+        )
+        return {a: float(per[i]) for i, a in enumerate(names)}
+
     # ------------------------------------------------------- engine view
 
     def operating_point(self) -> OperatingPoint:

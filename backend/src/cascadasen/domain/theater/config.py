@@ -89,6 +89,7 @@ class TheaterConfig:
     crews: dict[str, Any] = field(default_factory=dict)
     physics_alarms: dict[str, float] = field(default_factory=dict)
     cyber_attack: dict[str, float] = field(default_factory=dict)
+    cyber_attack_presets: dict[str, dict[str, Any]] = field(default_factory=dict)
     provenance: tuple[Provenance, ...] = field(default=())
 
     def template(self, template_id: str) -> Template:
@@ -166,6 +167,7 @@ def theater_config() -> TheaterConfig:
         crews=v.get("crews", {}),
         physics_alarms={k: float(x) for k, x in v.get("physics_alarms", {}).items()},
         cyber_attack={k: float(x) for k, x in v.get("cyber_attack", {}).items()},
+        cyber_attack_presets=v.get("cyber_attack_presets", {}),
         provenance=tuple(
             collect_provenance(p, "theater")
             + collect_provenance(t, "templates")

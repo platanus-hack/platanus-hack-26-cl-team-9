@@ -22,6 +22,8 @@ interface Props {
   /** The prepared grid of the changes (POST /grids/prepare) and the supply after the last simulation, if any. */
   prepared: Prepared | null; supply: Supply | null;
   setFactor(target: Target, id: string, factor: number): void;
+  /** Show the component without switching it off or on (the Ciberataque monitor: the defence acts by area). */
+  readOnly?: boolean;
 }
 
 const MAX_FACTOR = 5; // the backend's bound (docs/stress.md)
@@ -123,12 +125,12 @@ function LineCard(p: Props & { line: NetLine }) {
           <p className="meta">Multiplica la capacidad de la línea antes de cualquier falla. 1 la deja como está.</p>
         </div>
       )}
-      <div className="actions">
+      {!p.readOnly && <div className="actions">
         {isCut
           ? <button className="primary-btn" onClick={p.restore}>Volver a conectar</button>
           : <button className="primary-btn" onClick={() => p.cutLine(line.id)}>Sacar de servicio</button>}
         <span className="meta">{isCut ? "Vuelve al caso base en este punto de operación." : "O clic otra vez en la línea del mapa."}</span>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -173,7 +175,7 @@ function NodeCard(p: Props & { node: string }) {
         );
       })}
       <p className="meta">Clic en una línea de la lista para ver su detalle. Carga: flujo DC del motor Sub50 en el segundo actual.</p>
-      {lines.length > 0 && (
+      {lines.length > 0 && !p.readOnly && (
         <div className="actions">
           {p.shutDown
             ? <button className="primary-btn" onClick={() => p.powerOn(n.id)}>Volver a encender</button>

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .engine import people_out_by_bus, run_cascade_state
+from .engine import people_out_by_bus, prefault_boundary, run_cascade_state
 from .flow import dc_flow, find_islands
 from .network import ReducedNetwork
 from .scenario import OperatingPoint
@@ -55,27 +55,35 @@ def criticality_workflow(
     """Bus index -> measures and score, for every bus that still has a line in service. `open_lines` are already out
     (the user's cuts and what their cascade opened), so the score is that of the grid as it stands."""
     injection = point.gen - point.load
-    base = dc_flow(net, set(open_lines), injection, find_islands(net, set(open_lines)))
+    before = find_islands(net, set(open_lines))
+    base = dc_flow(net, set(open_lines), injection, before)
     capacity = np.array([ln.capacity_mw for ln in net.lines])
     total_load = float(point.load.sum()) or 1.0
+    # the same for every substation's cascade: computed once instead of once per substation
+    prefault = prefault_boundary(net, open_lines, point)
+    home_of = {bus: set(isl) for isl in before for bus in isl}
     out: dict[int, dict] = {}
     for bus in range(net.size):
         lines = sorted(ln.id for ln in net.lines if bus in (ln.a, ln.b) and ln.id not in open_lines)
         if not lines:
             continue
-        out[bus] = _one_substation(net, point, bus, lines, base, capacity, injection, total_load, open_lines)
+        out[bus] = _one_substation(
+            net, point, bus, lines, base, capacity, injection, total_load, open_lines, home_of[bus], prefault
+        )
     return out
 
 
-def _one_substation(net, point, bus, lines, base, capacity, injection, total_load, open_lines) -> dict:
+def _one_substation(
+    net, point, bus, lines, base, capacity, injection, total_load, open_lines, home, prefault
+) -> dict:
+    """`home`: the island the bus was in before it fell. Only that island counts: islands left by earlier cuts are
+    not this substation's doing. `prefault`: `prefault_boundary` of the grid before it fell."""
     out = set(lines) | set(open_lines)
     islands = find_islands(net, out)
-    # only the island the bus was in counts: islands left by earlier cuts are not this substation's doing
-    home = set(next(i for i in find_islands(net, set(open_lines)) if bus in i))
     others = [isl for isl in islands if isl != [bus] and home.issuperset(isl)]
     main = max(others, key=len) if others else []
     isolated_mw = float(sum(point.load[b] for isl in others if isl is not main for b in isl))
-    _, state = run_cascade_state(net, point, lines, open_lines=frozenset(open_lines))
+    _, state = run_cascade_state(net, point, lines, open_lines=frozenset(open_lines), prefault=prefault)
     lost = point.load - state.load
     collateral_mw = float(lost.sum() - lost[bus])
     people_lost = people_out_by_bus(point.people, point.load, state.load, state.dark)

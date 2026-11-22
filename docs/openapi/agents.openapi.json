@@ -6559,6 +6559,15 @@
               false
             ]
           },
+          "manual_defense": {
+            "type": "boolean",
+            "title": "Manual Defense",
+            "description": "The defensive staff proposes nothing: only actions sent to POST .../actions run, validated and paid for as usual (a user defends by hand, e.g. in the Ciberataque monitor)",
+            "default": false,
+            "examples": [
+              false
+            ]
+          },
           "stochastic": {
             "type": "boolean",
             "title": "Stochastic",

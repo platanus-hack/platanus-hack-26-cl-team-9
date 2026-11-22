@@ -109,6 +109,9 @@ class RunConfig:
     initial_events: tuple[dict[str, Any], ...] = ()
     stochastic: bool = True  # False: catalog sizes, no unplanned events, actions always work
     llm_commander: bool = False  # C2 picks among validated COAs with the configured LLM advisor
+    manual_defense: bool = (
+        False  # the staff proposes nothing: only actions from POST .../actions run (a user defends)
+    )
     llm_choices: tuple[tuple[int, tuple[str, ...]], ...] = ()  # recorded picks, replayed verbatim
 
     def as_dict(self) -> dict[str, Any]:
@@ -133,6 +136,7 @@ class RunConfig:
             initial_events=tuple(dict(e) for e in d.get("initial_events") or ()),
             stochastic=bool(d.get("stochastic", True)),
             llm_commander=bool(d.get("llm_commander", False)),
+            manual_defense=bool(d.get("manual_defense", False)),
             llm_choices=tuple((int(k), tuple(v)) for k, v in d.get("llm_choices") or ()),
         )
 
@@ -345,7 +349,7 @@ class Simulation:
 
     def _judge(self) -> None:
         """Propagation runs end early: the attack wins when the lost share of demand reaches its threshold,
-        the defence when no area is still compromised and every effect the attack caused is repaired."""
+        the defence when no area is still compromised and the lost share is back under `recovered_lost_share`."""
         adv = self.adversary
         if not isinstance(adv, PropagatingAdversary) or not adv.started:
             return
@@ -354,8 +358,8 @@ class Simulation:
         lost = 1 - sum(g.served_mw.values()) / demand if demand else 0.0
         if lost >= adv.params["attack_win_lost_share"] - 1e-9:
             self.outcome = "attack"
-        elif not adv.active() and not any(e.source == "adversary" for e in self.real.active_effects()):
-            self.outcome = "defense"  # no intrusion left and every effect it caused repaired
+        elif not adv.active() and lost <= adv.params["recovered_lost_share"] + 1e-9:
+            self.outcome = "defense"  # no intrusion left and the grid serves its demand again
 
     def _cyber_report(self) -> dict[str, Any] | None:
         adv = self.adversary
@@ -665,12 +669,16 @@ class Simulation:
             r: self._view(r, obs, reports, isr=isr_report, intent=intent)
             for r in ("operations", "stabilization", "logistics")
         }
-        coas = [
-            *isr_coas,
-            *self.ops.propose(staff["operations"]),
-            *self.stab.propose(staff["stabilization"]),
-            *self.logistics.propose(staff["logistics"]),
-        ]
+        coas = (
+            []
+            if self.config.manual_defense  # a user defends: only the queued external actions run
+            else [
+                *isr_coas,
+                *self.ops.propose(staff["operations"]),
+                *self.stab.propose(staff["stabilization"]),
+                *self.logistics.propose(staff["logistics"]),
+            ]
+        )
         unique: dict[str, COA] = {}
         for c in coas:
             if c.key not in unique or c.benefit > unique[c.key].benefit:
@@ -820,6 +828,15 @@ class Simulation:
                 "outcome": self.outcome,
                 "lost_share": round(1 - sum(g.served_mw.values()) / demand, 4) if demand else 0.0,
                 "people_without_power": round(self._people()),
+                "people_out": {a: round(v) for a, v in g.people_out_by_area().items()},
+                "segmented": sorted(a for a, d in real.digital.items() if d.segmented),
+                "dark": sorted(g.blackout_areas),
+                # what the defence did this cycle (isr tasking is bookkeeping): ok false says why it failed
+                "defense_actions": [
+                    {k: e.get(k) for k in ("action", "target", "ok", "verdict", "proposer")}
+                    for e in executed
+                    if e.get("action") != "isr_tasking"
+                ],
                 "crews_busy": sum(c["status"] == "busy" for c in self._crews_view()),
                 "events": [e for e in self.adversary.events if e["cycle"] == k],
             }
