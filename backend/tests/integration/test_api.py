@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from cascadasen.api.app import create_app
 from cascadasen.application.grid_queries import GridQueryService
 from cascadasen.domain.validation import validate_snapshot
+from cascadasen.infrastructure.settings import Settings
 
 
 @pytest.fixture
@@ -62,3 +63,15 @@ def test_service_unavailable_without_snapshot(toy_snapshot):
     c = TestClient(app)
     assert c.get("/api/v1/nodes").status_code == 503
     assert c.get("/api/v1/health").json()["status"] == "sin snapshot"
+
+
+def test_admin_reload_is_off_unless_enabled(toy_snapshot, tmp_path):
+    off = TestClient(create_app(service=GridQueryService(toy_snapshot), settings=Settings(data_dir=tmp_path)))
+    assert off.post("/api/v1/admin/reload").status_code == 404
+    on = TestClient(
+        create_app(
+            service=GridQueryService(toy_snapshot), settings=Settings(data_dir=tmp_path, admin_enabled=True)
+        )
+    )
+    res = on.post("/api/v1/admin/reload")
+    assert res.status_code == 200 and res.json()["status"] == "sin snapshot"  # nothing in tmp_path

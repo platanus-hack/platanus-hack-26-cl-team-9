@@ -2,6 +2,8 @@
 
 The agents ("bots") of the strategic theatre are described in `strategy.md` section 5: missions, views and permissions. This document covers what they know about the physics and how they act on it. The physics is the 188-bus cascade engine (`engine.md`); parameters for both live in YAML with provenance.
 
+External agents that drive runs over HTTP (not the bots below) use the agent-only OpenAPI spec: `GET /api/v1/agents/openapi.json`, versioned in `docs/openapi/agents.openapi.json`; conventions in `openapi.md`.
+
 Code: `domain/agents/` (agents), `domain/theater/digital.py` (what supervision shows), `domain/theater/grid.py` (per-area physical readings), `domain/theater/params/theater.yaml` → `physics_alarms` (thresholds). Tests: `backend/tests/unit/test_physical_bots.py`.
 
 ## 1. Physical contract
@@ -83,6 +85,10 @@ The new alarms add evidence per area. Weights: `frequency_out_of_band` 0.4, `hig
 ### 2.3 C2 and the LLM
 
 C2 still decides on the rules plus the optional LLM pick (`strategy.md` section 10). The LLM sees only C2's view.
+
+### 2.4 External agents
+
+An agent running on another machine works through a shared session (`docs/sessions-api.md`): it creates or joins a session, then passes the session id in the path of every call (`/api/v1/sessions/{sid}/...`). It can edit the session network, open and repair lines in the sandbox, and drive runs nested in the session, including `POST /sessions/{sid}/runs/{rid}/actions`, which queues its own course of action for the next cycle. That action skips C2's choice, its operator attention cap and the conflict rules, but goes through the same validator, resources and crews as the commander's approved actions when it executes (it still spends one unit of operator attention), and is logged with the agent's name. The guardrails of section 3 apply to it. A client with an LLM can drive the same API in natural language through the MCP server (`docs/mcp.md`).
 
 ## 3. Guardrails
 

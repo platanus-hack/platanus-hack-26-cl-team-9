@@ -79,8 +79,9 @@ class TemplateInterpreter:
             f"Peor nivel de consecuencia: {LEVELS_ES.get(con.get('worst_level', 'L0'), con.get('worst_level'))}.",
             f"Energía no servida: {num(con.get('unserved_energy_mwh', 0))} MWh; costo regulatorio "
             f"US$ {num(con.get('failure_cost_usd', 0))} (8,79 US$/kWh).",
-            f"Decisiones innecesarias: {ind['wrong_decisions']}. "
-            f"Reserva operacional final: {pct(ind['operational_reserve']['final'], 0)}.",
+            # a semicolon, not "1. Reserva": a reader (or an LLM) took "1." for list numbering
+            f"Decisiones innecesarias: {ind['wrong_decisions']}; "
+            f"reserva operacional final: {pct(ind['operational_reserve']['final'], 0)}.",
             f"Coordinación: {coord['conflicts']} conflictos, {coord['contradictions']} contradicciones, "
             f"{coord['blocked_at_execution']} acciones detenidas por el validador.",
         ]

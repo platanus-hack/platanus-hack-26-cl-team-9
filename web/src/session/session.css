@@ -1,0 +1,47 @@
+/* Session mode of mapa 3 (?sesion=, docs/mapa3.md section 11) in the Design v5 shell. Radius 0 and only the
+   cascade.css tokens (docs/design.md section 2). `.tag` is the session label: `.shell .badge` is the event marker. */
+
+/* ---- Session strip (panel head) and the Sesión compartida view ---- */
+.shell .session-strip { display: flex; align-items: center; gap: 6px; height: 24px; padding-left: 12px; color: var(--fg-2); font-size: 12px; line-height: 16px; }
+.shell .session-strip > span:first-child { margin-right: auto; color: var(--fg); font-weight: 500; white-space: nowrap; }
+.shell .session-strip .text-btn { margin-left: 6px; }
+.shell .session-join { display: flex; gap: 6px; }
+.shell .session-join input { flex: 1; }
+.shell .session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* ---- Square secondary button and tags ---- */
+.shell .btn { padding: 5px 10px; background: var(--selected); border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font-size: 12px; line-height: 16px; cursor: pointer; }
+.shell .btn:hover:not(:disabled) { color: var(--fg); border-color: var(--muted); }
+.shell .btn:disabled { color: var(--faint); cursor: default; }
+.shell .tag { display: inline-block; padding: 1px 6px; border: 1px solid var(--border-strong); border-radius: 0; color: var(--muted); font-size: 11px; line-height: 14px; font-weight: 400; white-space: nowrap; }
+.shell .tag.live, .shell .tag.session { color: var(--fg-2); }
+.shell .tag.poll, .shell .tag.assumption { color: var(--muted); }
+.shell .tag.off { color: var(--fault); border-color: var(--fault); }
+.shell .tags { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+
+/* ---- Datos tab ---- */
+.shell .data-panel { display: flex; flex-direction: column; }
+.shell .data-panel > .card, .shell .data-panel > .note, .shell .data-panel > .seg { margin-bottom: 10px; }
+.shell .data-panel > .meta { margin: 4px 0; }
+.shell .data-panel .figures { display: flex; }
+.shell .data-panel .figure b { font-size: 18px; line-height: 24px; }
+.shell .note.warn { background: var(--selected); color: var(--fg-2); }  /* overlay warnings: red is for faults */
+.shell .data-panel h4 { margin: 12px 0 4px; color: var(--fg); font-size: 13px; font-weight: 600; line-height: 16px; }
+.shell .data-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
+.shell .data-form label { display: flex; flex-direction: column; gap: 2px; color: var(--muted); font-size: 11px; line-height: 14px; }
+.shell .data-form input, .shell .data-form select, .shell .data-filter input, .shell .session-join input {
+  min-width: 0; padding: 4px 6px; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font: inherit; font-size: 12px;
+}
+.shell .data-form input:focus, .shell .data-form select:focus, .shell .data-filter input:focus, .shell .session-join input:focus { outline: 1px solid var(--muted); outline-offset: -1px; }
+.shell .data-form select option { background: var(--card); }
+.shell .data-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.shell .data-row { border-top: 1px solid var(--border); }
+.shell .data-row .row-btn { border-top: 0; }
+.shell .data-row.off .row-btn { color: var(--faint); }
+.shell .data-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); color: var(--fg-2); font-size: 13px; line-height: 16px; }
+.shell .data-filter { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+.shell .data-filter input { flex: 1; }
+
+/* ---- Controls a session pins ---- */
+.shell .condition[aria-disabled="true"] { cursor: default; }
+.shell .condition[aria-disabled="true"] .cond-name, .shell .condition[aria-disabled="true"]:hover .cond-name { color: var(--faint); }

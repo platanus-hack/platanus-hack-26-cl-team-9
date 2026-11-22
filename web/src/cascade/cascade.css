@@ -1,5 +1,6 @@
 /* Mapa 3 in the Paper "Design v5" shell (docs/design.md sections 2 and 3.2). Square corners everywhere except round map
-   symbols and event markers. Faces come from the --font-sans / --font-mono tokens in styles.css; nothing here names a font. */
+   symbols and event markers. The rail's Escenarios tree follows Design v6 (section 3.3). Faces come from the --font-sans,
+   --font-condensed and --font-mono tokens in styles.css; nothing here names a font. */
 .shell {
   --bg: #1f2022; --sidebar: #18191b; --surface: #1e1f21; --glass: #1e1f21f7; --card: #27282b; --selected: #2a2b2e;
   --border: #ffffff14; --border-strong: #ffffff1a; --fg: #ffffff; --fg-2: #e6e6e8; --fg-3: #d0d1d4; --muted: #a1a2a6;
@@ -17,9 +18,11 @@
 
 /* ---- Nav rail ---- */
 .shell .rail { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: var(--rail-w); padding: 16px 12px; background: var(--sidebar); display: flex; flex-direction: column; gap: 4px; border: 0; }
-.shell .wordmark { display: flex; align-items: flex-end; gap: 1px; height: 28px; margin-bottom: 12px; padding-inline: 10px; color: var(--fg); flex-shrink: 0; }
+.shell .wordmark { display: flex; align-items: flex-end; height: 28px; margin-bottom: 12px; padding-inline: 10px; color: var(--fg); flex-shrink: 0; }
 .shell .wordmark .sub { font-size: 20px; font-weight: 600; line-height: 24px; letter-spacing: -0.02em; }
-.shell .wordmark .subscript { display: flex; align-items: center; gap: 1px; padding-bottom: 1px; font-size: 12px; font-weight: 600; line-height: 12px; }
+/* Sized from project-logo.png against the 10.6 px x-height of Roboto at 20 px: the "5" is 0.69 x-heights tall
+   (7.2 px), the subscript drops 0.43 x-heights below the baseline (4.5 px). Width follows the viewBox ratio. */
+.shell .wordmark .subscript { width: 12.6px; height: 7.25px; margin-left: 1px; vertical-align: -4.5px; overflow: visible; }
 .shell .rail-item { display: flex; align-items: center; gap: 10px; height: 32px; width: 100%; flex-shrink: 0; padding: 0 10px; background: none; border: 0; color: var(--fg-3); font-size: 14px; line-height: 18px; text-align: left; cursor: pointer; }
 .shell .rail-item:hover { color: var(--fg); }
 .shell .rail-item.on { background: var(--selected); color: var(--fg); font-weight: 500; }
@@ -29,12 +32,26 @@
 .shell .rail-item.faint { color: var(--faint); }
 .shell .rail-item.faint.on, .shell .rail-item.faint:hover { color: var(--fg); }
 .shell .rail-spacer { flex: 1; }
-.shell .scenarios { display: flex; flex-direction: column; gap: 2px; margin-left: 17px; padding-left: 12px; border-left: 1px solid var(--border-strong); flex-shrink: 0; }
-.shell .scenario { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 28px; padding: 0 8px; background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; min-width: 0; }
+/* Escenarios tree (Design v6): scenario rows with a 12 px disclosure slot, conditions hanging from a nested guide line.
+   When the rail is short the tree scrolls without visible chrome and "Ayuda" stays pinned at the bottom. */
+.shell .scenarios { display: flex; flex-direction: column; gap: 2px; flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; margin-left: 17px; padding-left: 4px; border-left: 1px solid var(--border-strong); }
+.shell .scenarios::-webkit-scrollbar { display: none; }
+.shell .scenario { display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; flex-shrink: 0; padding: 0 8px 0 0; background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; min-width: 0; }
+.shell .scenario.faint { color: var(--faint); }
+.shell .scenario.on { color: var(--fg); font-weight: 500; }
 .shell .scenario:hover { color: var(--fg); }
-.shell .scenario.on { background: #ffffff0d; color: var(--fg); }
-.shell .scenario.muted { color: var(--faint); }
-.shell .scenario .year { color: var(--faint); font-size: 12px; flex-shrink: 0; }
+.shell .scenario > .ellipsis { flex: 1 1 0; }
+.shell .disclosure { display: flex; align-items: center; justify-content: center; width: 12px; height: 12px; flex-shrink: 0; color: var(--faint); }
+.shell .scenario.on .disclosure { color: var(--fg-3); }
+.shell .scenario .year { color: var(--faint); font-size: 12px; font-weight: 400; flex-shrink: 0; }
+.shell .conditions { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; margin-left: 5px; padding-left: 12px; border-left: 1px solid var(--border-strong); }
+.shell .condition { display: flex; flex-direction: column; flex-shrink: 0; width: 100%; min-width: 0; padding: 6px 8px; background: none; border: 0; text-align: left; cursor: pointer; }
+.shell .condition.on { background: var(--selected); }
+.shell .cond-name { color: var(--muted); font-size: 13px; line-height: 16px; }
+.shell .condition:hover .cond-name, .shell .condition.on .cond-name { color: var(--fg); }
+.shell .condition.on .cond-name { font-weight: 500; }
+.shell .cond-date { color: var(--muted); font: 12px/16px var(--font-condensed); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shell .scenario:focus-visible, .shell .condition:focus-visible { outline: 1px solid var(--fg-3); outline-offset: -1px; }
 .shell .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- Panel ---- */
@@ -133,7 +150,7 @@
 .shell .readout em { font-style: normal; color: #c9cbcf; }
 .shell .readout em.fault { color: var(--fault); }
 .shell .speed { position: relative; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; flex-shrink: 0; background: #2e2f33; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
-.shell .speed select, .shell .legend-mode select, .shell .time-pill select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.shell .speed select, .shell .legend-mode select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .shell .timeline-row { display: flex; align-items: flex-end; gap: 10px; margin: 0; }
 .shell .play { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; padding: 0; margin-bottom: 10px; background: var(--fg); border: 0; border-radius: 0; cursor: pointer; }
 .shell .play:disabled { opacity: 0.35; cursor: default; }
@@ -157,16 +174,14 @@
 .shell .timeline-right .ref { color: var(--faint); font-size: 12px; line-height: 16px; white-space: nowrap; }
 .shell .timeline-right .pos { color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap; }
 
-/* ---- Time pill, map controls, legend, scale ---- */
-.shell .time-pill { position: absolute; z-index: 2; top: var(--gap); left: calc(var(--panel-x) + var(--panel-w) + 118px); width: 160px; display: flex; flex-direction: column; align-items: center; padding: 8px 0; background: var(--surface); border: 1px solid var(--border-strong); cursor: pointer; }
-.shell .time-pill:hover { border-color: #ffffff33; }
-.shell .time-pill .date { color: var(--fg-2); font-size: 13px; line-height: 16px; }
-.shell .time-pill .hms { color: var(--fg); font: 600 14px/18px var(--font-mono); font-variant-numeric: tabular-nums; }
-.shell .time-pill .hms span { color: var(--muted); font-weight: 400; }
-.shell .pill-chevron { position: absolute; right: 10px; top: 50%; display: flex; transform: translateY(-50%); }
+/* ---- Map controls, legend, scale ---- */
 .shell .map-controls { position: absolute; z-index: 3; top: var(--gap); right: var(--gap); width: 36px; display: flex; flex-direction: column; gap: 4px; }
 .shell .ctl { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; background: var(--surface); border: 1px solid var(--border-strong); cursor: pointer; }
 .shell .ctl:hover, .shell .ctl.on { background: var(--selected); }
+/* "Prender todo": left of the controls column, on the layers button's row; under .map-controls so the layers popover covers it. */
+.shell .power-all { position: absolute; z-index: 2; top: var(--gap); right: calc(var(--gap) + 36px + 4px); height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 16px; cursor: pointer; }
+.shell .power-all:hover:not([aria-disabled]) { background: var(--selected); color: var(--fg); }
+.shell .power-all[aria-disabled] { opacity: 0.45; cursor: default; }
 .shell .ctl-stack { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border-strong); }
 .shell .ctl-stack .ctl { width: 34px; border: 0; }
 .shell .ctl-stack .ctl + .ctl { border-top: 1px solid var(--border-strong); }
@@ -189,6 +204,7 @@
 .shell .legend-mode { position: relative; display: flex; align-items: center; gap: 4px; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
 .shell .samples { display: flex; flex-wrap: wrap; gap: 10px; }
 .shell .sample { display: flex; flex-direction: column; gap: 8px; width: 82px; flex-shrink: 0; color: var(--fg-2); font-size: 12px; line-height: 16px; }
+.shell .sample .swatch-slot { display: flex; align-items: center; height: 6px; }
 .shell .sample .swatch { display: block; width: 28px; height: 3px; flex: none; }
 .shell .sample.absent .swatch, .shell .sample.absent svg { opacity: 0.4; }
 .shell .sample.absent > span:last-child { color: var(--muted); }
@@ -220,11 +236,6 @@
 .shell .pin-label span { color: var(--muted); font-size: 12px; line-height: 16px; }
 .shell .flip .pin-label { left: auto; right: 28px; }
 
-/* Narrow screens: the time pill moves next to the map controls so it never covers the panel. */
-@media (max-width: 1100px) {
-  .shell .time-pill { left: auto; right: 60px; }
-}
-
 /* Mapbox logo and attribution: bottom-left of the visible map, right of the timeline card. */
 .shell .mapboxgl-ctrl-bottom-left { left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); }
 .shell .mapboxgl-ctrl-attrib.mapboxgl-compact { background: #1e1f21cc; color: var(--muted); }
@@ -237,3 +248,55 @@
 .shell .pin-label b, .shell .pin-label span { overflow: hidden; text-overflow: ellipsis; }
 .shell .up .callout { top: auto; bottom: -20px; }
 .shell .up .callout::before { top: auto; bottom: 19px; }
+
+/* ---- Selection card, actions and feedback ---- */
+.shell .selection .card-head h3 { min-width: 0; }
+.shell .selection .meta.value-row { gap: 6px; }
+.shell .load-bar { display: flex; width: 100%; height: 4px; margin-top: 6px; background: var(--surface); }
+.shell .load-bar span { height: 4px; }
+.shell .status-row { justify-content: space-between; color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .status-row b { color: var(--fg); font-weight: 600; }
+.shell .status-row b.fault { color: var(--fault); }
+.shell .actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+/* Primary action: white fill like the play button. Red stays reserved for faults and overloads. */
+.shell .primary-btn { height: 32px; flex-shrink: 0; padding: 0 14px; background: var(--fg); border: 0; border-radius: 0; color: #18191b; font-size: 13px; font-weight: 600; line-height: 16px; cursor: pointer; }
+.shell .primary-btn:hover { background: var(--fg-2); }
+.shell .secondary-btn { height: 28px; flex-shrink: 0; padding: 0 10px; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 16px; cursor: pointer; }
+.shell .secondary-btn:hover { border-color: #ffffff40; color: var(--fg); }
+.shell .cut-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shell .cut-row .cut-name { min-width: 0; }
+.shell .withstands { display: flex; flex-direction: column; gap: 6px; }
+.shell .withstands p { margin: 0; color: var(--fg-3); font-size: 13px; line-height: 20px; }
+.shell .notice { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 12px; background: var(--card); border-left: 2px solid var(--fg-3); color: var(--fg-3); font-size: 12px; line-height: 16px; flex-shrink: 0; }
+.shell .loading { gap: 10px; }
+.shell .loading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .loading-bar { position: relative; display: block; height: 2px; overflow: hidden; background: var(--surface); }
+.shell .loading-bar::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 30%; background: var(--fg-3); animation: shell-loading 1.1s ease-in-out infinite; }
+@keyframes shell-loading { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .shell .loading-bar::after { animation: none; width: 100%; opacity: 0.4; } }
+.shell .timeline-empty { margin: 0 0 6px; color: var(--muted); font-size: 12px; line-height: 16px; }
+
+/* Keyboard focus on the shell's controls. */
+.shell button:focus-visible, .shell .row-btn:focus-visible, .shell .check input:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+.shell .speed:has(select:focus-visible), .shell .legend-mode:has(select:focus-visible) { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+
+/* Fuentes de la grilla: opens downward in the rail, under the item */
+.shell .rail-label { white-space: nowrap; }
+.shell .rail-item > svg { flex-shrink: 0; }
+.shell .rail-chevron { margin-left: auto; display: flex; color: var(--faint); }
+.shell .sources { margin-top: 2px; }
+.shell .source-row { display: flex; align-items: center; gap: 8px; height: 28px; flex-shrink: 0; padding: 0 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 16px; cursor: pointer; }
+.shell .source-row:hover { color: var(--fg); }
+.shell .source-row input { margin: 0; accent-color: var(--fg-2); flex-shrink: 0; }
+.shell .source-row .ellipsis { flex: 1 1 0; }
+.shell .source-status { font-size: 11px; line-height: 16px; flex-shrink: 0; color: var(--faint); }
+.shell .source-status.complete { color: var(--fg-3); }
+.shell .source-note { margin: 4px 4px; color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .source-reset { padding: 4px; text-align: left; }
+
+/* Estado de la red */
+.shell .state-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; color: var(--fg-2); font-size: 13px; line-height: 16px; }
+.shell .state-row .ellipsis { flex: 1 1 0; min-width: 0; }
+.shell .state-list .list-head { margin-top: 8px; }
+
+.shell .heat-hint { margin: 0; max-width: 220px; color: var(--muted); font-size: 12px; line-height: 16px; }

@@ -6,10 +6,10 @@ Each operational cycle:
     2. observe: the digital engine turns the real state into what supervision shows
     3. understand (ISR), intent (C2), plan (Operations, Stabilisation, Logistics)
     4. validate (deterministic) and decide (C2, within attention), with vetoes
-    5. execute approved actions (re-validated) on the real state
+    5. execute approved actions and queued external agent actions (re-validated) on the real state
     6. evaluate (indicators, Auditor findings) and adapt (adversary learns)
 Everything is appended to a hash-chained audit log. A run is reproducible from its recipe
-(configuration, seed and injected events with their cycle).
+(configuration, seed, injected events and external actions with their cycle).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
 from cascadasen.domain.theater.areas import bus_id
 from cascadasen.domain.theater.audit import AuditLog
-from cascadasen.domain.theater.catalog import EVENTS, OBJECTIVES
+from cascadasen.domain.theater.catalog import ACTIONS, EVENTS, OBJECTIVES
 from cascadasen.domain.theater.config import TheaterConfig, theater_config
 from cascadasen.domain.theater.crews import CrewRoster
 from cascadasen.domain.theater.decisions import COA, ActionFeedback, Decision
@@ -102,6 +102,25 @@ class RunConfig:
         d["capabilities"] = dict(self.capabilities)
         d["initial_events"] = [dict(e) for e in self.initial_events]
         return d
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> RunConfig:
+        """Inverse of `as_dict`, also after a JSON round trip (a persisted recipe)."""
+        adv = d.get("adversary")
+        return cls(
+            template=d.get("template", "open_field"),
+            policy=d.get("policy", "C"),
+            seed=None if d.get("seed") is None else int(d["seed"]),
+            uncertainty=float(d.get("uncertainty", 1.0)),
+            horizon=d.get("horizon"),
+            adversary=AdversaryConfig(**adv) if adv else None,
+            capabilities=tuple(sorted((d.get("capabilities") or {}).items())),
+            operating_point=d.get("operating_point"),
+            initial_events=tuple(dict(e) for e in d.get("initial_events") or ()),
+            stochastic=bool(d.get("stochastic", True)),
+            llm_commander=bool(d.get("llm_commander", False)),
+            llm_choices=tuple((int(k), tuple(v)) for k, v in d.get("llm_choices") or ()),
+        )
 
 
 @dataclass
@@ -194,6 +213,8 @@ class Simulation:
         self.snapshots: list[dict[str, Any]] = []
         self.injected: list[dict[str, Any]] = []
         self.queue: list[EventRequest] = []
+        self.actions: list[dict[str, Any]] = []  # external agent actions, as recorded in the recipe
+        self.action_queue: list[COA] = []
         self.feedback: list[ActionFeedback] = []
         self.cycle = 0
         self.llm_record: dict[int, tuple[str, ...]] = dict(conf.llm_choices)
@@ -283,6 +304,59 @@ class Simulation:
             "resolved_target": resolved,
             "area": area,
             "notice": NOTICE if cause == "intentional" else None,
+        }
+
+    def submit_action(
+        self,
+        action: str,
+        target: str,
+        role: str,
+        params: dict[str, Any] | None = None,
+        agent: str | None = None,
+    ) -> dict[str, Any]:
+        """Queue a course of action from an external agent for the next cycle. Only its structure is
+        checked here; the cycle validates it like any staff proposal and spends attention, resources
+        and crews to execute it."""
+        if self.finished:
+            raise RunFinishedError("la corrida terminó")
+        spec = ACTIONS.get(action)
+        if spec is None:
+            raise RunInputError("action", "acción desconocida", sorted(ACTIONS))
+        roles = sorted(r.value for r in spec.proposers)
+        if role not in roles:
+            raise RunInputError("role", f"el rol no puede proponer {action}", roles)
+        net = self.network
+        if action == "restore_element":
+            known = target in net.areas or target in net.corridors
+        elif spec.target == "area":
+            known = target in net.areas
+        elif spec.target == "corridor":
+            known = target in net.corridors
+        else:
+            known = target in self.defense_areas
+        if not known:
+            raise RunInputError("target", f"{target}: objetivo desconocido para {action}", not_found=True)
+        self.action_queue.append(
+            COA(action, target, role, "external_agent", params=tuple((params or {}).items()))
+        )
+        rec = {
+            "cycle": self.cycle,
+            "action": action,
+            "target": target,
+            "role": role,
+            "params": dict(params or {}),
+            "agent": agent,
+            "after_events": len(self.injected),  # keeps the input order when the run is rebuilt
+        }
+        self.actions.append(rec)
+        self.log.append(self.cycle, "inject", "external", "action_queued", rec)
+        return {
+            "accepted": True,
+            "applies_at_cycle": self.cycle,
+            "action": action,
+            "target": target,
+            "role": role,
+            "notice": NOTICE,
         }
 
     def step(self, n: int = 1) -> list[dict[str, Any]]:
@@ -508,6 +582,13 @@ class Simulation:
         }
         c2_view = self._view("c2", obs, reports, isr=isr_report, intent=intent)
         decisions = self.c2.decide(c2_view, coas, verdicts, vetoes, self._llm_pick(c2_view))
+        # external agent actions join C2's approvals unless C2 already approved the same one
+        approved = {d.coa.key for d in decisions if d.approved}
+        for coa in self.action_queue:
+            if coa.key not in approved:
+                decisions.append(Decision(coa, True, "external_agent", validate(coa, ctx)))
+                approved.add(coa.key)
+        self.action_queue = []
 
         # 5. execute
         executed, feedback, wrong, ok_count = [], [], 0, 0
@@ -772,6 +853,8 @@ class Simulation:
             "config": self.config.as_dict(),
             "injected": list(self.injected),
             "llm_choices": [[k, list(v)] for k, v in sorted(self.llm_record.items())],
+            "cycle": self.cycle,
+            "actions": list(self.actions),
         }
 
     def trace(self) -> dict[str, Any]:

@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Simulador abierto de apagones del sistema eléctrico chileno (Platanus Hack 26)"
 requires-python = ">=3.12"
 dependencies = [
+    "boto3>=1.40",
     "fastapi>=0.165.0",
+    "httpx>=0.28",
     "networkx>=3.7",
     "numpy>=2.5.5",
     "openpyxl>=3.1.5",
@@ -17,13 +19,16 @@ dependencies = [
 [project.scripts]
 cascadasen-api = "cascadasen.api.app:run"
 cascadasen-build = "cascadasen.cli:main"
+cascadasen-mcp = "cascadasen.mcp.server:main"
 cascadasen-cache = "cascadasen.application.cache_builder:main"
+cascadasen-grids = "cascadasen.application.grids:main"
 cascadasen-health = "cascadasen.application.grid_health:main"
 cascadasen-regional = "cascadasen.application.build_regional:main"
 cascadasen-sim-fixtures = "cascadasen.sim_fixtures:main"
 
 [project.optional-dependencies]
 llm = ["anthropic[bedrock]>=1.0.0"]
+mcp = ["mcp>=2.0"]
 
 [dependency-groups]
 dev = ["httpx>=0.28.1", "mypy>=2.4.1", "pytest>=9.2.0", "pytest-cov", "ruff"]

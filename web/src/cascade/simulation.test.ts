@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { darkAt, frequencyAt, groupEvents, impactAt, markerLabel, sample } from "./simulation";
-import type { BusState, Event, Timeline } from "./types";
+import { darkAt, frequencyAt, groupEvents, impactAt, lineStateAt, markerLabel, sample, withstandsAt } from "./simulation";
+import type { BusState, Event, NetLine, Timeline } from "./types";
 
 const ev = (t: number, type: string, params: Event["params"] = {}): Event => ({ t, type, ids: [], text_key: type, params });
 
@@ -44,5 +44,32 @@ describe("cascade at time t", () => {
     expect(m[m.length - 1].left + m[m.length - 1].width).toBeLessThanOrEqual(290);
     for (let i = 1; i < m.length; i++) expect(m[i].left).toBeGreaterThanOrEqual(m[i - 1].left + m[i - 1].width);
     expect(markerLabel({ first: 5, last: 8 })).toBe("5–8");
+  });
+});
+
+describe("line state", () => {
+  const line: NetLine = { id: "R1", a: "B1", b: "B2", kv: 220, capacity_mw: 100, x_pu: 0.1, map_edges: [], branches: ["x"] };
+  const frame = (edge: { flow_mw: number; status: "ok" | "overload" | "open"; loading: number }, dark: string[] = []) => ({ t: 0, edges: { R1: edge }, dark, islands: [] });
+
+  it("reads flow direction from the sign and flags overloads", () => {
+    expect(lineStateAt(line, frame({ flow_mw: -80, status: "ok", loading: 0.8 }))).toEqual({ status: "en servicio", flowMw: 80, loading: 0.8, from: "B2", to: "B1", atLimit: false });
+    expect(lineStateAt(line, frame({ flow_mw: 130, status: "overload", loading: 1.3 })).status).toBe("sobrecargada");
+    // The engine flags a line exactly at its limit as "overload"; it is at its limit, not over it.
+    expect(lineStateAt(line, frame({ flow_mw: 100, status: "overload", loading: 1 }))).toMatchObject({ status: "en servicio", atLimit: true });
+  });
+
+  it("puts out of service before dead, and dead before overload", () => {
+    expect(lineStateAt(line, frame({ flow_mw: 0, status: "open", loading: 0 }, ["B1", "B2"])).status).toBe("fuera de servicio");
+    expect(lineStateAt(line, frame({ flow_mw: 0, status: "ok", loading: 0 }, ["B1", "B2"])).status).toBe("sin tensión");
+    expect(lineStateAt(line, frame({ flow_mw: 0, status: "ok", loading: 0 }, ["B1"])).status).toBe("en servicio");
+  });
+});
+
+describe("a cut the system withstands", () => {
+  const calm: Timeline = { ...timeline, summary: { ...timeline.summary, people_without_power: 0, load_shed_mw: 0 } };
+  it("is reported only once the last event has played", () => {
+    expect(withstandsAt(calm, 5)).toBe(false);
+    expect(withstandsAt(calm, 20)).toBe(true);
+    expect(withstandsAt(timeline, 20)).toBe(false);
   });
 });

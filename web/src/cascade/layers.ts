@@ -6,24 +6,28 @@ import { RECTANGLE_BASE } from "../map/shapes";
 import type { BusState, EdgeState, Frame, NetLine, NetNode, Network } from "./types";
 
 type Rgba = [number, number, number, number];
-const hex = (h: string, a = 255): Rgba => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
+export const hex = (h: string, a = 255): Rgba => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
 
-/** What line color means. Design v5: one meaning per color at a time; stroke width always shows voltage. */
+/** What line color means. One meaning per color at a time; stroke width always shows voltage. */
 export type ColorMode = "voltage" | "load";
 
-// One source for the colours: the map, the legend and the panel read these (Paper Design v5 tokens).
+// One source for the colours: the map, the legend and the panels read these (Paper Design v6, docs/design.md 3.3).
+// Rule: cold colors describe the network (voltage), the traffic-light ramp describes its stress (load), and red is
+// always failure. No hue means voltage in one mode and load in the other.
 export const FAULT = "#FF5A48";
+/** Brighter and wider with more voltage. */
 export const VOLTAGE_TIERS: { label: string; minKv: number; color: string; width: number }[] = [
-  { label: "500 kV", minKv: 500, color: "#F0F2F4", width: 3 },
-  { label: "154–345 kV", minKv: 154, color: "#F99549", width: 1.8 },
-  { label: "100–110 kV", minKv: 100, color: "#3FB1EA", width: 1.3 },
-  { label: "44–69 kV", minKv: 44, color: "#7AA5BF", width: 1.1 },
+  { label: "500 kV", minKv: 500, color: "#FFFFFF", width: 3 },
+  { label: "154–345 kV", minKv: 154, color: "#7FDBFF", width: 1.8 },
+  { label: "100–110 kV", minKv: 100, color: "#3B9BF5", width: 1.3 },
+  { label: "44–69 kV", minKv: 44, color: "#4F78E0", width: 1.1 },
   { label: "Media tensión", minKv: 0, color: "#767B80", width: 1 },
 ];
+/** Share of thermal capacity: a line heats up as it carries more. Over 100 % is a fault and draws 1.5 px thicker. */
 export const LOAD_BANDS: { upTo: number; color: string; label: string }[] = [
-  { upTo: 0.5, color: "#8E9298", label: "< 50 %" },
-  { upTo: 0.75, color: "#C9CBCF", label: "50–75 %" },
-  { upTo: 1.0, color: "#E8B4A6", label: "75–100 %" },
+  { upTo: 0.5, color: "#28B47E", label: "< 50 %" },
+  { upTo: 0.75, color: "#F5D547", label: "50–75 %" },
+  { upTo: 1.0, color: "#FF9838", label: "75–100 %" },
   { upTo: Infinity, color: FAULT, label: "> 100 %" },
 ];
 export const DEAD_LINE = "#0E0F10";      // "sin tensión": both ends dark
@@ -44,7 +48,7 @@ export function loadColor(state: EdgeState | undefined): string {
 export interface Toggles { flow: boolean; demand: boolean }
 export interface View {
   network: Network; buses: Record<string, BusState>; frame: Frame; time: number; colorMode: ColorMode;
-  selectedNode: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[];
+  selectedNode: string | null; selectedLine: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[]; heat?: Layer[];
 }
 
 /** Flat network on the basemap; optional moving dots for the flow and demand as columns (3D) or discs (2D). */
@@ -72,8 +76,15 @@ export function buildCascadeLayers(v: View): Layer[] {
   };
   const color = (l: NetLine) => hex(v.colorMode === "voltage" ? tierOf(l.kv).color : loadColor(v.frame.edges[l.id]));
   const trigger = [v.frame, v.colorMode];
+  const selected = v.selectedLine ? v.network.lines.find((l) => l.id === v.selectedLine) : undefined;
   return [
     ...(v.regional ?? []),
+    ...(v.heat ?? []), // under the lines and substations, over the context countries
+    // Selected line: a white halo under the line, so its own colour (voltage, load or dashed) still reads inside.
+    ...(selected ? [new PathLayer<NetLine>({
+      id: "selection", data: selectionData(selected), widthUnits: "pixels", getPath: (l) => [pos(l.a), pos(l.b)], capRounded: true,
+      getColor: [255, 255, 255, 72], getWidth: (l) => tierOf(l.kv).width + 8, // faint enough that gray "fuera" dashes still read on it
+    })] : []),
     new PathLayer<NetLine>({
       id: "lines-dead-outline", data: dead, widthUnits: "pixels", getPath: (l) => [pos(l.a), pos(l.b)],
       getColor: [255, 255, 255, 64], getWidth: (l) => tierOf(l.kv).width + 2, updateTriggers: { getWidth: trigger },
@@ -82,13 +93,15 @@ export function buildCascadeLayers(v: View): Layer[] {
       id: "lines-dead", data: dead, pickable: true, widthUnits: "pixels", getPath: (l) => [pos(l.a), pos(l.b)],
       getColor: hex(DEAD_LINE), getWidth: (l) => tierOf(l.kv).width, updateTriggers: { getWidth: trigger },
     }),
-    new PathLayer<{ line: NetLine; path: [number, number][] }>({
-      id: "lines-open", data: openDashes, pickable: true, widthUnits: "pixels", getPath: (d) => d.path,
-      getColor: hex(OPEN_LINE), getWidth: 2, 
-    }),
     new PathLayer<NetLine>({
       id: "lines", data: live, pickable: true, autoHighlight: true, highlightColor: [255, 255, 255, 255], widthUnits: "pixels", capRounded: true,
       getPath: (l) => [pos(l.a), pos(l.b)], getColor: color, getWidth: width, updateTriggers: { getColor: trigger, getWidth: trigger },
+    }),
+    // "fuera" above the live lines: the cut line is the subject of the simulation, and a parallel overloaded line
+    // drawn on top used to hide it. Still below the flow dots and the substations.
+    new PathLayer<{ line: NetLine; path: [number, number][] }>({
+      id: "lines-open", data: openDashes, pickable: true, widthUnits: "pixels", getPath: (d) => d.path,
+      getColor: hex(OPEN_LINE), getWidth: 2,
     }),
     ...(v.toggles.flow ? [new TripsLayer<{ path: [number, number][]; timestamps: number[] }>({
       id: "flow", data: flowTrips(v, pos), getPath: (d) => d.path, getTimestamps: (d) => d.timestamps, getColor: [255, 255, 255, 230],
@@ -139,6 +152,10 @@ function dashes(lines: NetLine[], pos: (id: string) => [number, number], zoom: n
   }
   return out;
 }
+
+/** One stable array per line, so selecting a line does not make deck.gl rebuild the halo's attributes every tick. */
+const selectionCache = new WeakMap<NetLine, NetLine[]>();
+const selectionData = (l: NetLine) => selectionCache.get(l) ?? selectionCache.set(l, [l]).get(l)!;
 
 const DOT_COUNT = 3;
 type Partition = { live: NetLine[]; dead: NetLine[]; open: NetLine[]; dashes: Map<number, { line: NetLine; path: [number, number][] }[]> };

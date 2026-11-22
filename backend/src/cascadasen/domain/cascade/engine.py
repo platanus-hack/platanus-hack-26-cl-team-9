@@ -1,5 +1,6 @@
 """Cascade loop (docs/stack.md 4.3): open the cut, split into islands, settle each island's frequency,
-recompute the DC flow and open the most overloaded line, until nothing is overloaded.
+recompute the DC flow and open the most overloaded line, until nothing is overloaded. When the 25F corridor
+separates with a pre-fault flow beyond the defence-scheme range, the islands at both ends collapse by voltage.
 
 Result: a timeline dict in the stack.md section 6 format (frames are one per cascade stage, not 10 Hz, to keep
 files small; frequency curves are sampled at 5 Hz).
@@ -21,12 +22,12 @@ from .scenario import OperatingPoint
 
 ASSUMPTIONS = [
     "Red reducida: una barra por subestación y solo líneas; los transformadores se pliegan en su nodo (no se modelan sus sobrecargas).",
-    "Flujo DC: sin pérdidas, sin tensión ni potencia reactiva. La tensión no se calcula: si se abre el corredor del 25F con un flujo previo fuera del rango de validez del esquema de defensa (1.600 MW N→S, 1.000 MW S→N), la isla queda 'limitada por tensión (incierto)'. Es el único corredor con límites publicados.",
+    "Flujo DC: sin pérdidas, sin tensión ni potencia reactiva. La tensión no se calcula: si el corredor del 25F se separa con un flujo previo fuera del rango de validez del esquema de defensa (1.600 MW N→S, 1.000 MW S→N), las islas de ambos extremos colapsan por tensión. Es una regla, no un cálculo, y es el único corredor con límites publicados.",
     "Una línea se abre cuando supera 120% de su capacidad (supuesto de docs/stack.md 4.3). Las protecciones reales dependen de relés y tiempos que no están en los datos.",
     "Cada etapa de la cascada se separa 1,0 s de la anterior. Es un tiempo ilustrativo, no calculado.",
     "Reserva primaria 4% de la potencia sincrónica en línea con estatismo 5%, constante de tiempo 3 s y amortiguamiento de carga 1,5 %/Hz: supuestos sin calibrar.",
     "La inercia de cada isla es la de las unidades sincrónicas en línea; solar y eólica no aportan. Una unidad que sale antes del transitorio ya no cuenta.",
-    "EDAC con los escalones del informe del CEN sobre el 25F, incluido el EDAC por contingencia extrema (671,55 MW por gradiente); los MW de cada escalón se interpolan entre demanda baja y alta según la demanda del punto.",
+    "EDAC con los escalones del informe del CEN sobre el 25F (centro-sur y Norte Grande); los MW de cada escalón se interpolan entre demanda baja y alta. El EDAC por contingencia extrema no se modela.",
     "Baterías en modo rápido: retardo 200 ms y rampa 300 ms (stack.md 4.5), sin límite de energía en el transitorio de 20 s.",
     "No hay desconexión de generación por frecuencia o tensión (ride-through) salvo la reducción por sobrefrecuencia de solar y eólica.",
     "Despacho y demanda del punto de operación son simulados o modelados (PyPSA-CL), no medidos.",
@@ -64,6 +65,7 @@ class _State:
     extra_reserve: np.ndarray | None = None
     battery: np.ndarray | None = None
     prefault_boundary_mw: float = 0.0  # pre-fault flow across the 25F boundary, positive north to south
+    voltage_ends: tuple[int, int] | None = None  # 25F corridor ends whose separation collapses both islands
 
 
 @dataclass
@@ -77,7 +79,6 @@ class CascadeState:
     open_lines: set[str]
     dark: set[int]
     islands: list[dict] = field(default_factory=list)  # settled islands: `bus_idx` plus the summary fields
-    uncertain: bool = False
 
 
 def run_cascade_workflow(
@@ -113,8 +114,8 @@ def run_cascade_state(
     )
     already = set(open_lines)
     state.prefault_boundary_mw = boundary_flow_mw(net, already, point.gen - point.load)
+    state.voltage_ends = _voltage_ends(net, already, state.prefault_boundary_mw)
     truncated = _cascade(state)
-    uncertain = _voltage_verdict(state, already)
     final = CascadeState(
         state.gen,
         state.load,
@@ -123,9 +124,8 @@ def run_cascade_state(
         set(state.open_lines),
         set(state.dark),
         [{"bus_idx": sorted(k), **v} for k, v in state.results.items()],
-        uncertain,
     )
-    return _timeline(state, cut_line_ids, truncated, uncertain), final
+    return _timeline(state, cut_line_ids, truncated), final
 
 
 def boundary_lines(net: ReducedNetwork) -> list[tuple[str, int]]:
@@ -160,32 +160,25 @@ def boundary_flow_mw(net: ReducedNetwork, open_lines: set[str], injection: np.nd
     return float(sum(sign * flows[pos[lid]] for lid, sign in crossing if lid not in open_lines))
 
 
-def _voltage_verdict(s: _State, already_open: set[str]) -> bool:
-    """stack.md 4.6: the DC model has no voltage. When the 25F boundary opens with a pre-fault flow outside
-    the defence-scheme validity range, the islands at its ends are 'voltage_limited' (uncertain) instead of
-    a frequency verdict. Documented, not computed."""
-    flow = s.prefault_boundary_mw
-    over = flow > VOLTAGE_LIMIT["limit_ns_mw"] or -flow > VOLTAGE_LIMIT["limit_sn_mw"]
-    lines = {ln.id: ln for ln in s.net.lines}
-    opened = [lid for lid, _ in boundary_lines(s.net) if lid in s.open_lines and lid not in already_open]
-    if not (over and opened):
-        return False
-    ends = {b for lid in opened for b in (lines[lid].a, lines[lid].b)}
-    marked = False
-    for key, info in s.results.items():
-        if key & ends and info["result"] != "dark":
-            info["result"] = "voltage_limited"
-            marked = True
-    s.events.append(
-        {
-            "t": 0.0,
-            "type": "voltage_limited",
-            "ids": sorted(opened),
-            "text_key": "voltage_limited",
-            "params": {"prefault_mw": round(flow), "islands_marked": marked},
-        }
-    )
-    return True
+def _voltage_ends(net: ReducedNetwork, already_open: set[str], prefault_mw: float) -> tuple[int, int] | None:
+    """stack.md 4.6: the DC model has no voltage. With a pre-fault flow beyond the defence-scheme range across the
+    25F boundary, separating its two ends collapses the islands on both sides. Returns those end buses, or None
+    when the flow is inside the range or the ends were already apart before this run."""
+    over = prefault_mw > VOLTAGE_LIMIT["limit_ns_mw"] or -prefault_mw > VOLTAGE_LIMIT["limit_sn_mw"]
+    ends = _end_buses(net)
+    if not over or ends is None:
+        return None
+    together = any(ends[0] in i and ends[1] in i for i in find_islands(net, already_open))
+    return ends if together else None
+
+
+def _end_buses(net: ReducedNetwork) -> tuple[int, int] | None:
+    by_name = {_plain(name): i for name, i in net.index.items()}
+    found = [
+        next((i for k, i in by_name.items() if k.endswith(_plain(VOLTAGE_LIMIT[side]))), None)
+        for side in ("north", "south")
+    ]
+    return (found[0], found[1]) if None not in found else None
 
 
 def _start(net, point, params, cut_ids, already_open: set[str] | None = None) -> _State:
@@ -291,6 +284,8 @@ def _info(
 
 def _settle_island(s: _State, island: list[int], gen: float, load: float, t: float) -> dict:
     inertia, sync = float(s.inertia[island].sum()), float(s.sync[island].sum())
+    if s.voltage_ends and (s.voltage_ends[0] in island) != (s.voltage_ends[1] in island):
+        return _lose_island(s, island, t, "blackout", None, "voltage", inertia)
     if gen < 0.5:
         return _lose_island(s, island, t, "dark", None, "no_generation", inertia)
     if load < 0.5:
@@ -342,8 +337,6 @@ def _apply_result(s: _State, island: list[int], sim: IslandResult, t: float) -> 
     s.curves[f"I{len(s.curves) + 1}"] = [[round(t + p[0], 2), p[1]] for p in sim.curve]
     for step in sim.steps:
         params = {"zone": step["zone"], "step": step["step"], "mw": step["mw"]}
-        if step.get("extreme"):
-            params["extreme"] = True
         s.events.append(
             {
                 "t": round(t + step["t"], 2),
@@ -392,7 +385,7 @@ def _lose_island(
             "params": {"buses": len(island), "load_mw": round(lost), "reason": reason, "min_hz": min_hz},
         }
     )
-    return _info(result, min_hz, inertia)
+    return {**_info(result, min_hz, inertia), "reason": reason}
 
 
 def _shed_load(s: _State, island: list[int], shed_mw: dict[str, float]) -> None:
@@ -440,7 +433,7 @@ def _frame(s: _State, islands: list[list[int]], flows: np.ndarray, t: float) -> 
     }
 
 
-def _timeline(s: _State, cut_ids: list[str], truncated: bool, uncertain: bool = False) -> dict:
+def _timeline(s: _State, cut_ids: list[str], truncated: bool) -> dict:
     initial, final = s.point.load, s.load
     served = np.divide(final, initial, out=np.ones_like(final), where=initial > 0)
     people = float((s.point.people * (1.0 - served)).sum())
@@ -461,7 +454,6 @@ def _timeline(s: _State, cut_ids: list[str], truncated: bool, uncertain: bool = 
             "lines_opened": sorted(s.open_lines),
             "dark_buses": len(s.dark),
             "islands": [{**v, "buses": len(k)} for k, v in s.results.items()],
-            "uncertain": uncertain,
             "prefault_boundary_mw": round(s.prefault_boundary_mw),
         },
         "assumptions": ASSUMPTIONS,

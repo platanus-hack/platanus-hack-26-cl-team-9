@@ -38,3 +38,27 @@ resource "aws_iam_role_policy_attachment" "ecs_infrastructure" {
   role       = aws_iam_role.ecs_infrastructure.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForLoadBalancers"
 }
+# Role of the running containers. The backend reads and writes sessions and runs in the sessions bucket.
+resource "aws_iam_role" "task" {
+  name               = "cascadasen-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
+}
+data "aws_iam_policy_document" "task_sessions" {
+  statement {
+    actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = [
+      "${aws_s3_bucket.sessions.arn}/sessions/*",
+      "${aws_s3_bucket.sessions.arn}/runs/*",
+    ]
+  }
+  # No prefix condition: without ListBucket on the bucket, S3 answers 403 instead of 404 for a missing key.
+  statement {
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.sessions.arn]
+  }
+}
+resource "aws_iam_role_policy" "task_sessions" {
+  name   = "cascadasen-task-sessions"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.task_sessions.json
+}

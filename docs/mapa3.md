@@ -22,7 +22,7 @@ This is the reference list for future work. Each actor has: what it is in our da
 | A6 | Overload protection | Yes (simplified) | Opens the most overloaded line(s) each stage. | Line turns grey and thin ("open") |
 | A7 | EDAC (under-frequency load shedding) | Yes | Disconnects demand in steps when island frequency falls. | Events list, frequency chart, shorter bars |
 | A8 | Island | Yes (emergent) | A group of substations still connected to each other after cuts. Has its own frequency. Survives or blacks out as a whole. | Colour of its frequency curve in the chart |
-| A9 | Attacker or fault (the user's click) | Yes | Starts the cascade by opening a line at t = 0. | Cut line drawn in the "selected" colour |
+| A9 | Attacker or fault (the user's double click or "Sacar de servicio") | Yes | Starts the cascade by opening a line, or every line of a substation ("Apagar esta subestación"), at t = 0. | Cut line drawn dashed gray ("fuera") |
 | A10 | Transformer | Folded away | Not an actor in the engine. Its capacity is merged into the line. | Not drawn |
 | A11 | HVDC link | No | Excluded. Kimal-Lo Aguirre is a 2029 build, so it is dropped for 2025 and 2026. | Not drawn |
 | A12 | Storage (batteries, pumped hydro) | No | Not modelled as fast injection. | Not drawn |
@@ -111,7 +111,7 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder   # 
 cd ../web && npm install && npm run dev
 ```
 
-The cache (about 23 MB, 4 hours x 273 cuts) is committed, because the deployed web image has no Python. Regenerate it with `cascadasen-cache` and commit it whenever the engine or `data/processed` change. If a file is missing the page shows "Falta la caché (...)".
+The cache (about 42 MB, 4 hours x (273 line cuts + 188 substation shutdowns)) is committed, because the deployed web image has no Python. Regenerate it with `cascadasen-cache` and commit it whenever the engine or `data/processed` change. If a file is missing the page shows "Falta la caché (...)".
 
 | URL | Opens |
 |---|---|
@@ -120,43 +120,52 @@ The cache (about 23 MB, 4 hours x 273 cuts) is committed, because the deployed w
 | `/?mapa=3&point=feb2025-1500&cut=R239` | The 25F corridor cut, already playing |
 | `/?point=feb2025-1500&cut=R239&vista=3d` | The same, with the camera tilted |
 
-The URL follows the app: choosing a point, cutting a line or switching to 3D rewrites `point`, `cut` and `vista`, so the address bar is always a deep link to the current view.
+The URL follows the app: choosing a point, cutting a line or switching to 3D rewrites `point`, `cut` and `vista`, so the address bar is always a deep link to the current view. It carries only values that differ from the defaults: a point other than `nov2026-1300`, a cut, and `vista=3d`. Other params (`sesion`, `mapa`, `limite`) are kept. A bare `/` is the default view, and an explicit `?point=nov2026-1300` is normalised to `/` (`web/src/cascade/url.ts`).
 
 With `VITE_MAPBOX_TOKEN` in `web/.env.local` (git-ignored) the basemap is Mapbox. Without it, the offline Chile outline is used.
 
 ## 3. 2D and 3D views
 
-The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`).
+The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The map controls also have **Ver todo Chile**, which returns the camera to the initial fit. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`).
 
 ## 4. How to use it
 
-Layout (Paper "Design v5", `docs/design.md` section 3.2): a 200 px nav rail, a 440 px panel docked next to it with four tabs, the timeline card under the panel, a time pill at the top of the map, map controls at the top right, and the legend with the scale bar at the bottom right.
+Layout (Paper "Design v5", `docs/design.md` section 3.2, with the Design v6 rail and line colors of section 3.3): a 200 px nav rail, a 440 px panel docked next to it with four tabs, the timeline card under the panel, map controls at the top right, and the legend with the scale bar at the bottom right.
 
-1. **Time pill** (top of the map): date and clock of the operating point plus the simulated seconds. Click it to choose the operating point; changing it removes the cut.
-2. **Nav rail, Escenarios**: "Apagón 25F" opens the 25F corridor cut (`feb2025-1500`, `R239`); a custom cut shows as "Corte ..." while it is active; "Escenario nuevo" removes the cut. "Fuentes y supuestos" opens the sources and every engine assumption in the panel; "Ayuda" opens what the map draws (section 5). "Validación" is not built yet.
-3. **Tab Red**: size of the whole IDE Energía grid (km of lines, substations, installed MW, km by voltage band) and the detail of the substation you clicked (kV, zone, generation, demand, people, connected lines with their loading; a click on one of those lines cuts it). Line colour shows voltage.
-4. **Click a line** on the map to take it out of service. The panel switches to **Simulación** and line colour switches to load.
-5. **Tab Simulación**: people without supply and their share of the country, lost load, lost generation, the lowest island frequency (or "apagón"), and the numbered event history. Every figure is read at the current second of the timeline, so it grows as the cascade plays (section 5.1). A click on an event jumps to it. The "N supuestos en esta simulación" row opens the assumptions.
-6. **Timeline card**: clock with tenths, the frequency of each island, speed (1x, 2x, 4x), play, pause or repeat, and the rail. The rail spans the whole timeline (`duration_s`, usually 20 to 29 s) with the numbered event markers at their true times; events whose markers would overlap share one ("1·2", "1–11"). The curves above the rail are the island frequencies on a fixed scale (y = 11 - 4 x (Hz - 50) in 22 px), drawn up to the current second; red means the island fell below 49 Hz. Drag the rail, click a marker, or use the arrow keys (Shift for 1 s steps), Home and End.
+1. **Nav rail, Escenarios**: two folders. **Desastres** holds real events (`DISASTERS` in `Scenarios.tsx`, each an operating point plus the changes it applies, simulated through `POST /api/v1/grids/simulate` when it is more than one line):
+
+   | Entry | Point | Changes | Model | Real event |
+   |---|---|---|---|---|
+   | Apagón 25F | `feb2025-1500` | cut `R239` (Nueva Maitencillo – Nueva Pan de Azúcar 500 kV) | 16.8 M people, 11,096 of 11,096 MW | about 19 M (98.5 %) |
+   | Apagón 2011 · Ancoa | `nov2026-2000` | cut `R006` (Alto Jahuel – Ancoa 500 kV) | 3.2 M people, 2,118 of 10,934 MW, 5 stages | 24 Sep 2011, 9.8 M people, Coquimbo to Maule; a 500/220 kV transformer failed at S/E Ancoa ([Wikipedia](https://es.wikipedia.org/wiki/Apag%C3%B3n_de_Chile_de_2011)) |
+   | Terremoto 2010 · Charrúa | `nov2026-2000` | S/E Charrúa (`B043`) out of service | 4.1 M people, 2,410 of 10,934 MW, 2 stages | 14 Mar 2010, more than 13 M people, the whole SIC; a transformer damaged by the 27F earthquake failed |
+
+   ASSUMPTION: 2011 and 2010 are analogues on today's network at the closest hour we have (the 2026 evening peak), not reproductions: the reduced network folds transformers into lines, the post-earthquake damage is not in the repo, and the 2010 SIC was not joined to the north. Measured 2026-11-22. Issue #35 lists how to bring Charrúa closer to the real event. The cuts the user makes are not scenarios: they go to the tab Estado de la red. **Benchmark** holds the operating conditions with no cut, other than the 25F's own point: "Demanda mínima", "Mediodía solar" and "Punta nocturna", each with its date. Clicking an entry opens it (Benchmark on the Red tab with line colour Tensión, Desastres on Simulación with Carga). A bare `/` opens Mediodía solar with Chile alone; the selected background marks the active one. A cut on another hour is made by picking a Benchmark condition and cutting a line on the map. If the cache has no timeline for that cut at the point, the app shows the base case and a note. If the tree does not fit, it scrolls and "Ayuda" stays at the bottom. Code: `web/src/cascade/Scenarios.tsx`; the names and date lines come from `conditionName` and `conditionDate` in `text.ts`. "Fuentes de la grilla" below it picks the networks that make up the grid (docs/grids.md).
+2. **Nav rail, other items**: "Fuentes y supuestos" opens the sources and every engine assumption in the panel; "Ayuda" opens what the map draws (section 5). "Validación" is not built yet.
+3. **Tab Red**: size of the whole IDE Energía grid (km of lines, substations, installed MW, km by voltage band). Line colour shows voltage.
+4. **Select and cut.** A single click on a line or a substation selects it at once (white halo on a line, larger outlined dot on a substation) and its card opens at the top of the panel, in whichever tab is open; selecting never switches tabs or the line colour, and it leaves Ayuda or Fuentes. Clicking empty map or pressing Escape clears it. The line card shows voltage, the model branches folded into the corridor (not physical circuits), capacity, flow with its direction, loading and status at the current second (en servicio, sobrecargada, fuera de servicio, sin tensión; a line exactly at 100 % reads "al límite"), its two end substations (a click selects them) and the button **Sacar de servicio**. A **double click** on a line does the same as the button. The cut line's card and the impact card offer **Reponer línea**, which returns to the base case at the same point. A cut clears the selection and switches the panel to **Simulación** and line colour to load, so the impact card is at the top. The substation card shows kV, zone, generation, demand, people and its connected lines with their loading; a click on one of those lines selects it. Its button **Apagar esta subestación** (or a double click on the substation) takes it out of service with its demand and generation; it is one more change in Estado de la red, simulated together with the others through `POST /api/v1/grids/simulate` (docs/grids.md). In a session it opens that substation's lines instead (section 11). A link `?cut=sub-B012` opens with that substation out of service. While it is out, its card and the impact card offer **Encender subestación**. The cache still holds `<point>/sub-B###.json` (every line of that bus opened at t = 0, built by `cascadasen-cache`); the app no longer reads it. How clicks arrive on each basemap: `web/src/cascade/clicks.ts`.
+5. **Tab Simulación**: people without supply and their share of the country, lost load, lost generation, the lowest island frequency (or "apagón"), and the numbered event history. When the cascade has played out and the engine found nobody without supply and no lost load, the card says "El sistema resiste este corte" instead of a large 0 (204 of the 273 cuts at `nov2026-1300`). Every figure is read at the current second of the timeline, so it grows as the cascade plays (section 5.1). A click on an event jumps to it. The "N supuestos en esta simulación" row opens the assumptions.
+6. **Timeline card**: clock with tenths, the frequency of each island, speed (1x, 2x, 4x), play, pause or repeat, and the rail. The rail spans the whole timeline (`duration_s`, usually 20 to 29 s) with the numbered event markers at their true times; events whose markers would overlap share one ("1·2", "1–11"). The curves above the rail are the island frequencies on a fixed scale (y = 11 - 4 x (Hz - 50) in 22 px), drawn up to the current second; red means the island fell below 49 Hz. Drag the rail, click a marker, or use the arrow keys (Shift for 1 s steps), Home and End. The space bar plays or pauses when no form control or button has focus. With no cut the card says how to start one.
 7. **Map pins and callout**: the same event numbers appear on the map where the event happens (the cut or tripped line, the centroid of the zone that sheds load, the centroid of the area that goes dark). The latest event with a place is red and has a callout with people without supply and lost load; the first event keeps a short label. Events without a place (an island forms, an island stabilises) appear only in the history and on the rail.
 8. **Legend** (bottom right): "Color de líneas" switches between Tensión and Carga. The Tensión legend lists only the voltage tiers in the model network; the Carga legend always lists six items and dims the ones absent from the current frame.
-9. **"Qué lo habría evitado" and "Validación"** tabs are shown as in the design but disabled: the engine does not compute them yet.
+9. **Tabs outside a session:** **Estado de la red** (first), **Red** and **Simulación**. "Qué lo habría evitado" and "Validación" are not built yet and are not shown, so the tabs fit the 440 px panel. **Estado de la red** starts with "Resultado de la caída" (people without power and % of the country, MW lost, generation lost, islands that went dark: the same figures Simulación shows at its last second, and the cost from `POST /api/v1/grids/cost`, pending until issue #82 is built). It lists every change the user made (lines cut and substations out of service), each with **Reponer**, and **Reponer todo**. A new cut or outage adds to the list, never replaces it. A double click on a substation takes it out of service like on a line (a shared session keeps its own edits in Datos). With no change or one line the app reads the precalculated timeline from `web/public/cache`; with more it calls `POST /api/v1/grids/simulate` and plays the timeline it returns (docs/grids.md). Code: `web/src/cascade/{edits.ts,NetworkState.tsx}`.
+10. **Prender todo** (top right, left of the map controls): one step back to the full, energised network. It shows from every tab and from Ayuda, Fuentes and Sesión. It clears every cut, the selection and the notice, and puts the timeline at 0, paused. It clears the list in Estado de la red (lines and substations) and keeps the operating point, so the rail shows the Benchmark entry of that hour and the URL drops `cut`. The tab, the line colour and the 2D/3D view do not change. It is disabled ("No hay nada apagado ni editado.") while no change is in force; a selection or a timeline position alone does not enable it. Code: `web/src/cascade/powerAll.ts` (`canPowerAll`, `powerAll`). Session behaviour: section 11.
 
 ## 5. Legend (what the map draws)
 
 | Element | Meaning |
 |---|---|
-| Line colour, Red tab | Voltage: 500 kV near-white, 154 to 345 kV orange, 100 to 110 kV blue, 44 to 69 kV steel blue, medium voltage gray |
-| Line colour, Simulación tab | Loading at the current second: under 50 % gray, 50 to 75 % light gray, 75 to 100 % pale red, over 100 % red and thicker |
+| Line colour, Red tab | Voltage, in cold colors that get brighter with kV: 500 kV white, 154 to 345 kV light cyan, 100 to 110 kV blue, 44 to 69 kV deep blue, medium voltage gray |
+| Line colour, Simulación tab | Loading at the current second, as a traffic light: under 50 % green, 50 to 75 % yellow, 75 to 100 % orange, over 100 % red and thicker. Red is always failure |
 | Near-black line with a faint outline | "sin tensión": both ends are without supply |
-| Dashed gray line | "fuera": cut by you or tripped by overload (over 120 %) |
+| Dashed gray line | "fuera": cut by you or tripped by overload (over 120 %). Drawn above the live lines, so a cut line stays visible next to a parallel overloaded one |
 | Line width | Always voltage: 500 kV, 154 to 345 kV, lower |
 | Moving white dots | Direction of flow. Only lines with 60 MW or more |
-| Substation dot | Light gray = with supply (larger: 500 kV), near-black with an outline = without supply |
+| Substation dot | Light gray = with supply (larger: 500 kV), red with a dark outline = without supply |
 | Cream disc or column | Demand of the substation (off by default) |
 | Numbered pins | Events, the same numbers as the history and the timeline |
 
-The map legend, the "Ayuda" view and the layers share the constants in `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `LOAD_BANDS`, `DEAD_LINE`, `OPEN_LINE`), so they cannot drift apart. The panel's "Líneas por tensión" card uses `VOLTAGE_BANDS` in `networkSummary.ts`, which counts the whole IDE Energía grid rather than the 273-line model.
+The map legend, the "Ayuda" view and the layers share the constants in `web/src/cascade/layers.ts` (`VOLTAGE_TIERS`, `LOAD_BANDS`, `DEAD_LINE`, `OPEN_LINE`, `FAULT`), so they cannot drift apart. The panel's "Líneas por tensión" card uses `VOLTAGE_BANDS` in `networkSummary.ts`, which takes its labels, kV limits and colors from `VOLTAGE_TIERS` and counts the whole IDE Energía grid rather than the 273-line model. The other countries' lines and substations (`web/src/map/regional.ts`) read the same `VOLTAGE_TIERS` and `NODE_COLOR`; in the load view their lines are neutral gray (`REGIONAL_NO_LOAD`) because they carry no load.
 
 Not drawn: generation per plant, transformers, voltage and reactive power, networks below 66 kV, and the 1,930 original map lines of mapas 1 and 2.
 
@@ -174,13 +183,12 @@ The cache stores one frame per network stage and events with their own times (`w
 
 ![25F cut](images/mapa3-25f.jpg)
 
-EVIDENCE (engine output, `feb2025-1500`, cut `R239` Nueva Maitencillo-Nueva Pan de Azúcar 500 kV, 2,210 MVA). Re-measured 2026-11-21: 3.8 million people without power, 1,972 of 11,096 MW (18%), 2 stages, islands `voltage_limited` (uncertain). The bullets below and the figures 15.2 M and 7,872 MW come from an earlier run and are out of date (cause not investigated):
-- 15.2 million people without power, 7,872 of 11,096 MW (71%), 2 stages.
+EVIDENCE (engine output, `feb2025-1500`, cut `R239` Nueva Maitencillo-Nueva Pan de Azúcar 500 kV, 2,210 MVA; re-measured 2026-11-22):
 - 1.0 s: Pan de Azúcar-Punta Colorada 220 kV passes 120% and opens.
-- 2.0 s: Maitencillo-Pan de Azúcar 110 kV passes 120% and opens.
-- Two islands: centro-sur with a 2,205 MW deficit (the CEN report says 2,114 MW) and the north with a surplus.
-- The centro-sur island sheds load by EDAC and its frequency falls under 47.5 Hz.
-- The north's voltage collapse is not computed.
+- 2.0 s: Maitencillo-Pan de Azúcar 110 kV passes 120% and opens; the corridor separates into a centro-sur island (115 substations, 7,872 MW of load) and a north island (73 substations, 3,223 MW).
+- The pre-fault flow across the corridor was 2,209 MW N→S, over the 1,600 MW limit of the defence scheme, so both islands collapse by voltage (a rule, `engine.md` 6).
+- 16.8 million people without power, 11,096 of 11,096 MW (100%), 2 stages. The real 25F: about 19 M people (98.5%).
+- Estado de la red lists the user's cut apart from these consequences (lines opened by overload and islands that went dark, with their second).
 
 The same cut at `feb2025-0300` loses only 631 MW. Solar is off at night and coal and hydro run (EVIDENCE: carrier table above). ASSUMPTION: the corridor carries less and the system has more inertia, which explains the smaller loss. Do not present these numbers as a forecast.
 
@@ -194,7 +202,7 @@ The same cut at `feb2025-0300` loses only 631 MW. Solar is off at night and coal
 - Reserve 4% of online synchronous MW, damping 1.5 %/Hz, blackout under 47.5 Hz: ASSUMPTION except the 47.5 Hz limit (CEN 25F report).
 - No ride-through trips, no batteries, no HVDC, no operator actions, no restoration.
 - Storage in PyPSA-CL named `<TYPE>_<node>_<h>h` is expansion candidates, not real batteries.
-- A click cuts a whole merged corridor, not one circuit.
+- A cut takes out a whole merged corridor, not one circuit.
 - Not calibrated against the 25F numbers beyond the one comparison above.
 - The reduction (188 buses) contradicts the 10 to 14 aggregated nodes in `docs/stack.md`. The engine follows the reduction.
 
@@ -212,7 +220,11 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/public/cache/network-<year>.json` | The 188 substations and 273 lines |
 | `web/public/cache/<point>/buses.json` | Generation, demand, people per substation |
 | `web/public/cache/<point>/baseline.json` and `<line id>.json` | One timeline per cut: events, frames, frequency curves, summary |
-| `web/src/cascade/CascadeApp.tsx` | Design v5 shell: state, animation loop (clock, layers, HTML overlays), rail, panel, time pill, controls |
+| `web/src/cascade/Scenarios.tsx` | Escenarios in the rail: Desastres (cuts) and Benchmark (operating conditions without a cut) |
+| `web/src/cascade/CascadeApp.tsx` | Design v5 shell: state (selection, cut, point), animation loop (clock, layers, HTML overlays), keyboard, rail, panel, controls |
+| `web/src/cascade/powerAll.ts` | Pure rules of **Prender todo**: when it is enabled (`canPowerAll`) and what it resets (`powerAll`) |
+| `web/src/cascade/clicks.ts` | Pure click interpreter: single click selects, double click on a line cuts once on both basemaps |
+| `web/src/cascade/SelectionCard.tsx` | Card of the selected line or substation, at the top of the panel |
 | `web/src/cascade/simulation.ts` | Reads a timeline at second t: dark set, impact, island frequency, event markers and their map places |
 | `web/src/cascade/layers.ts` | deck.gl layers and colour constants |
 | `web/src/cascade/NetworkPanel.tsx`, `SimulationPanel.tsx` | Tabs Red and Simulación |
@@ -220,6 +232,7 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/src/cascade/Legend.tsx` | "Ayuda" and "Fuentes y supuestos" views |
 | `web/src/cascade/text.ts` | Spanish narration of events, place names, number and clock formats |
 | `web/src/cascade/cascade.css` | Styles of the shell (Design v5 tokens) |
+| `web/src/assistant/` | **Asistente** rail item: chat with the in-app assistant, its steps live, the map following its session (`docs/assistant.md` section 2c) |
 | `web/src/map/shapes.ts` | Outline of the rectangular bars |
 
 The frontend only reads files. All physics is in `backend/src/cascadasen/domain/cascade/`.
@@ -240,7 +253,8 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 | Red note "Falta la caché ..." | The cache is missing. Run `cascadasen-cache`. |
 | Offline outline instead of Mapbox | No `VITE_MAPBOX_TOKEN` in `web/.env.local`, or the token is invalid. Restart `npm run dev` after editing. |
 | Blank map, console shows `deck: ... Assertion failed` | A `ColumnLayer` with custom `vertices` needs `diskResolution` equal to the vertex count (4). Fixed in `layers.ts`. |
-| Click does nothing | You clicked off a line. Zoom in. Lines are thin. |
+| Click does nothing | You clicked off a line (the cursor turns into a pointer over anything clickable). Zoom in. Lines are thin. A single click only selects: the card opens at the top of the panel. To cut, double click the line or use "Sacar de servicio" in its card. |
+| Double click zooms instead of cutting | It was on empty map, where double-click zoom stays (Mapbox, mouse). On a touch screen Mapbox double-tap zoom is off, and the offline map has no double-click zoom. |
 | Never commit | `web/public/cache`, `.env*`, `data/raw` |
 
 ## 10. Glossary
@@ -296,3 +310,26 @@ interface TheaterSnapshot {                         // one per 5-min cycle: POST
 **Offline index** (`cache/theater/index.json`): `{points, runs: [{file, point, template, policy, seed, adversary}], notice}`. Each run file holds `{run, recipe, snapshots, report, after_action, trace_head}`.
 
 Never shown: the adversary's learned weights or any ranking of areas or elements. Every run carries the notice "Escenario hipotético: se modela el efecto, no el ataque."
+
+## 11. Session mode: a shared, editable copy of the network
+Without a session, mapa 3 reads only the static cache (`web/public/cache/`) and makes no `/api` request, so it works with no backend. With a session it reads the sessions API (`docs/sessions-api.md`) through `/api`, which the Vite dev server proxies to the backend (`VITE_API_TARGET`, default `http://localhost:8000`; docker compose sets `http://backend:8000`). In production CloudFront and the ALB already route `/api/*` to the backend (`docs/infrastructure.md`), but until the sessions bucket and task role are applied the deployed backend keeps sessions in memory (`CASCADASEN_SESSION_STORE` defaults to `memory`), so they are lost on every restart or deploy. Test session mode on the local stack until then.
+
+**Sources.**
+| Mode | Network and buses | Timeline | Point |
+|---|---|---|---|
+| No session (`/`) | `cache/network-<year>.json`, `cache/<point>/buses.json` | `cache/<point>/<cut>.json` | Time pill |
+| Session (`/?sesion=<sid>`) | `GET /api/v1/sessions/{sid}/network` | `GET /api/v1/sessions/{sid}/state` (the shared sandbox cut) | Pinned by the session; the conditions in the rail tree are disabled |
+
+**Entering and sharing.** Without a session the visible additions to the Design v5 shell are the rail items **Sesión compartida** and, below it, **Asistente** (the in-app assistant chat, `docs/assistant.md` section 2c; it joins the session the assistant edits). It opens a panel view with **Crear sesión** (`POST /sessions`) and **Unirse** (paste the id or the link, then **Unirse** or **Cancelar**); creating or joining from there opens the **Datos** tab. In a session the same view shows the id, **Copiar enlace** (`<origin>/?sesion=<sid>`) and **Salir**, and the panel head shows a session strip under the crumbs: `Sesión <first 6 chars>`, the revision (`rev. N`), the live mode and **Copiar enlace** (**Copiado** for 1.5 s). The live mode is **en vivo** (SSE stream `GET /{sid}/events`) or **sondeo** (no `EventSource`, or the stream gave up: `GET /{sid}` every 2 s with `If-None-Match`). The id lives only in the URL (`?sesion=`), so a bare `/` never rejoins a session or calls `/api`; **Salir** removes it. A session that no longer exists (404) is forgotten and the map falls back to the cache. When the `dataset_revision` changes the page refetches the session, the network and the state; run activity (`run_created`, `run_updated`) refetches only the session document. When refetches overlap (`web/src/session/loader.ts`), the network and state of the newest full refetch are always applied, and a session document only when no newer document read started, so a run event during a dataset refresh no longer drops the new network.
+
+**Cuts in a session.** A double click on a line, or **Sacar de servicio** in its selection card, calls `POST /{sid}/cut` with that line: it opens for everyone in the session and stays open until someone repairs it. **Reponer línea** in the selection card of an open line repairs that line; **Reponer línea**/**Reponer líneas** in the impact card repairs every open line (`{all: true}`). **Simulación** starts with the card **Líneas abiertas en la sesión · N**, which lists the open lines with **Reparar** (`POST /{sid}/repair {lines}`) and **Reparar todo** (`{all: true}`) and shows the notice the API returns; the impact card names every open line after `Corte:`. The session pins the operating point and owns the cut, so the Escenarios tree in the rail is locked (`ScenarioTree` with `locked`): the folders only fold and unfold, and every entry except the active one is disabled with the tooltip "En una sesión el punto está fijo; corta y repara líneas en el mapa y en Simulación.". The active entry is "Apagón 25F" when `R239` is the only open line, otherwise the Benchmark condition of the session's point. The URL keeps `?sesion=` (and `vista`) and drops `point` and `cut`. **Apagar esta subestación** in a session sends that substation's lines that are still closed in one `POST /{sid}/cut`; the session then holds them as ordinary open lines (there is no `sub-` id in a session). The card reads **Encender subestación** while all its lines are open, and it repairs exactly those lines. **Prender todo** (section 4, item 9) asks "¿Prender toda la red? Repara todas las líneas abiertas para todos los participantes de la sesión." and, on OK, repairs every open line (`POST /{sid}/repair {all: true}`) and clears the selection and the timeline. Session dataset edits stay; **Restablecer** in Datos is what drops them.
+
+**Tabs in a session:** **Red**, **Simulación** and **Datos**. The two placeholder tabs (Qué lo habría evitado, Validación) are hidden in a session so the three tabs fit the 440 px panel; without a session the tabs are main's four and there is no Datos tab.
+
+**Tab Datos** (only in a session): the session's copy of the network. Until the network arrives it shows "Cargando la sesión…".
+- Header: the session's base case without cuts (`baseline`: highest line loading, overloaded lines, MW shed), each redispatch (`balance`) and every warning. **Restablecer** (`POST /{sid}/reset`) drops all session edits after a confirmation.
+- Sub-tabs **Barras**, **Líneas**, **Generadores** and **Cargas y datacenters**: add forms, a list with an origin tag (`base` or `sesión`) and the label **supuesto (sesión)** on every session or overridden value, and per element a form that sends only the changed fields (`PATCH`), **Fuera de servicio** / **Poner en servicio** (`in_service`) and **Borrar** for session elements (base elements cannot be deleted).
+- **Elegir en el mapa** turns the next map click into the latitude and longitude of the form. For a load or datacenter, **Conectar a la subestación ≥220 kV más cercana** picks the nearest in-service bus of 220 kV or more (`web/src/session/geo.ts`, great-circle distance). That is the only geometry the browser computes; balance and cascades come from the API.
+- Edits send `If-Match` with the `dataset_revision` on screen. If another client changed the dataset first (412), the page reloads and asks you to retry. Run activity by other clients does not cause a 412. Every session request that gets the busy 409 (`sessions-api.md` section 7) waits `Retry-After` and is retried up to 2 times. Once the write is accepted the edit counts as done (the form closes) even if the reload after it still fails; the page then shows that reload error and keeps the network on screen until the next revision event reloads it. A busy 409 on the first load keeps the session and retries the load every 3 s; network errors and 5xx fall back to the base case. Overlay warnings in **Datos** use a neutral note, because red is reserved for faults.
+
+**Files.** `web/src/session/sessionApi.ts` (typed calls for every session route, `ApiError`, `sessionIdFrom`, `subscribe`), `useSession.ts` (state and refetch), `loader.ts` (which refetch result is applied), `SessionBar.tsx` (the view card and the compact strip), `SessionCut.tsx` (open lines in Simulación), `DataPanel.tsx`, `geo.ts`, and `session.css` (session styles under `.shell`: radius 0, cascade.css tokens, `.tag` for labels because `.shell .badge` is the event marker). `CascadeApp.tsx` wires them into the shell.
