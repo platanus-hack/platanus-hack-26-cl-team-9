@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -156,3 +158,21 @@ def test_prefault_health_reuses_given_n1_results_without_new_runs(monkeypatch):
     cost = report.as_dict()["cost"]
     assert cost["n1_worst_cost_usd"] == pytest.approx(150.0 * USD_PER_MW)
     assert cost["n1_expected_cost_usd"] == pytest.approx(75.0 * USD_PER_MW)
+
+
+def test_cache_writes_health_json_and_event_health_without_extra_runs(tmp_path, monkeypatch):
+    from cascadasen.application import cache_builder
+
+    net, op = _toy()
+    monkeypatch.setattr(cache_builder, "load_network_and_point", lambda *_: (net, op))
+    calls = []
+    real = cache_builder.run_cascade_workflow
+    monkeypatch.setattr(cache_builder, "run_cascade_workflow", lambda *a: calls.append(a) or real(*a))
+    cache_builder._build_point(tmp_path, tmp_path, {"id": "toy", "year": 2026})
+    prefault = json.loads((tmp_path / "toy" / "health.json").read_text())
+    assert prefault["kind"] == "prefault" and "n1_expected_cost_usd" in prefault["cost"]
+    cut = json.loads((tmp_path / "toy" / "R0.json").read_text())
+    assert cut["health"]["kind"] == "event"
+    assert cut["health"]["cost"]["cost_usd"] == cut["summary"]["failure_cost_usd"]
+    # baseline + one run per line + one per substation: health.json adds none
+    assert len(calls) == 1 + len(net.lines) + net.size

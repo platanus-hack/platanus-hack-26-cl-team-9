@@ -325,6 +325,12 @@ def event_report(summary: dict, scenario: str, cut: list[str]) -> HealthReport:
     )
 
 
+def with_event_health(timeline: dict) -> dict:
+    """Attach the after-cut report (index and cost) to a cascade timeline as `health`, from its summary."""
+    report = event_report(timeline["summary"], timeline["scenario"], list(timeline["failed_elements"]))
+    return {**timeline, "health": report.as_dict()}
+
+
 def event_health(net: ReducedNetwork, op: OperatingPoint, cut_line_ids: list[str]) -> HealthReport:
     """Index of the state after cutting `cut_line_ids`."""
     return event_report(run_cascade_workflow(net, op, cut_line_ids)["summary"], op.id, cut_line_ids)
@@ -343,4 +349,5 @@ __all__ = [
     "n1_cost",
     "n1_margins",
     "prefault_health",
+    "with_event_health",
 ]

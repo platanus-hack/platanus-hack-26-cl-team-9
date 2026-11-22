@@ -6,7 +6,8 @@ Layout under the output folder:
   network-<year>.json             reduced network: nodes and lines with ids, coordinates and the map ids behind them
   <point>/buses.json              generation, load and people per bus before the cut
   <point>/baseline.json           the secure base case (no cut)
-  <point>/<line id>.json          the cascade for cutting that line
+  <point>/health.json             pre-fault health index and N-1 money at risk (docs/health.md), from the line cuts below
+  <point>/<line id>.json          the cascade for cutting that line, with `health` (after-cut index and cost)
   <point>/sub-<bus id>.json       the cascade for shutting down that substation: every line of the bus opens at t = 0
 """
 
@@ -17,6 +18,7 @@ import json
 from pathlib import Path
 
 from cascadasen.domain.cascade.engine import ASSUMPTIONS, run_cascade_workflow
+from cascadasen.domain.cascade.health import prefault_health, with_event_health
 from cascadasen.domain.cascade.network import ReducedNetwork
 from cascadasen.domain.cascade.scenario import load_network_and_point
 
@@ -55,13 +57,18 @@ def _build_point(processed: Path, out: Path, point: dict) -> dict:
         },
     )
     _write(folder / "baseline.json", run_cascade_workflow(net, op, []))
+    n1: list[tuple[str, float]] = []
     for line in net.lines:
-        _write(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
+        timeline = run_cascade_workflow(net, op, [line.id])
+        n1.append((line.id, float(timeline["summary"]["load_shed_mw"])))
+        _write(folder / f"{line.id}.json", with_event_health(timeline))
+    # the single-line runs above feed the N-1 margins and cost: no cut runs twice
+    _write(folder / "health.json", prefault_health(net, op, n1_results=n1).as_dict())
     substations = 0
     for i in range(net.size):
         ids = [ln.id for ln in net.lines if i in (ln.a, ln.b)]
         if ids:
-            _write(folder / f"sub-B{i:03d}.json", run_cascade_workflow(net, op, ids))
+            _write(folder / f"sub-B{i:03d}.json", with_event_health(run_cascade_workflow(net, op, ids)))
             substations += 1
     return {"lines": len(net.lines), "substations": substations}
 

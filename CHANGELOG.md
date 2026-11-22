@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(cache): health.json and event health per timeline
+
+- **Changed:** `cascadasen-cache` writes `<point>/health.json` = `prefault_health(net, op, n1_results=...)`, fed by the single-line runs `_build_point` already makes (no extra run). Every `<line>.json` and `sub-B###.json` gains `health`: the after-cut report with its `cost`.
+- **Changed:** New `with_event_health(timeline)` in `domain/cascade/health.py` attaches `health` from the timeline summary. The session sandbox timeline (`application/sessions.py::_timeline`) uses it too, so session cuts carry the same field.
+- **Why:** Issue #72: the web reads the index and the cost from the cache (no server for static cuts).
+- **Agents:** `health` and `health.json` are optional for the web: an old cache without them must keep working. `baseline.json` has no `health`. The cache is regenerated in the next commit. Test: `test_cache_writes_health_json_and_event_health_without_extra_runs` counts the runs.
+- **Files:** `backend/src/cascadasen/application/{cache_builder.py,sessions.py}`, `backend/src/cascadasen/domain/cascade/health.py`, `backend/tests/unit/test_health.py`.
+
 ## 2026-11-21 · test(health): 25F cost validation
 
 - **Changed:** `tests/validation/test_health_25f.py` pins the cost figures: R239 at `feb2025-1500` about US$ 69 M (a floor, uncertain), a full blackout of 11,096 MW x 4 h about US$ 390 M, about 10.1 h of full blackout to reach the press estimate of US$ 984 M, and N-1 expected US$ 3.5 M / worst US$ 72.6 M. Run with `-s` to print them.
