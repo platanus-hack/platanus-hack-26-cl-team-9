@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from cascadasen.domain.theater.cycle import AdversaryConfig
+
 
 class AreaOut(BaseModel):
     id: str = Field(description="Área de operación A01-A13 (docs/strategy.md 2.1)")
@@ -164,6 +166,12 @@ class RunCreate(BaseModel):
         examples=[True],
     )
 
+    def config_dict(self) -> dict[str, Any]:
+        """The body as the plain dict `run_config` reads (without `auto_run`, events dumped)."""
+        data = self.model_dump(exclude={"auto_run"})
+        data["initial_events"] = [e.model_dump() for e in self.initial_events]
+        return data
+
 
 class StepIn(BaseModel):
     cycles: int = Field(1, ge=1, le=72, description="Cycles of 5 minutes to advance", examples=[3])
@@ -180,6 +188,18 @@ class ReplayIn(BaseModel):
     cycles: int | None = Field(
         None, ge=1, le=72, description="Cycles to play; default is what the original played", examples=[6]
     )
+
+    def overrides(self) -> dict[str, Any]:
+        """The run-config fields this replay changes, as `RunManager.replay` expects them."""
+        out: dict[str, Any] = {}
+        for key in ("policy", "uncertainty", "seed"):
+            if getattr(self, key) is not None:
+                out[key] = getattr(self, key)
+        if self.adversary is not None:
+            out["adversary"] = AdversaryConfig(**self.adversary.model_dump())
+        if self.capabilities is not None:
+            out["capabilities"] = tuple(sorted(self.capabilities.items()))
+        return out
 
 
 class RunSummary(BaseModel):

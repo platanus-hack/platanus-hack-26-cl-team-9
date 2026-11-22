@@ -44,7 +44,6 @@ from cascadasen.application.sessions import (
 )
 from cascadasen.domain.cascade.overlay import OverlayError
 from cascadasen.domain.ports import ConflictError
-from cascadasen.domain.theater.cycle import AdversaryConfig
 from cascadasen.infrastructure.settings import Settings
 
 router = APIRouter(prefix="/api/v1/sessions")
@@ -606,9 +605,7 @@ def create_run(
     request: Request, response: Response, sid: Sid, svc: Sessions, body: RunCreate, agent: Agent = "anon"
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    data = body.model_dump(exclude={"auto_run"})
-    data["initial_events"] = [e.model_dump() for e in body.initial_events]
-    return _run_etag(response, session_call(svc.create_run, sid, data, body.auto_run, agent))
+    return _run_etag(response, session_call(svc.create_run, sid, body.config_dict(), body.auto_run, agent))
 
 
 @router.get(
@@ -736,15 +733,7 @@ def replay_run(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    overrides: dict[str, Any] = {}
-    for key in ("policy", "uncertainty", "seed"):
-        if getattr(body, key) is not None:
-            overrides[key] = getattr(body, key)
-    if body.adversary is not None:
-        overrides["adversary"] = AdversaryConfig(**body.adversary.model_dump())
-    if body.capabilities is not None:
-        overrides["capabilities"] = tuple(sorted(body.capabilities.items()))
-    out = session_call(svc.run_command, sid, rid, "replay", overrides, body.cycles, by=agent)
+    out = session_call(svc.run_command, sid, rid, "replay", body.overrides(), body.cycles, by=agent)
     return _run_etag(response, out)
 
 
