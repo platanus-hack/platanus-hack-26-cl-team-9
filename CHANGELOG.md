@@ -1,5 +1,19 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · fix(web): fecha real de los desastres 2011 y 2010 (#115)
+
+- **Changed:** The Desastres entries "Apagón 2011 · Ancoa" and "Terremoto 2010 · Charrúa" show the date of the real event (24 sep 2011 · 20:31, 14 mar 2010 · 20:43) instead of the date of the 2026 hour they run on. `Disaster` gets an optional `date`.
+- **Why:** the small date under each entry read "nov 2026", which looked like the event date. Sources: Transelec (falla en S/E Ancoa a las 20:31 del 24 sep 2011) and BioBioChile (apagón total del SIC a las 20:43 del 14 mar 2010, transformador de Charrúa dañado por el 27F).
+- **Agents:** the analogues still run at `nov2026-2000`; only the label changed. The 25F keeps the date of its own point.
+- **Files:** `web/src/cascade/{Scenarios.tsx,scenarios.test.ts}`.
+
+## 2026-11-22 · chore(web): quitar la vista 3D del mapa, solo 2D (#115)
+
+- **Changed:** The **Vista 2D | 3D** switch of the layers panel is gone and the main map is always 2D. `?vista=3d` is no longer written, and an old link with it opens the 2D map (the param is dropped).
+- **Why:** product decision: only the 2D map.
+- **Agents:** `UrlState` has no `mode`. `CascadeApp` keeps `mode = "2d"` as a constant, so the 3D branches in `map/baseMap.ts` and `cascade/layers.ts` are unreachable; the deprecated `?mapa=1` and `?mapa=2` maps still tilt. `docs/mapa3.md` sections 2, 3, 4 and 11 updated.
+- **Files:** `web/src/cascade/{CascadeApp.tsx,url.ts,url.test.ts}`, `docs/mapa3.md`.
+
 ## 2026-11-22 · test(mcp): follow #110 (places, named substations) and re-point the doc references
 - **Changed:** Three tests of `tests/unit/test_mcp_tools.py` that this branch added now match what #110 changed, with no change to `src/`: `prepare_digest` names up to five substations (`at`) and warns when a change touched none, `add_generator` resolves the place through `GET /grids/places`, and the substations of a change are dicts (`id`, `name`). 15 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` moved with `assistant_routes.py`, `llm_tools.py`, `mcp/digest.py` and `mcp/toolbox.py`. The index is regenerated.
 - **Why:** The merge of `main` brought #110. Upstream CI runs without the `mcp` extra, so tests for the MCP tools were skipped there and could not catch the change; this branch installs the extra, so they run.
