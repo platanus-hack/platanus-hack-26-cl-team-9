@@ -35,7 +35,6 @@ SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{22}$")
 DEFAULT_POINT = "nov2026-1300"
 MAX_RUNS_PER_SESSION = 20
 WRITE_RETRIES = 3
-MAX_CUT_LINES = 3
 CACHE_SIZE = 32
 RUN_COMMANDS = ("state", "inject", "step", "action", "replay", "snapshots", "trace", "report", "after_action")
 MUTATING = frozenset({"inject", "step", "action", "replay"})
@@ -360,8 +359,8 @@ class SessionService:
     def cut(
         self, sid: str, lines: list[str], by: str = "anon", if_revision: int | None = None
     ) -> dict[str, Any]:
-        if not 1 <= len(lines) <= MAX_CUT_LINES:
-            raise ov.OverlayError("lines", f"Corta entre 1 y {MAX_CUT_LINES} líneas por llamada.")
+        if not 1 <= len(lines) <= ov.MAX_CUT_LINES:
+            raise ov.OverlayError("lines", f"Corta entre 1 y {ov.MAX_CUT_LINES} líneas por llamada.")
 
         def fn(doc: dict[str, Any]) -> None:
             self._check_lines(doc, lines)

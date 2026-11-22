@@ -29,6 +29,8 @@ MAX_ADDED = 50  # buses + lines + loads + generators added by one session
 MAX_ELEMENT_MW = 3000.0  # one added load or generator
 MAX_ADDED_MW = 5000.0  # sum of added load and generation, plus the MW changed by bus overrides
 MAX_CAPACITY_MW = 5000.0
+MAX_NAME_LEN = 80  # characters of a display name
+MAX_CUT_LINES = 3  # lines one sandbox cut may open
 LAT = (-56.0, -17.0)
 LON = (-76.0, -66.0)
 X_MAX_PU = 1.0
@@ -570,6 +572,6 @@ def _flag(value: Any, where: str) -> bool:
 
 
 def _name(value: Any, where: str) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > 80:
-        raise OverlayError(where, "Nombre obligatorio de hasta 80 caracteres.")
+    if not isinstance(value, str) or not value.strip() or len(value) > MAX_NAME_LEN:
+        raise OverlayError(where, f"Nombre obligatorio de hasta {MAX_NAME_LEN} caracteres.")
     return value.strip()

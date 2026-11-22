@@ -1,7 +1,10 @@
 """Session overlay on the toy mapa 3 network: validation, ids and the rebalance rule."""
 
+from typing import get_args
+
 import pytest
 
+from cascadasen.api.session_schemas import LoadKind, Tech
 from cascadasen.domain.cascade import overlay as ov
 from cascadasen.domain.cascade.engine import run_cascade_workflow
 from cascadasen.domain.theater.areas import build_theater_network
@@ -152,3 +155,8 @@ def test_a_generation_override_is_not_redispatched_back(base):
 def test_bus_overrides_are_bounded(base, fields):
     with pytest.raises(ov.OverlayError):
         ov.patch(ov.empty_overlay(), "bus", "B000", fields, *base)
+
+
+def test_session_schema_literals_match_the_overlay_sets():
+    assert set(get_args(Tech)) == ov.TECHS
+    assert set(get_args(LoadKind)) == ov.LOAD_KINDS

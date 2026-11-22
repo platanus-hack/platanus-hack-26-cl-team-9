@@ -7,12 +7,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from cascadasen.domain.cascade import overlay as ov
+
 Tech = Literal["hidro", "termica", "bioenergia", "geotermica", "solar", "eolica"]
 LoadKind = Literal["datacenter", "consumo"]
 
-_MW = {"gt": 0, "le": 3000}
-_LAT = {"ge": -56, "le": -17}
-_LON = {"ge": -76, "le": -66}
+_MW = {"gt": 0, "le": int(ov.MAX_ELEMENT_MW)}
+_LAT = {"ge": int(ov.LAT[0]), "le": int(ov.LAT[1])}
+_LON = {"ge": int(ov.LON[0]), "le": int(ov.LON[1])}
 _BUS_MW_MAX = 20000  # coarse schema guard; the overlay checks base value + MAX_ELEMENT_MW
 
 
@@ -28,13 +30,18 @@ class SessionCreate(_Body):
         examples=["nov2026-1300"],
     )
     label: str | None = Field(
-        None, max_length=80, description="Free text shown to the people who join.", examples=["Equipo 9"]
+        None,
+        max_length=ov.MAX_NAME_LEN,
+        description="Free text shown to the people who join.",
+        examples=["Equipo 9"],
     )
 
 
 class BusIn(_Body):
     name: str = Field(
-        max_length=80, description="Display name of the new bus.", examples=["SE Datacenter Norte"]
+        max_length=ov.MAX_NAME_LEN,
+        description="Display name of the new bus.",
+        examples=["SE Datacenter Norte"],
     )
     lat: float = Field(**_LAT, description="Latitude in degrees (continental Chile).", examples=[-33.45])
     lon: float = Field(**_LON, description="Longitude in degrees (continental Chile).", examples=[-70.66])
@@ -44,7 +51,9 @@ class BusIn(_Body):
 
 
 class BusPatch(_Body):
-    name: str | None = Field(None, max_length=80, description="New display name.", examples=["SE Renombrada"])
+    name: str | None = Field(
+        None, max_length=ov.MAX_NAME_LEN, description="New display name.", examples=["SE Renombrada"]
+    )
     kv: float | None = Field(None, gt=0, description="New voltage in kV (a base voltage).", examples=[500])
     lat: float | None = Field(None, **_LAT, description="New latitude in degrees.", examples=[-33.4])
     lon: float | None = Field(None, **_LON, description="New longitude in degrees.", examples=[-70.6])
@@ -73,7 +82,7 @@ class BusPatch(_Body):
     inertia_mws: float | None = Field(
         None,
         ge=0,
-        le=10 * _BUS_MW_MAX,
+        le=int(ov.MAX_INERTIA_H) * _BUS_MW_MAX,
         description="Inertia at the bus in MW·s (at most 10 s × sync_mw).",
         examples=[800],
     )
@@ -86,20 +95,28 @@ class LineIn(_Body):
     a: str = Field(description="From bus id (B###), from GET /network nodes.", examples=["B010"])
     b: str = Field(description="To bus id (B###), different from a.", examples=["B188"])
     kv: float = Field(gt=0, description="Voltage in kV; a base network voltage.", examples=[220])
-    capacity_mw: float = Field(gt=0, le=5000, description="Thermal capacity in MW.", examples=[500])
+    capacity_mw: float = Field(
+        gt=0, le=int(ov.MAX_CAPACITY_MW), description="Thermal capacity in MW.", examples=[500]
+    )
     x_pu: float | None = Field(
         None,
         gt=0,
-        le=1.0,
+        le=ov.X_MAX_PU,
         description="Reactance in p.u. (100 MVA base). Default: line length × typical x/km for kv.",
         examples=[0.02],
     )
-    name: str | None = Field(None, max_length=80, description="Display name.", examples=["Línea nueva"])
+    name: str | None = Field(
+        None, max_length=ov.MAX_NAME_LEN, description="Display name.", examples=["Línea nueva"]
+    )
 
 
 class LinePatch(_Body):
-    capacity_mw: float | None = Field(None, gt=0, le=5000, description="New capacity in MW.", examples=[800])
-    x_pu: float | None = Field(None, gt=0, le=1.0, description="New reactance in p.u.", examples=[0.015])
+    capacity_mw: float | None = Field(
+        None, gt=0, le=int(ov.MAX_CAPACITY_MW), description="New capacity in MW.", examples=[800]
+    )
+    x_pu: float | None = Field(
+        None, gt=0, le=ov.X_MAX_PU, description="New reactance in p.u.", examples=[0.015]
+    )
     in_service: bool | None = Field(
         None, description="false takes the line out of the network (not a sandbox cut).", examples=[False]
     )
@@ -109,13 +126,17 @@ class LoadIn(_Body):
     bus: str = Field(description="Bus id (B###) the load connects to.", examples=["B010"])
     mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 3000).", examples=[120])
     kind: LoadKind = Field(description="datacenter or consumo (other consumption).", examples=["datacenter"])
-    name: str = Field(max_length=80, description="Display name.", examples=["Datacenter Quilicura"])
+    name: str = Field(
+        max_length=ov.MAX_NAME_LEN, description="Display name.", examples=["Datacenter Quilicura"]
+    )
 
 
 class LoadPatch(_Body):
     mw: float | None = Field(None, **_MW, description="New demand in MW.", examples=[200])
     kind: LoadKind | None = Field(None, description="datacenter or consumo.", examples=["consumo"])
-    name: str | None = Field(None, max_length=80, description="New display name.", examples=["DC ampliado"])
+    name: str | None = Field(
+        None, max_length=ov.MAX_NAME_LEN, description="New display name.", examples=["DC ampliado"]
+    )
     in_service: bool | None = Field(None, description="false disconnects the load.", examples=[False])
 
 
@@ -130,10 +151,14 @@ class GeneratorIn(_Body):
         None, description="Override whether the unit adds synchronous MW and inertia.", examples=[False]
     )
     inertia_h: float | None = Field(
-        None, gt=0, le=10, description="Inertia constant H in s (default 4 s, an assumption).", examples=[4.0]
+        None,
+        gt=0,
+        le=int(ov.MAX_INERTIA_H),
+        description="Inertia constant H in s (default 4 s, an assumption).",
+        examples=[4.0],
     )
     name: str | None = Field(
-        None, max_length=80, description="Display name.", examples=["Parque solar nuevo"]
+        None, max_length=ov.MAX_NAME_LEN, description="Display name.", examples=["Parque solar nuevo"]
     )
 
 
@@ -142,10 +167,10 @@ class GeneratorPatch(_Body):
     tech: Tech | None = Field(None, description="New technology.", examples=["eolica"])
     synchronous: bool | None = Field(None, description="Synchronous override.", examples=[True])
     inertia_h: float | None = Field(
-        None, gt=0, le=10, description="New inertia constant H in s.", examples=[5.0]
+        None, gt=0, le=int(ov.MAX_INERTIA_H), description="New inertia constant H in s.", examples=[5.0]
     )
     name: str | None = Field(
-        None, max_length=80, description="New display name.", examples=["Central renombrada"]
+        None, max_length=ov.MAX_NAME_LEN, description="New display name.", examples=["Central renombrada"]
     )
     in_service: bool | None = Field(None, description="false disconnects the generator.", examples=[False])
 
@@ -153,7 +178,7 @@ class GeneratorPatch(_Body):
 class CutIn(_Body):
     lines: list[str] = Field(
         min_length=1,
-        max_length=3,
+        max_length=ov.MAX_CUT_LINES,
         description="1 to 3 line ids (R### base or U### session) to open in the sandbox.",
         examples=[["R012"]],
     )
