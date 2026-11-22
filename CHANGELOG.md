@@ -1,5 +1,10 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · fix(tests): pin the seed of the run an assistant event opens, so the deploy gate is not flaky
+- **Changed:** `test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened` patches `cycle.new_seed` to a fixed value.
+- **Why:** The run that `inject_event` opens has no seed, so it draws a fresh one, and about 1 run in 25 a background event (`E1_demand_surge`) landed in the second step and broke the assertion `events_applied == []`. It failed once on CI (and 1 of 25 locally on `main`). Since `deploy.yml` needs the checks, a flaky test could block a deploy for nothing.
+- **Agents:** Any test that opens a run without a seed and asserts on the events of a step must pin `new_seed` (or pass `seed`). 40 consecutive runs of the test pass with the fix.
+- **Files:** `backend/tests/integration/test_assistant_api.py`.
 ## 2026-11-22 · docs(agents): llms.txt, docs index and discoverability wiring
 - **Changed:** New `llms.txt` (llmstxt.org format: one-paragraph summary, then links with one line each under Start here, Architecture, Engine and simulation, APIs and contracts, Data, Frontend, Operations, Evaluation, Optional). New `docs/README.md`: every file in `docs/` with purpose, when to read it and status (current, partly stale, historical, generated, team-owned), and a "where is X" table (engines, V1-V10, frequency model, parameters, sessions, MCP, assistant, agent OpenAPI, caches, data pipeline, tests, CI, guardrails). `AGENTS.md` section 1 gets step 0 (navigation: `llms.txt`, `docs/README.md`, `docs/code-map.md`, the index and its regeneration command). `README.md` lists the new files in its documentation table.
 - **Why:** An agent or automated reviewer should find the right file and verify a claim without reading the tree (issue #79).
