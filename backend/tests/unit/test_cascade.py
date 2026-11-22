@@ -375,10 +375,9 @@ def _assert_invariants(timeline: dict, state, point: OperatingPoint, balance: bo
         assert set(before["dark"]) <= set(after["dark"])
     blackout_ids = {i for e in events if e["type"] == "island_blackout" for i in e["ids"]}
     assert blackout_ids == set(frames[-1]["dark"])
-    # Same convention as `_timeline`, the theatre and the web: only buses with positive net load count their people,
-    # so a dark bus with net negative load counts nobody (open decision, docs/engine.md "Hand-checked cuts").
+    # A dark bus counts all its people, whatever its net load; a live bus the share of its load shed by EDAC.
     final_dark = {int(b[1:]) for b in frames[-1]["dark"]}
-    dark = [b for b in sorted(final_dark) if point.load[b] > 0]
+    dark = sorted(final_dark)
     live = [b for b in range(len(point.load)) if b not in final_dark and point.load[b] > 0]
     edac = sum(point.people[b] * (1 - state.load[b] / point.load[b]) for b in live)
     assert timeline["summary"]["people_without_power"] == pytest.approx(
@@ -456,23 +455,23 @@ def _steps_by_stage(timeline: dict) -> dict[int, set]:
     return steps
 
 
-def test_a_re_split_island_does_not_fire_an_edac_step_again_with_resplit_memory():
-    """Default (documented assumption): the cut-off D island runs the full EDAC table again. With `resplit_memory`
-    the step its parent already fired sheds nothing."""
-    plain = _steps_by_stage(run_cascade_workflow(_resplit_net(), _resplit_point(), []))
-    assert plain[0] & plain[1]  # step 1 fires in both stages
-    memory = _steps_by_stage(
-        run_cascade_workflow(_resplit_net(), _resplit_point(), [], CascadeParams(resplit_memory=True))
+def test_a_re_split_island_does_not_fire_an_edac_step_again():
+    """Default: the step the parent island already fired sheds nothing in the cut-off D island. The old behaviour
+    (`resplit_memory=False`) fired it again, shedding load that was already off."""
+    old = _steps_by_stage(
+        run_cascade_workflow(_resplit_net(), _resplit_point(), [], CascadeParams(resplit_memory=False))
     )
+    assert old[0] & old[1]  # step 1 fires in both stages
+    memory = _steps_by_stage(run_cascade_workflow(_resplit_net(), _resplit_point(), []))
     assert memory[0] and memory[1]  # both the whole system and the cut-off D island shed
     assert not memory[0] & memory[1]
 
 
-def test_a_re_split_island_counts_the_reserve_already_deployed_with_resplit_memory():
+def test_a_re_split_island_counts_the_reserve_already_deployed():
     from cascadasen.domain.cascade.engine import _island_input, _start
 
     net, point = _resplit_net(), _resplit_point()
-    s = _start(net, point, CascadeParams(resplit_memory=True), [])
+    s = _start(net, point, CascadeParams(), [])
     s.reserve_used[:] = [10.0, 0.0, 0.0, 2.0]
     s.sync[:] = point.sync_mw + s.reserve_used
     s.edac_fired[3].add(("centro_sur", 0))
@@ -480,7 +479,7 @@ def test_a_re_split_island_counts_the_reserve_already_deployed_with_resplit_memo
     assert inp.sync_mw == pytest.approx(120.0)  # governor gain from the units, not from the deployed reserve
     assert inp.extra_reserve_mw == pytest.approx(-2.0)  # cap = 4 % x 120 - 2 MW already deployed
     assert inp.edac["centro_sur"][0].fraction == 0.0 and inp.edac["centro_sur"][1].fraction > 0
-    s.params = CascadeParams()
+    s.params = CascadeParams(resplit_memory=False)
     plain = _island_input(s, [3], 6000.0, float(s.sync[3]), 122.0, 400.0)
     assert plain.sync_mw == pytest.approx(122.0) and plain.edac["centro_sur"][0].fraction > 0
 
@@ -528,3 +527,15 @@ def test_real_cascades_keep_the_invariants(point_id, cut):
     net, point = load_network_and_point(PROCESSED, point_id)
     timeline, state = run_cascade_state(net, point, [cut])
     _assert_invariants(timeline, state, point)
+
+
+def test_people_in_dark_buses_count_whole_whatever_their_net_load():
+    """Issue #90 user decision: a dark bus with net load <= 0 (distributed generation above demand) still leaves its
+    people without supply. A live bus counts the shed share of its positive load only."""
+    from cascadasen.domain.cascade.engine import people_out_by_bus
+
+    people = np.array([100.0, 50.0, 30.0, 40.0])
+    initial = np.array([10.0, -5.0, 0.0, 20.0])
+    final = np.array([0.0, 0.0, 0.0, 15.0])
+    out = people_out_by_bus(people, initial, final, {0, 1, 2})
+    assert out.tolist() == pytest.approx([100.0, 50.0, 30.0, 10.0])

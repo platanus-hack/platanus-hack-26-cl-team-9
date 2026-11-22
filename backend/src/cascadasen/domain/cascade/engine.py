@@ -37,7 +37,7 @@ ASSUMPTIONS = [
     "Reserva primaria 4% de la potencia sincrónica en línea con estatismo 5%, constante de tiempo 3 s y amortiguamiento de carga 1,5 %/Hz: supuestos sin calibrar.",
     "La inercia de cada isla es la de las unidades sincrónicas en línea; solar y eólica no aportan. Una unidad que sale antes del transitorio ya no cuenta.",
     "EDAC con los escalones del informe del CEN sobre el 25F (centro-sur y Norte Grande); los MW de cada escalón se interpolan entre demanda baja y alta. El EDAC por contingencia extrema no se modela.",
-    "Una isla que se vuelve a partir parte de nuevo en 50 Hz con la tabla EDAC completa y cuenta como disponible la reserva que ya entregó: puede contar dos veces escalones EDAC y reserva.",
+    "Una isla que se vuelve a partir empieza su transitorio en 50 Hz, no en la frecuencia en que quedó; conserva los escalones EDAC ya disparados y la reserva ya entregada.",
     "Baterías en modo rápido: retardo 200 ms y rampa 300 ms (stack.md 4.5), sin límite de energía en el transitorio de 20 s.",
     "No hay desconexión de generación por frecuencia o tensión (ride-through) salvo la reducción por sobrefrecuencia de solar y eólica.",
     "Despacho y demanda del punto de operación son simulados o modelados (PyPSA-CL), no medidos.",
@@ -54,9 +54,9 @@ class CascadeParams:
     stage_spacing_s: float = float(value(_C["stage_spacing_s"]))
     local_cut_mw: float = float(value(_C["local_cut_mw"]))
     frequency: Params = field(default_factory=Params)
-    # Off by default (issue #90, docs/engine.md "Re-split islands"): a sub-island of a re-split island runs the full
-    # EDAC table and a reserve cap that includes the reserve already deployed. On, it keeps what its parent used.
-    resplit_memory: bool = False
+    # On by default (issue #90, docs/engine.md "re-split islands"): a sub-island of a re-split island keeps what its
+    # parent used (fired EDAC steps, deployed reserve). False only to compare with the old double-counting behaviour.
+    resplit_memory: bool = True
 
 
 @dataclass
@@ -509,10 +509,22 @@ def failure_cost(load_shed_mw: float, dark_mw: float | None = None, total_mw: fl
     )
 
 
+def people_out_by_bus(people: np.ndarray, initial: np.ndarray, final: np.ndarray, dark) -> np.ndarray:
+    """People without supply per bus. A dark bus counts all its people, whatever its net load (a bus whose
+    distributed generation exceeds its demand has a net load of zero or less, but its people still lose supply).
+    A live bus counts the share of its load that was shed (EDAC), only when its net load is positive."""
+    served = np.clip(
+        np.divide(final, initial, out=np.ones_like(final, dtype=float), where=initial > 0), 0.0, 1.0
+    )
+    out = people * (1.0 - served)
+    idx = sorted(dark)
+    out[idx] = people[idx]
+    return out
+
+
 def _timeline(s: _State, cut_ids: list[str], truncated: bool) -> dict:
     initial, final = s.point.load, s.load
-    served = np.divide(final, initial, out=np.ones_like(final), where=initial > 0)
-    people = float((s.point.people * (1.0 - served)).sum())
+    people = float(people_out_by_bus(s.point.people, initial, final, s.dark).sum())
     shed = round(float((initial - final).sum()))
     dark = round(float(initial[sorted(s.dark)].sum()), 1)  # demand of the buses that went dark
     return {

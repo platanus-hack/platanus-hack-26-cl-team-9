@@ -137,7 +137,7 @@ Layout (Paper "Design v5", `docs/design.md` section 3.2, with the Design v6 rail
 
    | Entry | Point | Changes | Model | Real event |
    |---|---|---|---|---|
-   | Apagón 25F | `feb2025-1500` | cut `R239` (Nueva Maitencillo – Nueva Pan de Azúcar 500 kV) | 16.8 M people, 11,096 of 11,096 MW | about 19 M (98.5 %) |
+   | Apagón 25F | `feb2025-1500` | cut `R239` (Nueva Maitencillo – Nueva Pan de Azúcar 500 kV) | 18.2 M people, 11,096 of 11,096 MW | about 19 M (98.5 %) |
    | Apagón 2011 · Ancoa | `nov2026-2000` | cut `R006` (Alto Jahuel – Ancoa 500 kV) | 3.2 M people, 2,118 of 10,934 MW, 5 stages | 24 Sep 2011, 9.8 M people, Coquimbo to Maule; a 500/220 kV transformer failed at S/E Ancoa ([Wikipedia](https://es.wikipedia.org/wiki/Apag%C3%B3n_de_Chile_de_2011)) |
    | Terremoto 2010 · Charrúa | `nov2026-2000` | S/E Charrúa (`B043`) out of service | 4.1 M people, 2,410 of 10,934 MW, 2 stages | 14 Mar 2010, more than 13 M people, the whole SIC; a transformer damaged by the 27F earthquake failed |
 
@@ -233,7 +233,7 @@ EVIDENCE (engine output, `feb2025-1500`, cut `R239` Nueva Maitencillo-Nueva Pan 
 - 1.0 s: Pan de Azúcar-Punta Colorada 220 kV passes 120% and opens.
 - 2.0 s: Maitencillo-Pan de Azúcar 110 kV passes 120% and opens; the corridor separates into a centro-sur island (115 substations, 7,872 MW of load) and a north island (73 substations, 3,223 MW).
 - The pre-fault flow across the corridor was 2,209 MW N→S, over the 1,600 MW limit of the defence scheme, so both islands collapse by voltage (a rule, `engine.md` 6).
-- 16.8 million people without power, 11,096 of 11,096 MW (100%), 2 stages. The real 25F: about 19 M people (98.5%).
+- 18.2 million people without power, 11,096 of 11,096 MW (100%), 2 stages. The real 25F: about 19 M people (98.5%).
 - Estado de la red lists the user's cut apart from these consequences (lines opened by overload and islands that went dark, with their second).
 
 The same cut at `feb2025-0300` loses only 631 MW. Solar is off at night and coal and hydro run (EVIDENCE: carrier table above). ASSUMPTION: the corridor carries less and the system has more inertia, which explains the smaller loss. Do not present these numbers as a forecast.

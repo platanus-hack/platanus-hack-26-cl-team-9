@@ -1,6 +1,23 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cascade): re-split memory on and people of dark buses counted whole
+
+- **Changed:** `CascadeParams.resplit_memory` now defaults to `True`: a re-split island keeps its parent's fired EDAC steps and deployed reserve. The `ASSUMPTIONS` line now only says the sub-island starts at 50 Hz.
+- **Changed:** New `people_out_by_bus` in `engine.py`: a dark bus counts all its people whatever its net load, and a live bus counts the shed share of its positive load. `_timeline`, the theatre (`TheaterGrid.people_without_power`) and `criticality.collateral_people` use it.
+- **Changed:** `test_flagship.py::test_adaptive_coordination_keeps_most_of_the_mission` became `..._across_seeds`: policy C must have the highest **mean** mission continuity over seeds 1-12.
+  - Why the change: the old one-seed ordering (seed 7) no longer holds. With the re-split fix, policy A's cycle-10 cascade sheds 123 MW less, because the cut-off 172-bus island no longer re-fires EDAC steps 1 and 3.
+  - With that, A later restores A08, A09 and A11 in full (after rearming the centro-sur EDAC at cycle 16), reaching 0.951 vs C 0.943. C's restorations in A08/A09 stay limited by headroom and are blocked 5 times.
+  - Neither A3 nor the theatre has a bug: C's runs are identical with the flag on or off.
+  - Over 12 seeds C still leads: mean 0.942 vs A 0.934 and B 0.936, the best worst case (0.910), the lowest peak of people without power and the fewest wrong decisions. The one-seed claim was already fragile: C was best in only 7 of 12 seeds before #90.
+- **Why:** User decision (2026-11-22): the model must be as realistic as possible. Closes `plan.md` §9 items 15 and 16.
+- **Agents:**
+  - Results that moved: 25F 15:00 16.8 → 18.2 M people; Nov 2026 13:00 17.0 → 18.2 M; Nov 2026 20:00 3.9 → 15.4 M people and 1,825 → 6,738 MW (`docs/engine.md` "Results so far" explains why it is real physics, with the same collapse at 25.6 s for 20/30/60/120 s horizons).
+  - `minimum-dataset.md`'s 25F regression anchor is now about 18.2 M.
+  - `resplit_memory=False` exists only for comparison.
+  - The cache is stale until the cache commit below.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine,criticality}.py`, `backend/src/cascadasen/domain/theater/grid.py`, `backend/tests/unit/test_cascade.py`, `backend/tests/validation/{test_flagship,test_results_so_far}.py`, `docs/{engine,plan,minimum-dataset,mapa3}.md`.
+
 ## 2026-11-22 · feat(map): pulse buses that just lost power
 
 - **Changed:** New `recentDarkAt(timeline, t, warp)` in `simulation.ts` returns the buses of `island_blackout` events from the last 1.5 s of track time (`RECENT_WINDOW_VIEW_S`), and at most 3 simulated s ago (`RECENT_MAX_SIM_S`), so the squeezed tail does not keep pulsing. If a blackout has no ids it falls back to the `darkAt` difference.

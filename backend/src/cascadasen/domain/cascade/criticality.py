@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .engine import run_cascade_state
+from .engine import people_out_by_bus, run_cascade_state
 from .flow import dc_flow, find_islands
 from .network import ReducedNetwork
 from .scenario import OperatingPoint
@@ -78,8 +78,7 @@ def _one_substation(net, point, bus, lines, base, capacity, injection, total_loa
     _, state = run_cascade_state(net, point, lines, open_lines=frozenset(open_lines))
     lost = point.load - state.load
     collateral_mw = float(lost.sum() - lost[bus])
-    ratio = np.divide(state.load, point.load, out=np.ones(net.size), where=point.load > 0)
-    people_lost = point.people * (1.0 - ratio)
+    people_lost = people_out_by_bus(point.people, point.load, state.load, state.dark)
     collateral_people = float(people_lost.sum() - people_lost[bus])
     after = dc_flow(net, out, injection, islands)
     keep = np.array([bus not in (ln.a, ln.b) for ln in net.lines])

@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 
-from cascadasen.domain.cascade.engine import CascadeParams, run_cascade_state
+from cascadasen.domain.cascade.engine import CascadeParams, people_out_by_bus, run_cascade_state
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
 from cascadasen.domain.cascade.frequency import F0
 from cascadasen.domain.cascade.frequency import Params as FrequencyParams
@@ -194,8 +194,8 @@ class TheaterGrid:
         return [area]
 
     def people_without_power(self) -> float:
-        served = np.divide(self.load, self.plan_load, out=np.ones_like(self.load), where=self.plan_load > 0)
-        return float((self.people * (1.0 - np.clip(served, 0.0, 1.0))).sum())
+        """Dark buses count all their people, whatever their net load; live buses the share of load shed."""
+        return float(people_out_by_bus(self.people, self.plan_load, self.load, self.dark).sum())
 
     # ------------------------------------------------------- engine view
 
