@@ -80,6 +80,8 @@ rationale:
   ops_restore_supervision_path: "Operaciones busca recuperar la vía de supervisión."
   ops_take_local_control: "Operaciones toma control local porque el remoto no responde."
   ops_isolate_untrusted_data: "Operaciones aísla datos que no son confiables."
+  ops_repair_after_containment: "Operaciones envía una cuadrilla a reparar un área ya segmentada."
+  ops_contain_intrusion: "Operaciones segmenta un área que parece comprometida para frenar la intrusión."
   ops_preventive_isolation: "Operaciones aísla de forma preventiva."
   ops_preventive_local_control: "Operaciones pasa a control local de forma preventiva."
   ops_restore_supply: "Operaciones restablece el suministro."
@@ -168,6 +170,7 @@ labels:
   tpl_response_saturation: "Saturación de respuesta"
   tpl_degraded_recovery: "Recuperación degradada"
   tpl_external_dependency: "Dependencias externas"
+  tpl_ciberataque: "Ciberataque que se propaga entre áreas"
 
 questions:
   q_huatacondo: "Si un incidente como el de Huatacondo deja fuera de servicio esta generación, ¿cuánta gente queda sin luz y cuánto tarda la defensa en entenderlo?"
@@ -180,3 +183,4 @@ questions:
   q_response_saturation: "¿Qué capacidad defensiva se agota primero?"
   q_degraded_recovery: "¿Cuánto tiempo puede sostenerse el servicio antes de recuperar las capacidades normales?"
   q_external_dependency: "¿Qué ocurre si se pierde un servicio de soporte necesario para operar?"
+  q_ciberataque: "Si una intrusión salta de un área a sus vecinas, ¿la defensa la contiene antes de que la red pierda el 80 % de la demanda?"

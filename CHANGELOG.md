@@ -1,6 +1,15 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(theater): escenario Ciberataque con propagación entre áreas (#109)
+
+- **Changed:** New adversary mode `propagation` (`domain/agents/propagation.py`) and template `ciberataque`: a seeded intrusion that jumps between neighbouring operating areas, strikes (C5 + C1, real cascade), is stopped by segmentation and eradicated by clean-up with a probability. Runs end early with `attack` (80 % demand lost) or `defense` (no intrusion, everything repaired). Parameters in `theater.yaml` → `cyber_attack`, overridable per run within bounds.
+- **Changed:** `GET /sim/catalog` adds `cyber_attack`; `AdversaryIn` adds `mode` and `propagation`; snapshots add `cyber`, the report adds `cyber_attack`. Operations and C2 get a containment rule that applies only to propagation runs (`AgentView.containment`).
+- **Changed:** Web view **Ciberataque** (`web/src/cyber/`): form from the catalog, defence A/B/C or LLM commander, run on a fresh base session, playback of area states and cascades on the map.
+- **Why:** issue #109. Area level keeps `cyber.md` section 8: no buses or lines as targets, no ranking.
+- **Agents:** no new route: use `POST /sessions/{sid}/runs` with `template: "ciberataque"`. The LLM defence is the existing `llm_commander`. `Simulation.finished` is now also true when a propagation run has an `outcome`. Other templates behave as before.
+- **Files:** `domain/agents/{propagation,operations,commander,base}.py`, `domain/theater/{cycle,config}.py`, `domain/theater/params/{theater,templates,narrative_es}.yaml`, `application/run_experiment.py`, `api/simulation_schemas.py`, `web/src/cyber/*`, `web/src/cascade/CascadeApp.tsx`, `web/src/session/sessionApi.ts`, `docs/attack-sim.md`, `docs/openapi/agents.openapi.json`, `backend/tests/unit/test_cyber_attack.py`.
+
 ## 2026-11-22 · Merge origin/main (#101, #102) into feature/90-cascada-tiempos
 
 - **Changed:** Integrates the in-place component editing, the prepared scenarios on the map and the context layers of main with issue #90. Conflicts only in `CascadeApp.tsx` (the `live` ref and the `setLayers` call) and this file. Both sides were kept: `warp`, `recent` and the pulse from #90, `pointId`, `changes` and `contextLayers` from main. The context layers are drawn under the cascade layers.

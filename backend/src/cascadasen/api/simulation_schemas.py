@@ -87,6 +87,18 @@ class AdversaryIn(BaseModel):
         description="True: it learns during the run (EXP3); False: it plays the template's plan",
         examples=[True],
     )
+    mode: Literal["exp3", "propagation"] = Field(
+        "exp3",
+        description="exp3: the adaptive adversary. propagation: the Ciberataque scenario, an intrusion that "
+        "spreads between neighbouring operating areas (docs/attack-sim.md 3.2)",
+        examples=["propagation"],
+    )
+    propagation: dict[str, float] | None = Field(
+        None,
+        description="Overrides of the propagation parameters (mode propagation); names and bounds in "
+        "`GET /api/v1/sim/catalog` → `cyber_attack`",
+        examples=[{"spread_p": 0.6, "eradicate_p": 0.5}],
+    )
 
 
 class EventIn(BaseModel):
@@ -246,6 +258,10 @@ class CatalogOut(AgentOut):
     uncertainty_levels: dict[str, Any] = Field(description="Uncertainty levels 0, 1 and 2.")
     cycle_minutes: int = Field(description="Minutes per cycle.")
     llm: dict[str, Any] = Field(description="Whether the server's LLM commander is available, and its model.")
+    cyber_attack: dict[str, Any] = Field(
+        description="Ciberataque scenario (template `ciberataque`, adversary mode `propagation`): parameter "
+        "defaults, their [min, max] bounds, the outcomes and the area adjacency the intrusion follows."
+    )
 
 
 class RunStateOut(AgentOut):
@@ -332,6 +348,12 @@ class RunReportOut(AgentOut):
         None,
         description="Only for runs started from a documented incident: sources, notes, mitigations and "
         "the consequence card (level, people, MW shed, MWh and cost over an assumed duration).",
+    )
+    cyber_attack: dict[str, Any] | None = Field(
+        None,
+        description="Only for propagation runs (Ciberataque): outcome (attack, defense, undecided, or null "
+        "while running), start area, parameters, peak of active areas, areas ever compromised and the "
+        "propagation events by cycle. Every snapshot of such a run also carries `cyber`: the state per area.",
     )
     trace_head: str = Field(description="Hash of the last audit log entry.")
 
