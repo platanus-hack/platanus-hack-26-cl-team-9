@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(index): regenerate after merging main into the event pins fix
+
+- **Changed:** `docs/index/repo-index.json` regenerated on `fix/event-pins-above-grid` after merging `origin/main` again (PR #61).
+- **Why:** The branch was cut before #108 brought the index, so the merged tree had an index without this branch's `CHANGELOG.md` entry and stylesheet change; the `repo-index` job would have turned red.
+- **Agents:** The fix itself is the 2026-11-21 entry "fix(web): draw the event pins and callout above the grid". Since #52 the callout is docked next to the panel, so the fix now matters mostly for the numbered event pins and the placed-point pins, which the grid was still painted over on Mapbox. Still not seen in a browser.
+- **Files:** `docs/index/repo-index.json`, `CHANGELOG.md`.
+
 ## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
 
 - **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`. After merging #117, three more references that #110 had shifted point at the right line again: `ConverseToolChat.turn` (`llm_tools.py:85`), `simulate` (`grid_routes.py:122`), `prepare_workflow` (`grid_stress.py:55`).
