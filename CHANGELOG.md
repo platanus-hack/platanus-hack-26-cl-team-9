@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(assistant): document the web chat
+
+- **Changed:** `docs/assistant.md` gets section 2c "Web client" (files, which session a message uses, refresh rules, persistence key, rehydration limits, error texts, what was checked) and §5 drops "The web UI" in favour of the pending Bedrock check. `web/README.md` adds a paragraph on the **Asistente** rail item and a row for `src/assistant/`. `docs/mapa3.md` §8 and §11 mention the new rail item and folder.
+- **Why:** The docs must match the chat added in the previous commits (#73).
+- **Agents:** The web chat was only checked against a scripted stand-in model, not Bedrock. `GET /conversations/{cid}` has no per-turn tool mapping and no `notice`, so a restored chat shows the tools as one collapsed list; adding a `turn` index to `tool_calls` in the backend would let the web place them.
+- **Files:** `docs/assistant.md`, `docs/mapa3.md`, `web/README.md`.
+
 ## 2026-11-21 · feat(web): assistant chat panel in mapa 3
 
 - **Changed:** New rail item **Asistente** (below Sesión compartida) opens the view `"assistant"` with `AssistantPanel`: history with the user bubble, the text the model writes before acting, tool cards (Spanish name, readable arguments, spinner "ejecutando…" → ✓ listo / ✗ falló, short summary, "Ver resultado" with the JSON), the final reply with the scenario `notice`, a truncation notice with **Continuar** (sends "continúa"), errors per status, and a message box (1-2000 characters with counter, Enter sends, Shift+Enter new line) plus **Nueva conversación**.
