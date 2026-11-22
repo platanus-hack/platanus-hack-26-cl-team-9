@@ -84,10 +84,14 @@ export function effectText(e: IncidentEffect): string {
   return `Ciclo ${e.cycle}: ${what} en ${where}${size ? ` (${size})` : ""}`;
 }
 
-/** Cycles whose snapshot carries a cascade (`transient`, the same shape as a cut's Timeline), in cycle order. */
+/**
+ * Cycles whose snapshot carries a visible cascade (`transient`, the same shape as a cut's Timeline), in cycle order. A
+ * transient that only formed a stable island, with no line opened, no bus dark and no load shed, has nothing to show.
+ */
 export function cascadeCycles(snapshots: RunSnapshot[]): CascadeCycle[] {
-  return snapshots.filter((s) => s.transient && s.transient.frames?.length).map((s) => ({ cycle: s.cycle, t_min: s.t_min, timeline: s.transient! }));
+  return snapshots.filter((s) => s.transient?.frames?.length && visible(s.transient)).map((s) => ({ cycle: s.cycle, t_min: s.t_min, timeline: s.transient! }));
 }
+const visible = (tl: Timeline) => (tl.summary?.load_shed_mw ?? 0) > 0 || (tl.summary?.dark_buses ?? 0) > 0 || (tl.summary?.lines_opened?.length ?? 0) > 0;
 
 /** Minutes per theatre cycle, read from the snapshots (t_min / cycle); 5 min when there is none to read. */
 export function cycleMinutes(snapshots: RunSnapshot[]): number {
@@ -128,4 +132,20 @@ export function parseDuration(text: string): number | null {
   const n = Number(text.replace(",", "."));
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.min(MAX_DURATION_H, Math.max(MIN_DURATION_H, n));
+}
+
+/** Spanish text of a failed call: `status` is null when the backend could not be reached at all. */
+export function incidentError(status: number | null, message: string, retryAfter: number | null = null): string {
+  if (status === null) return `No se pudo conectar con el backend (${message}). Los incidentes necesitan el servidor; el resto del mapa sigue funcionando.`;
+  if (status === 429) return `Demasiadas solicitudes a la sesión; espera ${retryAfter ? `${retryAfter} s` : "un momento"} y vuelve a intentarlo.`;
+  if (status === 503) return "El servidor no puede simular ahora (503). Intenta de nuevo más tarde.";
+  if (status === 422) return `El servidor rechazó el incidente: ${message}`;
+  return message;
+}
+
+/** Rows of the Ciclos list: `after_action.timeline`, plus any cycle with a cascade that has no line there, in order. */
+export function cycleRows(timeline: AarCycle[], cascades: CascadeCycle[]): AarCycle[] {
+  const have = new Set(timeline.map((r) => r.cycle));
+  const extra = cascades.filter((c) => !have.has(c.cycle)).map((c) => ({ cycle: c.cycle, t_min: c.t_min, lines: [] }));
+  return [...timeline, ...extra].sort((a, b) => a.cycle - b.cycle);
 }

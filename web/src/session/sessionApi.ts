@@ -18,7 +18,7 @@ export interface RevisionEvent { type?: "revision"; revision: number; dataset_re
 type Json = Record<string, unknown>;
 
 export class ApiError extends Error {
-  constructor(public status: number, public detail: unknown) { super(errorText(status, detail)); }
+  constructor(public status: number, public detail: unknown, public retryAfter: number | null = null) { super(errorText(status, detail)); }
 }
 
 /** The session id in `?sesion=`, the only place a session comes from (no URL, no session, no `/api` call); anything
@@ -44,7 +44,7 @@ async function callAt<T>(base: string, method: string, path: string, opts: { bod
   }
   if (r.status === 204) return undefined as T;
   const data = await r.json().catch(() => null);
-  if (!r.ok) throw new ApiError(r.status, data?.detail ?? data);
+  if (!r.ok) throw new ApiError(r.status, data?.detail ?? data, r.headers.has("Retry-After") ? Number(r.headers.get("Retry-After")) || null : null);
   return data as T;
 }
 const sid = (id: string) => `/${encodeURIComponent(id)}`;

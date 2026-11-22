@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "../cascade/types";
-import { cardFigures, cascadeCycles, cycleMinutes, effectText, incidentTag, parseDuration, pointText, responseFigures, sessionPlan, type IncidentCard, type RunSnapshot } from "./incidents";
+import { cardFigures, cycleRows, incidentError, cascadeCycles, cycleMinutes, effectText, incidentTag, parseDuration, pointText, responseFigures, sessionPlan, type IncidentCard, type RunSnapshot } from "./incidents";
 
-const tl = (label: string) => ({ scenario: label, label, failed_elements: [], truncated: false, duration_s: 10, events: [], frames: [{ t: 0 }], frequency_hz: {}, summary: {}, assumptions: [] }) as unknown as Timeline;
+const tl = (label: string, shed = 100) => ({ scenario: label, label, failed_elements: [], truncated: false, duration_s: 10, events: [], frames: [{ t: 0 }], frequency_hz: {},
+  summary: { load_shed_mw: shed, dark_buses: 0, lines_opened: [] }, assumptions: [] }) as unknown as Timeline;
 const card: IncidentCard = {
   incident: "polonia-2025", consequence_level: "L2", people_without_power: 3512405, load_shed_mw: 2028.5, unserved_energy_mwh: 8114.1,
   failure_cost_usd: 71322605, outage_duration_h: { value: 4, is_assumption: true }, note: "", notices: [],
@@ -30,11 +31,13 @@ describe("incidents", () => {
     expect(pointText("raro")).toBe("raro");
   });
 
-  it("keeps only the cycles whose snapshot carries a cascade", () => {
-    const snaps: RunSnapshot[] = [{ cycle: 1, t_min: 5, transient: null }, { cycle: 2, t_min: 10, transient: tl("a") }, { cycle: 3, t_min: 15 }, { cycle: 15, t_min: 75, transient: tl("b") }];
+  it("keeps only the cycles whose snapshot carries a visible cascade", () => {
+    const snaps: RunSnapshot[] = [{ cycle: 1, t_min: 5, transient: null }, { cycle: 2, t_min: 10, transient: tl("a") }, { cycle: 3, t_min: 15 }, { cycle: 4, t_min: 20, transient: tl("stable island", 0) }, { cycle: 15, t_min: 75, transient: tl("b") }];
     expect(cascadeCycles(snaps).map((c) => [c.cycle, c.timeline.label])).toEqual([[2, "a"], [15, "b"]]);
     expect(cycleMinutes(snaps)).toBe(5);
     expect(cycleMinutes([])).toBe(5);
+    const rows = cycleRows([{ cycle: 2, t_min: 10, lines: ["x"] }, { cycle: 20, t_min: 100, lines: ["y"] }], cascadeCycles(snaps));
+    expect(rows.map((r) => r.cycle)).toEqual([2, 15, 20]);
   });
 
   it("flags duration, MWh and cost as assumptions on the card", () => {
@@ -57,5 +60,12 @@ describe("incidents", () => {
     expect(parseDuration("9999")).toBe(720);
     expect(parseDuration("")).toBeNull();
     expect(parseDuration("abc")).toBeNull();
+  });
+
+  it("explains failures in Spanish", () => {
+    expect(incidentError(null, "Failed to fetch")).toContain("No se pudo conectar con el backend");
+    expect(incidentError(429, "x", 7)).toContain("espera 7 s");
+    expect(incidentError(503, "x")).toContain("503");
+    expect(incidentError(422, "el incidente corre a las feb2025-1500")).toContain("feb2025-1500");
   });
 });

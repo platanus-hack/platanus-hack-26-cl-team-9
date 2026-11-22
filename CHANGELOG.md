@@ -1,6 +1,16 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): Incidentes view with consequence card and cascade on the map
+
+- **Changed:**
+  - New rail view **Incidentes** (`IncidentPanel.tsx`, `incidents.css`): catalog cards in file order (title, date, hour, effects in text, `no verificado` / `referencia, no es ciber` tags, sources), policy A/B/C, outage hours (assumption, 0.25-720) and **Simular incidente**. The result shows the consequence card (level, people, MW, MWh and cost with their source and assumption tips), the agentic response (`report.indicators`, labelled experimental), "Qué lo habría evitado", the cycles (`after_action.timeline`), notes, sources and both notices. **Cerrar incidente** clears it.
+  - `useIncident.ts` (owned by `CascadeApp`, like `useAssistant`): creates a session at the incident's `operating_point` when there is none or its hour differs (confirm before leaving one), joins it, starts the run, steps it to its horizon, reads report and after-action. Errors (422, 429 with `Retry-After`, 503, no backend) are Spanish texts (`incidentError`); `ApiError` now carries `retryAfter`.
+  - **Ver cascada en el mapa** plays that cycle's `transient` with the cut player: `CascadeApp` uses it as `timeline` ahead of the session's, with the Carga colours. A cut by double click, Prender todo, Cerrar incidente or leaving the session remove it.
+- **Why:** Continuation of issue #74: a user can pick a documented incident in the web, simulate it and see consequence, response, prevention and cascade (user decisions 2026-11-22: own session per incident; panel and cascade only).
+- **Agents:** Only cycles whose `transient` shed load, darkened buses or opened lines get the button (`cascadeCycles`); a stable island alone is not shown. Changing the duration needs a new run (another run in the same session). No viewer of `snapshot.grid`, areas or crews yet (`mapa3.md` section 10). Checked in Chrome (Playwright) against a local API: Huatacondo L0 with no cascade, 25F asks to replace the session, gives L3 and plays its blackout; with the backend off the view shows the error and the map keeps working.
+- **Files:** `web/src/incidents/{IncidentPanel.tsx,useIncident.ts,incidents.ts,incidents.test.ts,incidents.css}`, `web/src/cascade/CascadeApp.tsx`, `web/src/session/sessionApi.ts`.
+
 ## 2026-11-22 · feat(web): incident catalog client and pure helpers
 
 - **Changed:** `sessionApi.ts` gains `getIncidentCatalog()` (`GET /api/v1/attacks/catalog`, through a new `callAt(base, ...)` that shares `call`'s busy-409 retries) and `startIncidentRun(sid, {scenario, policy, seed?, duration_h?})`. `useSession().create` accepts `{point, label}`. New `web/src/incidents/incidents.ts`: catalog, card and after-action types, `sessionPlan` (create/reuse/replace by the session hour), `cascadeCycles` (snapshots whose `transient` is a Timeline), `cycleMinutes`, `effectText`, `cardFigures` and `responseFigures` (each figure with its source; duration, MWh and cost flagged as assumptions), `parseDuration` (0.25-720 h).
