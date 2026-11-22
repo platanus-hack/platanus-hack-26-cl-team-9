@@ -5,7 +5,7 @@ the refactor was re-applied on top of it. The real-network case is skipped when 
 
 import hashlib
 import json
-import os
+import sys
 
 import pytest
 
@@ -36,8 +36,8 @@ def test_toy_cascade_and_theater_frame_are_byte_stable(toy_world):
 
 
 @pytest.mark.skipif(not HAVE_DATA, reason="run cascadasen-build first")
-# shortcut: byte-exact hashes differ between macOS and the Linux runner (float rounding), so CI skips this case.
-@pytest.mark.skipif(bool(os.environ.get("CI")), reason="platform-dependent hash; run locally")
+# shortcut: byte-exact hashes are taken on the Linux CI runner; macOS rounds floats differently, so it skips this case.
+@pytest.mark.skipif(sys.platform != "linux", reason="hash taken on Linux (CI)")
 @pytest.mark.parametrize("point_id", ["nov2026-1300", "feb2025-0300"])
 def test_real_cascade_is_byte_stable_for_every_single_cut(point_id):
     net, point = load_network_and_point(PROCESSED, point_id)
@@ -54,6 +54,6 @@ def test_real_cascade_is_byte_stable_for_every_single_cut(point_id):
 TOY_CASCADE = "8bdad44a1774856d155a868024abe9c30f6075b07b3d024f2203fe82d0f77ba5"
 TOY_FRAME = "f88e8cbb434ac5f39a0cad24521e78d2f6c68f174380e35fd4f3a036eede2316"
 REAL_CASCADE = {
-    "nov2026-1300": "1d05de454ed90a80218f1735a90a17257bdfa572e76e72a9c08e34339ec39e48",
-    "feb2025-0300": "31d2e13895f13ba41350d399c293afff5a6abade38d3462d9f3c5c790cba1664",
+    "nov2026-1300": "d64d8b40b7bc6f6014d91290042efbbff09737eda55c40c7e5a49a609225dcf5",
+    "feb2025-0300": "80f5e0444207ae0af9ea9c7c84428cf7da162a00681141705733bf80cab94ec9",
 }
