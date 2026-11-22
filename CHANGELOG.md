@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(index): regenerate after merging main into the event pins fix
+
+- **Changed:** `docs/index/repo-index.json` regenerated on `fix/event-pins-above-grid` after merging `origin/main` again (PR #61).
+- **Why:** The branch was cut before #108 brought the index, so the merged tree had an index without this branch's `CHANGELOG.md` entry and stylesheet change; the `repo-index` job would have turned red.
+- **Agents:** The fix itself is the 2026-11-21 entry "fix(web): draw the event pins and callout above the grid". Since #52 the callout is docked next to the panel, so the fix now matters mostly for the numbered event pins and the placed-point pins, which the grid was still painted over on Mapbox. Still not seen in a browser.
+- **Files:** `docs/index/repo-index.json`, `CHANGELOG.md`.
+
 ## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
 
 - **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`. After merging #117, three more references that #110 had shifted point at the right line again: `ConverseToolChat.turn` (`llm_tools.py:85`), `simulate` (`grid_routes.py:122`), `prepare_workflow` (`grid_stress.py:55`).
@@ -1258,6 +1265,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Agents (and a later MCP wrapper) need a small public spec with only the CRUD, run and catalog endpoints, separate from the full `/docs`.
 - **Agents:** Follow `docs/openapi.md` for every agent route: mark it, set `operation_id` from its list, English summary/description, `responses=errors(...)`, tags. Regenerate with `cd backend && uv run python -m cascadasen.api.agent_openapi` in the same commit, or the test fails. Session routes (`/sessions/*`) still need marking when they land. Tags and English summaries of the marked routes also changed in the full `/docs` (were `experimentos`, Spanish). `ErrorResponse.detail` is `str | object | list` because simulator input errors return `{field, message, valid}`.
 - **Files:** `backend/src/cascadasen/api/{agent_openapi,app,simulation_routes,simulation_schemas}.py`, `backend/tests/integration/test_agent_openapi.py`, `docs/openapi.md`, `docs/openapi/agents.openapi.json`, `docs/{stack,architecture,agents}.md`, `backend/README.md`.
+
+## 2026-11-21 · fix(web): draw the event pins and callout above the grid
+
+- **Changed:** `.shell .map` gets `z-index: 0`, so the map is its own stacking context and the HTML overlays (event pins, callout, first-event label, city names) sit above everything the map draws.
+- **Why:** On the Mapbox basemap the grid lines and the regional generation symbols were painted across the callout text and the numbered pins. Mapbox's control container has `z-index: 2` and holds the deck.gl canvas, `.map-overlays` has `z-index: 1`, and `.map` had no z-index, so both competed in the same stacking context. Found by the browser test of PR #60; it was already there before that PR.
+- **Agents:** The offline map was not affected (its canvas has no z-index). The deck.gl hover tooltip lives inside the map, so it now draws below the pins and the callout. Not seen in a browser yet after the fix. Still open from the same test: a selected out-of-service line is hard to read at country zoom next to its event pin; and against the Design v6 frame the play button sits 14 px lower and the legend is 5 to 6 px taller.
+- **Files:** `web/src/cascade/cascade.css`, `CHANGELOG.md`.
 
 ## 2026-11-21 · feat(web): click selects a line, double click cuts it
 
