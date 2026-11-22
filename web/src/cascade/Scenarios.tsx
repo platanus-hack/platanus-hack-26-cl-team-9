@@ -30,7 +30,7 @@ export const DISASTERS: Disaster[] = [
 /** The 25F reference case, the one a bare link with `?cut=R239` stands for. */
 export const CASE_25F = { point: DISASTERS[0].point, cut: DISASTERS[0].edits.lines[0] };
 
-/** `edits` replaces the user's changes (a disaster); null keeps them (a Benchmark condition, only the hour changes). */
+/** Any click resets everything: `edits` are the scenario's own failures (a disaster); null is the base case (a Benchmark condition). */
 export interface ScenarioChoice { point: string; edits: Edits | null }
 
 type Folder = "desastres" | "benchmark";

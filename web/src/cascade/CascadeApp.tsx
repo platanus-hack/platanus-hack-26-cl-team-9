@@ -41,6 +41,8 @@ import { useSession } from "../session/useSession";
 import { AssistantPanel } from "../assistant/AssistantPanel";
 import { useAssistant } from "../assistant/useAssistant";
 import { IncidentPanel } from "../incidents/IncidentPanel";
+import { ChangePanel } from "../changelog/ChangePanel";
+import { cascadeEntries, cyberEntries, diffEdits, type Entry } from "../changelog/changelog";
 import { useIncident } from "../incidents/useIncident";
 import { CyberPanel } from "../cyber/CyberPanel";
 import { useCyber } from "../cyber/useCyber";
@@ -49,7 +51,7 @@ import "./cascade.css";
 import "../session/session.css";
 
 type Tab = "estado" | "red" | "sim" | "datos";
-type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "cyber" | "upload";
+type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "history" | "cyber" | "upload";
 // "Qué lo habría evitado" and "Validación" are not built yet and left out so the four tabs fit the 440 px panel.
 const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"]];
 // In a session Datos replaces Estado de la red: the session owns its changes.
@@ -97,6 +99,9 @@ export function CascadeApp() {
   // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
   // A link's cut wins; otherwise the changes saved in this browser come back (a refresh never loses them).
   const [edits, setEdits] = useState<Edits>(() => (s.sid ? NO_EDITS : !startCut ? loadEdits() : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
+  // Historial de cambios: the adjustments (user or assistant); falls are derived from the timeline. A scenario click empties it.
+  const [adjustments, setAdjustments] = useState<Entry[]>([]);
+  const prevEdits = useRef<Edits>(edits);
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   // The prepared grid of the scenario's changes (POST /grids/prepare), keyed like the changes it belongs to.
   const [prepared, setPrepared] = useState<{ key: string; value: Prepared } | null>(null);
@@ -153,6 +158,12 @@ export function CascadeApp() {
   const outBuses = s.sid ? [] : edits.buses;
   const edited = !!incidentTl || cuts.length + outBuses.length > 0;
   const offState: Edits = { lines: cuts, buses: outBuses }; // what the user switched off, for the second click and the hints
+  const historyEntries = useMemo<Entry[]>(() => {
+    const userIds = new Set(adjustments.flatMap((a) => a.ids));
+    const falls = !incidentTl && loadedReady && loaded && network ? cascadeEntries(loaded.timeline, network, userIds) : [];
+    const attack = cyb.run && cyb.catalog ? cyberEntries(cyb.run.frames, cyb.catalog.areas) : [];
+    return [...adjustments, ...falls, ...attack];
+  }, [adjustments, incidentTl, loadedReady, loaded, network, cyb.run, cyb.catalog]);
   const duration = timeline?.duration_s ?? 0;
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
   const darkCount = timeline ? darkAt(timeline, t).size : 0;
@@ -204,6 +215,14 @@ export function CascadeApp() {
   useEffect(() => _loadShown(), [networkId, uploads]);
   useEffect(() => _fitNetwork(), [networkId, network, shownGrid]);
   useEffect(() => { if (!s.sid) saveEdits(edits); }, [edits, s.sid]);
+  useEffect(() => {
+    const before = prevEdits.current;
+    prevEdits.current = edits;
+    if (!network || s.sid) return;
+    const when = new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const added = diffEdits(before, edits, network).map((e) => ({ ...e, when }));
+    if (added.length) setAdjustments((x) => [...x, ...added]);
+  }, [edits]);
   useEffect(() => _loadHeat(), [heat, heatKey]);
   useEffect(() => { if (!s.sid && !composed) _loadPoint(); }, [pointId, index, s.sid, composed]);
   useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
@@ -682,11 +701,22 @@ export function CascadeApp() {
   }
   function openScenario(next: ScenarioChoice) {
     if (!current.simulable) return;
+    // Clicking any scenario or Benchmark condition is a full reset: only the scenario's own failures remain.
+    if (inc.playing != null) inc.stop();
+    if (cyb.mapCycle != null) cyb.showOnMap(null);
     setSelection(null);
     setNotice(null);
+    setError(null);
+    setSimResult(null);
+    setPrepared(null);
+    setHeat("none");
+    seek(0);
+    setPlaying(false);
+    setAdjustments([]);
     setPointId(next.point);
-    // A disaster replaces the changes; a Benchmark condition keeps the failures. A prepared scenario never carries over.
-    setEdits((e) => ({ lines: (next.edits ?? e).lines, buses: (next.edits ?? e).buses }));
+    const fresh = next.edits ? { lines: [...next.edits.lines], buses: [...next.edits.buses] } : NO_EDITS;
+    prevEdits.current = fresh; // the scenario's own failures are not adjustments
+    setEdits(fresh);
     if (composed === DEFAULT_COUNTRY) void composeFromSources(next.point, picksRef.current); // the composed grid follows the chosen hour
     setColorMode("load");
     chooseTab(next.edits ? "sim" : "red"); // a disaster opens on Simulación, a Benchmark condition on Red; both on Carga
@@ -722,8 +752,8 @@ export function CascadeApp() {
         <button className={view === "assistant" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "assistant" ? "tabs" : "assistant")}>
           <Icon><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z M5.5 7h.01M8 7h.01M10.5 7h.01" /></Icon><span>Asistente</span>
         </button>
-        <button className={view === "incidents" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "incidents" ? "tabs" : "incidents")}>
-          <Icon><path d="M8 1.8l6.2 11.2H1.8z M8 6.2v3.3M8 11.3v.1" /></Icon><span>Incidentes</span>
+        <button className={view === "history" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "history" ? "tabs" : "history")}>
+          <Icon><circle cx="8" cy="8" r="5.8" /><path d="M8 4.6V8l2.4 1.6" /></Icon><span>Historial de cambios</span>
         </button>
         <button className={view === "cyber" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "cyber" ? "tabs" : "cyber")}>
           <Icon><path d="M8 1.5l5.5 2v4c0 3.2-2.3 5.8-5.5 7-3.2-1.2-5.5-3.8-5.5-7v-4z M5.5 8l1.8 1.8L10.8 6.3" /></Icon><span>Ciberataque</span>
@@ -761,6 +791,7 @@ export function CascadeApp() {
           {(s.error ?? error) && <p className="note">{s.error ?? error}{s.error && <> <button className="text-btn" onClick={s.clearError}>Cerrar</button></>}</p>}
           {view === "session" && <SessionBar s={s} />}
           {view === "assistant" && <AssistantPanel a={a} />}
+          {view === "history" && <ChangePanel entries={historyEntries} />}
           {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
           {view === "cyber" && <CyberPanel c={cyb} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}
@@ -838,7 +869,7 @@ export function CascadeApp() {
   );
 }
 
-const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", incidents: "Incidentes", cyber: "Ciberataque", upload: "Subir una red" };
+const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", incidents: "Incidentes", history: "Historial de cambios", cyber: "Ciberataque", upload: "Subir una red" };
 
 /** Where a view-only network's figures come from: the manifest's sources for a country, the file for an upload. */
 function originOf(n: NetworkInfo, grid: RegionalGrid): Origin {
