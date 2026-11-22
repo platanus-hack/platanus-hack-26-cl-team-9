@@ -1,6 +1,26 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(network): add network-format.md and update regional and datasets docs
+
+- **Changed:** New `docs/network-format.md`, the data contract for adding or uploading a network, in seven sections:
+  1. Fields, types, units, ISO3 and provenance per bus, line, DC link and plant.
+  2. Readiness levels L0 / L1 / L1+ / L2.
+  3. Gap filling, with the error measured on Brazil.
+  4. Worked examples: Chile, Brazil, Peru, Argentina and Bolivia.
+  5. A checklist to add a country.
+  6. Upload safety (#49 part C).
+  7. What each level can claim.
+- **Changed:** `regional.md` gets section 6 (Brazil flow network: sources, units, decisions, result) and fixes section 4: ONS `SUBESTACAO.csv` **has** coordinates. `datasets.md` adds sources [42] and [43] (ONS, CC BY, downloaded 2026-11-21). `architecture.md`, `plan.md` §9 item 14, `backend/README.md` and the AGENTS.md read order (item 10) mention the new pieces.
+- **Why:** Issue part B. The contract has to be followable without reading the code, and it has to say how much a deduced network can be trusted.
+- **Agents:** Expected error of a deduced network, from Brazil:
+  - x: median 15 %, p90 39 %;
+  - capacity with Chile's typical ratings: median 31 %, p90 62 %;
+  - distance-snapped topology: precision 89 %, recall 99 %.
+
+  Treat these as a lower bound for the OSM countries. The proposed upload limits (10 MB, 5,000 buses, 10,000 lines) are not enforced anywhere yet.
+- **Files:** `docs/{network-format,regional,datasets,architecture,plan}.md`, `AGENTS.md`, `backend/README.md`.
+
 ## 2026-11-21 · feat(data): build Brazil flow network from ONS
 
 - **Changed:** New `data/processed/latam/BRA/network.json` (730 KB): 853 buses, 1,305 AC lines (1,842 circuits, 230-765 kV), 4 HVDC links (12 records) and 495 plant groups. `manifest.json` gains `countries.BRA.flow`. The drawn BRA geojson files are unchanged, except that the manifest's EPE `fetched_at` was refreshed.
