@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(web): quitar el ítem Validación del menú lateral (#112)
+
+- **Changed:** The disabled "Validación" item of the nav rail and its unused `SOON` tip are gone.
+- **Why:** it did nothing (a placeholder with "Todavía no está en la app") and confused users.
+- **Agents:** the "Validación" tab inside the panel was already hidden; nothing else references it. `docs/mapa3.md` 4 item 2 updated.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `docs/mapa3.md`.
+
 ## 2026-11-22 · feat(web): pins for placed points, Markdown replies, the chat stays open on a scenario
 
 - **Changed:**
