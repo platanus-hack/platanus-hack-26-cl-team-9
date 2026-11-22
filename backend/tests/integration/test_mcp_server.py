@@ -138,3 +138,19 @@ def test_an_edit_separates_new_overloads_from_ones_already_there(tools):
     assert added["bus"] == "B002" and added["area"] == out["area"]
     again = tools.edit_element("D001", {"mw": 1000})["baseline"]
     assert again["newly_overloaded"] == []  # nothing changed, so nothing is new
+
+
+def test_add_substation_connects_by_bus_id_and_by_bus_name(tools):
+    # Regression (#124): the tool sent a tuple as `to` and the API answered 422.
+    tools.start_session()
+    out = tools.add_substation(
+        "S/E Nueva",
+        -30.3,
+        -70.9,
+        220,
+        [{"to": "B000", "capacity_mw": 200}, {"to": "N2"}],
+        generator_mw=50,
+        generator_tech="solar",
+    )
+    assert len(out["line_ids"]) == 2 and out["generator_id"]
+    assert tools.describe_network()["added_generators"][0]["mw"] == 50
