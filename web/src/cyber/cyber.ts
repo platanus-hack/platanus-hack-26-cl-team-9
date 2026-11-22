@@ -25,7 +25,10 @@ export interface CyberFrame {
   people_out?: Record<string, number>; segmented?: string[]; dark?: string[]; defense_actions?: DefenseAction[];
   /** The grid at the end of the cycle (snapshot `grid`, the map's Frame format): what the map draws for this cycle. */
   grid: Frame | null;
+  /** The cycle's evaluator metrics (snapshot `metrics`): served vs demand, observability, consequence level. */
+  metrics: CycleMetrics | null;
 }
+export interface CycleMetrics { demand_mw?: number; served_mw?: number; observability?: number; level?: string; people_without_power?: number; resources_remaining?: number }
 export interface CyberReport {
   outcome: Outcome | null; start_area: string | null; params: Record<string, number>; peak_active_areas: number;
   ever_compromised: string[]; events: CyberEvent[]; is_assumption: boolean;
@@ -119,11 +122,15 @@ export function invalidFields(cat: CyberCatalog, params: Record<string, number>)
   }).map(([k]) => k);
 }
 
-type Snap = { cycle: number; t_min: number; cyber?: Omit<CyberFrame, "cycle" | "t_min" | "transient" | "grid">; transient?: Timeline | null; grid?: Omit<Frame, "t"> | null };
+type Snap = {
+  cycle: number; t_min: number; cyber?: Omit<CyberFrame, "cycle" | "t_min" | "transient" | "grid" | "metrics">;
+  transient?: Timeline | null; grid?: Omit<Frame, "t"> | null; metrics?: CycleMetrics | null;
+};
 /** Frames from the step snapshots: only the ones with a `cyber` block. */
 export function frames(snapshots: Snap[]): CyberFrame[] {
   return snapshots.filter((s) => s.cyber).map((s) => ({
     ...s.cyber!, cycle: s.cycle, t_min: s.t_min, transient: s.transient ?? null, grid: s.grid ? { t: 0, ...s.grid } : null,
+    metrics: s.metrics ?? null,
   }));
 }
 
@@ -155,10 +162,6 @@ const VERDICTS: Record<string, string> = {
 const verdictText = (v?: string) => (v ? VERDICTS[v] ?? v.replace(/_/g, " ") : "rechazada");
 
 export const millions = (n: number) => `${(n / 1e6).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} M`;
-export const figures = (f: CyberFrame) => [
-  { label: "demanda perdida", value: pct(f.lost_share) },
-  { label: "cuadrillas ocupadas", value: int(f.crews_busy) },
-];
 
 /** Display value of a parameter (probabilities and shares as %, cycles as is) and the inverse. */
 export const shown = (unit: string, v: number) => (unit === "ciclos" ? v : Math.round(v * 100));
@@ -183,4 +186,39 @@ export function layoutTags(root: HTMLElement, columnX: number, gap = 30): void {
     if (tag) tag.style.transform = `translate(${dx.toFixed(1)}px, ${(dy - 12).toFixed(1)}px)`;
     if (line) { line.setAttribute("x2", (dx - 2).toFixed(1)); line.setAttribute("y2", dy.toFixed(1)); }
   }
+}
+
+/** Clock of a cycle: the run starts at the point's hour (13:00 at nov2026-1300) and each cycle is `t_min` later. */
+export function cycleClock(tMin: number, startHour = 13): string {
+  const m = startHour * 60 + tMin;
+  return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/** Rail marks: a cycle where the attack hit an area, and one where the defence eradicated an area. */
+export function cycleMarks(frames: CyberFrame[], name: (id: string) => string, hideLatent: boolean) {
+  const out: { cycle: number; side: "attack" | "defense"; title: string }[] = [];
+  for (const f of frames) {
+    const hit = f.events.filter((e) => e.kind === "struck").map((e) => name(e.area));
+    const clean = f.events.filter((e) => e.kind === "eradicated").map((e) => name(e.area));
+    if (hit.length) out.push({ cycle: f.cycle, side: "attack", title: `Ciclo ${f.cycle}: afectada ${hit.join(", ")}` });
+    if (clean.length && !hideLatent) out.push({ cycle: f.cycle, side: "defense", title: `Ciclo ${f.cycle}: recuperada ${clean.join(", ")}` });
+  }
+  return out;
+}
+
+/** Network health of a cycle, from its grid and metrics: what the "Salud de la red" tab lists. */
+export function healthRows(f: CyberFrame) {
+  const edges = Object.values(f.grid?.edges ?? {});
+  const m = f.metrics ?? {};
+  const served = m.demand_mw ? (m.served_mw ?? 0) / m.demand_mw : 1 - f.lost_share;
+  return [
+    { label: "Demanda servida", value: pct(served), tip: "MW servidos sobre la demanda del punto de operación (métricas del ciclo)." },
+    { label: "Subestaciones sin luz", value: int(f.grid?.dark.length ?? 0), tip: "Barras apagadas al final del ciclo (estado de la red del ciclo)." },
+    { label: "Líneas abiertas", value: int(edges.filter((e) => e.status === "open").length), tip: "Líneas fuera de servicio al final del ciclo." },
+    { label: "Líneas sobrecargadas", value: int(edges.filter((e) => e.status === "overload").length), tip: "Líneas sobre el 100 % de su capacidad." },
+    { label: "Islas", value: int(f.grid?.islands.length ?? 0), tip: "Partes de la red separadas entre sí, con más de una subestación." },
+    { label: "Observabilidad", value: m.observability != null ? pct(m.observability) : "—", tip: "Parte de la red que la supervisión ve bien (métrica del teatro, supuesto)." },
+    { label: "Nivel de consecuencia", value: m.level ?? "—", tip: "L0 absorbido, L1 contenido, L2 apagón regional, L3 apagón nacional." },
+    { label: "Recursos que quedan", value: m.resources_remaining != null ? pct(m.resources_remaining) : "—", tip: "Parte de los recursos defensivos aún libre (métrica del teatro)." },
+  ];
 }

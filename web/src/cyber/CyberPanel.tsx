@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
-  actionText, activePreset, DEFENSE_NAME, DEFENSES, eventText, FIELDS, figures, millions, NOTICE, OUTCOME_LABEL, scoreboard, shown, SIDE,
-  statusOf, STATUS_LABEL, stored, type CyberArea, type CyberFrame, type Status,
+  actionText, activePreset, cycleClock, cycleMarks, DEFENSE_NAME, DEFENSES, eventText, FIELDS, healthRows, millions, NOTICE, OUTCOME_LABEL,
+  scoreboard, shown, SIDE, statusOf, STATUS_LABEL, stored, type CyberArea, type CyberFrame, type Status,
 } from "./cyber";
-import type { Cyber } from "./useCyber";
+import type { CycleRun } from "../cascade/Timeline";
+import { Info } from "../cascade/ui";
+import type { Cyber, Sub } from "./useCyber";
 import "./cyber.css";
 
 /**
@@ -11,14 +13,14 @@ import "./cyber.css";
  * defence's counters, the operating areas with their people and state, the cycle bar, and labels on the map. The form
  * comes from `GET /sim/catalog` → `cyber_attack`; the run and every number come from the backend. Area level only.
  */
-export function CyberPanel({ c }: { c: Cyber }) {
+export function CyberPanel({ c, component, prefault }: { c: Cyber; component: ReactNode; prefault: ReactNode }) {
   useEffect(() => { c.load(); }, []);
   return (
     <div className="cyber">
       {c.error && <p className="note">{c.error}</p>}
       {!c.catalog && !c.error && <p className="meta">Cargando el escenario…</p>}
       {c.catalog && !c.run && <Form c={c} />}
-      {c.run && <Monitor c={c} />}
+      {c.run && <Monitor c={c} component={component} prefault={prefault} />}
     </div>
   );
 }
@@ -86,13 +88,12 @@ function Form({ c }: { c: Cyber }) {
   );
 }
 
-type Sub = "territorio" | "jugadas" | "reglas";
+const SUBS: [Sub, string][] = [["territorio", "Territorio"], ["jugadas", "Jugadas"], ["componente", "Componente"], ["salud", "Salud de la red"], ["reglas", "Reglas"]];
 
-function Monitor({ c }: { c: Cyber }) {
+function Monitor({ c, component, prefault }: { c: Cyber; component: ReactNode; prefault: ReactNode }) {
   const run = c.run!;
   const areas = c.catalog?.areas ?? [];
   const name = (id: string) => areas.find((a) => a.id === id)?.name ?? id;
-  const [sub, setSub] = useState<Sub>("territorio");
   const f = run.frames[c.at];
   const outcome = run.report?.outcome ?? f?.outcome ?? null;
   const user = run.defense === "user";
@@ -104,18 +105,34 @@ function Monitor({ c }: { c: Cyber }) {
           <button className="text-btn" onClick={c.close}>Nueva partida</button>
         </div>
         <div className="cy-subtabs" role="tablist">
-          {(["territorio", "jugadas", "reglas"] as Sub[]).map((k) => (
-            <button key={k} role="tab" aria-selected={sub === k} className={sub === k ? "on" : ""} onClick={() => setSub(k)}>{k[0].toUpperCase() + k.slice(1)}</button>
+          {SUBS.map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={c.sub === k} className={c.sub === k ? "on" : ""} onClick={() => c.setSub(k)}>{label}</button>
           ))}
         </div>
       </div>
       {outcome && <div className={`cy-outcome ${outcome}`}>{OUTCOME_LABEL[outcome]}</div>}
       {!f && <p className="meta">Simulando el primer ciclo…</p>}
-      {f && sub === "territorio" && <Territory c={c} f={f} areas={areas} />}
-      {f && sub === "jugadas" && <Plays run={run.frames} upto={c.at} name={name} hideLatent={user && !run.finished} />}
-      {sub === "reglas" && <Rules c={c} />}
-      {f && <TurnBar c={c} f={f} name={name} user={user} />}
+      {f && c.sub === "territorio" && <Territory c={c} f={f} areas={areas} />}
+      {f && c.sub === "jugadas" && <Plays run={run.frames} upto={c.at} name={name} hideLatent={user && !run.finished} />}
+      {c.sub === "componente" && (component ?? <p className="meta">Haz clic en una línea o una subestación del mapa para ver sus datos aquí, en el ciclo que muestra el mapa.</p>)}
+      {f && c.sub === "salud" && <Health f={f} prefault={prefault} />}
+      {c.sub === "reglas" && <Rules c={c} />}
+      {user && !run.finished && c.queued.length > 0 && <p className="meta">En cola para este turno: {c.queued.map((q) => q.label).join(", ")}.</p>}
       <div className="notice"><span>{NOTICE} Valores del modelo, no una predicción.</span></div>
+    </>
+  );
+}
+
+function Health({ f, prefault }: { f: CyberFrame; prefault: ReactNode }) {
+  return (
+    <>
+      <div className="card">
+        <div className="card-head"><h3>Salud de la red · ciclo {f.cycle}</h3><span className="unit">min {f.t_min}</span></div>
+        <div className="mini-figures cy-figures">
+          {healthRows(f).map((r) => <div key={r.label}><span className="value-row"><b>{r.value}</b><Info tip={r.tip} /></span><span>{r.label}</span></div>)}
+        </div>
+      </div>
+      {prefault && <div className="card"><div className="card-head"><h3>Antes del ataque</h3></div>{prefault}</div>}
     </>
   );
 }
@@ -208,36 +225,6 @@ function Rules({ c }: { c: Cyber }) {
   );
 }
 
-function TurnBar({ c, f, name, user }: { c: Cyber; f: CyberFrame; name: (id: string) => string; user: boolean }) {
-  const run = c.run!;
-  const last = run.frames.length - 1;
-  const done = (f.defense_actions ?? []).filter((d) => d.ok).map((d) => actionText(d, name)).slice(0, 2);
-  const waiting = user && !run.finished && c.at === last;
-  return (
-    <div className="cy-turn">
-      <span className="cy-shield" aria-hidden><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1.5l5.5 2v4c0 3.2-2.3 5.8-5.5 7-3.2-1.2-5.5-3.8-5.5-7v-4z" fill="none" stroke="currentColor" strokeWidth="1.3" /></svg></span>
-      <div className="cy-turn-text">
-        <b>{waiting ? `Turno ${f.cycle + 1}: juega la defensa (tú)` : !run.finished && c.at === last ? `Turno ${f.cycle} · min ${f.t_min}${c.playing ? " · en curso" : " · en pausa"}` : `Ciclo ${f.cycle} · min ${f.t_min}`}</b>
-        <span className="meta">{waiting
-          ? c.queued.length ? `En cola: ${c.queued.map((q) => q.label).join(", ")}` : "Elige un área en la lista y una acción, o termina el turno."
-          : done.length ? done.join(" ") : `${figures(f).map((x) => `${x.value} ${x.label}`).join(" · ")}`}</span>
-      </div>
-      {waiting
-        ? <button className="btn" disabled={c.busy} onClick={() => void c.endTurn()}>{c.busy ? "Jugando…" : "Terminar turno"}</button>
-        : (
-          <div className="cy-play">
-            {c.playing ? <button className="btn" onClick={c.pause}>Pausa</button>
-              : <button className="btn" disabled={run.finished && run.frames.length < 2} onClick={c.play}>{run.finished ? "Repetir" : "Continuar"}</button>}
-          </div>
-        )}
-      <Progress c={c} />
-      {f.transient && (c.mapCycle === f.cycle
-        ? <button className="text-btn" onClick={() => c.showOnMap(null)}>Quitar cascada del mapa</button>
-        : <button className="text-btn" onClick={() => c.showOnMap(f.cycle)}>Ver cascada de este ciclo en el mapa</button>)}
-    </div>
-  );
-}
-
 /** Labels of the operating areas on the map, one per area at its anchor substation; the overlay loop places them. */
 export function CyberMapTags({ c }: { c: Cyber }) {
   const f = c.run?.frames[c.at];
@@ -260,26 +247,34 @@ export function CyberMapTags({ c }: { c: Cyber }) {
 }
 
 /**
- * Progress of the run over its horizon: the filled part is the cycles played so far, the marker the cycle on screen.
- * Clicking a played part shows that cycle; the unplayed part cannot be chosen.
+ * The bottom timeline card in cycle mode for the run on screen: the same card that plays a cascade second by second
+ * plays the attack cycle by cycle. With the user defending, Terminar turno sits in the card; a cycle with a cascade
+ * offers to play it on the map.
  */
-function Progress({ c }: { c: Cyber }) {
-  const run = c.run!;
-  const total = Math.max(1, run.horizon);
-  const played = run.frames.length ? run.frames[run.frames.length - 1].cycle + 1 : 0;
-  const shownCycle = run.frames[c.at]?.cycle ?? 0;
-  const pick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const cycle = Math.floor(((e.clientX - r.left) / r.width) * total);
-    const i = run.frames.findIndex((f) => f.cycle >= Math.min(cycle, played - 1));
-    if (i >= 0) c.seek(i);
+export function cyberCycles(c: Cyber): CycleRun | null {
+  const run = c.run;
+  const f = run?.frames[c.at];
+  if (!run || !f) return null;
+  const areas = c.catalog?.areas ?? [];
+  const name = (id: string) => areas.find((a) => a.id === id)?.name ?? id;
+  const last = run.frames.length - 1;
+  const user = run.defense === "user";
+  const waiting = user && !run.finished && c.at === last;
+  const status = run.finished ? `terminó en el ciclo ${run.frames[last].cycle}`
+    : waiting ? `turno ${f.cycle + 1}: juega la defensa`
+      : c.playing ? "en curso" : "en pausa";
+  const action = waiting
+    ? <button className="btn" disabled={c.busy} onClick={() => void c.endTurn()}>{c.busy ? "Jugando…" : "Terminar turno"}</button>
+    : f.transient
+      ? (c.mapCycle === f.cycle
+        ? <button className="text-btn" onClick={() => c.showOnMap(null)}>Volver a la red</button>
+        : <button className="text-btn" onClick={() => c.showOnMap(f.cycle)}>Ver cascada</button>)
+      : undefined;
+  return {
+    clock: cycleClock(f.t_min), status, played: run.frames.length ? run.frames[last].cycle + 1 : 0, total: run.horizon, at: f.cycle,
+    playing: c.playing, finished: run.finished, marks: cycleMarks(run.frames, name, user && !run.finished),
+    togglePlay: user && !run.finished ? () => void c.endTurn() : c.togglePlay,
+    seek: (cycle) => { const i = run.frames.findIndex((x) => x.cycle >= cycle); if (i >= 0) c.seek(i); },
+    action,
   };
-  return (
-    <div className="cy-progress" role="progressbar" aria-label="Avance de la partida" aria-valuemin={0} aria-valuemax={total} aria-valuenow={played}
-      aria-valuetext={`ciclo ${shownCycle} de ${total}`} onClick={pick}>
-      <div className="cy-progress-done" style={{ width: `${(played / total) * 100}%` }} />
-      <div className="cy-progress-at" style={{ left: `${((shownCycle + 0.5) / total) * 100}%` }} />
-      <span className="cy-progress-text">{run.finished ? `terminó en el ciclo ${played - 1} de ${total}` : `ciclo ${played} de ${total}`}</span>
-    </div>
-  );
 }

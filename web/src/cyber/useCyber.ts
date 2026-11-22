@@ -9,6 +9,7 @@ const PLAY_MS = 700; // replay speed of a finished run
 const BASE_POINT = "nov2026-1300"; // the standard grid: the original nodes at the default hour
 
 export interface Queued { action: string; target: string; label: string }
+export type Sub = "territorio" | "jugadas" | "componente" | "salud" | "reglas";
 export interface CyberRun {
   sid: string; runId: string; seed: number | null; defense: Defense; frames: CyberFrame[]; report: CyberReport | null; finished: boolean;
   horizon: number; // cycles the run may last; the progress bar is played cycles over this
@@ -21,6 +22,9 @@ export interface Cyber {
   showOnMap(cycle: number | null): void; cascadeAt(cycle: number): Timeline | null;
   /** The grid of the cycle on screen, for the map: dark substations, open and overloaded lines. */
   gridNow: Frame | null;
+  sub: Sub; setSub(s: Sub): void;
+  /** Play or pause: live turns while the run is on (algorithm or LLM), replay once it finished. */
+  togglePlay(): void;
   queue(action: string, target: string, label: string): Promise<void>; endTurn(): Promise<void>;
 }
 
@@ -45,6 +49,7 @@ export function useCyber(): Cyber {
   const [playing, setPlaying] = useState(false);
   const [mapCycle, setMapCycle] = useState<number | null>(null);
   const [queued, setQueued] = useState<Queued[]>([]);
+  const [sub, setSub] = useState<Sub>("territorio");
   const live = useRef({ catalog, params, defense, crews, seed, busy, run, playing });
   live.current = { catalog, params, defense, crews, seed, busy, run, playing };
   const stepping = useRef(false); // one live step call at a time
@@ -141,13 +146,15 @@ export function useCyber(): Cyber {
 
   const cascadeAt = useCallback((cycle: number) => run?.frames.find((f) => f.cycle === cycle)?.transient ?? null, [run]);
   const gridNow = run?.frames[at]?.grid ?? null;
+  const play = () => { if (run?.finished && at >= run.frames.length - 1) setAt(0); setPlaying(true); };
   return {
+    sub, setSub, togglePlay: () => (playing ? setPlaying(false) : play()),
     gridNow, catalog, llmAvailable, params, defense, crews, seed, busy, error, run, at, playing, mapCycle, queued,
     load, setParam: (k, v) => setParams((x) => ({ ...x, [k]: v })), setDefense, setCrews, setSeed, launch, cascadeAt, queue, endTurn,
     seek: (i) => { setPlaying(false); setAt(i); },
-    play: () => { if (run?.finished && at >= run.frames.length - 1) setAt(0); setPlaying(true); },
+    play,
     pause: () => setPlaying(false),
-    close: () => { setRun(null); setPlaying(false); setMapCycle(null); setError(null); setQueued([]); },
+    close: () => { setRun(null); setPlaying(false); setMapCycle(null); setError(null); setQueued([]); setSub("territorio"); },
     showOnMap: setMapCycle,
   };
 }

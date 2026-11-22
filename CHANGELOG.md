@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cyber): tabs Componente y Salud de la red, y la línea de tiempo inferior maneja el ciberataque (#121)
+
+- **Changed:** The monitor adds **Componente** (the card of a clicked line or substation at the cycle on screen, read only; a click on the map no longer leaves the view) and **Salud de la red** (served demand, dark substations, open and overloaded lines, islands, observability, level, resources left, pre-fault health).
+- **Changed:** The bottom `TimelineCard` gets a cycle mode (`cycles` prop, `CycleRun`) and drives the run: clock, play/pause, rail over the horizon with attack and defence marks, Terminar turno / Ver cascada. The progress bar and turn bar inside the panel are gone.
+- **Why:** both bars did the same job; one component now plays seconds of a cascade and cycles of an attack.
+- **Agents:** `SelectionCard` takes `readOnly`; `PrefaultHealth` is exported from `SimulationPanel.tsx`. In the cyber view a second click on the map does not switch anything off.
+- **Files:** `web/src/cascade/{Timeline.tsx,CascadeApp.tsx,SelectionCard.tsx,SimulationPanel.tsx,cascade.css}`, `web/src/cyber/*`, `docs/attack-sim.md`.
+
 ## 2026-11-22 · feat(cyber): el mapa muestra la red de cada ciclo del ciberataque (#121)
 
 - **Changed:** In the Ciberataque view the main map draws the run's grid at the cycle on screen (`snapshot.grid`, the map's Frame format): dark substations, open and overloaded lines, on line colour Carga. Before, the map kept the base grid and only the panel changed.
