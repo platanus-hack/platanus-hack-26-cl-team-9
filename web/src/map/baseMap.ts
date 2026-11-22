@@ -23,6 +23,12 @@ const PITCH_DEGREES = 45;
 const LAND_FILL: [number, number, number] = [58, 59, 63];
 const LAND_LINE: [number, number, number] = [84, 86, 91];
 const STYLE = "mapbox://styles/mapbox/standard";
+// Mapbox's public country polygons (Mapbox Countries v1), used only to paint the land in the design's gray.
+const LAND_TILESET = "mapbox://mapbox.country-boundaries-v1";
+const LAND_SOURCE_LAYER = "country_boundaries";
+const rgb = (c: [number, number, number]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+/** Camera animations are skipped (duration 0, a jump) when the user asked the system for reduced motion. */
+const motion = (ms: number) => (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms);
 const PANEL_CLEARANCE_PX = 664; // nav rail (200) + docked panel (12 + 440) + margin, see .shell in styles.css
 // How far (px) from the pointer a click or hover still reaches a line: at country zoom a line is about 1 to 4 px wide (F-33).
 const PICK_RADIUS_PX = 10;
@@ -64,6 +70,16 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
     ...(LIMITED ? { maxZoom: MAX_ZOOM } : {}),
     pitch: pitchOf(initialMode),
   });
+  // Flat neutral gray land (docs/design.md section 2). The Standard style's night preset darkens its own land to near
+  // black and no config option reaches it, so a fill of the country polygons goes in the style's "bottom" slot: above the
+  // style's land, landcover and water polygons, below its roads, borders and labels. Emissive, so the night light does
+  // not darken it. Inland water is covered too, which is the flat look the design asks for; the sea stays dark.
+  map.on("style.load", () => {
+    if (map.getSource("sub50-land")) return;
+    map.addSource("sub50-land", { type: "vector", url: LAND_TILESET });
+    map.addLayer({ id: "sub50-land", type: "fill", source: "sub50-land", "source-layer": LAND_SOURCE_LAYER, slot: "bottom",
+      paint: { "fill-color": rgb(LAND_FILL), "fill-emissive-strength": 1, "fill-antialias": false } });
+  });
   // The fit's padding stays as the camera padding, so the center (zoom, land check) is the center of the map left visible.
   const padding = { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 };
   let target = START_TARGET;
@@ -73,7 +89,8 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
    * The old limits would block the flight (Chile's maxBounds does not contain Brazil), so they are lifted first, and the
    * new ones are set when the camera lands. The listener goes on before the fit: a jump (duration 0) ends synchronously.
    */
-  const setTarget = (next: CameraTarget, duration = FLY_MS) => {
+  const setTarget = (next: CameraTarget, flightMs = FLY_MS) => {
+    const duration = motion(flightMs);
     target = next;
     if (!LIMITED) {
       fit(duration);
@@ -121,11 +138,11 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
     // 2D is the same map seen from straight above: it cannot be tilted or rotated.
     const flat = mode === "2d"; // a true 2D map cannot be tilted or rotated
     flat ? (map.dragRotate.disable(), map.touchZoomRotate.disableRotation()) : (map.dragRotate.enable(), map.touchZoomRotate.enableRotation());
-    map.easeTo({ pitch: pitchOf(mode), bearing: 0, duration: 600 });
+    map.easeTo({ pitch: pitchOf(mode), bearing: 0, duration: motion(600) });
   };
   return {
-    setLayers: (layers) => overlay.setProps({ layers }), setMode, zoomBy: (d) => map.easeTo({ zoom: map.getZoom() + d, duration: 300 }), dispose: () => map.remove(),
-    fitAll: () => fit(600), setTarget,
+    setLayers: (layers) => overlay.setProps({ layers }), setMode, zoomBy: (d) => map.easeTo({ zoom: map.getZoom() + d, duration: motion(300) }), dispose: () => map.remove(),
+    fitAll: () => fit(motion(600)), setTarget,
     project: (lon, lat) => { const p = map.project([lon, lat]); return [p.x, p.y]; },
     camera: () => { const c = map.getCenter(); return { lon: c.lng, lat: c.lat, zoom: map.getZoom() }; },
     hasLabels: true,
@@ -144,7 +161,7 @@ function _keepOverLand(map: mapboxgl.Map, container: HTMLDivElement, current: ()
     const { lng, lat } = map.getCenter();
     const radius = viewportRadiusDeg(map.getZoom(), container.clientWidth, container.clientHeight, LAND_MARGIN);
     if (nearLand(land, lng, lat, radius)) state.lastGood = map.getCenter();
-    else map.easeTo({ center: state.lastGood, duration: 400 });
+    else map.easeTo({ center: state.lastGood, duration: motion(400) });
   });
 }
 function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode: ViewMode): BaseMap {
@@ -167,12 +184,12 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode:
     onHover: (info) => { hovering = handlers.isClickable(info); }, getCursor: ({ isDragging }) => (isDragging ? "grabbing" : hovering ? "pointer" : "grab") });
   return {
     setLayers: (layers) => deck.setProps({ layers: [...neighbours, outline, ...layers] }),
-    setMode: (mode) => deck.setProps({ controller: controller(mode), initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: 600 } }),
-    zoomBy: (d) => deck.setProps({ initialViewState: { ...viewState, zoom: viewState.zoom + d, transitionDuration: 300 } }),
-    fitAll: () => deck.setProps({ initialViewState: { ..._tilted(_viewState(container, target), viewState.pitch), transitionDuration: 600 } }),
+    setMode: (mode) => deck.setProps({ controller: controller(mode), initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: motion(600) } }),
+    zoomBy: (d) => deck.setProps({ initialViewState: { ...viewState, zoom: viewState.zoom + d, transitionDuration: motion(300) } }),
+    fitAll: () => deck.setProps({ initialViewState: { ..._tilted(_viewState(container, target), viewState.pitch), transitionDuration: motion(600) } }),
     setTarget: (next, duration = FLY_MS) => {
       target = next;
-      deck.setProps({ views: view(next), initialViewState: { ..._tilted(_viewState(container, next), viewState.pitch), transitionDuration: duration, transitionInterpolator: new FlyToInterpolator() } });
+      deck.setProps({ views: view(next), initialViewState: { ..._tilted(_viewState(container, next), viewState.pitch), transitionDuration: motion(duration), transitionInterpolator: new FlyToInterpolator() } });
     },
     dispose: () => { deck.finalize(); canvas.remove(); },
     project: (lon, lat) => {

@@ -131,7 +131,7 @@ With `VITE_MAPBOX_TOKEN` in `web/.env.local` (git-ignored) the basemap is Mapbox
 
 ## 3. Map view (2D only)
 
-The map is 2D only (the 3D view was removed on 2026-11-22, issue #115). It uses the Mapbox Standard map (night, monochrome theme) and matches Design v5: the camera looks straight down and cannot be tilted or rotated. The layers button (top right, above zoom) opens a small panel with the layer switches. The map controls also have **Ver toda la red**, which returns the camera to the frame of the network on the map. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW.
+The map is 2D only (the 3D view was removed on 2026-11-22, issue #115). It uses the Mapbox Standard map (night, monochrome theme) with the land painted flat gray by a fill layer of the app (`web/src/map/baseMap.ts`; `docs/design.md` section 7 says why) and matches Design v5: the camera looks straight down and cannot be tilted or rotated. The layers button (top right, above zoom) opens a small panel with the layer switches. The map controls also have **Ver toda la red**, which returns the camera to the frame of the network on the map. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW.
 
 ## 4. How to use it
 

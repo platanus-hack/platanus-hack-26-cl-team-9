@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · style(map): flat gray land on the Mapbox basemap and no camera flights with reduced motion
+
+- **Changed:** `web/src/map/baseMap.ts` adds one fill layer to the Mapbox Standard style on `style.load`: Mapbox's public country polygons (`mapbox://mapbox.country-boundaries-v1`, source layer `country_boundaries`) in the style's `bottom` slot, colour `LAND_FILL` (#3A3B3F, the offline map's gray), with `fill-emissive-strength: 1` so the night light preset does not darken it. Camera animations (flights between networks, zoom buttons, "Ver toda la red", the snap back over land) use duration 0 when `prefers-reduced-motion: reduce` is set (`motion()`).
+- **Why:** The audit's visual review found land and sea nearly the same black, so Chile's coastline was hard to read; the design asks for flat neutral gray land with neighbours drawn (Electricity Maps look). The style's own options cannot do it (previous entry), a layer of ours can.
+- **Agents:** The fill sits above the style's land, landcover and water polygons and below its roads, borders and labels, so inland lakes and rivers are covered (the flat look) and the coast is the tileset's, slightly simplified at city zoom. The sea stays the style's near black. Without a token the offline outline is unchanged. This supersedes the "basemap is unchanged" note of the previous entry; `docs/design.md` section 7 has the detail.
+- **Files:** `web/src/map/baseMap.ts`, `docs/design.md`, `docs/mapa3.md`.
+
 ## 2026-11-22 · style(web): no developer text, dark controls, tidier cards and other countries in voltage colours
 
 - **Changed:** Fixes from the UI audit, work package 3 of 4 (content and visual polish).
