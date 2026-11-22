@@ -119,4 +119,32 @@ class TemplateInterpreter:
             "adversary": adversary,
             "timeline": timeline,
             "experimental": True,
+            **self._incident_section(report),
+        }
+
+    @staticmethod
+    def _incident_section(report: dict[str, Any]) -> dict[str, Any]:
+        inc = report.get("incident")
+        if not inc:
+            return {}
+        card = inc["consequence_card"]
+        effect = (
+            f"{LEVELS_ES.get(card['consequence_level'], card['consequence_level'])}: hasta "
+            f"{num(card['people_without_power'])} personas sin luz y {num(card['load_shed_mw'])} MW no servidos. "
+            f"Con una interrupción supuesta de {num(card['outage_duration_h']['value'], 1)} h "
+            f"(supuesto), {num(card['unserved_energy_mwh'])} MWh no servidos y US$ "
+            f"{num(card['failure_cost_usd'])}."
+        )
+        prevention = [render("prevention", m) for m in inc["mitigations"]]
+        return {
+            "incident": {
+                "title": inc["title"],
+                "summary": render("labels", inc["summary_key"]),
+                "effect": effect,
+                "prevention": prevention,
+                "notes": inc["notes"],
+                "sources": inc["sources"],
+                "verified": inc["verified"],
+                "notices": inc["notices"],
+            }
         }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { addElement, ApiError, cutLines, deleteElement, getNetwork, sessionIdFrom, subscribe, updateElement } from "./sessionApi";
+import { addElement, ApiError, cutLines, deleteElement, getIncidentCatalog, getNetwork, sessionIdFrom, startIncidentRun, subscribe, updateElement } from "./sessionApi";
 
 const SID = "abcdefghijklmnopqrstuv";
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -39,6 +39,16 @@ describe("sessionApi", () => {
     expect(fetchMock.mock.calls[0][1].headers["If-Match"]).toBeUndefined();
     expect(fetchMock.mock.calls[1][1].headers["If-Match"]).toBe('"7"');
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ lines: ["R014"] });
+  });
+
+  it("reads the incident catalog outside /sessions and launches an incident inside the session", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(200, {})));
+    await getIncidentCatalog();
+    await startIncidentRun(SID, { scenario: "huatacondo-2026", policy: "C", duration_h: 6 });
+    const calls = fetchMock.mock.calls.map(([url, init]) => `${init.method} ${url}`);
+    expect(calls).toEqual(["GET /api/v1/attacks/catalog", `POST /api/v1/sessions/${SID}/attacks/runs`]);
+    expect(fetchMock.mock.calls[0][1].headers["X-Sub50-Agent"]).toBe("web");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ scenario: "huatacondo-2026", policy: "C", duration_h: 6 });
   });
 
   it("raises ApiError with the status and the Spanish message", async () => {

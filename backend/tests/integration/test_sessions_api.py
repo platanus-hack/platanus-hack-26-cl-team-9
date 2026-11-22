@@ -53,8 +53,9 @@ OPERATION_IDS = {
     "get_run_report",
     "get_run_after_action",
     "submit_run_action",
+    "start_incident_run",
 }
-TAGS = {"sessions", "session-network", "session-sandbox", "session-runs"}
+TAGS = {"sessions", "session-network", "session-sandbox", "session-runs", "incidents"}
 
 
 @pytest.fixture(scope="module")

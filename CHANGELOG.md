@@ -1,8 +1,98 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · Merge origin/main into feat/incident-scenarios
+
+- **Changed:** Integrates #92 (select on the first click, switch off on the second) and #97/#99 (prepared scenarios, `prepare_scenario`) with the incident scenarios.
+  - `mcp/tools.py` `INSTRUCTIONS` keeps both paragraphs (incidents and `prepare_scenario`); `mcp/digest.py` keeps `_incident_digest` and `prepare_digest`.
+  - `CascadeApp.tsx`: `edited` still counts an incident cascade (`!!incidentTl || ...`) and sits before main's `offState`; `canPower` still counts `inc.playing`, and `shutDown` uses main's `isSwitchedOff`. `inc.stop()` stays in `cutLine`, `outBus` and `powerAllOn`, which main's second-click path also goes through.
+- **Why:** The branch conflicted with main in four files.
+- **Agents:** Checked after the merge: web `tsc`, tests and build, the backend suite, and the browser flow with main's new click behaviour (see the PR for counts). The two `test_the_committed_cache_matches_the_engine_for_a_single_cut` failures are the same as on a clean `origin/main`.
+- **Files:** `backend/src/cascadasen/mcp/{tools,digest}.py`, `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+
+## 2026-11-22 · fix(web): show the clamped duration in the incident field
+
+- **Changed:** `IncidentPanel.tsx` rewrites the duration field with the value that is actually sent when it loses focus (`parseDuration` clamps to 0.25-720 h).
+- **Why:** Found in a browser test: typing 1000 left "1000" in the field while the run used 720 h.
+- **Agents:** `parseDuration` is unchanged; only the text shown changed.
+- **Files:** `web/src/incidents/IncidentPanel.tsx`.
+
+## 2026-11-22 · fix(incidents): scripted by default so the card is the incident's own
+
+- **Changed:** `POST /sessions/{sid}/attacks/runs` now defaults `stochastic` to `false`; the web and the MCP tool did not send it, so they follow. `test_incidents.py` runs scripted by default, checks V10 on seeds 1-8 and a new test checks that scripted Huatacondo and UK runs have only `scenario` events and L0 on seeds 1-8.
+- **Why:** Found testing everything end to end. With the theatre's chance on (the old default), unplanned `E1_demand_surge`/`E2_renewable_drop` events landed in the card as if the incident had caused them: the 40 MW UK counter-example gave L1 on seed 7 and L2 on seed 6, and Huatacondo L1 and L2 on those seeds. V10 only passed because the tests looked at seeds 1-3.
+- **Agents:** `stochastic: true` is still allowed and then the card includes the unplanned events; the card does not say which events were the incident's. The policy does not change the peak card (the effect lands at cycle 2, before defence acts) but it does change `indicators` (continuity, TTU, wrong decisions, reserve). `agents.openapi.json` regenerated (the field description changed).
+- **Files:** `backend/src/cascadasen/api/incident_routes.py`, `backend/tests/unit/test_incidents.py`, `docs/attack-sim.md`, `docs/openapi/agents.openapi.json`.
+
+## 2026-11-22 · Merge origin/main into feat/incident-scenarios
+
+- **Changed:** Integrates #95/#96 (a new scenario stops and restarts the timeline) and #82/#94 (blackout cost) with the incident scenarios.
+  - Only conflict in code: `CascadeApp.tsx`. `timeline` is `incidentTl ?? (loadedReady ? loaded.timeline : null)`, so main's rule that a timeline of another scenario never drives the map still holds and an incident cascade still plays over it.
+- **Why:** The branch conflicted with main in `CascadeApp.tsx` and this file.
+- **Agents:** After the merge `tsc`, the 143 web tests and the build pass; the backend has 435 passed and 2 failed: `test_the_committed_cache_matches_the_engine_for_a_single_cut[feb2025-1500-R239]` and `[nov2026-2000-R001]`. They fail the same way on a clean `origin/main` (checked in a temporary worktree), so they are not from this branch: the committed cache probably needs `uv run cascadasen-cache` after #82 changed the engine's cost.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+
+## 2026-11-22 · docs(web): document the Incidentes view
+
+- **Changed:** `mapa3.md` has a new section 4.2 (catalog, options, own session per incident, result, cascade on the map, what is not built) and a `web/src/incidents/` row in section 8; section 10 says the Incidentes view is the only part of the theatre the web uses. `web/README.md` gains the view's paragraph and the `src/incidents/` row. `attack-sim.md` section 3.1 and `sessions-api.md` section 4 record the 422 when the session point differs from the incident's, and that the web consumes the API.
+- **Why:** AGENTS.md: behaviour changes are documented in the same delivery.
+- **Agents:** The "web has no run viewer" comment in `assistant/useAssistant.ts` is still true for generic runs; only incident cascades are played. Still open (`plan.md` section 9 item 10): team confirmation of the reversal and whether to expose the API.
+- **Files:** `docs/{mapa3,attack-sim,sessions-api}.md`, `web/README.md`.
+
+## 2026-11-22 · feat(web): Incidentes view with consequence card and cascade on the map
+
+- **Changed:**
+  - New rail view **Incidentes** (`IncidentPanel.tsx`, `incidents.css`): catalog cards in file order (title, date, hour, effects in text, `no verificado` / `referencia, no es ciber` tags, sources), policy A/B/C, outage hours (assumption, 0.25-720) and **Simular incidente**. The result shows the consequence card (level, people, MW, MWh and cost with their source and assumption tips), the agentic response (`report.indicators`, labelled experimental), "Qué lo habría evitado", the cycles (`after_action.timeline`), notes, sources and both notices. **Cerrar incidente** clears it.
+  - `useIncident.ts` (owned by `CascadeApp`, like `useAssistant`): creates a session at the incident's `operating_point` when there is none or its hour differs (confirm before leaving one), joins it, starts the run, steps it to its horizon, reads report and after-action. Errors (422, 429 with `Retry-After`, 503, no backend) are Spanish texts (`incidentError`); `ApiError` now carries `retryAfter`.
+  - **Ver cascada en el mapa** plays that cycle's `transient` with the cut player: `CascadeApp` uses it as `timeline` ahead of the session's, with the Carga colours. A cut by double click, Prender todo, Cerrar incidente or leaving the session remove it.
+- **Why:** Continuation of issue #74: a user can pick a documented incident in the web, simulate it and see consequence, response, prevention and cascade (user decisions 2026-11-22: own session per incident; panel and cascade only).
+- **Agents:** Only cycles whose `transient` shed load, darkened buses or opened lines get the button (`cascadeCycles`); a stable island alone is not shown. Changing the duration needs a new run (another run in the same session). No viewer of `snapshot.grid`, areas or crews yet (`mapa3.md` section 10). Checked in Chrome (Playwright) against a local API: Huatacondo L0 with no cascade, 25F asks to replace the session, gives L3 and plays its blackout; with the backend off the view shows the error and the map keeps working.
+- **Files:** `web/src/incidents/{IncidentPanel.tsx,useIncident.ts,incidents.ts,incidents.test.ts,incidents.css}`, `web/src/cascade/CascadeApp.tsx`, `web/src/session/sessionApi.ts`.
+
+## 2026-11-22 · feat(web): incident catalog client and pure helpers
+
+- **Changed:** `sessionApi.ts` gains `getIncidentCatalog()` (`GET /api/v1/attacks/catalog`, through a new `callAt(base, ...)` that shares `call`'s busy-409 retries) and `startIncidentRun(sid, {scenario, policy, seed?, duration_h?})`. `useSession().create` accepts `{point, label}`. New `web/src/incidents/incidents.ts`: catalog, card and after-action types, `sessionPlan` (create/reuse/replace by the session hour), `cascadeCycles` (snapshots whose `transient` is a Timeline), `cycleMinutes`, `effectText`, `cardFigures` and `responseFigures` (each figure with its source; duration, MWh and cost flagged as assumptions), `parseDuration` (0.25-720 h).
+- **Why:** First half of the Incidentes view (continuation of issue #74): the logic is pure and tested before the panel uses it.
+- **Agents:** `EVENT_LABELS` in `incidents.ts` copies the five event labels of `narrative_es.yaml`; add a label there when the catalog uses a new event type. Tests: `incidents.test.ts`, `sessionApi.test.ts`.
+- **Files:** `web/src/session/{sessionApi,sessionApi.test,useSession}.ts`, `web/src/incidents/{incidents,incidents.test}.ts`.
+
+## 2026-11-22 · fix(incidents): require the session point to match the incident
+
+- **Changed:** `POST /api/v1/sessions/{sid}/attacks/runs` answers 422 `{field: "scenario", message, valid: [<point>]}` when the session's `point` differs from the incident's `operating_point`. The catalog and route descriptions name `operating_point`; the MCP `start_incident_run` docstring says 25F needs `start_session(point="feb2025-1500")`. `agents.openapi.json` regenerated.
+- **Why:** `SessionService.create_run` forces the session point, so `25f-referencia` in a `nov2026-1300` session silently ran at the wrong hour.
+- **Agents:** To replay an incident, create (or join) a session at its `operating_point` (in the catalog). Today three incidents use `nov2026-1300` and `25f-referencia` uses `feb2025-1500`.
+- **Files:** `backend/src/cascadasen/api/incident_routes.py`, `backend/src/cascadasen/mcp/tools.py`, `backend/tests/unit/test_incidents.py`, `docs/openapi/agents.openapi.json`.
+
+## 2026-11-22 · docs(incidents): attack-sim is implemented, with its API and tools
+
+- **Changed:** `attack-sim.md` has a new section 3.1 (catalog, results, API, card, tools) and a new status line; `strategy.md` section 6, `mcp.md` section 3, `sessions-api.md` section 4 and `plan.md` section 9 item 10 point to it.
+- **Why:** AGENTS.md: behaviour changes are documented in the same delivery (issue #74).
+- **Agents:** `attack-sim.md` sections 3 and 5 are the first proposal and are partly wrong now (no `plant_out`, `fleet_out` or `/attacks/simulate`; the API is not local-only, it follows the session rules). Still open (`plan.md` section 9 item 10): team confirmation of the reversal, whether to expose the API, and the Huatacondo battery in the dataset.
+- **Files:** `docs/{attack-sim,strategy,mcp,sessions-api,plan}.md`.
+
+## 2026-11-22 · feat(mcp): incident scenario tools
+
+- **Changed:** `list_incident_scenarios` and `start_incident_run(scenario, policy, seed, duration_h)` in `mcp/tools.py` (and so in the assistant, which shares the specs). `run_report` and `after_action` digests carry the `incident` block. The server `INSTRUCTIONS` mention them.
+- **Why:** Issue #74: an MCP client or the assistant must be able to replay a documented incident in natural language.
+- **Agents:** `OPERATIONS` maps them to `get_attack_catalog` and `start_incident_run`. `start_incident_run` sets the active run, like `start_run`. No tool takes free effects or lists targets.
+- **Files:** `backend/src/cascadasen/mcp/{tools,digest}.py`, `backend/tests/unit/test_mcp_tools.py`.
+
+## 2026-11-22 · feat(incidents): documented-incident scenarios as agentic runs
+
+- **Changed:**
+  - New catalog `domain/theater/params/incidents.yaml` (`huatacondo-2026`, `polonia-2025`, `reino-unido-2026`, `25f-referencia`): each is a theatre template (events C1/C2/C3/C5/D4, adversary off) plus sources, `verified`, notes and mitigations. `theater_config().incidents` has the metadata and `.templates` also contains them.
+  - Runs from an incident add `incident` to `report()`: public metadata and a `consequence_card` (level, people, MW shed, MWh and cost over `duration_h`, an assumption, default 4 h). `RunConfig.duration_h` is new and travels in the recipe. The after-action adds an `incident` section (effect and prevention, Spanish).
+  - API: `GET /api/v1/attacks/catalog` and `POST /api/v1/sessions/{sid}/attacks/runs` (`start_incident_run`). Step, report, after_action and replay use the existing routes. `agents.openapi.json` regenerated.
+- **Why:** Issue #74: launch a documented incident and see the defensive agents respond, as a thin layer over the theatre, not a second engine.
+- **Agents:**
+  - V10 holds: Huatacondo gives L0 in the seeds tried. Polonia gives L1-L2, UK L0, 25F L3 (`tests/unit/test_incidents.py`, uses real data, skipped without `data/processed`).
+  - Guardrails are tests: no technique words, no named plants (areas and zones only), file order not damage order, adversary off, both notices on every card.
+  - Effect sizes for Polonia and UK are replay assumptions. Huatacondo uses the dataset's 88.1 MW and no battery (not in `storage.geojson`).
+  - Not built from the first proposal: `plant_out`/`fleet_out`, free `effects` in a request, `/attacks/simulate`.
+  - The MCP extra is needed to run its tests: `uv sync --all-extras`.
+- **Files:** `backend/src/cascadasen/domain/theater/{incident,config,cycle,narrative}.py`, `domain/theater/params/{incidents,narrative_es}.yaml`, `api/{incident_routes,app,simulation_schemas}.py`, `application/run_experiment.py`, `backend/tests/unit/test_incidents.py`, `backend/tests/integration/test_sessions_api.py`, `docs/openapi/agents.openapi.json`.
 ## 2026-11-22 · fix(types): mypy reports 0 errors and becomes a CI gate
-- **Changed:** The 56 remaining `mypy src` errors are fixed with annotations and `typing.cast`, with no change at run time: `float | None` coordinates guarded by `located` (`domain/unify.py`, `validation.py`, `simulation/network.py`, `regional_reduction.py`, `regional_network.py`, `application/grid_queries.py`), `SimulationService.world` (the API always passes a world), a renamed loop variable in `unify.py`, the typed bus row of `grid_stress.py`. In `regional_network.py` the all-or-nothing check on `r_pu` became `len(rs) == len(group)` over the non-None values, which gives the same result.
+- **Changed:** The 56 remaining `mypy src` errors are fixed with annotations and `typing.cast`, with no change at run time: `float | None` coordinates guarded by `located` (`domain/unify.py`, `validation.py`, `simulation/network.py`, `regional_reduction.py`, `regional_network.py`, `application/grid_queries.py`), two casts in the incident fields of `domain/theater/cycle.py` (code that came with #98), `SimulationService.world` (the API always passes a world), a renamed loop variable in `unify.py`, the typed bus row of `grid_stress.py`. In `regional_network.py` the all-or-nothing check on `r_pu` became `len(rs) == len(group)` over the non-None values, which gives the same result.
 - **Changed:** The `backend-mypy` job of `checks.yml` no longer has `continue-on-error`, so a new type error blocks the deploy. README and `backend/README.md` say so.
 - **Why:** The check was red on PR #100 because the baseline (52) was below the real count (56 after `main` added code), and the user asked to fix mypy first.
 - **Agents:** Run `cd backend && uv run mypy src` before pushing Python changes; it must say "no issues found". Do not raise a baseline: fix the error or add a justified `cast`.
@@ -63,6 +153,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Issue #42 phase A: a line could be cut before its data was seen. User decision: phase A only, values stay plain text.
 - **Agents:** Switching back on is only from the card; a second click on something already off does nothing. Without a session a substation is off when it is in `edits.buses` (its lines are not off by themselves); in a session when all its lines are open. A double click on an element that is already selected switches it off on its first click (that click is a second click on the selection). Open: phase B (editing generation, demand, people). `docs/plan-2.0.md`, cited by the issue, does not exist.
 - **Files:** `web/src/cascade/{clicks.ts,clicks.test.ts,outage.ts,outage.test.ts,CascadeApp.tsx,SelectionCard.tsx,SimulationPanel.tsx,NetworkState.tsx,Timeline.tsx,Legend.tsx}`.
+
 
 ## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
 

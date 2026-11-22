@@ -8,7 +8,7 @@ export type Edit = (fn: (sid: string, revision: number) => Promise<unknown>) => 
 export interface Session {
   sid: string | null; session: SessionDoc | null; network: SessionNetwork | null; state: CutState | null;
   live: LiveMode | null; error: string | null;
-  create(): Promise<void>; join(text: string): void; leave(): void; refresh(): Promise<void>; edit: Edit; clearError(): void;
+  create(opts?: { point?: string; label?: string }): Promise<void>; join(text: string): void; leave(): void; refresh(): Promise<void>; edit: Edit; clearError(): void;
 }
 
 /**
@@ -80,8 +80,8 @@ export function useSession(): Session {
   }, [sid, network, load]);
   return {
     sid, session, network, state, live, error,
-    create: async () => {
-      try { const doc = await createSession(); setError(null); setSid(doc.session_id); } catch (e) { setError((e as Error).message); }
+    create: async (opts = {}) => {
+      try { const doc = await createSession(opts); setError(null); setSid(doc.session_id); } catch (e) { setError((e as Error).message); }
     },
     join: (text) => {
       const id = sessionIdFrom(`?sesion=${encodeURIComponent(text.match(/sesion=([^&\s]+)/)?.[1] ?? text.trim())}`);
