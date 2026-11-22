@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · test(architecture): enforce the layer import rules
+- **Changed:** New `backend/tests/unit/test_architecture.py` parses `src/cascadasen` with `ast` (stdlib only, no package import) and asserts: `domain` imports no outer layer (api, application, infrastructure, mcp, cli, sim_fixtures); `application` and `infrastructure` import neither `api` nor `mcp`; no module cycle among top-level imports; the application to infrastructure imports equal the set `KNOWN_EXCEPTIONS`.
+- **Why:** Review R-21. The hexagonal rule in `docs/architecture.md` had no check. Measured on this base: 0 violations for the first four rules. A temporary `from cascadasen.api import app` in a domain module made 2 tests fail.
+- **Agents:** The 6 `KNOWN_EXCEPTIONS` (CLI entry points in `application/{build_regional,grid_health,grids}.py` and the default document store of `run_experiment.py`) are listed in the test. A new application to infrastructure import fails the test. The 4 api to mcp imports are not asserted (review B-08 is a larger refactor).
+- **Files:** `backend/tests/unit/test_architecture.py`.
 ## 2026-11-22 · chore(types): fix plain mypy annotation errors
 - **Changed:** `uv run mypy src` goes from 153 to 52 errors (179 before the config). Only annotations, `cast`, two `assert x is not None` that cannot fail (`execution.py` C3, `cycle.py` LLM answer) and renames of shadowed loop variables (`r` to `ramp`, `p` to `prob`, `k` to `nearest`, `c` to `comuna`, `z` to `zone`, `a, b` to `src, dst`). No runtime behaviour changed. `backend/README.md` gets a `Type checking` section.
 - **Why:** Review R-03/B-10.
