@@ -2,9 +2,15 @@
 the MCP server, run through the app's own routes. Not marked `x-sub50-agent`: they are for the web
 client, not for external agents. Error details are in Spanish."""
 
+import asyncio
+import json
+import logging
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Path, Request, Response
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from cascadasen.api.limits import client_ip
@@ -26,6 +32,7 @@ from cascadasen.mcp.toolbox import SessionTools
 from cascadasen.mcp.tools import INSTRUCTIONS, Sub50Tools
 
 router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
+log = logging.getLogger(__name__)
 
 AGENT_NAME = "asistente"
 SYSTEM = (
@@ -116,22 +123,116 @@ def conversation_error(exc: Exception) -> HTTPException:
     },
 )
 def chat(request: Request, body: ChatIn) -> dict[str, Any]:
-    settings: Settings = request.app.state.settings
-    ip = client_ip(request)
-    request.app.state.limiter.check("assistant", ip, settings.rate_assistant_per_minute, 60.0)
-    assistant = get_assistant(request)
-
-    def toolbox_for(session_id: str | None, run_id: str | None, said: str) -> ToolBox:
-        http = in_process_client(request.app, ip)
-        state = McpState(session_id, run_id)
-        return SessionTools(Sub50Tools(Sub50Client(http=http, agent=AGENT_NAME), state), said=said)
-
+    assistant, ip = admit(request)
     try:
-        return assistant.chat(body.message, body.conversation_id, body.session_id, toolbox_for)
+        return assistant.chat(
+            body.message, body.conversation_id, body.session_id, toolbox_factory(request.app, ip)
+        )
     except (ConversationNotFoundError, ConversationConflictError, AssistantInputError) as exc:
         raise conversation_error(exc) from exc
     except ToolChatError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+def admit(request: Request) -> tuple[Assistant, str]:
+    """Rate limit per client IP, then the assistant (503 when the LLM is not configured)."""
+    settings: Settings = request.app.state.settings
+    ip = client_ip(request)
+    request.app.state.limiter.check("assistant", ip, settings.rate_assistant_per_minute, 60.0)
+    return get_assistant(request), ip
+
+
+def toolbox_factory(app: Any, ip: str) -> Callable[[str | None, str | None, str], ToolBox]:
+    """The tools of one request: the MCP tools over the app's own routes, as the caller's IP."""
+
+    def toolbox_for(session_id: str | None, run_id: str | None, said: str) -> ToolBox:
+        http = in_process_client(app, ip)
+        state = McpState(session_id, run_id)
+        return SessionTools(Sub50Tools(Sub50Client(http=http, agent=AGENT_NAME), state), said=said)
+
+    return toolbox_for
+
+
+def sse(kind: str, data: dict[str, Any]) -> str:
+    return f"event: {kind}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+DONE_KEYS = ("conversation_id", "session_id", "run_id", "reply", "steps", "truncated", "notice")
+
+
+@router.post(
+    "/chat/stream",
+    summary="Same as /chat, streaming each step as Server-Sent Events",
+    description="Runs one message like /chat but answers `text/event-stream` with the steps as they "
+    "happen: `start`, `assistant_text`, `tool_call`, `tool_result` (with `session_id` and `run_id`, to "
+    "fetch the full state from the session routes), then `done` (the /chat fields without the trace) or "
+    "`error` (`status`, `detail`). A `: ping` comment is sent when nothing happened for a while. Errors "
+    "found before the stream starts (422, 404 conversation, 429, 503) are plain HTTP errors.",
+    response_class=StreamingResponse,
+    responses={
+        200: {"content": {"text/event-stream": {}}, "description": "The event stream."},
+        404: {"description": "The conversation does not exist or expired."},
+        422: {"description": "Empty or too long message, or a malformed id."},
+        429: {"description": "Rate limit reached; wait Retry-After seconds."},
+        503: {"description": "The assistant is not configured (LLM disabled or another provider)."},
+    },
+)
+async def chat_stream(request: Request, body: ChatIn) -> StreamingResponse:
+    assistant, ip = admit(request)
+    if body.conversation_id is not None:  # answer a missing conversation with a real 404, not an event
+        try:
+            await run_in_threadpool(assistant.load, body.conversation_id)
+        except ConversationNotFoundError as exc:
+            raise conversation_error(exc) from exc
+    settings: Settings = request.app.state.settings
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue()
+
+    def emit(kind: str, data: dict[str, Any]) -> None:  # called from the worker thread
+        loop.call_soon_threadsafe(queue.put_nowait, (kind, data))
+
+    def work() -> None:
+        try:
+            out = assistant.chat(
+                body.message,
+                body.conversation_id,
+                body.session_id,
+                toolbox_factory(request.app, ip),
+                on_event=emit,
+                deadline_s=settings.assistant_stream_deadline_s,
+            )
+            emit("done", {k: out[k] for k in DONE_KEYS})
+        except (ConversationNotFoundError, ConversationConflictError, AssistantInputError) as exc:
+            err = conversation_error(exc)
+            emit("error", {"status": err.status_code, "detail": err.detail})
+        except ToolChatError as exc:
+            emit("error", {"status": 502, "detail": str(exc)})
+        except Exception as exc:
+            log.warning("assistant stream failed (%s)", type(exc).__name__)
+            emit("error", {"status": 500, "detail": "El asistente falló; reintenta."})
+        finally:
+            emit("", {})  # end of stream
+
+    # the loop runs to the end and saves the conversation even if the client disconnects
+    worker = asyncio.ensure_future(run_in_threadpool(work))
+
+    async def events() -> AsyncIterator[str]:
+        while True:
+            try:
+                kind, data = await asyncio.wait_for(queue.get(), settings.assistant_stream_ping_s)
+            except TimeoutError:
+                yield ": ping\n\n"
+                continue
+            if not kind:
+                break
+            yield sse(kind, data)
+        await worker
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 ConversationId = Annotated[

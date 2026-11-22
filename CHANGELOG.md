@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(api): stream the assistant's steps as Server-Sent Events
+
+- **Changed:** `POST /api/v1/assistant/chat/stream` takes the `/chat` body and answers `text/event-stream`: `start`, `assistant_text`, `tool_call`, `tool_result` (compact result plus `session_id` and `run_id`), then `done` (the `/chat` fields without the trace) or `error` (`status`, `detail`). A `: ping` comment goes out after `assistant_stream_ping_s` (10 s) without events. The loop runs in a worker thread and keeps going, and saves the conversation, if the client disconnects. `/chat` is unchanged; both share the rate limit (`admit`) and the tool wiring (`toolbox_factory`).
+- **Changed:** New settings `assistant_stream_deadline_s` (90 s: events and pings keep CloudFront's 30 s origin read timeout from firing) and `assistant_stream_ping_s`.
+- **Why:** The web will draw partial results on the map while the assistant works. Events stay light and point to the existing routes for the full data: after `cut_lines` `GET /sessions/{sid}/state` (timeline with frames), after `step` `GET /sessions/{sid}/runs/{rid}/snapshots?start=N`, after an edit `GET /sessions/{sid}/network` (user decision: references, not map data inside the events).
+- **Agents:** Errors found before streaming (422, 404 conversation, 429, 503) are plain HTTP errors; later ones are `error` events. The route is not marked `x-sub50-agent`. Verification: `uv run --extra mcp pytest -q` 349 passed, 2 skipped; lint clean. Not tried against Bedrock yet.
+- **Files:** `backend/src/cascadasen/api/assistant_routes.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/integration/test_assistant_api.py`.
+
 ## 2026-11-21 · feat(assistant): emit each step of the tool loop through a callback
 
 - **Changed:** `Assistant.chat` takes `on_event(kind, data)` and `deadline_s`. It emits `start` (`conversation_id`, `session_id`, `run_id`), `assistant_text` (`step`, `text`) when the model talks while calling tools, `tool_call` (`step`, `id`, `name`, `arguments`) and `tool_result` (`step`, `id`, `name`, `ok`, `result`, plus the current `session_id` and `run_id`). `Emitter` drops a callback that raises, so a client that goes away never stops the loop or the save.
