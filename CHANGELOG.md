@@ -1,6 +1,17 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(cache): regenerate cascade cache with realistic defaults
+
+- **Changed:** `web/public/cache/` regenerated (`uv run cascadasen-cache`) after merging `origin/main` (#82 cost, #92 select-then-cut) and turning on `resplit_memory` and the whole-people rule.
+- **Why:** The merged cost fields and both modelling decisions change the timelines.
+- **Agents:**
+  - Against the cache before issue #90: 219 of the 1,848 timelines change people, 52 change MW and 8 change their stage count.
+  - The causality scan finds 0 violations.
+  - Settled live islands stay within 4.4 % of balance.
+  - R239 is 18.16 M people at Feb 2025 15:00 and at Nov 2026 13:00, 0.31 M at Feb 2025 03:00, and 15.40 M at Nov 2026 20:00.
+- **Files:** `web/public/cache/`.
+
 ## 2026-11-22 · fix(web): count every person in a dark substation
 
 - **Changed:** In `impactAt` (`web/src/cascade/simulation.ts`), the people of dark substations count whole whatever their net load (`sumPeople`). Lost load still adds only positive load (`sumLoad`).
