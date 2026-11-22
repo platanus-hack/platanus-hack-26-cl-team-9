@@ -43,13 +43,20 @@ def test_publish_then_verify_and_never_overwrite(store):
 def test_verify_reports_a_changed_document(tmp_path):
     s = LocalGridStore(tmp_path)
     publish_workflow(s, PROCESSED, SCENARIOS)
-    (tmp_path / "CHL/baseline_opf.json").write_bytes(b"{}")
-    assert verify_workflow(s) == ["sha256 distinto en CHL/baseline_opf.json"]
+    (tmp_path / "CHL/source/baseline_opf.json").write_bytes(b"{}")
+    assert verify_workflow(s) == ["sha256 distinto en CHL/source/baseline_opf.json"]
 
 
 def test_catalog_lists_countries_documents_and_scenarios(store):
     cat = catalog_workflow(store)
-    assert {"CHL", "ARG", "BOL", "BRA", "PER"} <= {d["country"] for d in cat["documents"]}
+    assert {c["country"] for c in cat["context"]} == {"ARG", "BOL", "BRA", "PER"}
+    assert {p["point"] for p in cat["points"]} == {
+        "feb2025-1500",
+        "feb2025-0300",
+        "nov2026-1300",
+        "nov2026-2000",
+    }
+    assert all(d["role"] != "source" for d in cat["documents"])
     assert {s["id"] for s in cat["scenarios"]} >= {"dia-normal", "25f"}
     assert next(s for s in cat["scenarios"] if s["id"] == "25f")["open_lines"] == ["R239"]
 
@@ -138,3 +145,39 @@ def test_api_compose_and_errors(tmp_path, store):
     assert ok.status_code == 200 and ok.json()["open_lines"] == ["R239"]
     assert client.post("/api/v1/grids/compose", json={"point": "x"}).status_code == 404
     assert client.post("/api/v1/grids/compose", json={}).status_code == 422
+
+
+def test_compose_context_selection_and_document(store):
+    composer = GridComposer(store)
+    assert composer.compose_workflow(point="feb2025-1500", context=[])["context"] == []
+    pick = ["ARG/grid.json"]
+    assert composer.compose_workflow(point="feb2025-1500", context=pick)["context"] == pick
+    assert len(composer.compose_workflow(point="feb2025-1500")["context"]) == 4
+    with pytest.raises(GridError) as exc:
+        composer.compose_workflow(point="feb2025-1500", context=["CHL/network-2025.json"])
+    assert exc.value.kind == "invalid"
+    assert json.loads(composer.document_workflow("ARG/grid.json"))["lines"]
+    with pytest.raises(GridError):
+        composer.document_workflow("CHL/network-2025.json")
+
+
+def test_regional_document_has_the_shape_the_web_draws(store):
+    doc = json.loads(GridComposer(store).document_workflow("PER/grid.json"))
+    assert doc["meta"]["country"] == "PER" and doc["meta"]["sources"]
+    assert doc["lines"][0].keys() >= {"id", "kv", "circuits", "lengthKm", "source", "path"}
+    assert doc["substations"][0].keys() >= {"id", "name", "kv", "kind", "source", "position"}
+    assert doc["plants"][0].keys() >= {"id", "name", "tech", "mw", "count", "source", "position"}
+
+
+def test_compose_rejects_a_network_that_does_not_fit_the_point(store):
+    composer = GridComposer(store)
+    other = composer.compose_workflow(point="nov2026-1300")["network"]
+    manifest = json.loads(store.read("manifest.json"))
+    composer._parsed[next(f["sha256"] for f in manifest["files"] if f["key"] == "CHL/network-2025.json")] = {
+        "year": 2025,
+        "nodes": other["nodes"][:-1],
+        "lines": [],
+    }
+    with pytest.raises(GridError) as exc:
+        composer.compose_workflow(point="feb2025-1500")
+    assert exc.value.kind == "invalid"

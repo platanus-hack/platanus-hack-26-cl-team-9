@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(grids): "Fuentes de la grilla" tab and app-ready documents per country (#66)
+
+- **Changed:** `publish` now builds the documents the app reads (`CHL/network-<year>.json`, `CHL/operating/<point>.json`, `<ISO>/grid.json`) and keeps the raw files under `<ISO>/source/`; compose only joins them (no engine, no snapshot). Compose takes `context` (which countries) and `GET /api/v1/grids/documents/<key>` serves a context document. Web: rail item "Fuentes de la grilla" (`GridSources.tsx`, `gridsApi.ts`, `regionalFromDocuments`): a collapsible list with a checkbox per country; ticking one composes the grid. Scenarios and hours are picked in the rail's "Escenarios", which recompose once a grid is composed.
+- **Why:** the user must choose, from the stored documents, which ones make up the grid on the map, and edit elements by id; whole documents per country keep their references together.
+- **Agents:** default prefix is now `grids/v2` (layout `cascadasen.grid/2`); `grids/v1` is superseded. The cascade timelines still come from `web/public/cache`; only network, buses and context come from the composed grid. Compose does not apply `overlay` yet. Only the first of several `open_lines` is simulated in the web. See `docs/grids.md`.
+- **Files:** `backend/src/cascadasen/{domain/grids.py,application/grids.py,api/grid_routes.py}`, `web/src/cascade/{GridSources.tsx,gridsApi.ts,CascadeApp.tsx}`, `web/src/map/regional.ts`, `docs/grids.md`.
+
 ## 2026-11-21 · feat(grids): grids as documents per country, published to S3 and composed by the backend (#63)
 
 - **Changed:** new port `GridStore` with `LocalGridStore` and `S3GridStore` (never overwrite), pure layout in `domain/grids.py`, use cases in `application/grids.py` (publish, verify, catalogue, `GridComposer`), routes `GET /api/v1/grids/sources`, `GET /api/v1/grids/scenarios`, `POST /api/v1/grids/compose`, CLI `cascadasen-grids publish|verify|list`, seed scenarios in `data/scenarios/*.json`.

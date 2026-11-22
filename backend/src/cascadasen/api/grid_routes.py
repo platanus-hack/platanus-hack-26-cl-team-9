@@ -5,7 +5,7 @@ Not marked for the agent OpenAPI: these routes serve the web app.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, model_validator
 
 from cascadasen.application.grids import GridComposer, GridError, catalog_workflow
@@ -18,6 +18,7 @@ _STATUS = {"not_found": 404, "invalid": 422, "unavailable": 503}
 class ComposeRequest(BaseModel):
     point: str | None = None
     scenario: str | None = None
+    context: list[str] | None = None  # context documents to include; omitted: all
 
     @model_validator(mode="after")
     def _one_of(self) -> ComposeRequest:
@@ -52,4 +53,10 @@ def scenarios(request: Request) -> list[dict]:
 
 @router.post("/compose")
 def compose(body: ComposeRequest, request: Request) -> dict:
-    return _run(_composer(request).compose_workflow, body.point, body.scenario)
+    return _run(_composer(request).compose_workflow, body.point, body.scenario, body.context)
+
+
+@router.get("/documents/{key:path}")
+def document(key: str, request: Request) -> Response:
+    data = _run(_composer(request).document_workflow, key)
+    return Response(data, media_type="application/json")

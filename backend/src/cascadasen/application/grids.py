@@ -1,7 +1,8 @@
 """Grids as documents (docs/grids.md): publish `data/processed` to a store, list it and compose a grid.
 
 Why: the user builds the grid they want to see from the documents the backend offers, edits it in the
-browser and keeps it there. The backend only reads documents and composes; it keeps no session for this.
+browser and keeps it there. Publishing converts the raw files into the shape the app reads, once; composing
+only picks and joins those documents, so a request never runs the engine or reads the raw snapshot.
 """
 
 from __future__ import annotations
@@ -31,6 +32,19 @@ class GridError(Exception):
 # ---- publish / verify -------------------------------------------------------------------------
 
 
+def plan_workflow(processed: Path, scenarios_dir: Path) -> list[layout.GridFile]:
+    """Every document to publish: the app-ready ones first, then the raw sources they come from."""
+    snapshot, ops, base = (
+        _read(processed / n) for n in ("grid_snapshot.json", "operating_points.json", "baseline_opf.json")
+    )
+    return [
+        *_chile_documents(snapshot, ops, base),
+        *_regional_documents(processed),
+        *_scenario_documents(scenarios_dir),
+        *layout.source_files(processed, _split_outlines(processed)),
+    ]
+
+
 def publish_workflow(
     store: GridStore,
     processed: Path,
@@ -38,7 +52,7 @@ def publish_workflow(
     built_at: str | None = None,
     commit: str = "unknown",
 ) -> dict:
-    files = layout.plan(processed, _read_scenarios(scenarios_dir), _split_outlines(processed))
+    files = plan_workflow(processed, scenarios_dir)
     manifest = layout.build_manifest(files, _countries(processed), built_at or _now(), commit)
     for f in files:
         store.write(f.key, f.read())
@@ -47,18 +61,19 @@ def publish_workflow(
 
 
 def verify_workflow(store: GridStore) -> list[str]:
-    manifest = _manifest(store)
-    return layout.check_manifest(manifest, store.read)
+    return layout.check_manifest(_manifest(store), store.read)
 
 
 def catalog_workflow(store: GridStore) -> dict:
     manifest = _manifest(store)
-    scenarios = [_scenario_summary(store, f["key"]) for f in manifest["files"] if f["role"] == "scenario"]
+    by_role = {role: [f for f in manifest["files"] if f["role"] == role] for role in layout.ROLES}
     return {
         "built_at": manifest["built_at"],
         "countries": manifest["countries"],
-        "documents": [f for f in manifest["files"] if f["role"] != "scenario"],
-        "scenarios": scenarios,
+        "points": [{"key": f["key"], **f["meta"]} for f in by_role["operating"]],
+        "scenarios": [f["meta"] for f in by_role["scenario"]],
+        "context": [{k: f[k] for k in ("key", "country", "bytes")} | f["meta"] for f in by_role["context"]],
+        "documents": [f for f in manifest["files"] if f["role"] != "source"],
     }
 
 
@@ -66,33 +81,60 @@ def catalog_workflow(store: GridStore) -> dict:
 
 
 class GridComposer:
-    """Builds a grid document from the stored sources. Parsed documents are cached by checksum."""
+    """Joins the stored documents the user picked into one grid. Parsed documents are cached by checksum."""
 
     def __init__(self, store: GridStore) -> None:
         self.store = store
         self._parsed: dict[str, dict] = {}
 
-    def compose_workflow(self, point: str | None = None, scenario: str | None = None) -> dict:
+    def compose_workflow(
+        self, point: str | None = None, scenario: str | None = None, context: list[str] | None = None
+    ) -> dict:
+        """`context`: the context documents to include (None: all of them, [] none)."""
         manifest = _manifest(self.store)
         chosen = self._scenario(manifest, scenario) if scenario else {"point": point}
-        point_id = _require_point(chosen.get("point"))
-        topology, ops, base = (self._doc(manifest, name) for name in layout_names())
-        year = _point_year(ops, point_id)
-        net = reduce_network(topology, year)
-        op = operating_point_from_docs(net, ops, base, topology, point_id)
-        return _grid_document(manifest, chosen, point_id, year, net, op)
+        operating = self._doc(
+            manifest, layout.operating_key(_require_point(chosen.get("point"))), "el punto de operación"
+        )
+        network = self._doc(manifest, layout.network_key(operating["year"]), "la red")
+        _check_fit(network, operating)
+        return {
+            "schema": layout.SCHEMA,
+            "country": layout.TOPOLOGY_COUNTRY,
+            "point": operating["point"],
+            "label": operating["label"],
+            "year": operating["year"],
+            "scenario": chosen.get("id"),
+            "built_at": manifest["built_at"],
+            "sources": [
+                _ref(manifest, layout.network_key(operating["year"])),
+                _ref(manifest, layout.operating_key(operating["point"])),
+            ],
+            "network": {"nodes": network["nodes"], "lines": network["lines"]},
+            "operating": operating["buses"],
+            "open_lines": chosen.get("open_lines", []),
+            "overlay": chosen.get("overlay", {}),  # applied by the simulator, not by compose (docs/grids.md)
+            "context": _context_keys(manifest, context),
+        }
+
+    def document_workflow(self, key: str) -> bytes:
+        """One context document as stored, checked against the catalogue."""
+        manifest = _manifest(self.store)
+        entry = next((f for f in manifest["files"] if f["key"] == key and f["role"] == "context"), None)
+        if entry is None:
+            raise GridError("not_found", f"No existe el documento de contexto: {key}")
+        data = self.store.read(key)
+        if data is None or layout.sha256(data) != entry["sha256"]:
+            raise GridError("unavailable", f"{key} no coincide con el catálogo")
+        return data
 
     def _scenario(self, manifest: dict, scenario_id: str) -> dict:
-        key = f"scenarios/{scenario_id}.json"
-        if key not in {f["key"] for f in manifest["files"]}:
-            raise GridError("not_found", f"No existe el escenario: {scenario_id}")
-        return self._doc(manifest, key, absolute=True)
+        return self._doc(manifest, f"scenarios/{scenario_id}.json", "el escenario")
 
-    def _doc(self, manifest: dict, name: str, absolute: bool = False) -> dict:
-        key = name if absolute else f"{layout.TOPOLOGY_COUNTRY}/{name}"
+    def _doc(self, manifest: dict, key: str, what: str) -> dict:
         entry = next((f for f in manifest["files"] if f["key"] == key), None)
         if entry is None:
-            raise GridError("unavailable", f"El catálogo no tiene {key}")
+            raise GridError("not_found", f"No existe {what}: {key}")
         if entry["sha256"] not in self._parsed:
             data = self.store.read(key)
             if data is None or layout.sha256(data) != entry["sha256"]:
@@ -101,39 +143,23 @@ class GridComposer:
         return self._parsed[entry["sha256"]]
 
 
-def layout_names() -> tuple[str, str, str]:
-    return "grid_snapshot.json", "operating_points.json", "baseline_opf.json"
+def _check_fit(network: dict, operating: dict) -> None:
+    """A network and an operating point fit when they cover the same buses (docs/grids.md)."""
+    ids = {n["id"] for n in network["nodes"]}
+    if ids != set(operating["buses"]) or network["year"] != operating["year"]:
+        raise GridError("invalid", "La red y el punto de operación no corresponden a las mismas barras")
 
 
-def _grid_document(manifest: dict, chosen: dict, point_id: str, year: int, net, op) -> dict:
-    ids = [f"B{i:03d}" for i in range(net.size)]
-    sources = [
-        f for f in manifest["files"] if f["country"] == layout.TOPOLOGY_COUNTRY and f["role"] != "scenario"
-    ]
-    return {
-        "schema": layout.SCHEMA,
-        "country": layout.TOPOLOGY_COUNTRY,
-        "point": point_id,
-        "label": op.label,
-        "year": year,
-        "scenario": chosen.get("id"),
-        "built_at": manifest["built_at"],
-        "sources": [{"key": f["key"], "sha256": f["sha256"]} for f in sources if f["role"] != "context"],
-        "network": network_json(net),
-        "operating": {
-            ids[i]: {
-                "gen_mw": round(float(op.gen[i]), 1),
-                "load_mw": round(float(op.load[i]), 1),
-                "sync_mw": round(float(op.sync_mw[i]), 1),
-                "inertia_mws": round(float(op.inertia_mws[i]), 1),
-                "people": round(float(op.people[i])),
-            }
-            for i in range(net.size)
-        },
-        "open_lines": chosen.get("open_lines", []),
-        "overlay": chosen.get("overlay", {}),  # applied by the simulator, not by compose (docs/grids.md)
-        "context": [f["key"] for f in sources if f["role"] == "context"],
-    }
+def _ref(manifest: dict, key: str) -> dict:
+    return {"key": key, "sha256": next(f["sha256"] for f in manifest["files"] if f["key"] == key)}
+
+
+def _context_keys(manifest: dict, wanted: list[str] | None) -> list[str]:
+    known = [f["key"] for f in manifest["files"] if f["role"] == "context"]
+    unknown = [k for k in wanted or [] if k not in known]
+    if unknown:
+        raise GridError("invalid", f"No son documentos de contexto: {', '.join(unknown)}")
+    return known if wanted is None else list(dict.fromkeys(wanted))
 
 
 def _require_point(point: str | None) -> str:
@@ -142,11 +168,81 @@ def _require_point(point: str | None) -> str:
     return point
 
 
-def _point_year(ops: dict, point_id: str) -> int:
-    found = next((p for p in ops["points"] if p["id"] == point_id), None)
-    if found is None:
-        raise GridError("not_found", f"No existe el punto de operación: {point_id}")
-    return int(found["snapshot"][:4])
+# ---- documents built at publish time ----------------------------------------------------------
+
+
+def _chile_documents(snapshot: dict, ops: dict, base: dict) -> list[layout.GridFile]:
+    country = layout.TOPOLOGY_COUNTRY
+    points = ops["points"]
+    nets = {y: reduce_network(snapshot, y) for y in sorted({int(p["snapshot"][:4]) for p in points})}
+    files = [
+        layout.GridFile(
+            layout.network_key(y),
+            country,
+            "network",
+            data=_encode({"schema": layout.SCHEMA, "country": country, "year": y, **network_json(net)}),
+            meta={"year": y},
+        )
+        for y, net in nets.items()
+    ]
+    for p in points:
+        year = int(p["snapshot"][:4])
+        net = nets[year]
+        op = operating_point_from_docs(net, ops, base, snapshot, p["id"])
+        meta = {"point": p["id"], "label": op.label, "year": year, "snapshot": p["snapshot"]}
+        buses = {
+            f"B{i:03d}": {
+                "gen_mw": round(float(op.gen[i]), 1),
+                "load_mw": round(float(op.load[i]), 1),
+                "sync_mw": round(float(op.sync_mw[i]), 1),
+                "inertia_mws": round(float(op.inertia_mws[i]), 1),
+                "people": round(float(op.people[i])),
+            }
+            for i in range(net.size)
+        }
+        files.append(
+            layout.GridFile(
+                layout.operating_key(p["id"]),
+                country,
+                "operating",
+                data=_encode({"schema": layout.SCHEMA, "country": country, **meta, "buses": buses}),
+                meta=meta,
+            )
+        )
+    return files
+
+
+def _regional_documents(processed: Path) -> list[layout.GridFile]:
+    files = []
+    for iso, meta in _countries(processed).items():
+        parts = [
+            _read(processed / "latam" / iso / f"{layer}.geojson")
+            for layer in ("lines", "substations", "plants")
+        ]
+        doc = layout.regional_document(iso, meta, *parts)
+        info = {
+            "name": meta.get("name", iso),
+            "lines": len(doc["lines"]),
+            "substations": len(doc["substations"]),
+            "plants": len(doc["plants"]),
+        }
+        files.append(layout.GridFile(layout.country_key(iso), iso, "context", data=_encode(doc), meta=info))
+    return files
+
+
+def _scenario_documents(folder: Path) -> list[layout.GridFile]:
+    files = []
+    for path in sorted(folder.glob("*.json")):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        meta = {k: doc.get(k) for k in ("id", "name", "point", "open_lines")} | {
+            "edits": bool(doc.get("overlay"))
+        }
+        files.append(
+            layout.GridFile(
+                f"scenarios/{path.name}", layout.TOPOLOGY_COUNTRY, "scenario", source=path, meta=meta
+            )
+        )
+    return files
 
 
 # ---- helpers ----------------------------------------------------------------------------------
@@ -159,28 +255,21 @@ def _manifest(store: GridStore) -> dict:
     return json.loads(data)
 
 
-def _scenario_summary(store: GridStore, key: str) -> dict:
-    doc = json.loads(store.read(key) or b"{}")
-    return {k: doc.get(k) for k in ("id", "name", "point", "open_lines")} | {
-        "edits": bool(doc.get("overlay"))
-    }
-
-
-def _read_scenarios(folder: Path) -> list[tuple[str, bytes]]:
-    return [(p.name, p.read_bytes()) for p in sorted(folder.glob("*.json"))]
+def _read(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _split_outlines(processed: Path) -> dict[str, bytes]:
     path = processed / "latam" / "outlines.geojson"
     if not path.is_file():
         return {}
-    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc = _read(path)
     return {f["properties"]["shapeGroup"]: _encode({**doc, "features": [f]}) for f in doc["features"]}
 
 
 def _countries(processed: Path) -> dict:
     path = processed / "latam" / "manifest.json"
-    return json.loads(path.read_text(encoding="utf-8"))["countries"] if path.is_file() else {}
+    return _read(path)["countries"] if path.is_file() else {}
 
 
 def _encode(doc: dict) -> bytes:
@@ -211,11 +300,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Publica, verifica y lista los documentos de grillas.")
     parser.add_argument("action", choices=["publish", "verify", "list"])
     parser.add_argument("--store", choices=["local", "s3"], default="local")
-    parser.add_argument(
-        "--out", type=Path, default=settings.data_dir / "grids", help="carpeta del store local"
-    )
-    parser.add_argument("--bucket", default=settings.session_bucket)
-    parser.add_argument("--prefix", default="grids/v1")
+    parser.add_argument("--out", type=Path, default=settings.grids_dir, help="carpeta del store local")
+    parser.add_argument("--bucket", default=settings.grids_bucket or settings.session_bucket)
+    parser.add_argument("--prefix", default=settings.grids_prefix)
     parser.add_argument("--region", default=settings.aws_region)
     parser.add_argument("--profile", default=settings.aws_profile)
     parser.add_argument("--dry-run", action="store_true", help="solo muestra qué se publicaría")
@@ -238,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     processed, scenarios = settings.processed_dir, settings.data_dir / "scenarios"
-    files = layout.plan(processed, _read_scenarios(scenarios), _split_outlines(processed))
+    files = plan_workflow(processed, scenarios)
     total = sum(len(f.read()) for f in files)
     print(
         f"{len(files)} documentos, {total / 1e6:.1f} MB -> {args.store}:{args.prefix if args.store == 's3' else args.out}"

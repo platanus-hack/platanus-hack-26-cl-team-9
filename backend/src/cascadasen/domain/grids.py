@@ -1,42 +1,44 @@
-"""Layout of the grid documents (docs/grids.md): which file of `data/processed` becomes which key.
+"""Layout of the grid documents (docs/grids.md): which document lives under which key.
 
-Why: a grid is a set of JSON documents organised by country. The backend composes the ones the user
-picks into one grid document that the browser keeps locally. Nothing here touches disk or S3: the
-layout, the manifest and the checksums are pure so that any store can publish and verify them.
+Why: a grid is a set of JSON documents organised by country, already in the shape the app reads, so that
+composing a grid only picks and joins them. The raw files of `data/processed` stay next to them as `source`
+for traceability. Nothing here touches disk or S3: layout, conversions, manifest and checksums are pure.
 """
 
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
-SCHEMA = "cascadasen.grid/1"
+SCHEMA = "cascadasen.grid/2"
 MANIFEST = "manifest.json"
-TOPOLOGY_COUNTRY = "CHL"  # the only country with a simulable topology (docs/grids.md)
+TOPOLOGY_COUNTRY = "CHL"  # the only country with a simulable network (docs/grids.md)
 LATAM = ("ARG", "BOL", "BRA", "PER")
 LAYERS = ("substations", "taps", "lines", "plants", "storage", "comunas")
+ROLES = ("network", "operating", "context", "scenario", "source")
 
-# (file under data/processed, key under the prefix, role). Role: topology | operating | context
-_CHILE = (
-    ("grid_snapshot.json", "grid_snapshot.json", "topology"),
-    ("comunas_geometry.json", "comunas_geometry.json", "topology"),
-    ("node_index.json", "node_index.json", "topology"),
-    ("sen_network.json", "sen_network.json", "topology"),
-    ("operating_points.json", "operating_points.json", "operating"),
-    ("baseline_opf.json", "baseline_opf.json", "operating"),
-    ("chile.geojson", "outline.geojson", "context"),
-    *((f"geo/{n}.geojson", f"geo/{n}.geojson", "context") for n in LAYERS),
+# raw file under data/processed -> key under CHL/source
+_CHILE_SOURCES = (
+    "grid_snapshot.json",
+    "comunas_geometry.json",
+    "node_index.json",
+    "sen_network.json",
+    "operating_points.json",
+    "baseline_opf.json",
+    "chile.geojson",
+    *(f"geo/{n}.geojson" for n in LAYERS),
 )
 
 
 @dataclass(frozen=True)
 class GridFile:
-    key: str  # relative to the prefix, e.g. "CHL/grid_snapshot.json"
+    key: str  # relative to the prefix, e.g. "CHL/network-2025.json"
     country: str
     role: str
     source: Path | None = None  # file to publish; None when `data` is given
     data: bytes | None = None
+    meta: dict = field(default_factory=dict)  # small facts the catalogue shows without reading the document
 
     def read(self) -> bytes:
         return self.data if self.data is not None else self.source.read_bytes()  # type: ignore[union-attr]
@@ -46,22 +48,80 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def plan(processed: Path, scenarios: list[tuple[str, bytes]], outlines: dict[str, bytes]) -> list[GridFile]:
-    """Every file to publish. `outlines` are the per-country slices of latam/outlines.geojson."""
+def network_key(year: int) -> str:
+    return f"{TOPOLOGY_COUNTRY}/network-{year}.json"
+
+
+def operating_key(point_id: str) -> str:
+    return f"{TOPOLOGY_COUNTRY}/operating/{point_id}.json"
+
+
+def country_key(iso: str) -> str:
+    return f"{iso}/grid.json"
+
+
+def source_files(processed: Path, outlines: dict[str, bytes]) -> list[GridFile]:
+    """The raw files, kept as `source` under each country. `outlines` are the per-country slices of latam/outlines."""
     files = [
-        GridFile(f"{TOPOLOGY_COUNTRY}/{key}", TOPOLOGY_COUNTRY, role, source=processed / src)
-        for src, key, role in _CHILE
-        if (processed / src).is_file()
+        GridFile(f"{TOPOLOGY_COUNTRY}/source/{name}", TOPOLOGY_COUNTRY, "source", source=processed / name)
+        for name in _CHILE_SOURCES
+        if (processed / name).is_file()
     ]
     for iso in LATAM:
         for layer in ("lines", "substations", "plants"):
             path = processed / "latam" / iso / f"{layer}.geojson"
             if path.is_file():
-                files.append(GridFile(f"{iso}/{layer}.geojson", iso, "context", source=path))
+                files.append(GridFile(f"{iso}/source/{layer}.geojson", iso, "source", source=path))
         if iso in outlines:
-            files.append(GridFile(f"{iso}/outline.geojson", iso, "context", data=outlines[iso]))
-    files += [GridFile(f"scenarios/{name}", "CHL", "scenario", data=data) for name, data in scenarios]
+            files.append(GridFile(f"{iso}/source/outline.geojson", iso, "source", data=outlines[iso]))
     return files
+
+
+def regional_document(iso: str, meta: dict, lines: dict, substations: dict, plants: dict) -> dict:
+    """One country of context in the shape the web draws (web/src/map/regional.ts `RegionalGrid`, one country)."""
+
+    def props(f: dict) -> dict:
+        return f["properties"]
+
+    return {
+        "schema": SCHEMA,
+        "country": iso,
+        "meta": {"country": iso, **meta},  # name, counts, raw_counts, plant_count, sources, warnings
+        "lines": [
+            {
+                "id": props(f)["id"],
+                "kv": props(f)["kv"],
+                "circuits": props(f)["circuits"],
+                "lengthKm": props(f)["length_km"],
+                "source": props(f)["source"],
+                "path": f["geometry"]["coordinates"],
+            }
+            for f in lines["features"]
+        ],
+        "substations": [
+            {
+                "id": props(f)["id"],
+                "name": props(f)["name"],
+                "kv": props(f)["kv"],
+                "kind": props(f)["kind"],
+                "source": props(f)["source"],
+                "position": f["geometry"]["coordinates"],
+            }
+            for f in substations["features"]
+        ],
+        "plants": [
+            {
+                "id": props(f)["id"],
+                "name": props(f)["name"],
+                "tech": props(f)["tech"],
+                "mw": props(f)["mw"],
+                "count": props(f)["count"],
+                "source": props(f)["source"],
+                "position": f["geometry"]["coordinates"],
+            }
+            for f in plants["features"]
+        ],
+    }
 
 
 def build_manifest(files: list[GridFile], countries: dict, built_at: str, commit: str) -> dict:
@@ -77,6 +137,7 @@ def build_manifest(files: list[GridFile], countries: dict, built_at: str, commit
                 "role": f.role,
                 "bytes": len(f.read()),
                 "sha256": sha256(f.read()),
+                **({"meta": f.meta} if f.meta else {}),
             }
             for f in files
         ],

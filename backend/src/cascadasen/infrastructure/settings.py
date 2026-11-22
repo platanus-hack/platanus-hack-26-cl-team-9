@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     # (default: the session bucket). The prod task role cannot read grids/* until its IAM policy allows it
     grids_store: Literal["local", "s3"] = "local"
     grids_bucket: str | None = None
-    grids_prefix: str = "grids/v1"
+    grids_prefix: str = "grids/v2"
     ide_energia_url: str = (
         "https://ide-energia.minenergia.cl/server/rest/services/IDE_Energia/Visor_IDE_Energ%C3%ADa/MapServer"
     )

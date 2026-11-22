@@ -276,3 +276,15 @@
 /* Keyboard focus on the shell's controls. */
 .shell button:focus-visible, .shell .row-btn:focus-visible, .shell .check input:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
 .shell .speed:has(select:focus-visible), .shell .legend-mode:has(select:focus-visible) { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+
+/* Fuentes de la grilla */
+.shell .grid-sources { display: flex; flex-direction: column; gap: 8px; }
+.shell .source-tree, .shell .source-docs { margin: 0; padding: 0; list-style: none; }
+.shell .source-tree > li { border-bottom: 1px solid var(--border); padding: 8px 0; }
+.shell .source-row { display: flex; align-items: center; gap: 6px; }
+.shell .source-row .disclosure { display: grid; place-items: center; width: 16px; height: 16px; padding: 0; background: none; border: 0; color: var(--muted); cursor: pointer; }
+.shell .grid-sources .check em { color: var(--muted); font-style: normal; }
+.shell .source-docs { padding: 6px 0 0 22px; display: flex; flex-direction: column; gap: 4px; }
+.shell .source-docs li { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.shell .source-docs em { font-style: normal; color: var(--fg-3); }
+.shell .grid-sources .source-actions { display: flex; align-items: center; gap: 16px; min-height: 16px; }
