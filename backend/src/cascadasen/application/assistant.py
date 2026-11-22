@@ -183,8 +183,9 @@ class Assistant:
         deadline_s: float | None = None,
         grid: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Run one user message. `toolbox_for(session_id, run_id)` builds the tools of this request;
-        `on_event(kind, data)` receives the steps
+        """Run one user message. `context` is appended to the system prompt for this turn only (the grid on
+        the user's map), so it is never stored in the conversation. `toolbox_for(session_id, run_id)` builds
+        the tools of this request; `on_event(kind, data)` receives the steps
         as they happen (`start`, `assistant_text`, `tool_call`, `tool_result`) for streaming clients;
         `deadline_s` overrides the default deadline (a stream keeps the connection alive longer); `grid` is the scenario
         on the user's map (point, changes, open_lines, out_buses), added to the prompt of this message only."""

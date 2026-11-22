@@ -95,7 +95,7 @@ function EmptyCard({ health }: { health: HealthReport | null }) {
 }
 
 /** After-cut index and event cost at the end of the simulation; each part hides when an old cache lacks it. */
-function EventHealth({ timeline }: { timeline: Timeline }) {
+export function EventHealth({ timeline }: { timeline: Timeline }) {
   const report = timeline.health;
   const fromReport = report && !isN1(report.cost) ? report.cost : undefined;
   const usd = fromReport?.cost_usd ?? timeline.summary.failure_cost_usd;

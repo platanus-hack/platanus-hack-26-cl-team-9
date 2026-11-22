@@ -195,7 +195,7 @@ Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239
 |---|---|---|
 | 422 | `factor` and `add` together, or a filter that does not apply to the target | `demand: indica factor o add, no ambos` · `generation: filtra por buses, zones, areas o tech` |
 | 422 | Unknown technology | `changes[0]: tecnologías desconocidas: nuclear (válidas: …)` |
-| 422 | Over the overlay limits | `Máximo 5000 MW agregados o cambiados (carga + generación).` |
+| 422 | Over the overlay limits | One element or bus override over 20000 MW (there is no total MW cap since 2026-11-22). |
 | 422 | `/simulate` with no failure | `Indica al menos una línea o una subestación` |
 | 404 | Unknown point, bus, line, comuna, zone or area | `changes[0]: comuna desconocida: Atlantis (usa el código CUT o el nombre)` |
 | 404 | Unknown place, or a comuna off the SEN | `changes[0]: No encuentro el lugar 'Marte'. …` · `La comuna de Punta Arenas no está conectada al Sistema Eléctrico Nacional …` |

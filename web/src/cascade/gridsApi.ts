@@ -1,6 +1,6 @@
 import type { RegionalCountry, RegionalLine, RegionalPlant, RegionalSubstation } from "../map/regional";
 import type { StressChange } from "./edits";
-import type { BusState, DependencyNode, Network, Timeline } from "./types";
+import type { BusState, DependencyNode, HealthReport, Network, Timeline } from "./types";
 
 /** Grid documents served by the backend from S3 (docs/grids.md): catalogue, compose and the context documents. */
 export interface CatalogPoint { key: string; point: string; label: string; year: number; snapshot: string }
@@ -83,6 +83,8 @@ export interface Prepared {
   overloaded_lines: { id: string; kv: number; loading_pct: number }[];
   should_feed: Supply;
   assumptions: { id: string; text: string; source?: string; is_assumption: boolean }[];
+  /** Health index of the prepared grid before any failure (no N-1); absent from an older backend. */
+  health?: HealthReport;
 }
 export const prepareScenario = (body: { point: string; changes: StressChange[] }) =>
   request<Prepared>("prepare", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

@@ -1,3 +1,4 @@
+import type { StressChange } from "../cascade/edits";
 import { AGENT } from "../session/sessionApi";
 import { errorMessage } from "./labels";
 import { createSseParser, type SseEvent } from "./sse";
@@ -5,8 +6,6 @@ import { createSseParser, type SseEvent } from "./sse";
 /** Client of the in-app assistant (docs/assistant.md sections 2 and 2b). */
 export const ASSISTANT_BASE = "/api/v1/assistant";
 export const MAX_MESSAGE = 2000;
-
-import type { StressChange } from "../cascade/edits";
 
 /** The scenario on the map: the assistant starts from it (docs/assistant.md section 2d). */
 export interface ChatGrid { point: string; changes: StressChange[]; open_lines: string[]; out_buses: string[] }

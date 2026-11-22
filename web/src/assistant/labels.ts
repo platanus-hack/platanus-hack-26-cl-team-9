@@ -61,17 +61,20 @@ export function argsText(name: string, args: unknown): string {
   return Object.entries(args).map(([k, v]) => part(k, v)).filter(Boolean).join(" · ");
 }
 
+/** One change in words: "× 0 carbón, gas, diésel", "+120 MW demanda en Antofagasta"; `name` turns ids into names. */
+export function changeText(c: Json, name: (id: string) => string = (id) => id): string {
+  const own = typeof c.generator_mw === "number" ? c.generator_mw : typeof c.load_mw === "number" ? c.load_mw : null; // a new substation
+  const how = own !== null ? `+${num(own)} MW` : typeof c.add === "number" ? `${c.add >= 0 ? "+" : ""}${num(c.add)}${c.target === "population" ? "" : " MW"}` : typeof c.factor === "number" ? `× ${num(c.factor)}` : "";
+  const what = Array.isArray(c.tech) && c.tech.length ? c.tech.map((t) => TECHS[String(t)] ?? String(t)).join(", ") : TARGETS[String(c.target)] ?? String(c.target);
+  const where = ["places", "comunas", "buses", "areas", "zones", "lines"].flatMap((k) => (Array.isArray(c[k]) ? (c[k] as unknown[]).map((x) => name(String(x))) : []));
+  return [how, what, where.length ? `en ${where.join(", ")}` : ""].filter(Boolean).join(" ");
+}
+
 /** prepare_scenario's changes in words ("+120 MW demanda en Antofagasta"), then the failures. Before, they read
  * "[object Object], [object Object]". */
 function scenarioArgs(args: Json): string {
   const changes = Array.isArray(args.changes) ? args.changes.filter(isObj) : [];
-  const words = changes.map((c) => {
-    const own = typeof c.generator_mw === "number" ? c.generator_mw : typeof c.load_mw === "number" ? c.load_mw : null;
-    const how = own !== null ? `+${num(own)} MW` : typeof c.add === "number" ? `${c.add >= 0 ? "+" : ""}${num(c.add)}${c.target === "population" ? "" : " MW"}` : typeof c.factor === "number" ? `× ${num(c.factor)}` : "";
-    const what = Array.isArray(c.tech) && c.tech.length ? c.tech.map((t) => TECHS[String(t)] ?? String(t)).join(", ") : TARGETS[String(c.target)] ?? String(c.target);
-    const where = ["places", "comunas", "buses", "areas", "zones", "lines"].flatMap((k) => (Array.isArray(c[k]) ? (c[k] as unknown[]).map(String) : []));
-    return [how, what, where.length ? `en ${where.join(", ")}` : ""].filter(Boolean).join(" ");
-  });
+  const words = changes.map((c) => changeText(c));
   const out = (k: string, label: string) => (Array.isArray(args[k]) && (args[k] as unknown[]).length ? [`${label}: ${list(args[k])}`] : []);
   return [...words, ...out("open_lines", "líneas fuera"), ...out("out_buses", "subestaciones fuera")].join(" · ") || "red base";
 }

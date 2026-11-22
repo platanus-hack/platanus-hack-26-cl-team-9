@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getRunSnapshots } from "../session/sessionApi";
 import type { Session } from "../session/useSession";
-import { AssistantError, deleteConversation, getConversation, MAX_MESSAGE, streamChat } from "./assistantApi";
+import { AssistantError, deleteConversation, getConversation, MAX_MESSAGE, streamChat, type ChatGrid } from "./assistantApi";
 import type { StressChange } from "../cascade/edits";
 import { refreshFor } from "./labels";
 import type { SseEvent } from "./sse";

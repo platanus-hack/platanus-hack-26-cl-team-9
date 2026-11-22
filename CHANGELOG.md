@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(assistant): siempre sobre la grilla cargada, sin tope de MW, pestaña Salud de la red e historial ubicable (#139)
+
+- **Changed:** the web sends `grid` (point, changes, open lines, substations off) with every chat message; the backend appends it to the system prompt for that turn (`grid_context`) and the prompt says every request is about it, never ask for the point. The overlay's 5000 MW total cap is gone and one element or bus override goes up to 20000 MW. `/grids/prepare` returns `health` (prefault index of the prepared grid, no N-1) and the assistant digest carries it.
+- **Changed (web):** Asistente has tabs Chat and Salud de la red (`assistant/GridHealth.tsx`). Historial de cambios names the technology and scope of a change ("× 0 carbón en toda la red"), merges a new factor on the same scope into one "Cambio" entry, attaches the substations `/grids/prepare` resolved (the name when there is one), and a click frames them on the map and selects the first.
+- **Why:** the model asked which operating point to use, split changes to dodge the 5000 MW cap, and said it "turned off" substations when it only zeroed generation (nothing turns red without a failure). The prompt now says that turning a substation off is `out_buses`.
+- **Agents:** `ChatIn.grid` is optional (MCP and curl clients keep working). `labels.changeText` is shared by the tool card and the history. `docs/openapi/agents.openapi.json` regenerated.
+- **Files:** backend/src/cascadasen/api/{assistant_routes,stress_schemas,session_schemas}.py, application/{assistant,grid_stress}.py, domain/cascade/overlay.py, mcp/digest.py, web/src/assistant/*, web/src/changelog/*, web/src/cascade/{CascadeApp.tsx,gridsApi.ts,SimulationPanel.tsx}, docs/{assistant,stress,sessions-api,stack}.md.
 ## 2026-11-22 · feat(web): el asistente muestra un spinner y colapsa los pasos de herramientas (#126)
 
 - **Changed:** `AssistantTurnView` (exportado) muestra solo "Pensando…" con spinner mientras el turno está en curso. Al terminar muestra la respuesta y los pasos (textos y tarjetas) dentro de un `<details>` cerrado "Detalles del trabajo (N herramientas)".

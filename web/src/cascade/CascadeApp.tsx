@@ -42,7 +42,8 @@ import { AssistantPanel } from "../assistant/AssistantPanel";
 import { useAssistant, type AssistantScenario } from "../assistant/useAssistant";
 import { IncidentPanel } from "../incidents/IncidentPanel";
 import { ChangePanel } from "../changelog/ChangePanel";
-import { cascadeEntries, cyberEntries, diffEdits, type Entry } from "../changelog/changelog";
+import { cascadeEntries, cyberEntries, diffEdits, withPrepared, type Entry } from "../changelog/changelog";
+import { GridHealth } from "../assistant/GridHealth";
 import { useIncident } from "../incidents/useIncident";
 import { cyberCycles, CyberMapTags, CyberPanel } from "../cyber/CyberPanel";
 import { layoutTags } from "../cyber/cyber";
@@ -168,8 +169,9 @@ export function CascadeApp() {
     const userIds = new Set(adjustments.flatMap((a) => a.ids));
     const falls = !incidentTl && loadedReady && loaded && network ? cascadeEntries(loaded.timeline, network, userIds) : [];
     const attack = cyb.run && cyb.catalog ? cyberEntries(cyb.run.frames, cyb.catalog.areas) : [];
-    return [...adjustments, ...falls, ...attack];
-  }, [adjustments, incidentTl, loadedReady, loaded, network, cyb.run, cyb.catalog]);
+    const located = network ? withPrepared(adjustments, changesOf(edits), prepared?.value ?? null, network) : adjustments;
+    return [...located, ...falls, ...attack];
+  }, [adjustments, incidentTl, loadedReady, loaded, network, cyb.run, cyb.catalog, edits, prepared]);
   const duration = timeline?.duration_s ?? 0;
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
   const darkCount = timeline ? darkAt(timeline, t).size : 0;
@@ -715,6 +717,18 @@ export function CascadeApp() {
     setT(time);
   }
 
+  /** Historial de cambios: shows where an entry happened. Selects its first element and frames them all. */
+  function locateEntry(ids: string[]) {
+    if (!network || !ids.length) return;
+    const node = (id: string) => network.nodes.find((n) => n.id === id);
+    const ends = ids.flatMap((id) => { const l = network.lines.find((x) => x.id === id); return l ? [node(l.a), node(l.b)] : [node(id)]; });
+    const points = ends.filter((n): n is NonNullable<typeof n> => !!n).map((n) => [n.lon, n.lat] as LonLat);
+    const all = cameraTarget(network.nodes.map((n) => [n.lon, n.lat] as LonLat), null);
+    const here = cameraTarget([...points, ...points.map(([x, y]) => [x + 0.8, y + 0.8] as LonLat), ...points.map(([x, y]) => [x - 0.8, y - 0.8] as LonLat)], null);
+    if (all && here) baseMap.current?.setTarget({ ...here, maxBounds: all.maxBounds });
+    setSelection({ kind: ids[0].startsWith("R") ? "line" : "node", id: ids[0] });
+  }
+
   function _pick(onPoint: (lon: number, lat: number) => void) {
     pickRef.current = onPoint;
     setPicking(true);
@@ -811,8 +825,9 @@ export function CascadeApp() {
         <div className="panel-body" ref={panelBodyRef}>
           {(s.error ?? error) && <p className="note">{s.error ?? error}{s.error && <> <button className="text-btn" onClick={s.clearError}>Cerrar</button></>}</p>}
           {view === "session" && <SessionBar s={s} />}
-          {view === "assistant" && <AssistantPanel a={a} />}
-          {view === "history" && <ChangePanel entries={historyEntries} />}
+          {view === "assistant" && <AssistantPanel a={a} health={<GridHealth prepared={prepared?.value ?? null} timeline={loadedReady ? loaded.timeline : null}
+            failures={countFailures(edits) > 0} base={s.sid || composed ? null : health} />} />}
+          {view === "history" && <ChangePanel entries={historyEntries} locate={locateEntry} />}
           {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
           {view === "cyber" && <CyberPanel c={cyb} prefault={cyberHealth ? <PrefaultHealth health={cyberHealth} /> : null}
             component={network && selection ? (
