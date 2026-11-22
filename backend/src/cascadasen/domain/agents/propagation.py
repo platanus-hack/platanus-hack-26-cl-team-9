@@ -4,9 +4,10 @@ Why: the "Ciberataque" scenario asks how far an intrusion that moves from one op
 neighbours gets before the defence contains it, and what the grid loses on the way. It models effects
 only, at operating-area level, with the abstract catalog:
 
-- an area becomes **compromised**: supervision there loses communications (D4);
-- `strike_delay` cycles later it **strikes**: remote dispatch is lost (C5) and a share of the area's
-  generation trips (C1). The cascade engine decides what that does to the grid;
+- an area becomes **compromised**: the intrusion is latent there, nothing is visible yet;
+- `strike_delay` cycles later it **strikes**: supervision loses communications (D4), remote dispatch is
+  lost (C5) and a share of the area's generation trips (C1). The cascade engine decides what that does
+  to the grid. Why latent: a defence that saw the intrusion at once would contain it before it moved;
 - every `spread_cooldown` cycles a compromised area tries each neighbouring area (a shared corridor)
   with probability `spread_p`. A segmented area (the defence's `digital_segmentation`) stops the jump
   with probability `isolation_p`, whether it is the source or the target;
@@ -42,6 +43,7 @@ BOUNDS: dict[str, tuple[float, float]] = {
     "min_neighbours": (1, 6),
     "clean_after_segmented": (1, 12),
     "crew_max_eta_cycles": (1, 72),
+    "recovered_lost_share": (0.0, 0.5),
 }
 STATES = ("clean", "compromised", "struck", "eradicated")
 
@@ -97,7 +99,7 @@ class PropagatingAdversary:
             return self._seed(view.cycle)
         posture = dict(view.posture)
         out = self._strikes(view.cycle)
-        out += self._spread(view.cycle, posture)
+        self._spread(view.cycle, posture)  # silent: a jump only shows when that area strikes
         return out
 
     def learn(self, view: AdversaryView) -> None:
@@ -147,26 +149,26 @@ class PropagatingAdversary:
         need = int(self.params["min_neighbours"])
         pool = sorted(a for a, n in self.neighbours.items() if len(n) >= need) or sorted(self.neighbours)
         self.start = self.rng.choice(pool)
-        return [self._compromise(self.start, cycle)]
+        self._compromise(self.start, cycle)
+        return []
 
-    def _compromise(self, area: str, cycle: int) -> EventRequest:
+    def _compromise(self, area: str, cycle: int) -> None:
         self._move(area, "compromised", cycle)
         self.areas[area].next_try = cycle + int(self.params["spread_cooldown"])
-        return self._event("D4_comms_loss", area, cycle)
 
     def _strikes(self, cycle: int) -> list[EventRequest]:
         out = []
         for area, st in self.areas.items():
             if st.state == "compromised" and cycle - st.since >= int(self.params["strike_delay"]):
                 self._move(area, "struck", cycle)
+                out.append(self._event("D4_comms_loss", area, cycle))
                 out.append(self._event("C5_remote_dispatch_loss", area, cycle))
                 share = self.params["generation_share"]
                 if share > 0:
                     out.append(self._event("C1_generation_loss", area, cycle, {"share": share}))
         return out
 
-    def _spread(self, cycle: int, posture: dict[str, str]) -> list[EventRequest]:
-        out = []
+    def _spread(self, cycle: int, posture: dict[str, str]) -> None:
         for area in sorted(self.active()):
             st = self.areas[area]
             if cycle < st.next_try or st.since == cycle:
@@ -179,9 +181,8 @@ class PropagatingAdversary:
                 if walled and self.rng.random() < self.params["isolation_p"]:
                     self.events.append({"cycle": cycle, "kind": "blocked", "from": area, "area": nb})
                     continue
-                out.append(self._compromise(nb, cycle))
+                self._compromise(nb, cycle)
                 self.events[-1]["from"] = area
-        return out
 
     def _move(self, area: str, state: str, cycle: int) -> None:
         self.areas[area].state, self.areas[area].since = state, cycle

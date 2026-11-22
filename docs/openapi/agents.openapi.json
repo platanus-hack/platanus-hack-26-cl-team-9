@@ -4997,7 +4997,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -5005,7 +5005,7 @@
               }
             ],
             "title": "Load Mw",
-            "description": "Bus demand in MW (replaces the base value; at most the base value + 3000 MW).",
+            "description": "Bus demand in MW (replaces the base value; at most the base value + 20000 MW).",
             "examples": [
               150
             ]
@@ -5014,7 +5014,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -5022,7 +5022,7 @@
               }
             ],
             "title": "Gen Mw",
-            "description": "Bus generation in MW (replaces the base value; at most the base value + 3000 MW). The bus keeps this value: it takes no share of the redispatch.",
+            "description": "Bus generation in MW (replaces the base value; at most the base value + 20000 MW). The bus keeps this value: it takes no share of the redispatch.",
             "examples": [
               300
             ]
@@ -5031,7 +5031,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -5048,7 +5048,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 200000.0,
+                "maximum": 400000.0,
                 "minimum": 0.0
               },
               {
@@ -5484,10 +5484,10 @@
           },
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Dispatched generation in MW (0 < mw ≤ 3000).",
+            "description": "Dispatched generation in MW (0 < mw ≤ 20000).",
             "examples": [
               250
             ]
@@ -5572,7 +5572,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 3000.0,
+                "maximum": 20000.0,
                 "exclusiveMinimum": 0.0
               },
               {
@@ -5920,10 +5920,10 @@
           },
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Demand in MW (0 < mw ≤ 3000).",
+            "description": "Demand in MW (0 < mw ≤ 20000).",
             "examples": [
               120
             ]
@@ -5966,7 +5966,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 3000.0,
+                "maximum": 20000.0,
                 "exclusiveMinimum": 0.0
               },
               {
@@ -6164,6 +6164,19 @@
             "type": "array",
             "title": "Redispatch",
             "description": "Generation the island's synchronous units moved."
+          },
+          "health": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health",
+            "description": "Health index of the prepared grid before any failure (docs/health.md, no N-1)."
           },
           "warnings": {
             "items": {
@@ -6554,6 +6567,15 @@
             "type": "boolean",
             "title": "Llm Commander",
             "description": "C2 picks among validated actions with the server's LLM (rules if none is configured)",
+            "default": false,
+            "examples": [
+              false
+            ]
+          },
+          "manual_defense": {
+            "type": "boolean",
+            "title": "Manual Defense",
+            "description": "The defensive staff proposes nothing: only actions sent to POST .../actions run, validated and paid for as usual (a user defends by hand, e.g. in the Ciberataque monitor)",
             "default": false,
             "examples": [
               false
@@ -7682,10 +7704,11 @@
               "population",
               "demand",
               "generation",
-              "lines"
+              "lines",
+              "substation"
             ],
             "title": "Target",
-            "description": "population (people; demand follows), demand (MW alone), generation (MW), lines (capacity)."
+            "description": "population (people; demand follows), demand (MW alone), generation (MW), lines (capacity), substation (a new substation next to the one that serves `places[0]`, with its own lines)."
           },
           "buses": {
             "items": {
@@ -7804,6 +7827,69 @@
             ],
             "title": "X Factor",
             "description": "Lines only: multiplies the reactance x_pu."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Substation only: its name."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat",
+            "description": "Substation only: latitude (default: next to `places[0]`)."
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon",
+            "description": "Substation only: longitude (default: next to `places[0]`)."
+          },
+          "load_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Mw",
+            "description": "Substation only: demand it serves, MW."
+          },
+          "generator_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Mw",
+            "description": "Substation only: generation it injects, MW; `tech` has its technology."
           }
         },
         "additionalProperties": false,
@@ -7870,10 +7956,10 @@
         "properties": {
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Generation in MW (0 < mw ≤ 3000).",
+            "description": "Generation in MW (0 < mw ≤ 20000).",
             "examples": [
               150
             ]
@@ -8023,10 +8109,10 @@
         "properties": {
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Demand in MW (0 < mw ≤ 3000).",
+            "description": "Demand in MW (0 < mw ≤ 20000).",
             "examples": [
               80
             ]

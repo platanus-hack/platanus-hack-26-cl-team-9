@@ -104,6 +104,8 @@ Areas: `A01` Arica–Iquique, `A02` Crucero–Kimal, `A03` Antofagasta–Taltal 
 
 **lines.** Capacity (`factor`) and reactance (`x_factor`). The cascade opens a line over its limit.
 
+**substation** (#130). A new substation with its own lines, in the same `changes` (so the web, the simulation and the assistant share one grid). `places` has exactly one place; `name`, `lat`, `lon` (default: 0.03° from the substation that serves the place), `load_mw` and `generator_mw` with one `tech` are optional. It is built with `overlay.add_substation`: a new bus at the voltage of the substation that serves the place, linked to it and to the nearest other substation of that voltage within 150 km (two paths; assumption), each line with the typical capacity of its neighbours. The report row says `new_substation`, `connects_to`, the new id (`elements[0]`: id, name, lat, lon, kv; ids continue after the base buses: B188 on the 188-bus grid), `load_mw`, `gen_mw`. At most 5 per scenario. A new generator pins its MW and the island redispatches the rest, like a new plant. A substation added this way cannot be taken out with `out_buses` (ids are checked against the base grid) and the web draws its pin but not its lines. Its row in `supply` takes the zone of the nearest base substation and has no technology mix.
+
 **Redispatch (every target).** The overlay's rule: the island's synchronous base units take the imbalance, weighted by their synchronous MW. Buses whose generation a change sets take no share. There is no upward capacity limit, so the grid tries to survive and what breaks is the lines. `redispatch` in the response says how much moved. **Assumption.**
 
 ## 5. Recipes (real outputs)
@@ -193,7 +195,7 @@ Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239
 |---|---|---|
 | 422 | `factor` and `add` together, or a filter that does not apply to the target | `demand: indica factor o add, no ambos` · `generation: filtra por buses, zones, areas o tech` |
 | 422 | Unknown technology | `changes[0]: tecnologías desconocidas: nuclear (válidas: …)` |
-| 422 | Over the overlay limits | `Máximo 5000 MW agregados o cambiados (carga + generación).` |
+| 422 | Over the overlay limits | One element or bus override over 20000 MW (there is no total MW cap since 2026-11-22). |
 | 422 | `/simulate` with no failure | `Indica al menos una línea o una subestación` |
 | 404 | Unknown point, bus, line, comuna, zone or area | `changes[0]: comuna desconocida: Atlantis (usa el código CUT o el nombre)` |
 | 404 | Unknown place, or a comuna off the SEN | `changes[0]: No encuentro el lugar 'Marte'. …` · `La comuna de Punta Arenas no está conectada al Sistema Eléctrico Nacional …` |

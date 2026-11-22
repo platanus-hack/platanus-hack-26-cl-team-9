@@ -122,7 +122,63 @@ def test_api_prepare_and_simulate_with_changes():
     assert sim.status_code == 200 and "supply" in sim.json()
     both = {"point": POINT, "changes": [{"target": "demand", "factor": 2, "add": 1}]}
     assert client.post("/api/v1/grids/prepare", json=both).status_code == 422
-    too_much = {"point": POINT, "changes": [{"target": "demand", "factor": 5}]}
+    big = {"point": POINT, "changes": [{"target": "demand", "factor": 5}]}
+    assert client.post("/api/v1/grids/prepare", json=big).status_code == 200  # no total MW cap: stress freely
+    off = {
+        "point": POINT,
+        "changes": [{"target": "generation", "tech": ["hidro", "solar", "termica"], "factor": 0}],
+    }
+    out = client.post("/api/v1/grids/prepare", json=off)
+    assert out.status_code == 200 and 0 <= out.json()["health"]["index"] <= 1
+
+
+VALLENAR_SOLAR = {
+    "target": "substation",
+    "places": ["Vallenar"],
+    "name": "S/E Solar Vallenar",
+    "generator_mw": 120,
+    "tech": ["solar"],
+}
+
+
+def test_a_new_substation_joins_the_prepared_grid_with_its_lines_and_plant(world):
+    out = prepare_workflow(world, POINT, [VALLENAR_SOLAR])
+    row = out["changes"][0]
+    assert row["new_substation"] and row["gen_mw"] == 120
+    new = row["elements"][0]
+    assert new["id"] == "B188" and new["name"] == "S/E Solar Vallenar" and new["lat"] and new["lon"]
+    assert 1 <= len(row["connects_to"]) <= 2 and row["places"][0]["bus"] in row["connects_to"]
+    plant = next(
+        r for r in out["should_feed"]["sources"] if r["id"] == "B188"
+    )  # the island redispatches the rest
+    assert plant["name"] == "S/E Solar Vallenar" and plant["gen_mw"][0] == 120 and plant["zone"] == "NC"
+
+
+def test_a_failure_runs_on_a_grid_with_a_new_substation(sim):
+    out = sim.simulate_workflow(POINT, [], ["B105"], [VALLENAR_SOLAR])
+    without = sim.simulate_workflow(POINT, [], ["B105"])
+    assert out["timeline"]["summary"]["people_without_power"] >= 0
+    assert out["supply"]["by_zone"] and without["supply"]["by_zone"]
+
+
+def test_the_limit_of_new_substations_and_a_wrong_target_are_rejected(world):
+    with pytest.raises(GridError, match="Máximo 5 subestaciones"):
+        prepare_workflow(world, POINT, [VALLENAR_SOLAR] * 6)
+    with pytest.raises(GridError):
+        prepare_workflow(world, POINT, [{**VALLENAR_SOLAR, "places": ["Narnia"]}])
+
+
+def test_api_prepare_and_simulate_with_a_new_substation():
+    client = TestClient(create_app(settings=Settings(data_dir=REPO_ROOT / "data")))
+    prep = client.post("/api/v1/grids/prepare", json={"point": POINT, "changes": [VALLENAR_SOLAR]})
+    assert prep.status_code == 200 and prep.json()["changes"][0]["elements"][0]["id"] == "B188"
+    sim = client.post(
+        "/api/v1/grids/simulate", json={"point": POINT, "out_buses": ["B105"], "changes": [VALLENAR_SOLAR]}
+    )
+    assert sim.status_code == 200 and "supply" in sim.json()
+    no_tech = {**VALLENAR_SOLAR, "tech": []}
     assert (
-        client.post("/api/v1/grids/prepare", json=too_much).status_code == 422
-    )  # over the overlay's MW limit
+        client.post("/api/v1/grids/prepare", json={"point": POINT, "changes": [no_tech]}).status_code == 422
+    )
+    other = {"target": "demand", "add": 5, "name": "x"}
+    assert client.post("/api/v1/grids/prepare", json={"point": POINT, "changes": [other]}).status_code == 422

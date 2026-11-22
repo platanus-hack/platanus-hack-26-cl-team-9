@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { darkAt, frequencyAt, groupEvents, impactAt, lineStateAt, MARKER_GAP_PX, markerLabel, MIN_GAP_VIEW_S, recentDarkAt, sample, TAIL_SHARE, timeWarp, withstandsAt } from "./simulation";
+import { darkAt, frequencyAt, groupEvents, impactAt, islandMoments, islandTicks, lineStateAt, MARKER_GAP_PX, markerLabel, MIN_GAP_VIEW_S, recentDarkAt, sample, TAIL_SHARE, timeWarp, withstandsAt } from "./simulation";
 import type { BusState, Event, NetLine, Timeline } from "./types";
 
 const ev = (t: number, type: string, params: Event["params"] = {}): Event => ({ t, type, ids: [], text_key: type, params });
@@ -167,5 +167,20 @@ describe("a cut the system withstands", () => {
     expect(withstandsAt(calm, 5)).toBe(false);
     expect(withstandsAt(calm, 20)).toBe(true);
     expect(withstandsAt(timeline, 20)).toBe(false);
+  });
+});
+
+describe("islandMoments", () => {
+  it("groups the islands that form at the same instant, in time order", () => {
+    const e = (t: number, type: string) => ({ t, type, ids: [], text_key: type, params: {} });
+    expect(islandMoments([e(0, "line_cut"), e(2, "island_formed"), e(2, "island_formed"), e(3.5, "island_formed"), e(4, "island_blackout")]))
+      .toEqual([{ t: 2, count: 2 }, { t: 3.5, count: 1 }]);
+  });
+});
+
+describe("islandTicks", () => {
+  it("joins moments too close on the rail so labels never overlap", () => {
+    const ticks = islandTicks([{ t: 1, count: 3 }, { t: 1.2, count: 2 }, { t: 9, count: 2 }], (t) => t * 20);
+    expect(ticks.map((k) => [k.t, k.count, k.times])).toEqual([[1, 5, [1, 1.2]], [9, 2, [9]]]);
   });
 });

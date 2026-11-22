@@ -123,20 +123,22 @@ def run_cascade_state(
     edac_off: frozenset[str] | set[str] = frozenset(),
     extra_reserve_by_bus: np.ndarray | None = None,
     battery_by_bus: np.ndarray | None = None,
+    prefault: tuple[float, tuple[int, int] | None] | None = None,
 ) -> tuple[dict, CascadeState]:
     """The cascade from a running state: `open_lines` were already open (no cut event), `edac_off`
     zones do not shed, `extra_reserve_by_bus` adds fast reserve and `battery_by_bus` fast-frequency
-    batteries to each island. Returns the timeline (same format as `run_cascade_workflow`) and the
-    settled per-bus state."""
+    batteries to each island. `prefault` is `prefault_boundary(net, open_lines, point)`, passed by a
+    caller that runs many cascades from the same state (criticality) so it is computed once. Returns the
+    timeline (same format as `run_cascade_workflow`) and the settled per-bus state."""
     state = _start(net, point, params, cut_line_ids, set(open_lines))
     state.edac_off, state.extra_reserve, state.battery = (
         frozenset(edac_off),
         extra_reserve_by_bus,
         battery_by_bus,
     )
-    already = set(open_lines)
-    state.prefault_boundary_mw = boundary_flow_mw(net, already, point.gen - point.load)
-    state.voltage_ends = _voltage_ends(net, already, state.prefault_boundary_mw)
+    if prefault is None:
+        prefault = prefault_boundary(net, open_lines, point)
+    state.prefault_boundary_mw, state.voltage_ends = prefault
     truncated = _cascade(state)
     final = CascadeState(
         state.gen,
@@ -180,6 +182,16 @@ def boundary_flow_mw(net: ReducedNetwork, open_lines: set[str], injection: np.nd
     flows = dc_flow(net, open_lines, injection, find_islands(net, open_lines))
     pos = {ln.id: k for k, ln in enumerate(net.lines)}
     return float(sum(sign * flows[pos[lid]] for lid, sign in crossing if lid not in open_lines))
+
+
+def prefault_boundary(
+    net: ReducedNetwork, already_open: frozenset[str] | set[str], point: OperatingPoint
+) -> tuple[float, tuple[int, int] | None]:
+    """The pre-fault flow across the 25F boundary and the corridor ends whose separation collapses both
+    islands (`_voltage_ends`). Depends only on the lines already open and the point, not on the cut."""
+    already = set(already_open)
+    mw = boundary_flow_mw(net, already, point.gen - point.load)
+    return mw, _voltage_ends(net, already, mw)
 
 
 def _voltage_ends(net: ReducedNetwork, already_open: set[str], prefault_mw: float) -> tuple[int, int] | None:

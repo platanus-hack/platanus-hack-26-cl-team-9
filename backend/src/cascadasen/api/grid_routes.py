@@ -6,7 +6,7 @@ tools also call (docs/stress.md). `/simulate`, `/dependency` and `/cost` take th
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, model_validator
 
 from cascadasen.api.agent_openapi import AGENT, errors, ok
@@ -66,11 +66,15 @@ def _simulator(request: Request) -> GridSimulator:
     return app.state.grid_sim
 
 
-def _dependency(request: Request) -> GridDependency:
-    app = request.app
+def grid_dependency(app: FastAPI) -> GridDependency:
+    """The app's heat-map service, built on first use (a request or the startup warm-up)."""
     if app.state.grid_dependency is None:
         app.state.grid_dependency = GridDependency(default_world(str(app.state.settings.processed_dir)))
     return app.state.grid_dependency
+
+
+def _dependency(request: Request) -> GridDependency:
+    return grid_dependency(request.app)
 
 
 def _composer(request: Request) -> GridComposer:
@@ -132,7 +136,11 @@ def simulate(body: SimulateRequest, request: Request) -> dict:
 
 
 class DependencyRequest(SimulateRequest):
-    pass
+    criticality: bool = Field(
+        default=True,
+        description="False: only who feeds whom (gen_mw, people_fed, share_of_people), without the criticality "
+        "of each substation, which runs one cascade per substation and is most of the time.",
+    )
 
 
 @router.post("/dependency")
@@ -146,11 +154,12 @@ def dependency(body: DependencyRequest, request: Request) -> dict:
         body.open_lines,
         body.out_buses,
         body.change_dicts(),
+        criticality=body.criticality,
     )
 
 
 @router.post("/cost")
-def cost(body: DependencyRequest, request: Request) -> dict:
+def cost(body: SimulateRequest, request: Request) -> dict:
     """Failure cost of the changes: total and per hour of outage, telling a total blackout from load shedding."""
     s = request.app.state.settings
     request.app.state.limiter.check("simulate", client_ip(request), s.rate_cuts_per_minute, 60.0)

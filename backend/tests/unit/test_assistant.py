@@ -61,7 +61,7 @@ def make(model, **kw):
 
 def test_plain_answer_without_tools():
     a = make(ScriptedModel(AssistantTurn("hola")))
-    out = a.chat("hola", None, None, lambda s, r, t: FakeBox())
+    out = a.chat("hola", None, None, lambda s, r: FakeBox())
     assert out["reply"] == "hola" and out["tool_calls"] == [] and out["truncated"] is None
     assert out["steps"] == 1 and out["notice"] == "aviso" and len(out["conversation_id"]) == 22
 
@@ -70,7 +70,7 @@ def test_tool_calls_run_and_the_session_is_remembered_across_messages():
     model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("listo"), AssistantTurn("otra vez"))
     a, boxes = make(model), []
 
-    def box(sid, rid, said):
+    def box(sid, rid):
         boxes.append((sid, rid))
         return FakeBox()
 
@@ -88,7 +88,7 @@ def test_tool_calls_run_and_the_session_is_remembered_across_messages():
 
 def test_a_failed_tool_goes_back_to_the_model_and_the_loop_continues():
     model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("no se pudo"))
-    out = make(model).chat("x", None, None, lambda s, r, t: FakeBox(fail=True))
+    out = make(model).chat("x", None, None, lambda s, r: FakeBox(fail=True))
     assert out["tool_calls"][0]["ok"] is False and out["reply"] == "no se pudo"
     assert model.seen[1][-1] == {
         "role": "tool",
@@ -101,7 +101,7 @@ def test_a_failed_tool_goes_back_to_the_model_and_the_loop_continues():
 def test_the_step_cap_ends_the_message_and_keeps_roles_alternating():
     model = ScriptedModel(*[AssistantTurn("", (call(id=f"c{i}"),)) for i in range(3)])
     a = make(model, max_steps=3)
-    out = a.chat("x", None, None, lambda s, r, t: FakeBox())
+    out = a.chat("x", None, None, lambda s, r: FakeBox())
     assert out["truncated"] == "steps" and "continúa" in out["reply"] and out["steps"] == 3
     doc, _ = a.load(out["conversation_id"])
     assert doc["messages"][-1]["role"] == "assistant"
@@ -110,27 +110,27 @@ def test_the_step_cap_ends_the_message_and_keeps_roles_alternating():
 def test_the_deadline_stops_before_the_next_model_call():
     now = iter([0.0, 0.0, 0.0, 1.0, 30.0, 30.0, 30.0])
     model = ScriptedModel(AssistantTurn("", (call(),)))
-    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r, t: FakeBox())
+    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r: FakeBox())
     assert out["truncated"] == "deadline" and out["steps"] == 1
 
 
 def test_a_model_failure_keeps_the_turn_and_raises():
     a = make(ScriptedModel(ToolChatError("no disponible"), AssistantTurn("ya")))
     with pytest.raises(ToolChatError):
-        a.chat("primero", None, None, lambda s, r, t: FakeBox())
+        a.chat("primero", None, None, lambda s, r: FakeBox())
     cid = next(k for k in a.store._docs).removeprefix("assistant/").removesuffix(".json")
     doc, _ = a.load(cid)
     assert [m["role"] for m in doc["messages"]] == ["user", "assistant"]
-    assert a.chat("de nuevo", cid, None, lambda s, r, t: FakeBox())["reply"] == "ya"
+    assert a.chat("de nuevo", cid, None, lambda s, r: FakeBox())["reply"] == "ya"
 
 
 def test_unknown_conversation_bad_session_id_and_delete():
     a = make(ScriptedModel(AssistantTurn("hola")))
     with pytest.raises(ConversationNotFoundError):
-        a.chat("x", "nope", None, lambda s, r, t: FakeBox())
+        a.chat("x", "nope", None, lambda s, r: FakeBox())
     with pytest.raises(AssistantInputError):
-        a.chat("x", None, "corto", lambda s, r, t: FakeBox())
-    cid = a.chat("x", None, SID, lambda s, r, t: FakeBox())["conversation_id"]
+        a.chat("x", None, "corto", lambda s, r: FakeBox())
+    cid = a.chat("x", None, SID, lambda s, r: FakeBox())["conversation_id"]
     a.delete(cid)
     with pytest.raises(ConversationNotFoundError):
         a.load(cid)
@@ -138,9 +138,9 @@ def test_unknown_conversation_bad_session_id_and_delete():
 
 def test_a_concurrent_message_loses_with_a_conflict():
     a = make(ScriptedModel(AssistantTurn("uno"), AssistantTurn("dos"), AssistantTurn("tres")))
-    cid = a.chat("x", None, None, lambda s, r, t: FakeBox())["conversation_id"]
+    cid = a.chat("x", None, None, lambda s, r: FakeBox())["conversation_id"]
 
-    def racing(sid, rid, said):
+    def racing(sid, rid):
         a.store.put(f"assistant/{cid}.json", {**a.load(cid)[0], "updated_at": "otro"})  # another writer
         return FakeBox()
 
@@ -224,7 +224,7 @@ def test_an_announced_but_unrun_action_gets_one_hidden_nudge():
         AssistantTurn("Listo, la corté."),
     )
     a = make(model)
-    out = a.chat("corta la línea entre A y B", None, None, lambda s, r, t: FakeBox())
+    out = a.chat("corta la línea entre A y B", None, None, lambda s, r: FakeBox())
     assert out["reply"] == "Listo, la corté." and [t["name"] for t in out["tool_calls"]] == ["start_session"]
     nudge = model.seen[1][-1]
     assert nudge["role"] == "user" and nudge["hidden"] is True
@@ -241,52 +241,8 @@ def test_no_nudge_for_questions_past_tense_or_twice():
     assert not announces("¿Quieres que la corte?") and not announces("Reparé todas las líneas.")
     assert not announces("Comparé las dos políticas.")
     model = ScriptedModel(AssistantTurn("Haré el corte."), AssistantTurn("Haré el corte."))
-    out = make(model).chat("x", None, None, lambda s, r, t: FakeBox())
+    out = make(model).chat("x", None, None, lambda s, r: FakeBox())
     assert out["reply"] == "Haré el corte." and out["steps"] == 2  # only one nudge
-
-
-def test_megawatts_must_come_from_the_user():
-    from cascadasen.mcp.toolbox import numbers, stated
-
-    assert numbers("un datacenter de 1.200 MW y otro de 0,5 GW o 120") == {1200.0, 0.5, 120.0}
-    assert stated(120, "agrega 120 MW") and stated(500, "medio GW: 0,5 GW") and not stated(500, "en Calama")
-
-    class Tools(Sub50Tools):
-        def prepare_scenario(
-            self,
-            changes: list[dict] | None = None,
-            open_lines: list[str] | None = None,
-            out_buses: list[str] | None = None,
-            point: str | None = None,
-        ):
-            return {"changes": changes}
-
-    tools = Tools(Sub50Client(base_url="http://x"), McpState(SID))
-    dc = {"target": "demand", "places": ["Calama"], "add": 500}
-    box = SessionTools(tools, said="Agrega un datacenter en Calama")
-    ok, out = box.run(call("prepare_scenario", changes=[dc]))
-    assert not ok and "pregúntale" in out["error"] and "500 MW" in out["error"]
-    box = SessionTools(tools, said="Agrega un datacenter en Calama\n300 MW")
-    ok, _ = box.run(call("prepare_scenario", changes=[{**dc, "add": 300}]))
-    assert ok
-    # a factor is not a quantity the user types ("a la mitad"), and a later turn may resend earlier changes
-    half = {"target": "generation", "tech": ["hidro"], "factor": 0.5}
-    box = SessionTools(tools, said="300 MW en Calama\nbaja a la mitad la hidro")
-    assert box.run(call("prepare_scenario", changes=[{**dc, "add": 300}, half]))[0]
-
-
-def test_the_toolbox_gets_everything_the_user_said():
-    seen = []
-    model = ScriptedModel(AssistantTurn("¿Cuántos MW?"), AssistantTurn("ok"))
-    a = make(model)
-
-    def box(sid, rid, said):
-        seen.append(said)
-        return FakeBox()
-
-    cid = a.chat("datacenter en Calama", None, None, box)["conversation_id"]
-    a.chat("300", cid, None, box)
-    assert seen == ["datacenter en Calama", "datacenter en Calama\n300"]
 
 
 def test_offers_waiting_for_the_user_get_no_nudge():
@@ -301,7 +257,7 @@ def test_a_call_that_would_end_past_the_deadline_is_not_started():
     # start 0; step 1: check 0, call 0 -> 12 (mean 12); step 2: check 14 + 12 > 25 -> stop
     now = iter([0.0, 0.0, 0.0, 12.0, 14.0])
     model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("no debería llegar"))
-    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r, t: FakeBox())
+    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r: FakeBox())
     assert out["truncated"] == "deadline" and out["steps"] == 1 and len(model.turns) == 1
 
 
@@ -309,7 +265,7 @@ def test_steps_are_emitted_as_they_happen():
     events = []
     model = ScriptedModel(AssistantTurn("Creo la sesión.", (call(),)), AssistantTurn("listo"))
     out = make(model).chat(
-        "x", None, None, lambda s, r, t: FakeBox(), on_event=lambda k, d: events.append((k, d))
+        "x", None, None, lambda s, r: FakeBox(), on_event=lambda k, d: events.append((k, d))
     )
     assert [k for k, _ in events] == ["start", "assistant_text", "tool_call", "tool_result"]
     start, text, tool_call, tool_result = (d for _, d in events)
@@ -325,7 +281,7 @@ def test_a_failing_event_callback_does_not_stop_the_conversation():
         raise BrokenPipeError
 
     model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("listo"))
-    out = make(model).chat("x", None, None, lambda s, r, t: FakeBox(), on_event=broken)
+    out = make(model).chat("x", None, None, lambda s, r: FakeBox(), on_event=broken)
     assert out["reply"] == "listo" and out["tool_calls"][0]["ok"] is True
 
 
@@ -333,31 +289,30 @@ def test_a_longer_deadline_can_be_given_per_message():
     now = iter([0.0, 0.0, 0.0, 30.0, 31.0, 31.0, 40.0])
     model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("listo"))
     a = make(model, deadline_s=25, clock=lambda: next(now))
-    out = a.chat("x", None, None, lambda s, r, t: FakeBox(), deadline_s=90)
+    out = a.chat("x", None, None, lambda s, r: FakeBox(), deadline_s=90)
     assert out["reply"] == "listo" and out["truncated"] is None
 
 
-def test_add_substation_refuses_mw_the_user_never_wrote():
-    from cascadasen.domain.ports import ToolCall
-    from cascadasen.mcp.toolbox import SessionTools
+def test_the_model_sizes_the_megawatts_when_the_user_gave_none():
+    """The user asks for help and is not technical: the toolbox does not make the model ask for MW (#125)."""
 
-    class Tools:
-        state = type("S", (), {"session_id": "x", "run_id": None})()
+    class Tools(Sub50Tools):
+        def add_generator(self, bus: str, mw: float, tech: str, name: str | None = None):
+            return {"mw": mw}
 
-        def add_substation(self, **kw):
-            return {"ok": True}
+        def prepare_scenario(
+            self,
+            changes: list[dict] | None = None,
+            open_lines: list[str] | None = None,
+            out_buses: list[str] | None = None,
+            point: str | None = None,
+        ):
+            return {"changes": changes}
 
-    box = SessionTools.__new__(SessionTools)
-    box.tools, box.exclude, box.said, box.names = (
-        Tools(),
-        frozenset(),
-        "crea una subestación con 80 MW",
-        {"add_substation"},
-    )
-    args = {"name": "SE", "lat": -23, "lon": -70, "kv": 220, "connections": [{"to": "B001"}]}
-    ok, _ = box.run(ToolCall(id="1", name="add_substation", arguments={**args, "load_mw": 80}))
-    bad, out = box.run(ToolCall(id="2", name="add_substation", arguments={**args, "load_mw": 500}))
-    assert ok and not bad and "500" in out["error"]
+    box = SessionTools(Tools(Sub50Client(base_url="http://x"), McpState(SID)), frozenset())
+    assert box.run(call("add_generator", bus="Vallenar", mw=120, tech="solar")) == (True, {"mw": 120})
+    change = {"target": "generation", "places": ["Calama"], "add": 300}
+    assert box.run(call("prepare_scenario", changes=[change]))[0]
 
 
 def test_a_first_session_at_the_default_point_waits_until_a_tool_needs_it():
@@ -376,3 +331,15 @@ def test_a_first_session_at_the_default_point_waits_until_a_tool_needs_it():
     assert box.run(call("start_session", point="nov2026-1300"))[1]["deferred"] and not opened
     ok, out = box.run(call("start_session", point="feb2025-1500"))  # an incident's own point: open it now
     assert ok and out["session_id"] == SID and opened == ["feb2025-1500"]
+
+
+def test_the_system_prompt_only_names_tools_the_assistant_is_offered():
+    import re
+
+    from cascadasen.api.assistant_routes import SYSTEM
+    from cascadasen.mcp.toolbox import EXCLUDED
+    from cascadasen.mcp.tools import TOOLS
+
+    named = {t for t in TOOLS if re.search(rf"\b{t}\b", SYSTEM)}
+    assert {"describe_network", "prepare_scenario"} <= named
+    assert not named & EXCLUDED, named & EXCLUDED
