@@ -4,7 +4,7 @@ Browser app for the demo: a 2D map of Chile with the SEN grid standing in 3D on 
 
 ## Run locally (guide for people and agents)
 
-Requirements: Node 20 or newer and npm. Tested with Node 22.23 and npm 10.9 on macOS. No backend, API key, cloud account or internet connection is needed once dependencies are installed, except for session mode (`?sesion=`), which needs the backend.
+Requirements: Node 20 or newer and npm (the component tests need jsdom, which wants Node 22.22 or newer: `npm ci` warns on an older Node). Tested with Node 22.23 and npm 10.9 on macOS. No backend, API key, cloud account or internet connection is needed once dependencies are installed, except for session mode (`?sesion=`), which needs the backend.
 
 ```bash
 cd web
@@ -16,7 +16,7 @@ Other commands:
 
 | Command | What it does |
 |---|---|
-| `npm test` | Vitest unit tests (`src/**/*.test.ts`) |
+| `npm test` | Vitest unit tests (`src/**/*.test.ts`) and component tests (`src/**/*.test.tsx`: `@testing-library/react` on jsdom, selected per file with `// @vitest-environment jsdom`; the rest run in node) |
 | `npm run build` | Type check (`tsc --noEmit`) and production build into `web/dist/` |
 | `npm run preview` | Serve `web/dist/` at http://localhost:4173 |
 
@@ -55,7 +55,7 @@ Click a line or substation to see its detail; click the selected element again (
 cd backend && uv run cascadasen-cache      # about 46 MB, 4 hours x (273 line cuts + 188 substation shutdowns + `health.json`), about a minute
 ```
 
-Session mode: `?sesion=<sid>` (or the **Sesión compartida** rail item) opens a shared, editable copy of the network served by the backend; the **Datos** tab edits buses, lines, generators, loads and datacenters, and every client of the session sees the changes live (SSE, with a 2 s polling fallback). Guide: [`docs/mapa3.md`](../docs/mapa3.md) section 11, API: [`docs/sessions-api.md`](../docs/sessions-api.md). The browser calls `/api`, which `npm run dev` proxies to `VITE_API_TARGET` (default `http://localhost:8000`, start it with `cd backend && uv run cascadasen-api`; docker compose sets `http://backend:8000`). Without `?sesion=` the app makes no `/api` request and needs no backend.
+Session mode: shared sessions are hidden from the web (#101): there is no rail item, `?sesion=<sid>` is not read when the page loads (`src/session/useSession.ts` starts with no session), and sessions are created through the API (`POST /api/v1/sessions`, [`docs/sessions-api.md`](../docs/sessions-api.md)), the MCP server or the assistant. The web joins a session only when an **Incidentes** run creates one; the session code stays live from then on (the **Datos** tab edits buses, lines, generators, loads and datacenters, and clients of the session see the changes through SSE with a 2 s polling fallback). Guide: [`docs/mapa3.md`](../docs/mapa3.md) section 11. The browser calls `/api`, which `npm run dev` proxies to `VITE_API_TARGET` (default `http://localhost:8000`, start it with `cd backend && uv run cascadasen-api`; docker compose sets `http://backend:8000`). One line cut reads only the cache (`fromCache` in `src/cascade/edits.ts`) and needs no backend; several changes at once, a substation shutdown, prepared scenarios, composed grids, incident runs and the assistant call `/api` and need it.
 
 Assistant: the **Asistente** rail item opens a chat where you ask in natural language ("Agrega un datacenter de 120 MW en Antofagasta y corta R014") and see each step of the model live: what it writes, each tool call with its state and result, and the final reply. The map joins the session the assistant edits and refreshes after each tool. It needs the backend with `CASCADASEN_LLM_ENABLED=true` and a Bedrock model (`docs/assistant.md` section 1); otherwise the panel says the assistant is not enabled. The conversation id is kept in `localStorage` (`sub50.assistant.cid`). Details: [`docs/assistant.md`](../docs/assistant.md) section 2c.
 
@@ -78,7 +78,7 @@ Mapa 3 keeps the camera near Chile (`maxBounds` lon -110 to -35, lat -62 to -5, 
 | `src/map/gridData.ts` | Loads the GeoJSON files and aggregates plants per substation |
 | `src/map/layers.ts` | deck.gl layers and colour tables (the legend reads the same tables) |
 | `src/session/sessionApi.ts` | Sessions API client: typed calls, `ApiError`, `sessionIdFrom`, `subscribe` (SSE or polling) |
-| `src/session/useSession.ts`, `loader.ts`, `SessionBar.tsx`, `SessionCut.tsx`, `DataPanel.tsx`, `session.css` | Session state and refetch, the **Sesión compartida** view and panel-head strip, the open lines in **Simulación**, the **Datos** tab, and their styles |
+| `src/session/useSession.ts`, `loader.ts`, `SessionBar.tsx`, `SessionCut.tsx`, `DataPanel.tsx`, `session.css` | Session state and refetch, the panel-head strip (the **Sesión compartida** card is not reachable, see `docs/mapa3.md` section 11), the open lines in **Simulación**, the **Datos** tab, and their styles |
 | `src/assistant/` | In-app assistant chat (**Asistente** rail item): SSE parser, event reducer, Spanish labels, API client, `useAssistant` hook and the panel; see `docs/assistant.md` section 2c |
 | `src/incidents/` | Documented incidents (**Incidentes** rail item): pure helpers (`incidents.ts`), the `useIncident` hook owned by `CascadeApp`, the panel and its styles; see `docs/mapa3.md` section 4.2 |
 | `src/session/geo.ts` | Nearest bus of at least 220 kV (great-circle distance only, no physics) |

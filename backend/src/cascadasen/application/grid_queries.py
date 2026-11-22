@@ -25,6 +25,8 @@ def _prov(items) -> list[dict]:
 
 
 class GridQueryService:
+    """Read model over one `GridSnapshot`: it builds the id indexes once so every API query is a lookup."""
+
     def __init__(self, snapshot: GridSnapshot) -> None:
         self.s = snapshot
         self.nodes = {n.id: n for n in snapshot.nodes}

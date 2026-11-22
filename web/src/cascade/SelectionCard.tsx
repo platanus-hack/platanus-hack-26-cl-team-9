@@ -9,6 +9,10 @@ import type { BusState, Frame, NetLine, Network } from "./types";
 import { Info } from "./ui";
 
 interface Props {
+  /** network: the reduced network on the map. buses: gen, load and people per bus at the point. frame: the cascade frame at the
+   *  playhead (undefined before a timeline). selection: the clicked line or substation. cut: id of the line cut now, or null.
+   *  year: network year, for the topology tip. Callbacks: select a row of a list, clear the selection, cut the line, restore
+   *  the cut, shut down or power on a substation. */
   network: Network; buses: Record<string, BusState>; frame: Frame | undefined; selection: Pick; cut: string | null; year: number | undefined;
   /** True when the selected substation is shut down (every one of its lines open). */
   shutDown: boolean;

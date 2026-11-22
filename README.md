@@ -63,6 +63,11 @@ CI runs backend pytest with a coverage floor, mypy (0 errors, blocking), web tsc
 | [`docs/cyber.md`](docs/cyber.md) | Main objective (cyberattack consequences) and guardrails |
 | [`docs/stack.md`](docs/stack.md) | Decisions, simulation model, data contracts, API |
 | [`docs/architecture.md`](docs/architecture.md) | How the system is built |
+| [`docs/README.md`](docs/README.md) | Index of every doc: purpose, when to read it, status, "where is X" |
+| [`docs/code-map.md`](docs/code-map.md) | Backend and web module by module, data flows, tests per module |
+| [`docs/for-reviewers.md`](docs/for-reviewers.md) | Claims, where to verify them, limitations, pending decisions |
+| [`docs/index/`](docs/index/README.md) | Generated index of files, symbols, routes and tests (`repo-index.json`) |
+| [`llms.txt`](llms.txt) | The same map for an LLM, in the llmstxt.org format |
 | [`docs/adr/`](docs/adr/README.md) | Architecture decision records |
 | [`docs/plan.md`](docs/plan.md) | Phases, validation cases, open decisions |
 | [`docs/sessions-api.md`](docs/sessions-api.md) | Shared sessions and the agent API |

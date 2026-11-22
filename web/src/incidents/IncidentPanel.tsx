@@ -9,6 +9,10 @@ import "./incidents.css";
  * (never sorted by damage), the run options, and the result: consequence card, agentic response, prevention, the
  * cycles (those with a cascade play it on the map) and the sources. Every result carries both notices.
  */
+/**
+ * Props: `inc` is the `useIncident` state owned by CascadeApp. `sessionPoint` is the operating point of the session on screen
+ * (null without one); it decides whether a launch reuses that session or creates a new one at the incident's hour.
+ */
 export function IncidentPanel({ inc, sessionPoint }: { inc: Incident; sessionPoint: string | null }) {
   useEffect(() => { inc.load(); }, []);
   const { catalog, result } = inc;

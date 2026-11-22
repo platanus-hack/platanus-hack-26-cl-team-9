@@ -81,6 +81,10 @@ class _Lru:
 
 
 class SessionService:
+    """One shared session = one JSON document in the `DocumentStore` (overlay, open lines, revisions).
+    Why: every write goes through `mutate`, a conditional write with retries, so any instance of the API
+    can serve any session and two writers never overwrite each other (ADR 0004)."""
+
     def __init__(
         self,
         world: TheaterWorld,
