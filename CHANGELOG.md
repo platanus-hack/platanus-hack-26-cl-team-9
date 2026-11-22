@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): keep the mapa 3 URL clean on defaults
+
+- **Changed:** New `web/src/cascade/url.ts` with `DEFAULT_POINT` (`nov2026-1300`) and the pure `syncedSearch(search, { pointId, cut, mode, sid })`. `_syncUrl` in `CascadeApp.tsx` uses it and keeps `location.hash`. The URL now writes `point` only when it differs from the default and there is no session, `cut` only without a session, and `vista=3d` only in 3D. It keeps every other param (`sesion`, `mapa`, `limite`) and drops the `?` when nothing is left.
+- **Why:** The first render of `/` became `/?point=nov2026-1300`, and an empty search still left a trailing `?`. Explicit `?point=`/`?cut=`/`?vista=3d` links still open the same state.
+- **Agents:** A bare `/` is the default view. A session URL carries `sesion` (and `vista`) but no `point` or `cut`. Tests are in `web/src/cascade/url.test.ts`. No slug or path aliases (such as `/25f`): ids stay the only deep-link format. Note: `scripts/lint.sh` only lints `frontend/*`, so `web/` files are not linted.
+- **Files:** `web/src/cascade/{url.ts,url.test.ts,CascadeApp.tsx}`.
+
 ## 2026-11-21 · docs(network): add network-format.md and update regional and datasets docs
 
 - **Changed:** New `docs/network-format.md`, the data contract for adding or uploading a network, in seven sections:
