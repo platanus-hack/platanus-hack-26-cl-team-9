@@ -14,7 +14,7 @@ import { MapLegend } from "./MapLegend";
 import { MapOverlays, type LocatedMarker } from "./MapOverlays";
 import { NetworkPanel } from "./NetworkPanel";
 import { NetworkState } from "./NetworkState";
-import { CASE_25F, ScenarioTree, type ScenarioChoice } from "./Scenarios";
+import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
@@ -466,15 +466,14 @@ export function CascadeApp() {
     setSelection(null);
     setNotice(null);
     setPointId(next.point);
-    if (next.cut) setEdits(addLine(NO_EDITS, next.cut)); // the 25F replaces the changes; a Benchmark condition keeps them
+    if (next.edits) setEdits(next.edits); // a disaster replaces the changes; a Benchmark condition keeps them
     if (composed) void composeFromSources(next.point, sourcesRef.current); // the composed grid follows the chosen hour
-    chooseTab(next.cut ? "sim" : "red"); // a Benchmark condition has no cut: it opens on Red
+    chooseTab(next.edits ? "sim" : "red"); // a disaster opens on Simulación (Carga), a Benchmark condition on Red (Tensión)
   }
 
   const tabs: [Tab, string][] = s.sid ? SESSION_TABS : TABS;
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
   const selectedCut = selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null;
-  const only25f = s.sid ? cuts.length === 1 && cuts[0] === CASE_25F.cut : edits.buses.length === 0 && edits.lines.length === 1 && edits.lines[0] === CASE_25F.cut;
   const canPower = canPowerAll({ cuts, edited: outBuses.length > 0 });
   const shutDown = selection?.kind === "node" && (s.sid
     ? !!network && substationLines(network, selection.id).length > 0 && substationLines(network, selection.id).every((l) => cuts.includes(l))
@@ -494,7 +493,7 @@ export function CascadeApp() {
           <Icon><path d="M1.5 3.5l4-1.5 5 2 4-1.5v10l-4 1.5-5-2-4 1.5z M5.5 2v10 M10.5 4v10" /></Icon><span>Mapa</span>
         </button>
         <div className="rail-item static"><Icon><path d="M2 13.5h12M4 11V7M8 11V3M12 11V8" /></Icon><span>Escenarios</span></div>
-        <ScenarioTree points={index?.points ?? []} pointId={pointId} is25f={only25f && pointId === CASE_25F.point} open={openScenario} locked={s.sid ? PINNED : undefined} />
+        <ScenarioTree points={index?.points ?? []} pointId={pointId} edits={s.sid ? { lines: cuts, buses: [] } : edits} open={openScenario} locked={s.sid ? PINNED : undefined} />
         <button className="rail-item" aria-disabled="true" data-tip={SOON}><Icon><path d="M3 8.5l3 3 7-7" /></Icon><span>Validación</span></button>
         <button className={view === "sources" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "sources" ? "tabs" : "sources")}>
           <Icon><ellipse cx="8" cy="4" rx="5.5" ry="2" /><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" /></Icon><span>Fuentes y supuestos</span>

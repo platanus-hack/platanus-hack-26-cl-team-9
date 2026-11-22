@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): Desastres adds the 2011 Ancoa blackout and the 2010 earthquake (S/E Charrúa) (#88)
+
+- **Changed:** `DISASTERS` in `Scenarios.tsx` lists Apagón 25F, Apagón 2011 · Ancoa (cut `R006` at `nov2026-2000`) and Terremoto 2010 · Charrúa (S/E Charrúa `B043` out of service at `nov2026-2000`). A scenario is now `{point, edits}`: a disaster replaces the changes of Estado de la red, a Benchmark condition keeps them. `activeDisaster` marks the entry whose hour and changes match exactly. The 25F tooltip named the wrong corridor (Alto Jahuel–Ancoa); it now says Nueva Maitencillo – Nueva Pan de Azúcar.
+- **Why:** the scenario plan (PR #33) had both events; the user asked for them in Desastres.
+- **Agents:** 2011 gives 3.2 M people (real 9.8 M) and 2010 gives 4.1 M (real more than 13 M): analogues, not reproductions (docs/mapa3.md, issue #35). Adding a disaster is one entry in `DISASTERS`.
+- **Files:** `web/src/cascade/{Scenarios.tsx,scenarios.test.ts,CascadeApp.tsx}`, `docs/mapa3.md`.
+
 ## 2026-11-22 · feat(grids): heat maps of dependency and criticality through the API, on the grid after the changes (#54)
 
 - **Changed:** `domain/cascade/tracing.py` and `criticality.py` (from PR #55) take the lines already open. New use case `GridDependency` (`application/grid_dependency.py`) and `POST /api/v1/grids/dependency` (`{point, open_lines, out_buses}`) measure who feeds whom and how critical each substation is after the user's changes and their cascade; `prepare_edits` in `grid_simulation.py` is shared with `/grids/simulate`. Web: "Mapa de calor" in the Capas menu (Población from the loaded buses; Dependencia and Criticidad from the API). The changes of Estado de la red are saved in localStorage (`sub50.edits.v1`) and come back after a refresh; a link with `?cut=` wins.
