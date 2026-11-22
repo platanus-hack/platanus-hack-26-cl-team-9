@@ -2,7 +2,7 @@
 
 An endpoint of the backend where a user writes a request in natural language and an LLM runs the simulation by calling tools. The tools are the ones of the MCP server (`docs/mcp.md`), run through the app's own routes (`docs/sessions-api.md`). The MCP server serves an external client that brings its own LLM; the assistant is the same thing inside the application. It does not replace or change the theatre's bots (`docs/agents.md`).
 
-Code: `api/assistant_routes.py`, `application/assistant.py`, `infrastructure/llm_tools.py`, `infrastructure/inprocess.py`, `mcp/{specs,toolbox}.py`. Tests: `tests/unit/{test_assistant,test_llm_tools,test_tool_specs}.py`, `tests/integration/test_assistant_api.py`.
+Web client: `web/src/assistant/` (section 2c). Code: `api/assistant_routes.py`, `application/assistant.py`, `infrastructure/llm_tools.py`, `infrastructure/inprocess.py`, `mcp/{specs,toolbox}.py`. Tests: `tests/unit/{test_assistant,test_llm_tools,test_tool_specs}.py`, `tests/integration/test_assistant_api.py`.
 
 ## 1. Turn it on
 
@@ -94,6 +94,26 @@ curl -N -X POST localhost:8000/api/v1/assistant/chat/stream -H 'content-type: ap
   -d '{"message": "Agrega un datacenter de 120 MW en Antofagasta y corta R014"}'
 ```
 
+## 2c. Web client (mapa 3, rail item **Asistente**)
+
+The web reads `/chat/stream` and shows each step while the model works. It needs the backend with the LLM on (section 1); without it the first message gets 503 and the panel disables the input with "El asistente no está habilitado en este servidor."
+
+| File (`web/src/assistant/`) | Role |
+|---|---|
+| `sse.ts` | `createSseParser(onEvent)`: chunks cut anywhere → `{event, data}`; skips `: ping`, accepts CRLF and multi-line `data:` |
+| `steps.ts` | Pure chat state: `begin`, `reduce(state, event)` groups text and tool cards by `step` and pairs a `tool_result` with its `tool_call` by `id`; `interrupt`, `fail`, `annotate`, `fromConversation` |
+| `labels.ts` | Spanish tool names (the 23 MCP tools), readable arguments, short result summaries, `refreshFor(tool)`, error texts per status |
+| `assistantApi.ts` | `streamChat` (`fetch` + stream reader; `AssistantError` with `Retry-After` for errors before the stream; status 0 = network), `getConversation`, `deleteConversation` |
+| `useAssistant.ts` | Hook owned by `CascadeApp`, so the chat survives view changes |
+| `AssistantPanel.tsx`, `assistant.css` | The panel: history, tool cards (ejecutando… → ✓/✗, "Ver resultado" with the JSON), reply with the scenario `notice`, **Continuar** after a truncation, message box (1-2000 characters, Enter sends, Shift+Enter new line), **Nueva conversación** |
+
+- **Which session.** Every message sends `session_id` = the session on screen, when there is one, so the assistant works on what the user sees. When `start`, `tool_result` or `done` carries a `session_id` that differs from the one on screen, the web joins it (`useSession.join`, which also puts `?sesion=` in the URL). The map then follows by itself through the session SSE.
+- **Refresh.** After a successful tool whose `refreshFor` is not null (edits, `cut_lines`, `repair_lines`, `step`), the web reloads the session 300 ms later (`useSession.refresh`: document, network and `/state`) as a fallback to the SSE. After `step` it also fetches `GET /sessions/{sid}/runs/{rid}/snapshots?start=N` and only writes a one-line summary in the card ("3 instantáneas cargadas de la corrida (ciclos …)"): the web has no run viewer.
+- **Persistence.** The conversation id is kept in `localStorage` under `sub50.assistant.cid` (wrapped in try/catch). On load the web rebuilds the chat with `GET /conversations/{cid}`; a 404 forgets the id. That route does not say which turn ran each tool and carries no `notice`, so a restored chat shows the replies, the earlier texts of each answer, and one collapsed list "Herramientas que ya usó esta conversación (N)". Restoring joins the conversation's session only when no session is on screen.
+- **Errors.** Before the stream: 422 and 413 "El mensaje está vacío o supera 2000 caracteres.", 429 "Demasiados mensajes; espera N s." (from `Retry-After`), 404 forgets the id, 503 disables the chat. In the stream (`error`): 502 "El modelo falló; tu mensaje quedó guardado, intenta de nuevo.", 409 "Otro mensaje de esta conversación estaba corriendo; reintenta.", 500 generic. A stream that closes without `done` or `error` marks the turn interrupted and re-reads the conversation up to 5 times, 3 s apart, because the backend still finishes and saves it.
+- **Guardrails.** The panel only shows what the tools returned. The summaries repeat fields of the result; the scenario `notice` (with the assumption note) is shown under each reply.
+- Checked on 2026-11-21 against a local backend whose model was a scripted stand-in (the real app and routes, not Bedrock), with headless Chromium: live cards, `?sesion=` set, datacenter in Datos and cascade playing without reload, second message on the same session, chat restored after reload, **Nueva conversación** clearing it. A live check against Bedrock is still pending.
+
 ## 3. How it works
 
 - `Assistant.chat` runs a loop: the model answers with text or tool calls, each call runs, the result goes back, until the model answers with text, `assistant_max_steps` is reached or `assistant_deadline_s` passes.
@@ -119,7 +139,7 @@ Same as `cyber.md` section 8, `sessions-api.md` section 11 and `mcp.md` section 
 
 ## 5. Not done
 
-- The web UI (the backend streams the steps; see section 2b).
+- A live check of the web chat against Bedrock (section 2c).
 - Other providers (`anthropic`, `bedrock` Messages API).
 - Terraform: the task role has no Bedrock permission and CloudFront keeps its default 30 s origin timeout (`infrastructure/iam.tf`, `cloudfront.tf`).
 - Live test on 2026-11-21 against Bedrock and the 188-bus network with a bench of 17 turns in 5 conversations (edit and cut, strategic run with report and replay, guardrail, ambiguous requests, harder multi-step and prompt injection). `qwen.qwen3-next-80b-a3b` needed most of the guards above and still failed intermittently; `deepseek.v3.2` passed every check across several passes (the only flags were false negatives of the bench), with 1-19 s per message, and is the model set in the team's local `.env`. Other models that call tools through Converse on the account: `moonshotai.kimi-k2.5`, `zai.glm-5`, `mistral.mistral-large-3-675b-instruct`, `openai.gpt-oss-120b-1:0` (not benchmarked). The bench script is not in the repo.

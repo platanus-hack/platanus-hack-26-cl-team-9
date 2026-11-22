@@ -73,6 +73,51 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** One formula for both engines: never recompute the cost by hand, call `outage_cost`. The cascade cost uses the rounded `load_shed_mw`, so `failure_cost_usd = load_shed_mw x 4 x 1000 x 8.79` exactly. It is a regulatory valuation, not a measured loss. The cache is not regenerated yet.
 - **Files:** `backend/src/cascadasen/domain/simulation/consequence.py`, `backend/src/cascadasen/domain/cascade/engine.py`, `backend/tests/unit/{test_cascade.py,test_sim_engine.py}`.
 
+## 2026-11-21 · docs(assistant): document the web chat
+
+- **Changed:** `docs/assistant.md` gets section 2c "Web client" (files, which session a message uses, refresh rules, persistence key, rehydration limits, error texts, what was checked) and §5 drops "The web UI" in favour of the pending Bedrock check. `web/README.md` adds a paragraph on the **Asistente** rail item and a row for `src/assistant/`. `docs/mapa3.md` §8 and §11 mention the new rail item and folder.
+- **Why:** The docs must match the chat added in the previous commits (#73).
+- **Agents:** The web chat was only checked against a scripted stand-in model, not Bedrock. `GET /conversations/{cid}` has no per-turn tool mapping and no `notice`, so a restored chat shows the tools as one collapsed list; adding a `turn` index to `tool_calls` in the backend would let the web place them.
+- **Files:** `docs/assistant.md`, `docs/mapa3.md`, `web/README.md`.
+
+## 2026-11-21 · feat(web): assistant chat panel in mapa 3
+
+- **Changed:** New rail item **Asistente** (below Sesión compartida) opens the view `"assistant"` with `AssistantPanel`: history with the user bubble, the text the model writes before acting, tool cards (Spanish name, readable arguments, spinner "ejecutando…" → ✓ listo / ✗ falló, short summary, "Ver resultado" with the JSON), the final reply with the scenario `notice`, a truncation notice with **Continuar** (sends "continúa"), errors per status, and a message box (1-2000 characters with counter, Enter sends, Shift+Enter new line) plus **Nueva conversación**.
+- **Changed:** `CascadeApp.tsx` calls `useAssistant(s)` once, so the chat survives view changes; the map stays beside the panel and follows the session the assistant edits. `labels.resultText` adds the bus name of an edit (`en S/E ESCONDIDA`).
+- **Why:** Issue #73: the user sees the assistant's steps live while it builds the simulation.
+- **Agents:** Styles in `web/src/assistant/assistant.css` (cascade.css tokens, radius 0, red only for a failed tool). Checked with a local backend whose model was a scripted stand-in (not Bedrock) and headless Chromium: the first message joins the new session (`?sesion=`), the datacenter shows in Datos and the cascade plays; a second message stays on the same session; reload restores the chat; Nueva conversación clears it and the stored id. Not checked against Bedrock.
+- **Files:** `web/src/assistant/{AssistantPanel.tsx,assistant.css,labels.ts,labels.test.ts}`, `web/src/cascade/CascadeApp.tsx`.
+
+## 2026-11-21 · feat(web): assistant API client and hook
+
+- **Changed:** New `web/src/assistant/assistantApi.ts`: `streamChat(body, onEvent, signal)` reads `POST /api/v1/assistant/chat/stream` with `fetch` and the SSE parser and resolves whether the stream ended with `done`/`error`; `getConversation`, `deleteConversation`; `AssistantError(status, retryAfter, detail)` (status 0 = network) whose message is the Spanish text.
+- **Changed:** New `web/src/assistant/useAssistant.ts`: `useAssistant(session)` → `{state, busy, enabled, restoring, send, reset}`. Sends `session_id: s.sid` with every message, joins the `session_id` of `start`/`tool_result`/`done` when it differs from the one on screen, reloads the session 300 ms after each successful edit/cut/repair, and after `step` fetches the run snapshots and annotates the card. The conversation id lives in `localStorage` (`sub50.assistant.cid`) and is rebuilt on mount (404 forgets it).
+- **Why:** The chat panel (#73) needs the stream, persistence and the map following the assistant.
+- **Agents:** A 503 disables the chat (`enabled = false`). A stream that drops before `done` marks the turn interrupted and re-reads the conversation up to 5 times, 3 s apart. `reset()` aborts the stream, clears the chat and DELETEs the conversation (the session stays). `errorText` in `sessionApi.ts` was not exported: all assistant texts come from `labels.ts`. Tests: `assistantApi.test.ts`.
+- **Files:** `web/src/assistant/{assistantApi.ts,assistantApi.test.ts,useAssistant.ts}`.
+
+## 2026-11-21 · feat(web): reduce assistant events to steps
+
+- **Changed:** New `web/src/assistant/steps.ts`: pure chat state (`ChatState`, turns, steps, `ToolCard`) with `begin`, `reduce(state, event)`, `interrupt`, `fail`, `annotate` and `fromConversation(view)`.
+- **Changed:** New `web/src/assistant/labels.ts`: Spanish tool names for the 23 MCP tools (`toolName`), readable arguments (`argsText`), short result summaries (`resultText`), `refreshFor(tool)` → `"network" | "state" | "snapshots" | null`, and error texts per status (`errorMessage`, `truncatedText`).
+- **Why:** The chat panel (#73) shows each step live, grouped by `step`, with tool cards that go from running to ok or failed.
+- **Agents:** A result pairs with its call by `id`; `done` and `error` turn cards still running into failed. `GET /conversations/{cid}` does not say which turn ran each tool, so `fromConversation` merges the assistant texts of one user message into one turn (last text = reply) and puts the tool trace in `restoredTools`. Summaries only repeat fields the tool returned. Tests: `steps.test.ts`, `labels.test.ts`.
+- **Files:** `web/src/assistant/{steps.ts,labels.ts,steps.test.ts,labels.test.ts}`.
+
+## 2026-11-21 · feat(web): parse the assistant event stream
+
+- **Changed:** New `web/src/assistant/sse.ts` with `createSseParser(onEvent)`: `push(chunk)` parses `text/event-stream` chunks cut anywhere into `{event, data}`; `flush()` parses a last block left without a blank line.
+- **Why:** First piece of the assistant chat in the web (#73). `EventSource` only does GET, so the POST `/api/v1/assistant/chat/stream` is read with `fetch` and this parser.
+- **Agents:** It skips `: ping` comments and blocks without `event:`, accepts `\r\n` (also split between chunks), joins multi-line `data:` with `\n`, and passes non-JSON data as a string. Tests in `sse.test.ts`.
+- **Files:** `web/src/assistant/{sse.ts,sse.test.ts}`.
+
+## 2026-11-22 · feat(grids): heat maps of dependency and criticality through the API, on the grid after the changes (#54)
+
+- **Changed:** `domain/cascade/tracing.py` and `criticality.py` (from PR #55) take the lines already open. New use case `GridDependency` (`application/grid_dependency.py`) and `POST /api/v1/grids/dependency` (`{point, open_lines, out_buses}`) measure who feeds whom and how critical each substation is after the user's changes and their cascade; `prepare_edits` in `grid_simulation.py` is shared with `/grids/simulate`. Web: "Mapa de calor" in the Capas menu (Población from the loaded buses; Dependencia and Criticidad from the API). The changes of Estado de la red are saved in localStorage (`sub50.edits.v1`) and come back after a refresh; a link with `?cut=` wins.
+- **Why:** PR #55 precomputed `dependency.json` in the cache for the base case only and was written against the old mapa 3; the new backend serves everything through the API, and the heat maps must describe the grid the user edited.
+- **Agents:** no `dependency.json`, no `population.json` and no `cascadasen-cache --only dependency`. Criticality costs about 2 s per new set of changes (32 results kept per process). New dependency `@deck.gl/aggregation-layers`.
+- **Files:** `backend/src/cascadasen/{domain/cascade/tracing.py,domain/cascade/criticality.py,application/grid_dependency.py,application/grid_simulation.py,api/grid_routes.py,api/app.py}`, `backend/tests/unit/{test_tracing,test_criticality,test_grid_dependency}.py`, `web/src/cascade/{heat.ts,heat.test.ts,edits.ts,edits.test.ts,gridsApi.ts,types.ts,layers.ts,CascadeApp.tsx,cascade.css}`, `web/package.json`, `docs/dependency.md`.
+
 ## 2026-11-22 · feat(web): outage result and cost in Estado de la red; Chile alone by default (#83)
 
 - **Changed:** Estado de la red opens with "Resultado de la caída": people without power and % of the country, MW lost of the hour's demand, generation lost and islands that went dark, read with the same `impactAt` that Simulación uses at its last second. Cost of the outage comes from `POST /api/v1/grids/cost` (issue #82, not built yet): the card says "pendiente" on 404. `/grids/simulate` now adds the demand of substations out of service to `load_total_mw`. The map opens with Chile alone (no context countries until ticked in Fuentes de la grilla) at Mediodía solar; Desastres open on Carga and Benchmark on Tensión.

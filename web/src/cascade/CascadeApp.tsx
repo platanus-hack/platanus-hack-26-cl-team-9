@@ -6,8 +6,9 @@ import { loadBuses, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./a
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourceSelection } from "./GridSources";
-import { addBus, addLine, dropBus, dropLine, editKey, fromCache, NO_EDITS, type Edits } from "./edits";
-import { composeGrid, loadContextDocument, simulateGrid, type SimulationResult } from "./gridsApi";
+import { addBus, addLine, dropBus, dropLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits, type Edits } from "./edits";
+import { composeGrid, loadContextDocument, loadDependency, simulateGrid, type SimulationResult } from "./gridsApi";
+import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
 import { MapLegend } from "./MapLegend";
 import { MapOverlays, type LocatedMarker } from "./MapOverlays";
@@ -19,7 +20,7 @@ import { SimulationPanel } from "./SimulationPanel";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
-import type { BusState, HealthReport, Index, Network, Timeline } from "./types";
+import type { BusState, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
 import { Icon, TipLayer, Wordmark } from "./ui";
 import { DataPanel } from "../session/DataPanel";
 import { SessionBar } from "../session/SessionBar";
@@ -27,12 +28,14 @@ import { SessionCut } from "../session/SessionCut";
 import { cutLines, repairLines } from "../session/sessionApi";
 import { canPowerAll, powerAll } from "./powerAll";
 import { useSession } from "../session/useSession";
+import { AssistantPanel } from "../assistant/AssistantPanel";
+import { useAssistant } from "../assistant/useAssistant";
 import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
 import "../session/session.css";
 
 type Tab = "estado" | "red" | "sim" | "datos";
-type View = "tabs" | "sources" | "help" | "session";
+type View = "tabs" | "sources" | "help" | "session" | "assistant";
 // "Qué lo habría evitado" and "Validación" are not built yet and left out so the four tabs fit the 440 px panel.
 const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"]];
 // In a session Datos replaces Estado de la red: the session owns its changes.
@@ -55,6 +58,7 @@ export function CascadeApp() {
   // ?point=<id>&cut=<line id | sub-<bus id>>&vista=3d&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
   const params = useMemo(() => new URLSearchParams(location.search), []);
   const s = useSession();
+  const a = useAssistant(s); // owned here so the chat survives view changes
   const startCut = s.sid ? null : params.get("cut"); // a session owns its cut
   const [index, setIndex] = useState<Index | null>(null);
   const [pointId, setPointId] = useState(params.get("point") ?? DEFAULT_POINT);
@@ -64,7 +68,8 @@ export function CascadeApp() {
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
   // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
-  const [edits, setEdits] = useState<Edits>(() => (!startCut ? NO_EDITS : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
+  // A link's cut wins; otherwise the changes saved in this browser come back (a refresh never loses them).
+  const [edits, setEdits] = useState<Edits>(() => (s.sid ? NO_EDITS : !startCut ? loadEdits() : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -78,6 +83,10 @@ export function CascadeApp() {
   const [mode, setMode] = useState<ViewMode>(params.get("vista") === "3d" ? "3d" : "2d");
   const [toggles, setToggles] = useState<Toggles>({ flow: true, demand: false });
   const [layersOpen, setLayersOpen] = useState(false);
+  const [heat, setHeat] = useState<HeatKind>("none");
+  // Heat-map data from POST /grids/dependency for the grid as it stands, keyed so a late answer never shows under newer changes.
+  const [dependency, setDependency] = useState<{ key: string; nodes: Record<string, DependencyNode> } | null>(null);
+  const [heatError, setHeatError] = useState<string | null>(null);
   const [hasLabels, setHasLabels] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -117,11 +126,14 @@ export function CascadeApp() {
   }, [located, states]);
 
   const [regional, setRegional] = useState<RegionalGrid | null>(null);
+  const heatKey = `${pointId}|${[...cuts].sort()}|${[...outBuses].sort()}`;
+  const heatData = dependency?.key === heatKey ? dependency.nodes : null;
+  const heatLayerList = useMemo<Layer[]>(() => (network ? heatLayers(heat, heatPoints(heat, network, buses, heatData)) : []), [heat, network, buses, heatData]);
   const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional, colorMode) : []), [regional, colorMode]);
 
   const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 1;
-  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine, outBus });
-  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine, outBus };
+  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus });
+  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus };
   const prevSid = useRef(s.sid);
   const clickMemory = useRef(NO_CLICK);
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -130,6 +142,8 @@ export function CascadeApp() {
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
   // Only Chile by default: the other countries are drawn once they are ticked in Fuentes de la grilla.
+  useEffect(() => { if (!s.sid) saveEdits(edits); }, [edits, s.sid]);
+  useEffect(() => _loadHeat(), [heat, heatKey]);
   useEffect(() => { if (!s.sid && !composed) _loadPoint(); }, [pointId, index, s.sid, composed]);
   useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
   // Pre-fault health of the base point; null when the cache predates it. Hidden in a session or a composed grid: they change the network.
@@ -200,6 +214,16 @@ export function CascadeApp() {
       setNotice(`No hay simulación de este corte para ${index?.points.find((x) => x.id === pointId)?.label ?? pointId}. Se muestra el caso base.`);
       setEdits(NO_EDITS);
     });
+  }
+
+  /** Dependency and criticality come from the server, computed on the grid after the changes and their cascade. */
+  function _loadHeat() {
+    setHeatError(null);
+    if (!needsDependency(heat) || dependency?.key === heatKey) return;
+    const key = heatKey;
+    loadDependency({ point: pointId, open_lines: cuts, out_buses: outBuses })
+      .then((r) => { if (live.current.heatKey === key) setDependency({ key, nodes: r.nodes }); })
+      .catch((e) => { if (live.current.heatKey === key) setHeatError(String(e.message)); });
   }
 
   /** Why: the cache has single cuts only; two or more changes are simulated together by the backend. */
@@ -293,7 +317,7 @@ export function CascadeApp() {
         const zoom = map.camera().zoom;
         const sel = v.selection;
         map.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame: v.frame, time, colorMode: v.colorMode, selectedNode: sel?.kind === "node" ? sel.id : null,
-          selectedLine: sel?.kind === "line" ? sel.id : null, mode: v.mode, zoom, toggles: v.toggles, regional: v.regionalLayers }));
+          selectedLine: sel?.kind === "line" ? sel.id : null, mode: v.mode, zoom, toggles: v.toggles, regional: v.regionalLayers, heat: v.heatLayerList }));
         _placeOverlays(map);
       }
       raf = requestAnimationFrame(tick);
@@ -485,6 +509,9 @@ export function CascadeApp() {
         <button className={view === "session" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "session" ? "tabs" : "session")}>
           <Icon><path d="M6.5 9.5l3-3M7.2 4.3l1.1-1.1a2.6 2.6 0 0 1 3.7 3.7l-1.1 1.1M8.8 11.7l-1.1 1.1a2.6 2.6 0 0 1-3.7-3.7l1.1-1.1" /></Icon><span>Sesión compartida</span>
         </button>
+        <button className={view === "assistant" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "assistant" ? "tabs" : "assistant")}>
+          <Icon><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z M5.5 7h.01M8 7h.01M10.5 7h.01" /></Icon><span>Asistente</span>
+        </button>
         <div className="rail-spacer" />
         <button className={view === "help" ? "rail-item faint on" : "rail-item faint"} onClick={() => setView(view === "help" ? "tabs" : "help")}>
           <Icon><circle cx="8" cy="8" r="5.8" /><path d="M6.3 6.3a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1M8 11.3v.1" /></Icon><span>Ayuda</span>
@@ -507,7 +534,7 @@ export function CascadeApp() {
             </>
           ) : (
             <div className="crumbs view-head">
-              <h1>{view === "sources" ? "Fuentes y supuestos" : view === "session" ? "Sesión compartida" : "Ayuda"}</h1>
+              <h1>{view === "sources" ? "Fuentes y supuestos" : view === "session" ? "Sesión compartida" : view === "assistant" ? "Asistente" : "Ayuda"}</h1>
               <button className="text-btn" onClick={() => setView("tabs")}>Cerrar</button>
             </div>
           )}
@@ -515,6 +542,7 @@ export function CascadeApp() {
         <div className="panel-body" ref={panelBodyRef}>
           {(s.error ?? error) && <p className="note">{s.error ?? error}{s.error && <> <button className="text-btn" onClick={s.clearError}>Cerrar</button></>}</p>}
           {view === "session" && <SessionBar s={s} />}
+          {view === "assistant" && <AssistantPanel a={a} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}
           {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={regional} />}
@@ -569,6 +597,11 @@ export function CascadeApp() {
             <h3>Capas</h3>
             <label className="check"><input type="checkbox" checked={toggles.flow} onChange={(e) => setToggles({ ...toggles, flow: e.target.checked })} />Flujo de potencia</label>
             <label className="check"><input type="checkbox" checked={toggles.demand} onChange={(e) => setToggles({ ...toggles, demand: e.target.checked })} />Demanda por subestación</label>
+            <h3>Mapa de calor</h3>
+            {HEAT_OPTIONS.map((o) => (
+              <label className="check" key={o.kind}><input type="radio" name="heat" checked={heat === o.kind} onChange={() => setHeat(o.kind)} />{o.label}</label>
+            ))}
+            {heat !== "none" && <p className="heat-hint">{heatError ?? (needsDependency(heat) && !heatData ? "Calculando en el servidor…" : HEAT_OPTIONS.find((o) => o.kind === heat)?.hint)}</p>}
           </div>
         )}
       </div>
