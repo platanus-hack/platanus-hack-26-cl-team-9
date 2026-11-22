@@ -102,7 +102,7 @@ The web reads `/chat/stream` and shows each step while the model works. It needs
 |---|---|
 | `sse.ts` | `createSseParser(onEvent)`: chunks cut anywhere → `{event, data}`; skips `: ping`, accepts CRLF and multi-line `data:` |
 | `steps.ts` | Pure chat state: `begin`, `reduce(state, event)` groups text and tool cards by `step` and pairs a `tool_result` with its `tool_call` by `id`; `interrupt`, `fail`, `annotate`, `fromConversation` |
-| `labels.ts` | Spanish tool names (the 23 MCP tools), readable arguments, short result summaries, `refreshFor(tool)`, error texts per status |
+| `labels.ts` | Spanish names for 23 of the 26 MCP tools (`list_incident_scenarios`, `start_incident_run` and `prepare_scenario` show their id), readable arguments, short result summaries, `refreshFor(tool)`, error texts per status |
 | `assistantApi.ts` | `streamChat` (`fetch` + stream reader; `AssistantError` with `Retry-After` for errors before the stream; status 0 = network), `getConversation`, `deleteConversation` |
 | `useAssistant.ts` | Hook owned by `CascadeApp`, so the chat survives view changes |
 | `AssistantPanel.tsx`, `assistant.css` | The panel: history, tool cards (ejecutando… → ✓/✗, "Ver resultado" with the JSON), reply with the scenario `notice`, **Continuar** after a truncation, message box (1-2000 characters, Enter sends, Shift+Enter new line), **Nueva conversación** |

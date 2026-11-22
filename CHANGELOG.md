@@ -1,5 +1,10 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · docs(assistant): tool count in the labels row, and the checks gate of the deploy workflow
+- **Changed:** `docs/assistant.md` (`labels.ts` row): the file names 23 of the 26 MCP tools; `list_incident_scenarios`, `start_incident_run` and `prepare_scenario` show their id. `docs/infrastructure.md` ("Automatic deploy from GitHub"): the `deploy` job has `needs: checks`.
+- **Why:** `web/src/assistant/labels.ts` `TOOL_NAMES` has 23 entries and `mcp/tools.py` `OPERATIONS` has 26; `.github/workflows/deploy.yml` calls `checks.yml` and the doc did not say so.
+- **Agents:** Found while cross-checking the docs for `docs/README.md`. Doc only.
+- **Files:** `docs/assistant.md`, `docs/infrastructure.md`.
 ## 2026-11-22 · docs(code): one-line docstrings with the why for the most complex undocumented symbols
 - **Changed:** Docstrings on `Simulation` (class, `step`, `run_to_end`, `recipe`, `trace`, `report`, `_snapshot`), `RunConfig` and `AdversaryConfig` in `domain/theater/cycle.py`; `theater_config` in `domain/theater/config.py`; `CascadeParams` and `zone_load` in `domain/cascade/engine.py`; `Applied`, `empty_overlay`, `is_empty` in `domain/cascade/overlay.py`; `Executor`; `GridUnifier` and `UnifyConfig`; `GridQueryService`; `SessionService`. Prop comments on `SelectionCard`, `SimulationPanel`, `NetworkState` and `IncidentPanel`.
 - **Why:** `docs/index/repo-index.json` flagged these as undocumented public symbols in the largest modules (`counts.undocumented_public_symbols` drops accordingly).
