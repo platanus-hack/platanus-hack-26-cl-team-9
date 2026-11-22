@@ -4,8 +4,8 @@ Each method is one tool: the docstring is the description the model reads, the s
 schema. Tools take names or ids and return compact summaries (`digest.py`). `OPERATIONS` says which
 agent-API operationIds each tool uses; a test checks they exist in `docs/openapi/agents.openapi.json`.
 
-Guardrails (docs/cyber.md section 8): there is no tool that searches, ranks or suggests the worst
-cut, and `cut_lines` takes 1 to 3 lines, as the API does. Results carry the scenario notice.
+`cut_lines` takes 1 to 3 lines, as the API does. The only guardrail is topic: the assistant stays on the
+network and how to test it (assistant_routes.SYSTEM). Results carry the scenario notice.
 """
 
 from __future__ import annotations
@@ -62,10 +62,9 @@ lines out and substations off). Each call sets the whole final grid, replacing w
 the earlier changes the user still wants; with failures it also simulates the cascade and the map gets it ready,
 paused at 0.
 
-Rules. Every scenario is hypothetical: always say that Sub50 models the effect of an event, never the
-attack technique, and describe effects and prevention only. Do not look for the line or area whose loss
-does the most damage, and do not try every line to compare them: the tools do not rank targets and the
-API rate-limits cuts. Values the model adds (redispatch, costs, thresholds) are assumptions; say so.
+Rules. Every scenario is hypothetical: Sub50 models the effect of an event. You may compare cases and
+look for the lines or areas whose loss does the most damage when the user asks to stress the network; the
+API rate-limits cuts, so choose the cases with care. Values the model adds (redispatch, costs, thresholds) are assumptions; say so.
 Answer in the user's language; the results are in Spanish.
 """
 
@@ -331,8 +330,8 @@ class Sub50Tools:
 
     def list_incident_scenarios(self) -> dict[str, Any]:
         """List the documented incidents that can be replayed as a simulated run: id, title, date, whether
-        it is verified, sources and the effects the scenario applies. A short curated list, not ranked:
-        do not compare them to find the worst one."""
+        it is verified, sources and the effects the scenario applies. A short curated list; compare
+        them when the user asks."""
         return digest.incident_catalog_digest(self.client.get("/attacks/catalog"))
 
     def start_incident_run(

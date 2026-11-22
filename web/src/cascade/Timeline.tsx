@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { BLACKOUT_HZ, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
+import { BLACKOUT_HZ, islandMoments, islandTicks, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
 import { hz, secs } from "./text";
 import type { Timeline as TimelineData } from "./types";
 import { Chevron, Info } from "./ui";
@@ -98,6 +98,15 @@ export function TimelineCard(p: Props) {
           <div className="track-rail" />
           <div className="track-rail played" style={{ width: x(p.t) }} />
           {!hasCascade && <div className="head" style={{ left: x(p.t) }} />}
+          {hasCascade && islandTicks(islandMoments(p.timeline!.events), x).map((m) => {
+            const text = `${m.count === 1 ? "Se forma 1 isla" : `Se forman ${m.count} islas`} · ${m.times.map((t) => `${secs(t)} s`).join(", ")}`;
+            return (
+              <button key={m.t} className={m.t <= p.t + 1e-9 ? "island-tick past" : "island-tick"} style={{ left: m.left }}
+                onClick={(e) => { e.stopPropagation(); p.seek(m.t); }} onPointerDown={(e) => e.stopPropagation()} aria-label={text} data-tip={text}>
+                {m.count === 1 ? "isla" : `${m.count} islas`}
+              </button>
+            );
+          })}
           {markers.map((m) => <TrackMarker key={m.first} m={m} state={stateOf(m, visible)} onClick={() => p.seek(m.events[m.events.length - 1].t)} />)}
         </div>
         <div className="timeline-right">

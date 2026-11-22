@@ -7,6 +7,7 @@ Last updated: 2026-11-22. Three questions about people and the grid as it stands
 | Población | Where do the people the grid serves live? | `people` per bus of the loaded operating point (no extra file) |
 | Dependencia de generadores | How many people depend on each generator? | `people_fed` from `POST /api/v1/grids/dependency` |
 | Criticidad de subestaciones | What dies without backup if a substation falls? | `criticality` from the same endpoint |
+| Personas sin suministro | Who loses supply at this second? | `people` of the buses in `darkAt(t)`; toggled from the Simulación tab, not the Capas menu |
 
 Tags: EVIDENCE = measured in this repo. ASSUMPTION = a modelling choice, not verified.
 
@@ -16,6 +17,9 @@ One point per substation with people: `people` of the operating point (`buses.js
 
 ASSUMPTION (from `grid_snapshot.json`): each urban census zone goes to its nearest delivery substation; the rural remainder goes to the delivery substations inside the comuna. It is a geographic approximation, not the real feeder map. `people` has the known defect of substations with load and 0 people (`docs/minimum-dataset.md`).
 
+## 1.1 Affected population (Simulación tab)
+The heat map "Personas sin suministro" (heat kind `affected`, `web/src/cascade/heat.ts`) weighs each substation without supply at the current second (`frame.dark`) by its `people`, so it grows as the cascade plays. The card "Comunas sin suministro" groups the same people by comuna with `affectedByComuna` (`web/src/cascade/affected.ts`), using `web/public/cache/comunas-<year>.json` (the per-comuna split behind `people`, from `comunas[].served_by`). Each bus's split is scaled to its current `people`.
+ASSUMPTION: a comuna that is only partly without supply (some of its substations still have supply) reads "estimado", because its count depends on the comuna-to-substation split above. A comuna whose substations are all dark counts every person the model assigns to it. A dark substation with no split (old cache, or a substation added in a session) is listed under its own name, also "estimado". People cut by EDAC in islands that survive are not per bus, so the card reports them on one separate line.
 ## 2. Dependency: who feeds whom (`domain/cascade/tracing.py`)
 
 The data says where plants and people are, but not which plant feeds which people. The DC flow of the base case says how much power crosses every line. With **proportional sharing** (Bialek's downstream tracing) the power that enters a substation is a mix of what reached it, in proportion to the flows: `c[j, g]` is the share of the power at substation j that was generated at g. People fed by g = sum over j of `people_j * c[j, g]`.

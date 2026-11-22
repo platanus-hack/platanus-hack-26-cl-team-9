@@ -6,11 +6,12 @@ import { cameraTarget, type LonLat } from "../map/countryBounds";
 import { countryName } from "../map/iso3";
 import { buildRegionalLayers, loadCountryGrid, loadOutline, regionalCountries, regionalFromDocuments, regionalTooltip, type RegionalGrid } from "../map/regional";
 import { deleteUpload, listUploads, newUploadId, saveUpload, type StoredNetwork } from "../map/uploadStore";
-import { loadBuses, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./api";
+import { affectedByComuna } from "./affected";
+import { loadBuses, loadComunas, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourcePick } from "./GridSources";
-import { addBus, addLine, changesOf, countFailures, dropBus, dropChange, dropLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits, setFactor, type Edits, type StressChange, type Target } from "./edits";
+import { addBus, addLine, changesOf, countFailures, dropBus, dropChange, dropLine, editKey, fromCache, NO_EDITS, setFactor, type Edits, type StressChange, type Target } from "./edits";
 import { composeGrid, loadContextDocument, loadDependency, prepareScenario, simulateGrid, type Prepared, type SimulationResult } from "./gridsApi";
 import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
@@ -29,7 +30,7 @@ import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, recentDarkAt, timeWarp, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
-import type { BusState, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
+import type { BusState, ComunaPeople, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
 import { Icon, TipLayer, Wordmark } from "./ui";
 import { DataPanel } from "../session/DataPanel";
 import { SessionBar } from "../session/SessionBar";
@@ -40,6 +41,8 @@ import { useSession } from "../session/useSession";
 import { AssistantPanel } from "../assistant/AssistantPanel";
 import { useAssistant } from "../assistant/useAssistant";
 import { IncidentPanel } from "../incidents/IncidentPanel";
+import { ChangePanel } from "../changelog/ChangePanel";
+import { cascadeEntries, cyberEntries, diffEdits, type Entry } from "../changelog/changelog";
 import { useIncident } from "../incidents/useIncident";
 import { cyberCycles, CyberMapTags, CyberPanel } from "../cyber/CyberPanel";
 import { layoutTags } from "../cyber/cyber";
@@ -48,12 +51,12 @@ import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
 import "../session/session.css";
 
-type Tab = "estado" | "red" | "sim" | "datos";
-type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "cyber" | "upload";
+type Tab = "estado" | "red" | "sim" | "datos" | "componente";
+type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "history" | "cyber" | "upload";
 // "Qué lo habría evitado" and "Validación" are not built yet and left out so the four tabs fit the 440 px panel.
-const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"]];
+const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"], ["componente", "Componente"]];
 // In a session Datos replaces Estado de la red: the session owns its changes.
-const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"]];
+const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"], ["componente", "Componente"]];
 const PINNED = "En una sesión el punto está fijo; corta y repara líneas en el mapa y en Simulación.";
 const SESSION_NETWORK = "Una sesión compartida usa la red de Chile.";
 // Networks shipped with the build: Chile plus every country whose drawn layer exists (docs/regional.md).
@@ -93,11 +96,16 @@ export function CascadeApp() {
   const [buses, setBuses] = useState<Record<string, BusState>>({});
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [cyberHealth, setCyberHealth] = useState<HealthReport | null>(null); // the Ciberataque runs at nov2026-1300
+  const [comunas, setComunas] = useState<ComunaPeople | null>(null); // people per bus and comuna, for "Comunas sin suministro"
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
   // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
   // A link's cut wins; otherwise the changes saved in this browser come back (a refresh never loses them).
-  const [edits, setEdits] = useState<Edits>(() => (s.sid ? NO_EDITS : !startCut ? loadEdits() : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
+  // The app always starts on the base case (Demanda mínima, no changes) unless a link carries a cut.
+  const [edits, setEdits] = useState<Edits>(() => (s.sid || !startCut ? NO_EDITS : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
+  // Historial de cambios: the adjustments (user or assistant); falls are derived from the timeline. A scenario click empties it.
+  const [adjustments, setAdjustments] = useState<Entry[]>([]);
+  const prevEdits = useRef<Edits>(edits);
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   // The prepared grid of the scenario's changes (POST /grids/prepare), keyed like the changes it belongs to.
   const [prepared, setPrepared] = useState<{ key: string; value: Prepared } | null>(null);
@@ -153,6 +161,12 @@ export function CascadeApp() {
   const outBuses = s.sid ? [] : edits.buses;
   const edited = !!incidentTl || cuts.length + outBuses.length > 0;
   const offState: Edits = { lines: cuts, buses: outBuses }; // what the user switched off, for the second click and the hints
+  const historyEntries = useMemo<Entry[]>(() => {
+    const userIds = new Set(adjustments.flatMap((a) => a.ids));
+    const falls = !incidentTl && loadedReady && loaded && network ? cascadeEntries(loaded.timeline, network, userIds) : [];
+    const attack = cyb.run && cyb.catalog ? cyberEntries(cyb.run.frames, cyb.catalog.areas) : [];
+    return [...adjustments, ...falls, ...attack];
+  }, [adjustments, incidentTl, loadedReady, loaded, network, cyb.run, cyb.catalog]);
   const duration = timeline?.duration_s ?? 0;
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
   const darkCount = timeline ? darkAt(timeline, t).size : 0;
@@ -186,7 +200,9 @@ export function CascadeApp() {
   const changes = s.sid ? [] : changesOf(edits);
   const heatKey = `${pointId}|${[...cuts].sort()}|${[...outBuses].sort()}|${JSON.stringify(changes)}`;
   const heatData = dependency?.key === heatKey ? dependency.nodes : null;
-  const heatLayerList = useMemo<Layer[]>(() => (network ? heatLayers(heat, heatPoints(heat, network, buses, heatData)) : []), [heat, network, buses, heatData]);
+  const darkSet = useMemo(() => new Set(frame?.dark ?? []), [frame]);
+  const affected = useMemo(() => (network ? affectedByComuna(darkSet, buses, network, comunas) : { people: 0, rows: [] }), [darkSet, buses, network, comunas]);
+  const heatLayerList = useMemo<Layer[]>(() => (network ? heatLayers(heat, heatPoints(heat, network, buses, heatData, darkSet)) : []), [heat, network, buses, heatData, darkSet]);
   const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, colorMode) : []), [shownGrid, colorMode]);
   const contextLayers = useMemo<Layer[]>(() => (isChile && contextGrid ? buildRegionalLayers(contextGrid, colorMode) : []), [isChile, contextGrid, colorMode]);
 
@@ -207,7 +223,14 @@ export function CascadeApp() {
   useEffect(() => { if (s.sid && networkId !== DEFAULT_COUNTRY) chooseNetwork(DEFAULT_COUNTRY); }, [s.sid]);
   useEffect(() => _loadShown(), [networkId, uploads]);
   useEffect(() => _fitNetwork(), [networkId, network, shownGrid]);
-  useEffect(() => { if (!s.sid) saveEdits(edits); }, [edits, s.sid]);
+  useEffect(() => {
+    const before = prevEdits.current;
+    prevEdits.current = edits;
+    if (!network || s.sid) return;
+    const when = new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const added = diffEdits(before, edits, network).map((e) => ({ ...e, when }));
+    if (added.length) setAdjustments((x) => [...x, ...added]);
+  }, [edits]);
   useEffect(() => _loadHeat(), [heat, heatKey]);
   useEffect(() => { if (!s.sid && !composed) _loadPoint(); }, [pointId, index, s.sid, composed]);
   useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
@@ -215,6 +238,8 @@ export function CascadeApp() {
   // Pre-fault health of the base point; null when the cache predates it. Hidden in a session or a composed grid: they change the network.
   useEffect(() => { if (view === "cyber" && !cyberHealth) loadHealth("nov2026-1300").then(setCyberHealth); }, [view, cyberHealth]);
   useEffect(() => { let live = true; setHealth(null); loadHealth(pointId).then((h) => { if (live) setHealth(h); }); return () => { live = false; }; }, [pointId]);
+  const year = point?.year;
+  useEffect(() => { let live = true; setComunas(null); if (year) loadComunas(year).then((c) => { if (live) setComunas(c); }); return () => { live = false; }; }, [year]);
   useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
   useEffect(() => { if (s.state) { timelineRequest.current = "session"; setLoaded({ key: "session", timeline: s.state.timeline }); setT(0); setPlaying(s.state.open_lines.length > 0); } }, [s.state]);
   useEffect(() => _onSessionChange(), [s.sid]);
@@ -556,10 +581,12 @@ export function CascadeApp() {
   }
 
   /** Selecting never switches tabs or the line colour; it only leaves Ayuda or Fuentes for the tabs. */
+  /** A click on a line or substation opens its card in the Componente tab; the other tabs keep only their own content. */
   function select(target: Pick) {
     setSelection(target);
     if (live.current.view === "cyber") { cyb.setSub("componente"); return; } // the monitor keeps the map's cycle
     setView("tabs");
+    setTab("componente");
   }
 
   /** Without a session the cut adds to the list of changes; in a session the line opens for everyone through `POST /{sid}/cut`. */
@@ -690,11 +717,22 @@ export function CascadeApp() {
   }
   function openScenario(next: ScenarioChoice) {
     if (!current.simulable) return;
+    // Clicking any scenario or Benchmark condition is a full reset: only the scenario's own failures remain.
+    if (inc.playing != null) inc.stop();
+    if (cyb.mapCycle != null) cyb.showOnMap(null);
     setSelection(null);
     setNotice(null);
+    setError(null);
+    setSimResult(null);
+    setPrepared(null);
+    setHeat("none");
+    seek(0);
+    setPlaying(false);
+    setAdjustments([]);
     setPointId(next.point);
-    // A disaster replaces the changes; a Benchmark condition keeps the failures. A prepared scenario never carries over.
-    setEdits((e) => ({ lines: (next.edits ?? e).lines, buses: (next.edits ?? e).buses }));
+    const fresh = next.edits ? { lines: [...next.edits.lines], buses: [...next.edits.buses] } : NO_EDITS;
+    prevEdits.current = fresh; // the scenario's own failures are not adjustments
+    setEdits(fresh);
     if (composed === DEFAULT_COUNTRY) void composeFromSources(next.point, picksRef.current); // the composed grid follows the chosen hour
     setColorMode("load");
     chooseTab(next.edits ? "sim" : "red"); // a disaster opens on Simulación, a Benchmark condition on Red; both on Carga
@@ -731,8 +769,8 @@ export function CascadeApp() {
         <button className={view === "assistant" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "assistant" ? "tabs" : "assistant")}>
           <Icon><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z M5.5 7h.01M8 7h.01M10.5 7h.01" /></Icon><span>Asistente</span>
         </button>
-        <button className={view === "incidents" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "incidents" ? "tabs" : "incidents")}>
-          <Icon><path d="M8 1.8l6.2 11.2H1.8z M8 6.2v3.3M8 11.3v.1" /></Icon><span>Incidentes</span>
+        <button className={view === "history" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "history" ? "tabs" : "history")}>
+          <Icon><circle cx="8" cy="8" r="5.8" /><path d="M8 4.6V8l2.4 1.6" /></Icon><span>Historial de cambios</span>
         </button>
         <button className={view === "cyber" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "cyber" ? "tabs" : "cyber")}>
           <Icon><path d="M8 1.5l5.5 2v4c0 3.2-2.3 5.8-5.5 7-3.2-1.2-5.5-3.8-5.5-7v-4z M5.5 8l1.8 1.8L10.8 6.3" /></Icon><span>Ciberataque</span>
@@ -770,6 +808,7 @@ export function CascadeApp() {
           {(s.error ?? error) && <p className="note">{s.error ?? error}{s.error && <> <button className="text-btn" onClick={s.clearError}>Cerrar</button></>}</p>}
           {view === "session" && <SessionBar s={s} />}
           {view === "assistant" && <AssistantPanel a={a} />}
+          {view === "history" && <ChangePanel entries={historyEntries} />}
           {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
           {view === "cyber" && <CyberPanel c={cyb} prefault={cyberHealth ? <PrefaultHealth health={cyberHealth} /> : null}
             component={network && selection ? (
@@ -785,7 +824,10 @@ export function CascadeApp() {
           {view === "tabs" && !isChile && tab === "red" && shownGrid && (
             <NetworkPanel source={sourceNote} summary={shownSummary} origin={shownOrigin} viewOnly={VIEW_ONLY} />
           )}
-          {view === "tabs" && isChile && network && selection && (
+          {view === "tabs" && tab === "componente" && !selection && (
+            <p className="meta">Haz clic en una línea o una subestación del mapa para ver sus datos aquí.</p>
+          )}
+          {view === "tabs" && tab === "componente" && isChile && network && selection && (
             <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year}
               select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut ? [selectedCut] : undefined)}
               shutDown={shutDown} shutdown={outBus} powerOn={powerOn}
@@ -802,7 +844,7 @@ export function CascadeApp() {
           {view === "tabs" && isChile && tab === "sim" && network && (timeline && timelineReady ? (
             <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} totalPeople={totalPeople}
               seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} health={s.sid || composed ? null : health}
-              supply={simResult?.supply ?? null} />
+              supply={simResult?.supply ?? null} affected={affected} heatOn={heat === "affected"} setHeatOn={(on) => setHeat(on ? "affected" : "none")} />
           ) : !error && <Loading text="Cargando la simulación" />)}
           {view === "tabs" && tab === "datos" && (s.network
             ? <DataPanel network={s.network} edit={s.edit} pick={_pick} picking={picking} />
@@ -838,7 +880,7 @@ export function CascadeApp() {
             {HEAT_OPTIONS.map((o) => (
               <label className="check" key={o.kind}><input type="radio" name="heat" checked={heat === o.kind} onChange={() => setHeat(o.kind)} />{o.label}</label>
             ))}
-            {heat !== "none" && <p className="heat-hint">{heatError ?? (needsDependency(heat) && !heatData ? "Calculando en el servidor…" : HEAT_OPTIONS.find((o) => o.kind === heat)?.hint)}</p>}
+            {heat !== "none" && heat !== "affected" && <p className="heat-hint">{heatError ?? (needsDependency(heat) && !heatData ? "Calculando en el servidor…" : HEAT_OPTIONS.find((o) => o.kind === heat)?.hint)}</p>}
           </div>
         )}
       </div>
@@ -852,7 +894,7 @@ export function CascadeApp() {
   );
 }
 
-const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", incidents: "Incidentes", cyber: "Ciberataque", upload: "Subir una red" };
+const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", incidents: "Incidentes", history: "Historial de cambios", cyber: "Ciberataque", upload: "Subir una red" };
 
 /** Where a view-only network's figures come from: the manifest's sources for a country, the file for an upload. */
 function originOf(n: NetworkInfo, grid: RegionalGrid): Origin {
