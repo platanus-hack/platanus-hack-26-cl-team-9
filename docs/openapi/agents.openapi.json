@@ -7777,7 +7777,7 @@
               }
             ],
             "title": "Factor",
-            "description": "Multiplies the value (lines: capacity)."
+            "description": "Multiplies the value (lines: capacity, more than 0; to take a line out of service put it in `open_lines`)."
           },
           "add": {
             "anyOf": [

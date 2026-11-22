@@ -31,6 +31,12 @@ from cascadasen.domain.simulation.params import value
 
 MAX_CHANGES = 20
 MAX_FACTOR = 5.0
+# A line with no capacity is a line out of service: that is a failure (`open_lines`), not a change. The model sent
+# both (open_lines R239 and a lines change with factor 0) and the overlay's "Debe ser mayor que 0" did not say so.
+LINE_OUT_HINT = (
+    "lines: factor 0 no saca una línea de servicio (la capacidad debe ser mayor que 0). Para sacarla de servicio "
+    "pon su id R### en open_lines y no agregues un cambio de lines para ella."
+)
 TARGETS = ("population", "demand", "generation", "lines")
 # PyPSA-CL carriers of the dispatch (baseline_opf.json) to the plant technologies of the snapshot.
 CARRIER_TECH = {
@@ -418,6 +424,8 @@ def _new_plant(
 def _lines(ctx: _Context, edit: _Edit, change: dict, where: str) -> dict:
     """Capacity (`factor`) and reactance (`x_factor`: the DC flow uses reactance, not resistance) of the lines
     the filter picks: ids, voltage levels, or both ends inside the zones or areas."""
+    if change.get("factor") is not None and change["factor"] <= 0:
+        raise GridError("invalid", f"{where}: {LINE_OUT_HINT}")
     picked = _pick_lines(ctx, change, where)
     rows = []
     for ln in picked:

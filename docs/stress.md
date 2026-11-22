@@ -185,7 +185,7 @@ Examples:
 
 The tool maps technology names people use before sending (`digest.normalize_tech`): "eólica", "fotovoltaica", "baterías"/"BESS", "biomasa"… and "nuclear" to `termica`, with a note that it is an assumption (there is no nuclear plant in Chile). The prepared summary says, for a change that touched one to five substations, which ones (`at`), and a change that touched none carries a `warning` so the model never reports a plant that was not built.
 
-Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239`.
+Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239`. A line out of service goes in `open_lines` only: a `lines` change with `factor` 0 answers 422 with that hint.
 
 ## 8. Errors
 
@@ -194,6 +194,7 @@ Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239
 | 422 | `factor` and `add` together, or a filter that does not apply to the target | `demand: indica factor o add, no ambos` · `generation: filtra por buses, zones, areas o tech` |
 | 422 | Unknown technology | `changes[0]: tecnologías desconocidas: nuclear (válidas: …)` |
 | 422 | Over the overlay limits | `Máximo 5000 MW agregados o cambiados (carga + generación).` |
+| 422 | A `lines` change with `factor` 0 (a line with no capacity is a line out of service) | `lines: factor 0 no saca una línea de servicio (la capacidad debe ser mayor que 0). Para sacarla de servicio pon su id R### en open_lines y no agregues un cambio de lines para ella.` |
 | 422 | `/simulate` with no failure | `Indica al menos una línea o una subestación` |
 | 404 | Unknown point, bus, line, comuna, zone or area | `changes[0]: comuna desconocida: Atlantis (usa el código CUT o el nombre)` |
 | 404 | Unknown place, or a comuna off the SEN | `changes[0]: No encuentro el lugar 'Marte'. …` · `La comuna de Punta Arenas no está conectada al Sistema Eléctrico Nacional …` |

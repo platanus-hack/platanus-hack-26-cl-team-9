@@ -1,5 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · fix(stress): a lines change with factor 0 says to use open_lines
+
+- **Changed:** `StressChange` (`api/stress_schemas.py`) rejects a `lines` change with `factor` 0 with `LINE_OUT_HINT` (`application/grid_stress.py`): "factor 0 no saca una línea de servicio … pon su id R### en open_lines". `_lines` raises the same `GridError` for callers that skip the schema. The `factor` description says lines need more than 0. Tests in `test_grid_stress.py` (workflow and `/grids/simulate`) and `test_assistant_api.py` (the tool error reaches the model).
+- **Why:** On production the assistant sent `open_lines: ["R239"]` plus a lines change × 0 on R239; the overlay answered 422 "Debe ser mayor que 0", which did not tell the model that `open_lines` alone cuts the line.
+- **Agents:** A line out of service is a failure (`open_lines`), never a capacity change. Other targets keep `factor` 0 (no hydro, for example). `docs/openapi/agents.openapi.json` regenerated (the `factor` description). `docs/stress.md` sections 7 and 8.
+- **Files:** `backend/src/cascadasen/{application/grid_stress.py,api/stress_schemas.py}`, `backend/tests/{unit/test_grid_stress.py,integration/test_assistant_api.py}`, `docs/stress.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-22 · fix(web): show "apagón", not 50 Hz, when islands collapse by the voltage rule
 
 - **Changed:** `frequencyAt` (`web/src/cascade/simulation.ts`) lists each `island_blackout` with `reason: "voltage"` as an island with no curve (`hz: null`), started and collapsed from its event on. The Simulación figure and the timeline readout therefore say "apagón" for 25F (`feb2025-1500`, R239), where `frequency_hz` is `{}` and 18.2 M people are dark. Two unit tests; the tips mention the no-curve case.

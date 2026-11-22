@@ -91,6 +91,16 @@ def test_a_point_lands_at_the_substation_that_serves_the_place(make_app):
     assert tool["result"]["scenario"]["changes"] == changes  # what the web loads on the map
 
 
+def test_a_line_with_factor_zero_tells_the_model_to_use_open_lines(make_app):
+    zero = {"target": "lines", "lines": ["R239"], "factor": 0}
+    model = ScriptedModel(
+        calls(("prepare_scenario", {"changes": [zero], "open_lines": ["R239"]})), AssistantTurn("Uy.")
+    )
+    out = TestClient(make_app(model)).post(CHAT, json={"message": "corta R239"}).json()
+    tool = out["tool_calls"][0]
+    assert not tool["ok"] and "open_lines" in tool["result"]["error"]
+
+
 def test_the_conversation_continues_and_can_be_read_and_deleted(make_app):
     model = ScriptedModel(calls(("start_session", {})), AssistantTurn("listo"), AssistantTurn("sigo"))
     client = TestClient(make_app(model))
