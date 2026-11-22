@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import networkx as nx
 
@@ -161,15 +161,25 @@ class Resolved:
     note: str = ""
 
 
-@dataclass
-class ReducedNetwork:
-    areas: dict[str, Area]
-    corridors: dict[str, Corridor]
-    nodes: dict[str, NodeInfo]
-    edge_corridor: dict[str, str]
-    edge_area: dict[str, str]
-    s_base_mva: float
-    provenance: list[Provenance]
+class _Zoned(Protocol):
+    @property
+    def zone(self) -> str: ...
+    @property
+    def index(self) -> int: ...
+
+
+class _Ends(Protocol):
+    @property
+    def a(self) -> str: ...
+    @property
+    def b(self) -> str: ...
+
+
+class AreaGraph[A: _Zoned, C: _Ends]:
+    """Order, zones and incident corridors of a network with `areas` and `corridors` (a mixin without fields)."""
+
+    areas: dict[str, A]
+    corridors: dict[str, C]
 
     @property
     def order(self) -> list[str]:
@@ -182,8 +192,19 @@ class ReducedNetwork:
     def zone_areas(self, zone: str) -> list[str]:
         return [a for a in self.order if self.areas[a].zone == zone]
 
-    def incident(self, area: str) -> list[Corridor]:
+    def incident(self, area: str) -> list[C]:
         return [c for c in self.corridors.values() if area in (c.a, c.b)]
+
+
+@dataclass
+class ReducedNetwork(AreaGraph[Area, Corridor]):
+    areas: dict[str, Area]
+    corridors: dict[str, Corridor]
+    nodes: dict[str, NodeInfo]
+    edge_corridor: dict[str, str]
+    edge_area: dict[str, str]
+    s_base_mva: float
+    provenance: list[Provenance]
 
     def resolve(self, target: str) -> Resolved:
         """Map an area id, corridor id, snapshot node id or snapshot line id to a network element."""
@@ -209,14 +230,14 @@ def _main_component(snapshot: GridSnapshot) -> set[str]:
     return max(nx.connected_components(g), key=len) if snapshot.nodes else set()
 
 
-def _band(lat: float, specs: tuple[AreaSpec, ...]) -> str:
+def band_of(lat: float, specs: tuple[AreaSpec, ...]) -> str:
     for s in specs:
         if s.lat_south is None or lat >= s.lat_south:
             return s.id
     return specs[-1].id
 
 
-def _nearest_class(kv: float, table: dict[float, Any]) -> float:
+def _nearest_class[K: float](kv: float, table: dict[K, Any]) -> K:
     return min(table, key=lambda k: abs(k - kv))
 
 
@@ -281,7 +302,7 @@ def _assign_areas(snapshot: GridSnapshot, spec: NetworkSpec, nodes: dict[str, No
         if e.source_node in nodes and e.target_node in nodes:
             adj[e.source_node].add(e.target_node)
             adj[e.target_node].add(e.source_node)
-    node_area = {n.id: _band(n.lat, spec.areas) for n in nodes.values() if n.lat is not None}
+    node_area = {n.id: band_of(n.lat, spec.areas) for n in nodes.values() if n.lat is not None}
     pending = [nid for nid in nodes if nid not in node_area]
     while pending:
         votes = {nid: Counter(node_area[m] for m in adj[nid] if m in node_area) for nid in pending}
@@ -360,7 +381,7 @@ def _line_part(e: Edge, kv: float, spec: NetworkSpec, nodes: dict[str, Node]) ->
         km = haversine_km(sa.lon, sa.lat, sb.lon, sb.lat) if sa.located and sb.located else None
     if not km:
         return None
-    lo, hi = X_PER_KM[min(X_PER_KM, key=lambda k: abs(k - kv))]
+    lo, hi = X_PER_KM[_nearest_class(kv, X_PER_KM)]
     cap = spec.typical_capacity_mva[_nearest_class(kv, spec.typical_capacity_mva)]
     return CorridorPart(e.id, (lo + hi) / 2 * km * spec.s_base_mva / kv**2, cap, (e.id,), True)
 

@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(domain): one level_of rule and an AreaGraph mixin shared by the 13-area and theatre networks
+- **Changed:** `level_of(n_counted, n_collapsed, load_lost_mw)` in `domain/simulation/consequence.py` holds the L0-L3 ladder; `consequence_level` there and `theater/execution.py::consequence_level` map their data to the three numbers and call it.
+- **Changed:** `AreaGraph[A, C]` mixin in `domain/simulation/network.py` (`order`, `zones`, `zone_areas`, `incident`, no dataclass fields) is inherited by `ReducedNetwork` and `TheaterNetwork`; `_band` becomes `band_of` there and `theater/areas.py` imports it. `build_reduced_network` uses `_nearest_class(kv, X_PER_KM)` instead of the inline `min(...)`.
+- **Changed:** New table test `test_theater_consequence_level_table` in `tests/unit/test_theater.py` (the theatre version had no direct test); it passed before the refactor.
+- **Why:** F7 and F8 of the duplication report.
+- **Agents:** Change the level ladder in `level_of` only. The shared `typical_x_per_km(kv)` was not added: `overlay.py` needs an exact kV class match and `validation.py` cannot import `simulation.network` (cycle). `docs/openapi/agents.openapi.json` is unchanged. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 256 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/simulation/consequence.py`, `domain/simulation/network.py`, `domain/theater/execution.py`, `domain/theater/areas.py`, `backend/tests/unit/test_theater.py`.
 ## 2026-11-22 · refactor(sessions): bus_id, iso_utc, session_ttl_s, LAYERS and the live-lines check have one home
 - **Changed:** `bus_id` moves from `domain/theater/areas.py` to `domain/cascade/network.py`; `theater/{areas,cycle,grid,execution}.py`, `cascade/overlay.py`, `cascade/engine.py`, `application/{cache_builder,simulation_service}.py` import it from there. The inline `f"B{i:03d}"` in `cache_builder.py` (twice) and `cascade/engine.py` now call it. `cascade/overlay.py` no longer imports from `theater`.
 - **Changed:** `iso_utc(ts)` in `application/run_experiment.py` replaces the two `_now()` bodies and the `expires_at` formatting in `sessions.py`. `Settings.session_ttl_s` (property) replaces `session_ttl_hours * 3600` in `api/session_routes.py` and `infrastructure/container.py`. `LAYERS` lives in `domain/model.py` and `api/app.py` and `infrastructure/exporters.py` import it.
