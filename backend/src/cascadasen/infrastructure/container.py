@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from cascadasen.application.build_grid import BuildGridSnapshot
-from cascadasen.application.build_regional import BuildRegionalGrid
+from cascadasen.application.build_regional import BuildFlowNetwork, BuildRegionalGrid
 from cascadasen.domain.ports import DocumentStore, RegionalGridSource
 from cascadasen.domain.unify import GridUnifier
 from cascadasen.infrastructure.document_store import FileDocumentStore, MemoryDocumentStore, S3DocumentStore
@@ -17,6 +17,7 @@ from cascadasen.infrastructure.sources.infotecnica import InfotecnicaSource
 from cascadasen.infrastructure.sources.pypsa_cl import PypsaClSource
 from cascadasen.infrastructure.sources.regional.energia_argentina import EnergiaArgentinaSource
 from cascadasen.infrastructure.sources.regional.epe_brasil import EpeBrasilSource
+from cascadasen.infrastructure.sources.regional.ons_brasil import OnsBrasilSource
 from cascadasen.infrastructure.sources.regional.osinergmin_peru import OsinergminPeruSource
 from cascadasen.infrastructure.sources.regional.osm_overpass import OsmOverpassSource
 
@@ -77,3 +78,13 @@ def regional_use_case(settings: Settings, osm: set[str] | None = None) -> BuildR
             OsmOverpassSource(http, iso, name, iso2, settings.overpass_url) if use_osm else official[iso]
         )
     return BuildRegionalGrid(sources, settings.regional_dir)
+
+
+def flow_network_use_case(settings: Settings) -> BuildFlowNetwork:
+    """Brazil's flow network: ONS lines and substations, with the EPE layer for plants and checks."""
+    http = CachedHttp(settings.raw_dir, settings.http_timeout_s, settings.user_agent)
+    return BuildFlowNetwork(
+        OnsBrasilSource(http, settings.ons_lines_url, settings.ons_substations_url),
+        EpeBrasilSource(http, settings.epe_webmap_url),
+        settings.regional_dir,
+    )

@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(regional): write BRA/network.json with cascadasen-regional --ons
+
+- **Changed:** `cd backend && uv run cascadasen-regional --countries BRA --ons` now also builds Brazil's flow network through the new use case `BuildFlowNetwork` (`application/build_regional.py`, wired by `container.flow_network_use_case`). It writes `data/processed/latam/BRA/network.json` and a `flow` block under `manifest.countries.BRA`. That block has counts, circuit-km per kV, the length check against 189,308 km, assumed values, exclusions, the coordinate match rate and `deduction_error`. The command prints a summary and every warning.
+- **Changed:** `BuildRegionalGrid` keeps a country's existing `flow` block when it rewrites the drawn layer.
+- **Why:** Issue part A3: one command produces the network file and the figures the docs cite.
+- **Agents:** `--ons` needs `BRA` in `--countries`. It reads the EPE layer (cached raw) for plants, the name fallback and the A5 topology check. `as_of` defaults to the UTC build date. The ONS CSVs are cached in `data/raw/regional/bra/ons_*.csv` (git-ignored); `--refresh` downloads them again.
+- **Files:** `backend/src/cascadasen/application/build_regional.py`, `backend/src/cascadasen/infrastructure/container.py`, `backend/tests/unit/test_ons_brasil.py`.
+
 ## 2026-11-21 · feat(regional): add ONS adapter and pure flow-network builder for Brazil
 
 - **Changed:** New `domain/regional_network.py` (pure). It turns ONS line and substation rows into a flow network: one bus per ONS substation (`id_subestacao`), AC circuits folded like Chile's `_parallel`, HVDC records as `dc_links`, and EPE plants attached by distance. It also holds `deduction_error`, which compares typical x and capacity, and the distance-snapped drawn topology, against the real values (issue part A5). New adapter `infrastructure/sources/regional/ons_brasil.py` reads `LINHA_TRANSMISSAO.csv` and `SUBESTACAO.csv`. New port `FlowNetworkSource`; settings `ons_lines_url` and `ons_substations_url`.

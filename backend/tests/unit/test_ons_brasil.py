@@ -1,11 +1,19 @@
 """Brazil flow network from ONS (domain/regional_network.py, infrastructure/sources/regional/ons_brasil.py)."""
 
+import json
 import math
 
 import pytest
 
+from cascadasen.application.build_regional import BuildRegionalGrid
 from cascadasen.domain.cascade.network import X_MIN_PU
-from cascadasen.domain.regional import RegionalPlant, RegionalSource, RegionalSubstation
+from cascadasen.domain.regional import (
+    RegionalBundle,
+    RegionalLine,
+    RegionalPlant,
+    RegionalSource,
+    RegionalSubstation,
+)
 from cascadasen.domain.regional_network import (
     Circuit,
     OnsBusbar,
@@ -255,3 +263,32 @@ def test_adapter_fetch_uses_the_cache_and_states_the_licence():
     assert len(ds.lines) == 3 and len(ds.busbars) == 3
     assert {s.id for s in ds.sources} == {"ons_linha_transmissao", "ons_subestacao"}
     assert all("CC BY" in s.license for s in ds.sources)
+
+
+class _FixedSource:
+    country = "XXX"
+
+    def fetch(self, refresh=False):
+        b = RegionalBundle("XXX", "Pais")
+        b.substations += [
+            RegionalSubstation("a", "A", 220.0, -60.0, -10.0, "s"),
+            RegionalSubstation("b", "B", 220.0, -61.0, -10.0, "s"),
+            RegionalSubstation("c", "C", 220.0, -62.0, -10.0, "s"),
+        ]
+        b.lines += [
+            RegionalLine("1", "AB", 220.0, [(-60.0, -10.0), (-61.0, -10.0)], "s"),
+            RegionalLine("2", "BC", 220.0, [(-61.0, -10.0), (-62.0, -10.0)], "s"),
+        ]
+        return b
+
+
+def test_rebuilding_the_drawn_layer_keeps_the_flow_block(tmp_path):
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {"version": 1, "countries": {"XXX": {"country": "XXX", "flow": {"file": "XXX/network.json"}}}}
+        )
+    )
+    manifest, errors = BuildRegionalGrid({"XXX": _FixedSource()}, tmp_path).execute(["XXX"])
+    assert not errors
+    assert manifest["countries"]["XXX"]["flow"] == {"file": "XXX/network.json"}
+    assert manifest["countries"]["XXX"]["counts"]["lines"] == 2
