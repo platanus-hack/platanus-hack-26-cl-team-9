@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(mapa3): one network builder for the web cache and GET /sim/network
+- **Changed:** New `domain/cascade/network_json.py::mapa3_network(net, op)` returning `{nodes, lines, buses}`. `simulation_service.theater_network_view` extends it (adds `area` to nodes, `corridor` to lines, then `areas`, `corridors`, `defenses`, `zones`); `cache_builder` writes `network-<year>.json` (`nodes`, `lines`) and `<point>/buses.json` from it. `cache_builder._network_json` and its inline buses dict are gone.
+- **Changed:** `cache_builder` loads through `ProcessedWorld` (new `ProcessedWorld.records()` for the raw point entries) instead of `load_network_and_point`. That function stays, used only by `tests/unit/test_cascade.py`.
+- **Changed:** New `backend/tests/unit/test_network_json.py`: golden sha256 of the toy-world cache network, buses and `theater_network_view` (taken on the old code before the refactor).
+- **Why:** F9 of the duplication report. Output is byte-identical: `cascadasen-cache` for all four points gives 1103 files identical (`diff -r`) to the old code, and the real-data view hashes of `theater_network_view` are unchanged.
+- **Agents:** Change node/line/bus fields in `mapa3_network` only. Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/cascade/network_json.py`, `application/cache_builder.py`, `application/simulation_service.py`, `application/theater_world.py`, `backend/tests/unit/test_network_json.py`.
 ## 2026-11-22 · refactor(cache): one BoundedMap for the session caches, the run cache and the campaign store
 - **Changed:** New `application/cache.py::BoundedMap[K, V]` (`get(key, *, touch=True)`, `put`, `pop`, `drop(match)`, `len`, `RLock`, evicts the oldest past `size`). `sessions._Lru` is deleted (`SessionService._docs/_worlds/_views` use `BoundedMap`); `RunCache` stores its runs in one and keeps its 64 striped `lock(key)` locks unchanged; `CampaignRunner.campaigns` is a `BoundedMap(MAX_CAMPAIGNS)`.
 - **Changed:** New `backend/tests/unit/test_cache.py` (written against `_Lru` first: miss, oldest eviction, `get` renews, `put` renews, `drop`).

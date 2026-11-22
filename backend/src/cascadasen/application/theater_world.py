@@ -28,6 +28,10 @@ class ProcessedWorld:
     def points(self) -> list[str]:
         return list(self._points)
 
+    def records(self) -> list[dict]:
+        """The raw `operating_points.json` entries (id, label, snapshot, ...)."""
+        return list(self._points.values())
+
     def labels(self) -> dict[str, str]:
         return {pid: p["label"] for pid, p in self._points.items()}
 
