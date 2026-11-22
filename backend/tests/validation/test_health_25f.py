@@ -1,12 +1,12 @@
 """The health index separates the 25F reference from a healthy operating point of the same network
 (docs/health.md): `feb2025-1500` (25F) against `feb2025-0300` (minimum demand), before and after cutting R239.
 
-Cost (ASSUMPTION, only to order magnitudes, docs/health.md "Cost"): the model values the 25F cut at about
-US$ 69 M (1,972 MW x 4 h x 8.79 US$/kWh) and a full national blackout at about US$ 390 M. The press estimate of
-the 25F loss is US$ 984 M (datasets.md [44], not verified); a full blackout would need about 10 h of average
-unserved energy to reach it. The gap comes from the voltage collapse of the 25F being documented, not computed
-(`voltage_limited`, docs/engine.md: the model loses 1,972 MW, not the whole system), and from the assumed
-duration. These tests pin the figures; they do not tune the duration to match.
+Cost (ASSUMPTION, only to order magnitudes, docs/health.md "Cost"): since the voltage-collapse rule darkens the
+25F islands (#76), the model loses the whole system after cutting R239 and values it at about US$ 390 M
+(11,096 MW x 4 h x 8.79 US$/kWh). The press estimate of the 25F loss is US$ 984 M (datasets.md [44], not
+verified); a full blackout would need about 10 h of average unserved energy to reach it. The gap comes from the
+assumed 4 h duration (and from the press figure measuring more than unserved energy). These tests pin the
+figures; they do not tune the duration to match.
 """
 
 import pytest
@@ -53,12 +53,14 @@ def test_25f_after_the_cut_is_less_healthy_and_uncertain(reports):
     assert not good.uncertain
 
 
-def test_25f_cut_cost_is_a_floor_of_about_69_million(reports):
+def test_25f_cut_cost_is_the_full_blackout_of_about_390_million(reports):
     cost = reports[("feb2025-1500", "event")].extra["cost"]
-    print(f"\n25F R239: US$ {cost['cost_usd'] / 1e6:.1f} M, {cost['unserved_energy_mwh']:.0f} MWh, floor")
-    assert cost["cost_usd"] == pytest.approx(69e6, rel=0.05)
+    print(f"\n25F R239: US$ {cost['cost_usd'] / 1e6:.1f} M, {cost['unserved_energy_mwh']:.0f} MWh")
+    assert cost["cost_usd"] == pytest.approx(390e6, rel=0.02)
     assert cost["outage_duration_h"] == {"value": 4.0, "is_assumption": True}
-    assert cost["is_floor"]  # the voltage collapse is documented, not computed
+    assert cost[
+        "voltage_rule"
+    ]  # the islands go dark by the voltage-collapse rule, not by a computed collapse
 
 
 def test_full_blackout_and_the_hours_behind_the_press_estimate(reports):
@@ -79,5 +81,5 @@ def test_n1_cost_before_the_fault(reports):
     )
     assert cost["n1_cuts"] == 273
     assert 0 < cost["n1_expected_cost_usd"] <= cost["n1_worst_cost_usd"]
-    assert cost["n1_expected_cost_usd"] == pytest.approx(3.5e6, rel=0.1)
-    assert cost["n1_worst_cost_usd"] == pytest.approx(72.6e6, rel=0.05)
+    assert cost["n1_expected_cost_usd"] == pytest.approx(7.5e6, rel=0.1)
+    assert cost["n1_worst_cost_usd"] == pytest.approx(390e6, rel=0.02)

@@ -264,15 +264,15 @@ def prefault_health(
 
 
 def event_margins(summary: dict) -> tuple[list[Margin], bool]:
-    """Margins from a cascade `summary`: load served and island frequencies. A `voltage_limited` island
-    gets margin 0 and marks the report uncertain: the 25F voltage collapse is documented, not computed."""
+    """Margins from a cascade `summary`: load served and island frequencies. An island that collapsed by voltage
+    gets margin 0 and marks the report uncertain: the 25F voltage collapse is a rule, not computed."""
     total = float(summary["load_total_mw"])
     shed = float(summary["load_shed_mw"])
     islands = summary["islands"]
-    voltage = any(i["result"] == "voltage_limited" for i in islands)
+    voltage = any(i.get("reason") == "voltage" for i in islands)
     hz = []
     for i in islands:
-        if i["result"] in ("blackout", "voltage_limited"):
+        if i["result"] == "blackout":
             hz.append(0.0)
         elif i["result"] == "maintains" and i["min_hz"] is not None:
             hz.append((float(i["min_hz"]) - BLACKOUT_LOW_HZ) / (BAND_LOW_HZ - BLACKOUT_LOW_HZ))
@@ -287,17 +287,17 @@ def event_margins(summary: dict) -> tuple[list[Margin], bool]:
         "frequency_islands",
         "Frecuencia de las islas",
         min(hz) if hz else 1.0,
-        "limitada por tensión (incierto)" if voltage else f"{len(hz)} islas evaluadas",
+        "colapso por tensión (regla, no calculado)" if voltage else f"{len(hz)} islas evaluadas",
         f"{BLACKOUT_LOW_HZ} a {BAND_LOW_HZ} Hz",
         source=SRC_BLACKOUT,
-        note="Una isla limitada por tensión puntúa 0: el colapso de tensión no se calcula",
+        note="Una isla apagada puntúa 0; el colapso por tensión es una regla, no un cálculo",
     )
-    return [supply, frequency], voltage or bool(summary.get("uncertain"))
+    return [supply, frequency], voltage
 
 
-def event_cost(summary: dict, uncertain: bool) -> dict[str, Any]:
-    """Failure cost of the event from the same MW lost as the `supply` margin. With an uncertain result
-    (a documented, not computed, voltage collapse) the cost is a floor, not an estimate."""
+def event_cost(summary: dict, voltage_rule: bool) -> dict[str, Any]:
+    """Failure cost of the event from the same MW lost as the `supply` margin. `voltage_rule` says part of that
+    load went dark by the 25F voltage-collapse rule (documented, not computed), not by the frequency model."""
     cost = (
         {k: summary[k] for k in ("failure_cost_usd", "unserved_energy_mwh", "outage_duration_h")}
         if "failure_cost_usd" in summary
@@ -307,7 +307,7 @@ def event_cost(summary: dict, uncertain: bool) -> dict[str, Any]:
         "cost_usd": cost["failure_cost_usd"],
         "unserved_energy_mwh": cost["unserved_energy_mwh"],
         "outage_duration_h": cost["outage_duration_h"],
-        "is_floor": uncertain,
+        "voltage_rule": voltage_rule,
         "source": SRC_COST,
         "note": COST_NOTE,
     }

@@ -70,8 +70,8 @@ def test_n1_security_counts_cuts_without_effect_and_worst_stays_out_of_the_index
     assert secure.in_index and not worst.in_index
 
 
-def _summary(shed: float, islands: list[dict], uncertain: bool = False) -> dict:
-    return {"load_total_mw": 10000.0, "load_shed_mw": shed, "islands": islands, "uncertain": uncertain}
+def _summary(shed: float, islands: list[dict]) -> dict:
+    return {"load_total_mw": 10000.0, "load_shed_mw": shed, "islands": islands}
 
 
 def test_event_margins_take_the_worst_island_frequency():
@@ -87,9 +87,12 @@ def test_event_margins_take_the_worst_island_frequency():
     assert not uncertain
 
 
-def test_event_margins_voltage_limited_island_scores_zero_and_is_uncertain():
-    islands = [{"result": "voltage_limited", "min_hz": 50.0}, {"result": "maintains", "min_hz": 49.9}]
-    margins, uncertain = event_margins(_summary(2000.0, islands, uncertain=True))
+def test_event_margins_voltage_collapse_scores_zero_and_is_uncertain():
+    islands = [
+        {"result": "blackout", "min_hz": None, "reason": "voltage"},
+        {"result": "maintains", "min_hz": 49.9},
+    ]
+    margins, uncertain = event_margins(_summary(2000.0, islands))
     assert {m.key: m for m in margins}["frequency_islands"].value == 0.0
     assert uncertain
 
@@ -107,13 +110,13 @@ def test_event_cost_follows_the_supply_margin_when_supply_binds():
     cost = report.as_dict()["cost"]
     assert cost["cost_usd"] == pytest.approx((1 - supply.raw) * 10000.0 * 4.0 * 1000 * 8.79)
     assert cost["outage_duration_h"] == {"value": 4.0, "is_assumption": True}
-    assert not cost["is_floor"]
+    assert not cost["voltage_rule"]
 
 
-def test_event_cost_is_a_floor_when_the_result_is_uncertain():
-    islands = [{"result": "voltage_limited", "min_hz": 50.0}]
-    cost = event_report(_summary(2000.0, islands, uncertain=True), "x", ["R1"]).extra["cost"]
-    assert cost["is_floor"]
+def test_event_cost_flags_islands_darkened_by_the_voltage_rule():
+    islands = [{"result": "blackout", "min_hz": None, "reason": "voltage"}]
+    cost = event_report(_summary(2000.0, islands), "x", ["R1"]).extra["cost"]
+    assert cost["voltage_rule"]
     assert cost["cost_usd"] == pytest.approx(2000.0 * USD_PER_MW)
 
 

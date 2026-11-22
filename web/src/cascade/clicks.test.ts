@@ -24,16 +24,16 @@ describe("map click interpretation", () => {
   it("cuts once on a Mapbox double click (click, click, dblclick)", () => {
     const actions = run([[A, 1, 0], [A, 1, 180], [A, 2, 181]]);
     expect(actions[0]).toEqual({ type: "select", target: A });
-    expect(cuts(actions)).toEqual([{ type: "cut", id: "R001" }]);
+    expect(cuts(actions)).toEqual([{ type: "cut", id: "R001", kind: "line" }]);
   });
 
   it("cuts once when the OS double-click time is longer than ours (dblclick does the cut)", () => {
     const actions = run([[A, 1, 0], [A, 1, 450], [A, 2, 451]]);
-    expect(actions).toEqual([{ type: "select", target: A }, { type: "select", target: A }, { type: "cut", id: "R001" }]);
+    expect(actions).toEqual([{ type: "select", target: A }, { type: "select", target: A }, { type: "cut", id: "R001", kind: "line" }]);
   });
 
   it("cuts once on an offline double click (tapCount 1, 2) and ignores a third tap", () => {
-    expect(run([[A, 1, 0], [A, 2, 200]])).toEqual([{ type: "select", target: A }, { type: "cut", id: "R001" }]);
+    expect(run([[A, 1, 0], [A, 2, 200]])).toEqual([{ type: "select", target: A }, { type: "cut", id: "R001", kind: "line" }]);
     expect(cuts(run([[A, 1, 0], [A, 2, 200], [A, 3, 380]]))).toHaveLength(1);
   });
 
@@ -51,8 +51,10 @@ describe("map click interpretation", () => {
     expect(run([[A, 1, 0], [B, 2, 200]])).toEqual([{ type: "select", target: A }, { type: "select", target: B }]);
   });
 
-  it("selects a substation and never cuts it", () => {
-    expect(run([[NODE, 1, 0], [NODE, 1, 100], [NODE, 2, 101]]).every((a) => a.type === "select")).toBe(true);
+  it("selects a substation on a single click and takes it out of service on a double click", () => {
+    const actions = run([[NODE, 1, 0], [NODE, 1, 100], [NODE, 2, 101]]);
+    expect(actions[0]).toEqual({ type: "select", target: NODE });
+    expect(cuts(actions)).toEqual([{ type: "cut", id: "B010", kind: "node" }]);
   });
 
   it("clears the selection on a click on nothing", () => {

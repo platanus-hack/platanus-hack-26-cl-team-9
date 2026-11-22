@@ -1,6 +1,15 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(health): merge main; cost under the voltage rule and in grids/simulate
+
+- **Changed:** Merges `origin/main` (#70, #76, #83, #66, #63) into `feat/health-cost`. `event_cost` drops `is_floor` for `voltage_rule` (islands darkened by the 25F voltage-collapse rule, `reason: "voltage"`), since #76 removed `voltage_limited`/`uncertain`; the web reads "costo estimado, colapso por regla" with no "≥".
+- **Changed:** `GridSimulator` (`POST /api/v1/grids/simulate`) recomputes the summary cost after adding the direct loss of substations out of service and attaches `health` (`with_event_health`), so it matches the cache. The pre-fault row also hides on a composed grid.
+- **Changed:** Cache regenerated. 25F figures with the new engine: R239 at `feb2025-1500` costs US$ 390.1 M (11,096 MW, whole system); N-1 expected US$ 7.5 M, worst US$ 390.1 M (5 costliest carry 60-80 %); reference `feb2025-0300` N-1 expected US$ 4.5 M. The gap to US$ 984 M is now only the assumed 4 h (about 10.1 h needed).
+- **Why:** Resolve the PR #81 conflicts with main and keep the cost correct under the new voltage rule and the multi-edit API.
+- **Agents:** `health.cost.is_floor` no longer exists: use `voltage_rule`. Any timeline from cache, session or `/grids/simulate` carries `summary.failure_cost_usd` and `health`. Older entries below that quote US$ 69 M / 3.5 M / 72.6 M or "floor" are superseded.
+- **Files:** `backend/src/cascadasen/{domain/cascade/{engine,health}.py,application/{grid_simulation,grid_health}.py}`, `backend/tests/{unit/test_health.py,unit/test_grid_simulation.py,validation/test_health_25f.py}`, `web/src/cascade/{SimulationPanel.tsx,CascadeApp.tsx,types.ts}`, `web/public/cache/`, `docs/{health,engine,mapa3,grids}.md`.
+
 ## 2026-11-21 · docs(health): cost section
 
 - **Changed:** `docs/health.md` gets a "Cost" section: the figures table, the rules (no index in dollars, no ids of costly cuts, N-1 reuses the runs), the 25F and reference results and the US$ 984 M validation gap. "Run" adds the cache and `-s`; "Not done" drops the cache `health.json` and lists the cost items left out.
@@ -63,6 +72,55 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Issue #72: show the money next to the health index. The cascade (map 3, cache, sessions) had MW lost but no cost.
 - **Agents:** One formula for both engines: never recompute the cost by hand, call `outage_cost`. The cascade cost uses the rounded `load_shed_mw`, so `failure_cost_usd = load_shed_mw x 4 x 1000 x 8.79` exactly. It is a regulatory valuation, not a measured loss. The cache is not regenerated yet.
 - **Files:** `backend/src/cascadasen/domain/simulation/consequence.py`, `backend/src/cascadasen/domain/cascade/engine.py`, `backend/tests/unit/{test_cascade.py,test_sim_engine.py}`.
+
+## 2026-11-22 · feat(web): outage result and cost in Estado de la red; Chile alone by default (#83)
+
+- **Changed:** Estado de la red opens with "Resultado de la caída": people without power and % of the country, MW lost of the hour's demand, generation lost and islands that went dark, read with the same `impactAt` that Simulación uses at its last second. Cost of the outage comes from `POST /api/v1/grids/cost` (issue #82, not built yet): the card says "pendiente" on 404. `/grids/simulate` now adds the demand of substations out of service to `load_total_mw`. The map opens with Chile alone (no context countries until ticked in Fuentes de la grilla) at Mediodía solar; Desastres open on Carga and Benchmark on Tensión.
+- **Why:** the user wants the cost of the fall and the share of people without power next to the list of changes, with one set of figures for both tabs.
+- **Agents:** the cost contract is in issue #82; `loadOutageCost` in `gridsApi.ts` returns null on 404. `loadRegionalGrid` in `map/regional.ts` is no longer called by the app.
+- **Files:** `web/src/cascade/{NetworkState.tsx,gridsApi.ts,CascadeApp.tsx,GridSources.tsx}`, `backend/src/cascadasen/application/grid_simulation.py`, `backend/tests/unit/test_grid_simulation.py`, `docs/mapa3.md`, `docs/grids.md`.
+
+## 2026-11-22 · fix(web): drop the committed node_modules symlink
+
+- **Changed:** removes `web/node_modules`, a symlink to a local path that merge `cf013db` committed by mistake, and makes `web/.gitignore` ignore `node_modules` as a file too, not only as a directory.
+- **Why:** `web.Dockerfile` runs `npm ci` and then `COPY web/ ./`, so the symlink could replace the installed packages in the image and break the build.
+- **Agents:** never symlink `node_modules` into a worktree and then `git add -A` there.
+- **Files:** `web/node_modules` (removed), `web/.gitignore`.
+
+## 2026-11-22 · fix(cascade): voltage collapse brings the 25F down again; drop the extreme-contingency EDAC (#76)
+
+- **Changed:** the extreme-contingency EDAC (671.55 MW by df/dt) is removed from `frequency.py` and `cascade.yaml`. The voltage rule no longer marks islands `voltage_limited`/`uncertain`: when the 25F corridor separates with a pre-fault flow beyond 1,600 MW N→S or 1,000 MW S→N, both end islands collapse (`island_blackout`, `reason: "voltage"`); islands in `summary.islands` that went dark carry `reason`. `summary.uncertain` and `CascadeState.uncertain` are gone. Cache regenerated. Web: Estado de la red lists the consequences (lines opened by overload, islands that went dark, with their second) apart from the user's cuts.
+- **Why:** the extreme EDAC alone kept the centro-sur island above 47.5 Hz (48.49 Hz), so the 25F fell from 15.2 M to 3.8 M people; the real 25F left about 19 M (98.5 %) without power. Measured by switching each change of 58f8b74 off one at a time: the voltage verdict changed no number.
+- **Agents:** 25F at `feb2025-1500` now gives 11,096 of 11,096 MW and 16.8 M people (the model only assigns 18.16 M). `test_the_committed_cache_matches_the_engine_for_a_single_cut` fails if the engine changes without `cascadasen-cache`. The strategic theatre's `voltage_limited` branches (`domain/theater`, `domain/agents`) no longer fire from this engine; the 13-area engine in `domain/simulation` is untouched.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine.py,frequency.py,health.py,params/cascade.yaml}`, `backend/tests/unit/{test_cascade.py,test_health.py,test_grid_simulation.py}`, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,text.ts,CascadeApp.tsx}`, `docs/{engine,stack,mapa3,health,minimum-dataset,grids}.md`.
+
+## 2026-11-22 · feat(grids): "Estado de la red" tab, several cuts and substations together through the API (#70)
+
+- **Changed:** new `GridSimulator` use case and `POST /api/v1/grids/simulate` (`{point, open_lines, out_buses}`) that runs the cascade with all changes at once and returns a cache-shaped timeline. Web: first tab "Estado de la red" lists every change with Reponer and Reponer todo (`edits.ts`, `NetworkState.tsx`); a double click on a substation takes it out of service; a new cut adds to the list instead of replacing the last one; the rail's Escenarios no longer gets a "Corte ..." row. The two placeholder tabs are hidden to fit the panel.
+- **Why:** outside a session only the last single cut was shown, because the cache has single cuts only.
+- **Agents:** with zero or one line the web still reads `web/public/cache`; two or more changes, or any substation, go to the API. The cache predates engine commit `58f8b74`, so a single cut from the cache and the same cut from the API can differ (25F: 15.2 M vs 3.8 M people); regenerate with `cascadasen-cache` to align them. Changes are not persisted: a refresh keeps only a single cut in the URL. In a shared session the old behavior stays (Datos).
+- **Files:** `backend/src/cascadasen/{application/grid_simulation.py,api/grid_routes.py}`, `web/src/cascade/{edits.ts,NetworkState.tsx,CascadeApp.tsx,Scenarios.tsx,SelectionCard.tsx,SimulationPanel.tsx,clicks.ts,gridsApi.ts}`, `docs/grids.md`, `docs/mapa3.md`.
+
+## 2026-11-22 · fix(web): Benchmark conditions open on the Red tab (#66)
+
+- **Changed:** `openScenario` in `CascadeApp.tsx` opens the Red tab when the chosen scenario has no cut (Benchmark) and Simulación when it has one (Desastres).
+- **Why:** a Benchmark condition has no cascade to play, so Simulación only showed an empty timeline.
+- **Agents:** the tab after a rail choice is Red without a cut, Simulación with one.
+- **Files:** `web/src/cascade/CascadeApp.tsx`.
+
+## 2026-11-22 · feat(grids): "Fuentes de la grilla" tab and app-ready documents per country (#66)
+
+- **Changed:** `publish` now builds the documents the app reads (`CHL/network-<year>.json`, `CHL/operating/<point>.json`, `<ISO>/grid.json`) and keeps the raw files under `<ISO>/source/`; compose only joins them (no engine, no snapshot). Compose takes `context` (which countries) and `GET /api/v1/grids/documents/<key>` serves a context document. Web: rail item "Fuentes de la grilla" (`GridSources.tsx`, `gridsApi.ts`, `regionalFromDocuments`) that opens downward in the rail with a checkbox and a Complete or Partial status per network (all can be unticked); ticking one composes the grid. The rail's "Escenarios" are now two folders, Desastres (Apagón 25F) and Benchmark (the other three conditions), and recompose once a grid is composed. `GET /sources` adds `grids` with the status.
+- **Why:** the user must choose, from the stored documents, which ones make up the grid on the map, and edit elements by id; whole documents per country keep their references together.
+- **Agents:** default prefix is now `grids/v2` (layout `cascadasen.grid/2`); `grids/v1` is superseded. The cascade timelines still come from `web/public/cache`; only network, buses and context come from the composed grid. Compose does not apply `overlay` yet. Only the first of several `open_lines` is simulated in the web. See `docs/grids.md`.
+- **Files:** `backend/src/cascadasen/{domain/grids.py,application/grids.py,api/grid_routes.py}`, `web/src/cascade/{GridSources.tsx,gridsApi.ts,CascadeApp.tsx}`, `web/src/map/regional.ts`, `docs/grids.md`.
+
+## 2026-11-21 · feat(grids): grids as documents per country, published to S3 and composed by the backend (#63)
+
+- **Changed:** new port `GridStore` with `LocalGridStore` and `S3GridStore` (never overwrite), pure layout in `domain/grids.py`, use cases in `application/grids.py` (publish, verify, catalogue, `GridComposer`), routes `GET /api/v1/grids/sources`, `GET /api/v1/grids/scenarios`, `POST /api/v1/grids/compose`, CLI `cascadasen-grids publish|verify|list`, seed scenarios in `data/scenarios/*.json`.
+- **Why:** a grid is a JSON document the browser keeps and edits. The backend reads the documents the user picks (by country) from S3 and composes one grid; scenarios are preset grids (point, open lines, edits).
+- **Agents:** documents live under `grids/v1/` of the session bucket (the lifecycle rules only expire `sessions/` and `runs/`). Settings `CASCADASEN_GRIDS_STORE` (`local` default, `s3`), `_GRIDS_BUCKET`, `_GRIDS_PREFIX`. The prod task role `cascadasen-task` cannot read `grids/*` until IAM allows it (no Terraform yet). `operating_point_from_docs` and `network_json` are now public. Compose does not apply `overlay` yet; the simulator will. Details in `docs/grids.md`.
+- **Files:** `backend/src/cascadasen/{domain,application,infrastructure,api}/*grid*`, `domain/cascade/scenario.py`, `application/cache_builder.py`, `data/scenarios/`, `docs/grids.md`.
 
 ## 2026-11-21 · docs(mapa3): document Prender todo
 

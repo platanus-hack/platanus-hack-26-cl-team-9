@@ -29,7 +29,7 @@ Runs `run_cascade_workflow` and reads its `summary`.
 | Key | Margin |
 |---|---|
 | `supply` | `1 - load shed / total load` |
-| `frequency_islands` | Worst `(min_hz - 47.5) / 1.5` among islands that maintain. A `blackout` island scores 0. A `voltage_limited` island scores 0 and marks the report `uncertain`: the 25F voltage collapse is documented, not computed (`engine.md`) |
+| `frequency_islands` | Worst `(min_hz - 47.5) / 1.5` among islands that maintain. A `blackout` island scores 0. An island that collapsed by voltage (`reason: "voltage"`) scores 0 and marks the report `uncertain`: the 25F voltage collapse is a rule, not computed (`engine.md`) |
 
 ## Result (2026-11-21, `cascadasen-health`)
 
@@ -39,7 +39,7 @@ Reference for "healthy": `feb2025-0300`, the same 2025 network and month as the 
 |---|---|---|
 | Pre-fault index | **0.00**, limited by `transfer_25f` (2,209 MW N→S, limit 1,600; raw -0.38) | **0.35**, limited by `transfer_25f` (653 MW S→N, limit 1,000) |
 | Other pre-fault margins | inertia 0.50 (36.7 GVAs), `frequency_n1` 1.00, `n1_security` 0.80 (218/273) | inertia 1.00 (49.3 GVAs), `frequency_n1` 0.93, `n1_security` 0.85 (231/273) |
-| After cutting R239 | **0.00**, uncertain (`voltage_limited`; 1,972 of 11,096 MW lost) | **0.67**, limited by `frequency_islands` (48.5 Hz; 631 of 8,719 MW lost) |
+| After cutting R239 | **0.00**, uncertain (collapse by voltage, a rule; 11,096 of 11,096 MW lost) | **0.67**, limited by `frequency_islands` (48.5 Hz; 631 of 8,719 MW lost) |
 
 Reading: the index separates the two cases mainly through the corridor transfer, which is the documented cause of the 25F. Inertia and the frequency after losing the largest unit do not limit either case. The reference is not "fully healthy" (0.35) because its corridor already carries 65% of its south-to-north limit.
 
@@ -50,7 +50,7 @@ The index and the failure cost sit side by side, never merged: there is no "inde
 | Figure | Where | How | Quality |
 |---|---|---|---|
 | `cost.cost_usd` (after a cut) | `event_report` / `event_health`, `extra["cost"]` | `failure_cost_usd` of the cascade summary: `load_shed_mw` x `outage_duration_h` x 1,000 x 8.79 US$/kWh, by `outage_cost` (`consequence.py`) | Modelled, regulatory valuation (CNE [19]) |
-| `cost.is_floor` | same | `true` when the report is `uncertain` (`voltage_limited`): the documented voltage collapse is not computed, so the cost is a floor | Modelled |
+| `cost.voltage_rule` | same | `true` when islands went dark by the 25F voltage-collapse rule (`reason: "voltage"`): that load is lost by a documented rule, not a computed collapse | Modelled |
 | `cost.n1_expected_cost_usd` (before a cut) | `prefault_health`, `extra["cost"]` | Mean cost of the 273 single-line cuts, each line with the same weight | Modelled. ASSUMPTION: equal probability per line (no published failure rates) |
 | `cost.n1_worst_cost_usd` | same | Cost of the worst single cut | Modelled; the same artefact as `n1_worst` (a reduced line cuts a whole corridor) |
 | `cost.n1_cost_share` | same | Count (5) and a 20-point band of the share of the expected cost carried by the 5 costliest cuts | Modelled |
@@ -66,12 +66,12 @@ Result (2026-11-21, `cascadasen-health`, 4 h):
 
 | | 25F (`feb2025-1500`) | Reference (`feb2025-0300`) |
 |---|---|---|
-| After cutting R239 | US$ 69.3 M, a floor (1,972 MW, 7,888 MWh, uncertain) | US$ 22.2 M (631 MW) |
-| N-1 expected / worst | US$ 3.5 M / US$ 72.6 M; 55 of 273 cuts with cost, the 5 costliest carry 20-40 % | US$ 4.1 M / US$ 306.6 M; 42 of 273, the 5 costliest carry 80-100 % |
+| After cutting R239 | US$ 390.1 M (11,096 MW, 44,384 MWh, the whole system; `voltage_rule`) | US$ 22.2 M (631 MW) |
+| N-1 expected / worst | US$ 7.5 M / US$ 390.1 M; 55 of 273 cuts with cost, the 5 costliest carry 60-80 % | US$ 4.5 M / US$ 306.6 M; 42 of 273, the 5 costliest carry 80-100 % |
 
-Validation against the 25F (ASSUMPTION, only to order magnitudes; `tests/validation/test_health_25f.py`): a full blackout of 11,096 MW for 4 h is about US$ 390 M. The press estimate of the 25F loss is US$ 984 M (`datasets.md` [44], not verified); a full blackout would need about 10.1 h of average unserved energy to reach it. The gap comes from the voltage collapse being documented, not computed (the model loses 1,972 MW, not the whole system) and from the assumed duration. The test pins the figures and does not tune the duration. The US$ 984 M figure is not shown in the UI.
+Validation against the 25F (ASSUMPTION, only to order magnitudes; `tests/validation/test_health_25f.py`): a full blackout of 11,096 MW for 4 h is about US$ 390 M. The press estimate of the 25F loss is US$ 984 M (`datasets.md` [44], not verified); a full blackout would need about 10.1 h of average unserved energy to reach it. Since the voltage-collapse rule (#76) the model loses the whole system after cutting R239, so the gap is the assumed 4 h duration (and the press figure measuring more than unserved energy). The test pins the figures and does not tune the duration. The US$ 984 M figure is not shown in the UI.
 
-Where it shows: `cascadasen-health` (a `$` line under each report, and `cost` in `--json`), the web cache (`<point>/health.json`, `health` in every cut timeline), the session sandbox timeline (`health`), and the map 3 Simulación tab (`mapa3.md` section 4, item 5).
+Where it shows: `cascadasen-health` (a `$` line under each report, and `cost` in `--json`), the web cache (`<point>/health.json`, `health` in every cut timeline), the session sandbox timeline (`health`), `POST /api/v1/grids/simulate` (`health`, and the summary cost includes the direct loss of substations out of service), and the map 3 Simulación tab (`mapa3.md` section 4, item 5).
 
 ## Cautions
 

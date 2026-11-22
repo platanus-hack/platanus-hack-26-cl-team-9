@@ -15,15 +15,15 @@ export interface Timeline {
   summary: { people_without_power: number; load_shed_mw: number; load_total_mw: number; stages: number; lines_opened: string[]; dark_buses: number;
     islands: { result: string; min_hz: number | null; buses: number }[];
     // Failure cost (CNE [19]) of the lost load; absent in a cache built before issue #72.
-    failure_cost_usd?: number; unserved_energy_mwh?: number; outage_duration_h?: Assumed; uncertain?: boolean };
+    failure_cost_usd?: number; unserved_energy_mwh?: number; outage_duration_h?: Assumed };
   assumptions: string[];
   /** After-cut health index and cost (docs/health.md); absent in an old cache and in baseline.json. */
   health?: HealthReport;
 }
 export interface Assumed { value: number; is_assumption: boolean }
 export interface HealthMargin { key: string; label: string; value: number; raw: number; measured: string; limit: string; source: string | null; is_assumption: boolean; in_index: boolean; note?: string }
-/** Cost of one event: a regulatory valuation, a floor when the result is uncertain. */
-export interface EventCost { cost_usd: number; unserved_energy_mwh: number; outage_duration_h: Assumed; is_floor: boolean; source: string; note: string }
+/** Cost of one event: a regulatory valuation; `voltage_rule` when islands went dark by the 25F voltage-collapse rule. */
+export interface EventCost { cost_usd: number; unserved_energy_mwh: number; outage_duration_h: Assumed; voltage_rule?: boolean; source: string; note: string }
 /** Money at risk before a cut: failure cost of every single-line cut, equal weights, no line ids (cyber.md section 8). */
 export interface N1Cost {
   n1_expected_cost_usd: number; n1_worst_cost_usd: number; n1_cuts: number; n1_cuts_with_cost: number;

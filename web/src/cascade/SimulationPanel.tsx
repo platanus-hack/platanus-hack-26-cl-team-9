@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
 import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
-import { cutName, hz, index2, int, narrate, pct, secs, shutdownNode, usdM } from "./text";
+import { cutName, hz, index2, int, narrate, pct, placeName, secs, usdM } from "./text";
 import type { EventCost, HealthReport, N1Cost, Network, Timeline } from "./types";
 import { Chevron, Info } from "./ui";
 
 interface Props {
-  network: Network; timeline: Timeline; cuts: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
+  network: Network; timeline: Timeline; cuts: string[]; outBuses: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
   seek(t: number): void; openSources(): void; restore(): void; source: string;
   /** Pre-fault health of the point (`<point>/health.json`); null in an old cache or in a session. */
   health: HealthReport | null;
@@ -14,10 +14,11 @@ interface Props {
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
 export function SimulationPanel(p: Props) {
   const assumptions = p.timeline.assumptions.length;
+  const edited = p.cuts.length + p.outBuses.length > 0;
   return (
     <>
-      {p.cuts.length > 0 ? <ImpactCard {...p} /> : <EmptyCard health={p.health} />}
-      {p.cuts.length > 0 && <History {...p} />}
+      {edited ? <ImpactCard {...p} /> : <EmptyCard health={p.health} />}
+      {edited && <History {...p} />}
       {p.timeline.truncated && <p className="note">La cascada llegó al tope de 20 etapas: el resultado puede ser mayor.</p>}
       <button className="assumptions-row" onClick={p.openSources}>
         <Info tip="Supuestos del motor que afectan esta simulación. Ábrelos para ver cada uno." />
@@ -86,17 +87,17 @@ function EventHealth({ timeline }: { timeline: Timeline }) {
   const fromReport = report && !isN1(report.cost) ? report.cost : undefined;
   const usd = fromReport?.cost_usd ?? timeline.summary.failure_cost_usd;
   if (!report && usd == null) return null;
-  const floor = fromReport?.is_floor ?? !!timeline.summary.uncertain;
+  const rule = !!fromReport?.voltage_rule;
   const hours = (fromReport?.outage_duration_h ?? timeline.summary.outage_duration_h)?.value ?? 4;
-  const floorTip = floor ? " Resultado incierto: el colapso de tensión no se calcula, así que el costo es un piso, no una estimación." : "";
+  const ruleTip = rule ? " Incluye las islas apagadas por la regla de colapso de tensión del 25F: está documentado, no calculado." : "";
   return (
     <>
       <div className="mini-figures ruled">
         {report && <IndexFigure report={report} tip="Al final de la simulación, después del corte; no se compara con el índice antes del corte." />}
         {usd != null && (
           <div>
-            <div className="value-row"><b>{floor && <small>≥ </small>}{usdM(usd)}</b><Info tip={`${COST_TIP} Duración: ${hours} h supuestas. Valor al final de la simulación.${floorTip}`} /></div>
-            <span>{floor ? "costo estimado, piso" : "costo estimado"}</span>
+            <div className="value-row"><b>{usdM(usd)}</b><Info tip={`${COST_TIP} Duración: ${hours} h supuestas. Valor al final de la simulación.${ruleTip}`} /></div>
+            <span>{rule ? "costo estimado, colapso por regla" : "costo estimado"}</span>
           </div>
         )}
       </div>
@@ -138,8 +139,8 @@ function ImpactCard(p: Props) {
       </div>
       <EventHealth timeline={p.timeline} />
       <div className="cut-row">
-        <p className="meta cut-name">Corte: {p.cuts.map((id) => cutName(p.network, id)).join(", ")}</p>
-        <button className="secondary-btn" onClick={() => p.restore()}>{p.cuts.length === 1 && shutdownNode(p.cuts[0]) ? "Encender subestación" : p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea"}</button>
+        <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => cutName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>
+        <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Encender subestación"}</button>
       </div>
     </div>
   );

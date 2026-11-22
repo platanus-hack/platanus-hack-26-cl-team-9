@@ -46,8 +46,8 @@ def format_cost(r: HealthReport) -> str | None:
             f"con costo, los {cost['n1_cost_share']['count']} más caros suman {cost['n1_cost_share']['share_band']} "
             f"(costo de falla CNE [19], {hours}, mismo peso por línea)"
         )
-    floor = "; piso, no estimación" if cost["is_floor"] else ""
-    return f"  $ Costo estimado: {usd_m(cost['cost_usd'])} (costo de falla CNE [19], {hours}{floor})"
+    rule = "; incluye islas apagadas por la regla de colapso de tensión" if cost.get("voltage_rule") else ""
+    return f"  $ Costo estimado: {usd_m(cost['cost_usd'])} (costo de falla CNE [19], {hours}{rule})"
 
 
 def format_report(r: HealthReport) -> str:
