@@ -93,6 +93,14 @@ class TheaterNetwork(AreaGraph[Area, Corridor]):
         mine = set(self.areas[area].buses)
         return [ln.id for ln in self.buses.lines if ln.a in mine or ln.b in mine]
 
+    def sites_of(self, target: str) -> list[str] | None:
+        """Areas where a crew acts on an area or a corridor; None for any other target (the caller's fallback)."""
+        if target in self.areas:
+            return [target]
+        if target in self.corridors:
+            return [self.corridors[target].a, self.corridors[target].b]
+        return None
+
     def defense_areas(self) -> dict[str, list[str]]:
         out: dict[str, list[str]] = {f"edac:{z}": [] for z in EDAC_ZONES}
         for a in self.order:

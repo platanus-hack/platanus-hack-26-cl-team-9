@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(theater): TheaterNetwork.sites_of replaces two copies of the crew-site lookup
+
+- **Changed:** New `TheaterNetwork.sites_of(target)`: `[area]` for an area, `[a, b]` for a corridor, `None` otherwise. `LogisticsAgent._sites` and `Simulation._sites` call it and keep their own fallback (`self.sites.get(target, [])`; `defense_areas.get(target) or all areas`).
+- **Why:** F17 of the duplication report. Fallbacks are unchanged because `sites_of` never returns an empty list.
+- **Agents:** Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped (coverage run: both `_sites` lines executed).
+- **Files:** `backend/src/cascadasen/domain/theater/areas.py`, `domain/agents/logistics.py`, `domain/theater/cycle.py`.
 ## 2026-11-22 · refactor(api): page() helper and shared Limit/Offset query types in app.py
 
 - **Changed:** `api/app.py` gets `page((total, items))` for the four `{"total", "items"}` responses and `Limit = Annotated[int, Query(ge=1, le=5000)]`, `Offset = Annotated[int, Query(ge=0)]` for the three list routes (defaults stay 100 for nodes/edges and 2000 for plants).

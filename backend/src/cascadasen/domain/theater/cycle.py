@@ -408,12 +408,7 @@ class Simulation:
 
     def _sites(self, target: str) -> list[str]:
         """Areas where a crew can carry out an action on `target`."""
-        net = self.network
-        if target in net.areas:
-            return [target]
-        if target in net.corridors:
-            return [net.corridors[target].a, net.corridors[target].b]
-        return self.defense_areas.get(target) or list(net.order)
+        return self.network.sites_of(target) or self.defense_areas.get(target) or list(self.network.order)
 
     def _crews_view(self) -> list[dict[str, Any]]:
         """Crews with the map position of their area's anchor substation (mapa 3 bus id and lon/lat)."""
