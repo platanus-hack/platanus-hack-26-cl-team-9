@@ -120,10 +120,10 @@ cyber_attack:
   value:
     strike_delay: 2
     spread_cooldown: 3
-    spread_p: 0.45
-    isolation_p: 0.8
-    eradicate_p: 0.55
-    generation_share: 0.45
+    spread_p: 0.4
+    isolation_p: 0.85
+    eradicate_p: 0.65
+    generation_share: 0.35
     attack_win_lost_share: 0.8
     min_neighbours: 2
     clean_after_segmented: 2
@@ -132,7 +132,7 @@ cyber_attack:
   is_assumption: true
   note: >-
     Propagating cyberattack scenario (docs/attack-sim.md 3.2), all at operating-area level and in 5-minute cycles.
-    The defaults are the "normal" difficulty below. An intrusion is latent until it strikes (supervision, remote
+    The defaults are the "Normal" difficulty below. An intrusion is latent until it strikes (supervision, remote
     dispatch and part of the area's generation lost); it tries each neighbour every spread_cooldown cycles;
     segmentation stops a jump with isolation_p; an area kept segmented clean_after_segmented cycles or fully
     restored is eradicated with eradicate_p (else it strikes again). The attack wins when 80 % of the demand is
@@ -143,22 +143,25 @@ cyber_attack_presets:
   value:
     facil:
       label: Fácil
-      params: {strike_delay: 3, spread_cooldown: 4, spread_p: 0.35, isolation_p: 0.9, eradicate_p: 0.7, clean_after_segmented: 2, generation_share: 0.3}
-      measured: "Algoritmo C, 9 cuadrillas, semillas 1-10: la defensa gana 8, 2 sin definir"
+      params: {strike_delay: 4, spread_cooldown: 5, spread_p: 0.2, isolation_p: 0.95, eradicate_p: 0.9, clean_after_segmented: 1, generation_share: 0.15}
+      measured: "100 semillas, 9 cuadrillas: la defensa gana 92 % (A), 96 % (B), 91 % (C), en 5 a 8 ciclos"
     normal:
       label: Normal
-      params: {strike_delay: 2, spread_cooldown: 3, spread_p: 0.45, isolation_p: 0.8, eradicate_p: 0.55, clean_after_segmented: 2, generation_share: 0.45}
-      measured: "Algoritmo C, 9 cuadrillas, semillas 1-10: la defensa gana 4, 6 sin definir"
+      params: {strike_delay: 2, spread_cooldown: 3, spread_p: 0.4, isolation_p: 0.85, eradicate_p: 0.65, clean_after_segmented: 2, generation_share: 0.35}
+      measured: "100 semillas, 9 cuadrillas: la defensa gana 46 % (A), 71 % (B), 51 % (C); el ataque, 0 a 2 %"
     dificil:
       label: Difícil
-      params: {strike_delay: 1, spread_cooldown: 1, spread_p: 0.75, isolation_p: 0.5, eradicate_p: 0.3, clean_after_segmented: 4, generation_share: 0.65}
-      measured: "Algoritmo C, 9 cuadrillas, semillas 1-10: el ataque gana 5, 5 sin definir"
-    extremo:
-      label: Extremo
+      params: {strike_delay: 1, spread_cooldown: 2, spread_p: 0.55, isolation_p: 0.7, eradicate_p: 0.45, clean_after_segmented: 3, generation_share: 0.5}
+      measured: "100 semillas, 9 cuadrillas: la defensa gana 0 % (A), 8 % (B), 0 % (C); el ataque, 19 a 32 %"
+    muy_dificil:
+      label: Muy difícil
       params: {strike_delay: 0, spread_cooldown: 1, spread_p: 0.9, isolation_p: 0.3, eradicate_p: 0.2, clean_after_segmented: 5, generation_share: 0.85}
-      measured: "Algoritmo C, 9 cuadrillas, semillas 1-10: el ataque gana 10"
+      measured: "100 semillas, 9 cuadrillas: la defensa gana 0 %; el ataque gana 100 % (A), 93 % (B), 99 % (C)"
   is_assumption: true
-  note: "Difficulty presets of the Ciberataque form, measured on 2026-11-22 with the mapa 3 network at nov2026-1300"
+  note: >-
+    Difficulty presets of the Ciberataque form, measured on 2026-11-22 with the mapa 3 network at nov2026-1300, seeds
+    1-100 per preset and rules policy (A reactive, B preventive, C adaptive). The rest of each run ends undecided at
+    the 72-cycle horizon. The LLM commander was not measured (no model on the bench)
 
 restoration:
   value: {load_share_per_cycle: 0.3, gen_share_per_cycle: 0.34, manual_slowdown: 0.5, reserve_recovery: 0.5}

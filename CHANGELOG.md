@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cyber): curva de dificultad medida con 100 simulaciones por nivel (#121)
+
+- **Changed:** New difficulty presets, measured with seeds 1-100 per preset and rules policy, 9 crews. Defence win rate A / B / C: Fácil 92 / 96 / 91 % (5-8 cycles), Normal 46 / 71 / 51 %, Difícil 0 / 8 / 0 %, Muy difícil 0 % (the attack wins 93-100 %). "Extremo" is now "Muy difícil" (`muy_dificil`). Defaults = Normal.
+- **Why:** the target curve: Fácil instant, Normal winnable, Difícil almost impossible, Muy difícil impossible. The old presets left most Fácil and Normal runs undecided.
+- **Agents:** re-measure with `cd backend && uv run python ../scripts/cyber_difficulty.py - 100 ABC` (about 45 s on 10 cores). The LLM commander was not measured.
+- **Files:** `backend/src/cascadasen/domain/theater/params/theater.yaml`, `scripts/cyber_difficulty.py`, `docs/attack-sim.md`, `backend/tests/unit/test_cyber_attack.py`.
+
 ## 2026-11-22 · feat(cyber): la velocidad del timeline controla el ciberataque (#121)
 
 - **Changed:** The Ciberataque uses the timeline card's own speed selector (1×, 2×, 4×): one cycle every 1.4 s at 1×, divided by the speed, live and in the replay. The selector is one shared component (`Speed` in `Timeline.tsx`) and the `speed` state lives once in `CascadeApp`.

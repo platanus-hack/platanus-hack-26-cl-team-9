@@ -166,6 +166,6 @@ def test_every_difficulty_preset_is_within_bounds(toy_world):
     from cascadasen.application.run_experiment import catalog
 
     presets = catalog(toy_world)["cyber_attack"]["presets"]
-    assert [p["id"] for p in presets] == ["facil", "normal", "dificil", "extremo"]
+    assert [p["id"] for p in presets] == ["facil", "normal", "dificil", "muy_dificil"]
     for p in presets:
         propagation_params(P, p["params"])  # raises when a value is out of bounds
