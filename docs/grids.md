@@ -19,7 +19,7 @@ Only CHL is simulable. The other countries are display-only context. `atlas_sen.
 
 ## API
 
-- `GET /api/v1/grids/sources`: `points`, `scenarios`, `context` (country documents), `documents`, `built_at`.
+- `GET /api/v1/grids/sources`: `grids` (country, name, status Complete or Partial, context key), `points`, `scenarios`, `context`, `documents`, `built_at`.
 - `POST /api/v1/grids/compose`: body `{point | scenario, context?: [keys]}` (`context` omitted: all, `[]`: none). Returns `schema`, `country`, `point`, `year`, `scenario`, `sources` (key and sha256), `network`, `operating`, `open_lines`, `overlay`, `context` (keys).
 - `GET /api/v1/grids/documents/<key>`: one context document, checked against its sha256.
 - Errors: 404 unknown point, scenario or document; 422 bad body, unknown context key, or network and point that do not fit; 503 no catalogue or a document that does not match its checksum.
@@ -27,7 +27,11 @@ Only CHL is simulable. The other countries are display-only context. `atlas_sen.
 
 ## Web: "Fuentes de la grilla"
 
-Rail item in mapa 3 (`web/src/cascade/GridSources.tsx`). A collapsible list with one row per country and a checkbox: Chile (the simulable network, always on) and the countries of context. Expanding a row shows its documents. Ticking a country composes the grid at once for the current operating point. The scenario and the hour are chosen in the rail's "Escenarios": once a grid is composed, picking one there composes again with the ticked countries. The map shows the composed network, buses and context; the cascade timelines still come from the app cache for the same point and cut (`web/public/cache`). "Volver a la caché" returns to the cache. Locked inside a shared session.
+Rail item in mapa 3 (`web/src/cascade/GridSources.tsx`) that opens downward under itself, not in a panel. One row per network in the catalogue (`grids` in `GET /sources`) with a checkbox and its status. **Complete**: the store has its network and operating points, so it can be simulated (Chile). **Partial**: only context to draw (ARG, BOL, BRA, PER). Everything can be unticked, Chile included (the map then draws nothing of it). Ticking one composes the grid at once for the current operating point.
+
+The scenario and the hour are chosen in the rail's "Escenarios", in two folders: **Desastres** (Apagón 25F, plus the cut the user makes on the map) and **Benchmark** (the other operating conditions with no cut: demanda mínima, mediodía solar, punta nocturna). Once a grid is composed, picking one there composes again with the ticked networks.
+
+The map shows the composed network, buses and context; the cascade timelines still come from the app cache for the same point and cut (`web/public/cache`). "Volver a la caché" returns to the cache. Locked inside a shared session.
 
 ## Publish
 

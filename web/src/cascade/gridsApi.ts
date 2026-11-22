@@ -6,7 +6,8 @@ export interface CatalogPoint { key: string; point: string; label: string; year:
 export interface CatalogScenario { id: string; name: string; point: string; open_lines: string[]; edits: boolean }
 export interface CatalogContext { key: string; country: string; name: string; bytes: number; lines: number; substations: number; plants: number }
 export interface CatalogDocument { key: string; country: string; role: string; bytes: number }
-export interface Catalog { built_at: string; documents: CatalogDocument[]; points: CatalogPoint[]; scenarios: CatalogScenario[]; context: CatalogContext[] }
+export interface CatalogGrid { country: string; name: string; status: "Complete" | "Partial"; key: string | null }
+export interface Catalog { built_at: string; documents: CatalogDocument[]; grids: CatalogGrid[]; points: CatalogPoint[]; scenarios: CatalogScenario[]; context: CatalogContext[] }
 export interface ComposeRequest { point?: string; scenario?: string; context: string[] }
 export interface ComposedGrid {
   point: string; label: string; year: number; scenario: string | null; built_at: string; open_lines: string[];

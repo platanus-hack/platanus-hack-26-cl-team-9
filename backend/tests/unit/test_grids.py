@@ -57,6 +57,13 @@ def test_catalog_lists_countries_documents_and_scenarios(store):
         "nov2026-2000",
     }
     assert all(d["role"] != "source" for d in cat["documents"])
+    assert [(g["country"], g["status"]) for g in cat["grids"]] == [
+        ("CHL", "Complete"),
+        ("ARG", "Partial"),
+        ("BOL", "Partial"),
+        ("BRA", "Partial"),
+        ("PER", "Partial"),
+    ]
     assert {s["id"] for s in cat["scenarios"]} >= {"dia-normal", "25f"}
     assert next(s for s in cat["scenarios"] if s["id"] == "25f")["open_lines"] == ["R239"]
 

@@ -73,8 +73,26 @@ def catalog_workflow(store: GridStore) -> dict:
         "points": [{"key": f["key"], **f["meta"]} for f in by_role["operating"]],
         "scenarios": [f["meta"] for f in by_role["scenario"]],
         "context": [{k: f[k] for k in ("key", "country", "bytes")} | f["meta"] for f in by_role["context"]],
+        "grids": _grids_summary(manifest, by_role),
         "documents": [f for f in manifest["files"] if f["role"] != "source"],
     }
+
+
+def _grids_summary(manifest: dict, by_role: dict) -> list[dict]:
+    """One entry per country with its status: Complete when the store has its network and operating points (it can be
+    simulated), Partial when it only has context to draw."""
+    simulable = bool(by_role["network"] and by_role["operating"])
+    chile = {
+        "country": layout.TOPOLOGY_COUNTRY,
+        "name": "Chile",
+        "status": "Complete" if simulable else "Partial",
+        "key": None,
+    }
+    others = [
+        {"country": f["country"], "name": f["meta"]["name"], "status": "Partial", "key": f["key"]}
+        for f in by_role["context"]
+    ]
+    return [chile, *sorted(others, key=lambda g: g["name"])]
 
 
 # ---- compose ----------------------------------------------------------------------------------

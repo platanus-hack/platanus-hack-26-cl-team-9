@@ -5,7 +5,7 @@ import { buildRegionalLayers, loadRegionalGrid, regionalFromDocuments, regionalT
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
-import { GridSources } from "./GridSources";
+import { GridSources, type SourceSelection } from "./GridSources";
 import { composeGrid, loadContextDocument } from "./gridsApi";
 import { HelpPanel, SourcesPanel } from "./Legend";
 import { MapLegend } from "./MapLegend";
@@ -28,7 +28,7 @@ import "./cascade.css";
 import "../session/session.css";
 
 type Tab = "red" | "sim" | "datos";
-type View = "tabs" | "sources" | "grids" | "help" | "session";
+type View = "tabs" | "sources" | "help" | "session";
 const TABS: [Tab | "avoid" | "validation", string][] = [["red", "Red"], ["sim", "Simulación"], ["avoid", "Qué lo habría evitado"], ["validation", "Validación"]];
 // In a session the two placeholder tabs are left out so Datos fits the 440 px panel.
 const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"]];
@@ -74,7 +74,7 @@ export function CascadeApp() {
   // The grid composed by the backend from the documents picked in "Fuentes de la grilla"; null: the app cache.
   const [composed, setComposed] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
-  const contextKeys = useRef<string[]>([]); // countries ticked in Fuentes de la grilla, kept for the rail's scenarios
+  const sourcesRef = useRef<SourceSelection>({ chile: true, context: [] }); // ticked in Fuentes de la grilla, kept for the rail's scenarios
   const pickRef = useRef<((lon: number, lat: number) => void) | null>(null); // map pick mode of the Datos tab
 
   const point = index?.points.find((p) => p.id === pointId);
@@ -145,15 +145,17 @@ export function CascadeApp() {
   }
 
   /** Why: the grid on the map is whatever the user picked from the stored documents, not only the app cache. */
-  async function composeFromSources(point: string, context: string[]) {
+  async function composeFromSources(point: string, picked: SourceSelection) {
     setComposing(true);
-    contextKeys.current = context;
+    sourcesRef.current = picked;
     try {
-      const grid = await composeGrid({ point, context });
+      const grid = await composeGrid({ point, context: picked.context });
       const docs = await Promise.all(grid.context.map(loadContextDocument));
-      setNetwork(grid.network); setBuses(grid.operating); setRegional(regionalFromDocuments(docs));
-      setError(null);
-      setComposed(`${grid.label}, ${docs.length} ${docs.length === 1 ? "país" : "países"} de contexto`);
+      setNetwork(picked.chile ? grid.network : { nodes: [], lines: [] }); setBuses(picked.chile ? grid.operating : {});
+      setRegional(regionalFromDocuments(docs));
+      setError(null); setSelection(null);
+      if (!picked.chile) { setCut(null); setLoaded(null); setTab("red"); }
+      setComposed(`${picked.chile ? grid.label : "sin Chile"}, ${docs.length} ${docs.length === 1 ? "país" : "países"} de contexto`);
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -375,7 +377,7 @@ export function CascadeApp() {
     setNotice(null);
     setPointId(next.point);
     setCut(next.cut);
-    if (composed) void composeFromSources(next.point, contextKeys.current); // the composed grid follows the chosen hour
+    if (composed) void composeFromSources(next.point, sourcesRef.current); // the composed grid follows the chosen hour
     chooseTab("sim");
   }
 
@@ -402,9 +404,7 @@ export function CascadeApp() {
         <button className={view === "sources" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "sources" ? "tabs" : "sources")}>
           <Icon><ellipse cx="8" cy="4" rx="5.5" ry="2" /><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" /></Icon><span>Fuentes y supuestos</span>
         </button>
-        <button className={view === "grids" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "grids" ? "tabs" : "grids")}>
-          <Icon><path d="M2 3.5h5v4H2zM9 3.5h5v4H9zM5.5 9.5h5v4h-5zM4.5 7.5v1M11.5 7.5v1M8 8.5v1" /></Icon><span>Fuentes de la grilla</span>
-        </button>
+        <GridSources composed={composed} busy={composing} apply={(picked) => void composeFromSources(pointId, picked)} reset={backToCache} locked={!!s.sid} />
         <button className={view === "session" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "session" ? "tabs" : "session")}>
           <Icon><path d="M6.5 9.5l3-3M7.2 4.3l1.1-1.1a2.6 2.6 0 0 1 3.7 3.7l-1.1 1.1M8.8 11.7l-1.1 1.1a2.6 2.6 0 0 1-3.7-3.7l1.1-1.1" /></Icon><span>Sesión compartida</span>
         </button>
@@ -432,7 +432,7 @@ export function CascadeApp() {
             </>
           ) : (
             <div className="crumbs view-head">
-              <h1>{view === "sources" ? "Fuentes y supuestos" : view === "grids" ? "Fuentes de la grilla" : view === "session" ? "Sesión compartida" : "Ayuda"}</h1>
+              <h1>{view === "sources" ? "Fuentes y supuestos" : view === "session" ? "Sesión compartida" : "Ayuda"}</h1>
               <button className="text-btn" onClick={() => setView("tabs")}>Cerrar</button>
             </div>
           )}
@@ -442,7 +442,6 @@ export function CascadeApp() {
           {view === "session" && <SessionBar s={s} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}
           {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
-          {view === "grids" && <GridSources composed={composed} busy={composing} apply={(keys) => void composeFromSources(pointId, keys)} reset={backToCache} locked={!!s.sid} />}
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={regional} />}
           {view === "tabs" && !network && !error && <Loading text="Cargando la red" />}
           {view === "tabs" && network && selection && (
