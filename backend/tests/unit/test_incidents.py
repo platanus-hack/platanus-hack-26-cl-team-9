@@ -32,8 +32,9 @@ def world():
     return default_world(str(PROCESSED))
 
 
-def run(world, scenario: str, seed: int = 1, **kw):
-    sim = Simulation(world, RunConfig(template=scenario, policy="C", seed=seed, **kw))
+def run(world, scenario: str, seed: int = 1, stochastic: bool = False, **kw):
+    # scripted by default, like the API: the card must be the incident's own, not the theatre's chance
+    sim = Simulation(world, RunConfig(template=scenario, policy="C", seed=seed, stochastic=stochastic, **kw))
     while not sim.finished:
         sim.step()
     return sim
@@ -65,11 +66,22 @@ def test_every_scenario_effect_resolves_on_the_real_network(world):
 
 
 def test_v10_huatacondo_is_absorbed_or_contained(world):
-    for seed in (1, 2, 3):
+    for seed in range(1, 9):
         rep = run(world, "huatacondo-2026", seed).report()
         assert rep["consequence"]["worst_level"] in {"L0", "L1"}
         card = rep["incident"]["consequence_card"]
         assert card["consequence_level"] in {"L0", "L1"} and card["notices"] == list(NOTICES)
+
+
+def test_a_scripted_incident_has_no_unplanned_events_so_the_small_ones_stay_small(world):
+    # with the theatre's chance on, seed 6 added an unplanned demand surge and renewable drop and made the
+    # 40 MW UK counter-example an L2; the card would then blame the incident for events it did not script
+    for scenario in ("reino-unido-2026", "huatacondo-2026"):
+        for seed in range(1, 9):
+            sim = run(world, scenario, seed)
+            sources = {e["source"] for s in sim.snapshots for e in s["events"]}
+            assert sources <= {"scenario"}, (scenario, seed, sources)
+            assert sim.report()["incident"]["consequence_card"]["consequence_level"] == "L0", (scenario, seed)
 
 
 def test_the_incident_card_uses_an_editable_duration_flagged_as_assumption(world):
@@ -126,6 +138,7 @@ def test_the_api_launches_a_run_inside_a_session_and_rejects_unknown_ids():
     r = c.post(f"/api/v1/sessions/{sid}/attacks/runs", json={"scenario": "huatacondo-2026", "seed": 4})
     assert r.status_code == 201 and r.json()["session_revision"] >= 1
     rid = r.json()["run_id"]
+    assert c.get(f"/api/v1/sessions/{sid}/runs/{rid}/trace").json()["recipe"]["config"]["stochastic"] is False
     assert c.post(f"/api/v1/sessions/{sid}/runs/{rid}/step", json={"cycles": 24}).status_code == 200
     rep = c.get(f"/api/v1/sessions/{sid}/runs/{rid}/report").json()
     assert rep["incident"]["id"] == "huatacondo-2026" and rep["incident"]["adversary"] is False

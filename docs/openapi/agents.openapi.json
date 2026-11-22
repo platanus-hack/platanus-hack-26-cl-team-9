@@ -5351,8 +5351,8 @@
           "stochastic": {
             "type": "boolean",
             "title": "Stochastic",
-            "description": "False turns off the theatre's chance (catalog sizes).",
-            "default": true
+            "description": "False (default): the incident is the script, with its catalog sizes and no unplanned events, so the consequence card is the incident's own. True adds the theatre's chance (unplanned external events, defences that may not act), which then also counts in the card.",
+            "default": false
           },
           "adversary": {
             "anyOf": [

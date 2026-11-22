@@ -52,7 +52,12 @@ class IncidentRunIn(BaseModel):
         "assumption; omitted uses the catalog default.",
     )
     uncertainty: float = Field(1.0, description="0 perfect information, 1 baseline, 2 degraded.")
-    stochastic: bool = Field(True, description="False turns off the theatre's chance (catalog sizes).")
+    stochastic: bool = Field(
+        False,
+        description="False (default): the incident is the script, with its catalog sizes and no unplanned "
+        "events, so the consequence card is the incident's own. True adds the theatre's chance (unplanned "
+        "external events, defences that may not act), which then also counts in the card.",
+    )
     adversary: AdversaryIn | None = Field(
         None, description="Optional seeded abstract adversary. Off by default: the incident is the script."
     )

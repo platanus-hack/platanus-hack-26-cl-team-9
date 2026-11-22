@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(incidents): scripted by default so the card is the incident's own
+
+- **Changed:** `POST /sessions/{sid}/attacks/runs` now defaults `stochastic` to `false`; the web and the MCP tool did not send it, so they follow. `test_incidents.py` runs scripted by default, checks V10 on seeds 1-8 and a new test checks that scripted Huatacondo and UK runs have only `scenario` events and L0 on seeds 1-8.
+- **Why:** Found testing everything end to end. With the theatre's chance on (the old default), unplanned `E1_demand_surge`/`E2_renewable_drop` events landed in the card as if the incident had caused them: the 40 MW UK counter-example gave L1 on seed 7 and L2 on seed 6, and Huatacondo L1 and L2 on those seeds. V10 only passed because the tests looked at seeds 1-3.
+- **Agents:** `stochastic: true` is still allowed and then the card includes the unplanned events; the card does not say which events were the incident's. The policy does not change the peak card (the effect lands at cycle 2, before defence acts) but it does change `indicators` (continuity, TTU, wrong decisions, reserve). `agents.openapi.json` regenerated (the field description changed).
+- **Files:** `backend/src/cascadasen/api/incident_routes.py`, `backend/tests/unit/test_incidents.py`, `docs/attack-sim.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-22 · Merge origin/main into feat/incident-scenarios
 
 - **Changed:** Integrates #95/#96 (a new scenario stops and restarts the timeline) and #82/#94 (blackout cost) with the incident scenarios.
