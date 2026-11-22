@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): help text and styles after merging the substation shutdown
+
+- **Changed:** Ayuda (`Legend.tsx`) no longer says substations can only be switched off in a session: the second click or **Apagar subestación** works with and without one, and it says what switching off does (out of service with its demand and generation; in a session, all its lines open). `cascade.css` drops the disabled-button style and a stray comment left from the session-only button. The substation card reads "apagada" instead of "sin suministro" while the user has it off.
+- **Why:** Leftovers from rebasing the select-then-cut branch onto #67 and #70, which already take substations out of service.
+- **Agents:** No disabled primary buttons remain in the cascade cards.
+- **Files:** `web/src/cascade/{Legend.tsx,SelectionCard.tsx,cascade.css}`.
+
 ## 2026-11-21 · docs(mapa3): document the select-then-cut flow and substation off
 
 - **Changed:** `docs/mapa3.md` sections 1.1 (A9), 1.2 (A9), 4 items 4 and 9 (two clicks on top of the substation outage of #67 and #70, buttons renamed), 8 (`clicks.ts`, new `outage.ts`), 9 (troubleshooting rows "Click does nothing", "Double click does not cut") and 11 ("Cuts in a session": substation off in batches of 3, on). `web/README.md` usage line.

@@ -283,8 +283,6 @@
 /* Primary action: white fill like the play button. Red stays reserved for faults and overloads. */
 .shell .primary-btn { height: 32px; flex-shrink: 0; padding: 0 14px; background: var(--fg); border: 0; border-radius: 0; color: #18191b; font-size: 13px; font-weight: 600; line-height: 16px; cursor: pointer; }
 .shell .primary-btn:hover { background: var(--fg-2); }
-.shell .primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-/* A disabled button gets no pointer events: its tooltip hangs on this wrapper. */
 .shell .secondary-btn { height: 28px; flex-shrink: 0; padding: 0 10px; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 16px; cursor: pointer; }
 .shell .secondary-btn:hover { border-color: #ffffff40; color: var(--fg); }
 .shell .cut-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

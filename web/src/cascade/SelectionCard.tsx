@@ -91,7 +91,7 @@ function NodeCard(p: Props & { node: string }) {
         <div className="title"><h3>{placeName(n.name)}</h3></div>
         <button className="text-btn" onClick={p.clear}>Cerrar</button>
       </div>
-      <p className="meta">{Math.round(n.kv)} kV · {zoneName(n.zone)}{dark ? " · sin suministro" : ""}</p>
+      <p className="meta">{Math.round(n.kv)} kV · {zoneName(n.zone)}{p.shutDown ? " · apagada" : dark ? " · sin suministro" : ""}</p>
       <div className="mini-figures">
         <div><div className="value-row"><b>{int(b?.gen_mw ?? 0)} <small>MW</small></b><Info tip={opTip("Generación")} /></div><span>generación</span></div>
         <div><div className="value-row"><b>{int(b?.load_mw ?? 0)} <small>MW</small></b><Info tip={opTip("Demanda")} /></div><span>demanda</span></div>
