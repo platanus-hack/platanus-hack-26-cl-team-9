@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(cache): one BoundedMap for the session caches, the run cache and the campaign store
+- **Changed:** New `application/cache.py::BoundedMap[K, V]` (`get(key, *, touch=True)`, `put`, `pop`, `drop(match)`, `len`, `RLock`, evicts the oldest past `size`). `sessions._Lru` is deleted (`SessionService._docs/_worlds/_views` use `BoundedMap`); `RunCache` stores its runs in one and keeps its 64 striped `lock(key)` locks unchanged; `CampaignRunner.campaigns` is a `BoundedMap(MAX_CAMPAIGNS)`.
+- **Changed:** New `backend/tests/unit/test_cache.py` (written against `_Lru` first: miss, oldest eviction, `get` renews, `put` renews, `drop`).
+- **Why:** F10 of the duplication report. Eviction order is unchanged. Campaign reads use `touch=False` so the campaign store stays FIFO as before; the only difference is that its dict is now lock-protected.
+- **Agents:** Use `BoundedMap` for any new bounded cache. Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 266 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/application/cache.py`, `sessions.py`, `run_experiment.py`, `run_campaign.py`, `backend/tests/unit/test_cache.py`.
 ## 2026-11-22 · refactor(serialization): dumps_compact and write_json replace nine copies of the compact JSON dump
 - **Changed:** New `domain/serialization.py::dumps_compact(obj, **kw)` (`ensure_ascii=False`, `separators=(",", ":")`) and `infrastructure/files.py::write_json(path, obj) -> int` (creates parent folders, writes UTF-8, returns bytes). Used by `document_store._encode`, `theater/audit.canonical` (`sort_keys=True, default=str`), `snapshot_repository.save`, `exporters`, `sim_fixtures._write` and `cache_builder`; the private `_write` of `cache_builder` is gone.
 - **Changed:** New `backend/tests/unit/test_serialization_golden.py` with literal golden bytes for `_encode` and `canonical` (written and passing before the refactor) and a `write_json` check.

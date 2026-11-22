@@ -12,13 +12,12 @@ from __future__ import annotations
 import copy
 import re
 import secrets
-import threading
 import time
-from collections import OrderedDict
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from cascadasen.application.cache import BoundedMap
 from cascadasen.application.run_experiment import RunCache, RunManager, RunNotFoundError, iso_utc, run_config
 from cascadasen.application.simulation_service import theater_network_view
 from cascadasen.application.theater_world import SessionWorld
@@ -52,30 +51,6 @@ class SessionLimitError(ValueError):
     """A per-session limit was reached (HTTP 422)."""
 
 
-class _Lru:
-    def __init__(self, size: int) -> None:
-        self.size, self._items, self._lock = size, OrderedDict(), threading.Lock()
-
-    def get(self, key: Any) -> Any:
-        with self._lock:
-            if key in self._items:
-                self._items.move_to_end(key)
-                return self._items[key]
-            return None
-
-    def put(self, key: Any, value: Any) -> None:
-        with self._lock:
-            self._items[key] = value
-            self._items.move_to_end(key)
-            while len(self._items) > self.size:
-                self._items.popitem(last=False)
-
-    def drop(self, match: Callable[[Any], bool]) -> None:
-        with self._lock:
-            for key in [k for k in self._items if match(k)]:
-                del self._items[key]
-
-
 class SessionService:
     def __init__(
         self,
@@ -94,9 +69,15 @@ class SessionService:
         self.world, self.physics, self.store, self.cache = world, physics, store, cache
         self.interpreter, self.advisor, self.spec = interpreter, advisor, spec
         self.ttl_s, self.version, self.clock = ttl_s, version, clock
-        self._docs = _Lru(256)  # sid -> (doc, etag): what SSE polls between store heads
-        self._worlds = _Lru(CACHE_SIZE)  # (sid, dataset_revision) -> SessionWorld
-        self._views = _Lru(CACHE_SIZE)  # (sid, dataset_revision) -> network view
+        self._docs: BoundedMap[str, tuple[dict[str, Any], str]] = BoundedMap(
+            256
+        )  # sid -> (doc, etag): what SSE polls between store heads
+        self._worlds: BoundedMap[tuple[str, int], SessionWorld] = BoundedMap(
+            CACHE_SIZE
+        )  # (sid, dataset_revision) -> SessionWorld
+        self._views: BoundedMap[tuple[str, int], dict[str, Any]] = BoundedMap(
+            CACHE_SIZE
+        )  # (sid, dataset_revision) -> network view
 
     # --------------------------------------------------------------- store
     @staticmethod
