@@ -72,7 +72,7 @@ History: until Design v6 this table used the OpenInfraMap voltage hues (magenta 
 
 ### 3.2 Design v5 polish rules (council review of 2026-11-21)
 
-- **Grid:** nav rail 200 px; panel and timeline card at x 212, both 440 px wide; panel at y 12 and as tall as its content (max 742 px); timeline 122 px tall at bottom 12 in every frame. Panel content starts 24 px from the panel edge (header, tabs, cards, rows, source line).
+- **Grid:** nav rail 200 px; panel and timeline card at x 212, both 440 px wide; panel at y 12 and as tall as its content, up to 12 px above the timeline card; timeline 122 px tall at bottom 12 in every frame. Panel content starts 24 px from the panel edge (header, tabs, cards, rows, source line).
 - **Type:** "Chile" 16/20 600; card titles 14/20 600; values 16/20 600 tabular; 12 px secondary text on cards uses muted #A1A2A6, never faint #8A8B90 (4.3:1 fails AA there). Info icons are 14 px with stroke #8A8B90.
 - **Red:** token `--color-fault` #FF5A48. Digits on a filled red badge or pin are #18191B, because white on #FF5A48 is 3.09:1.
 - **Event markers:** one style on the panel, timeline and map: 20 px circles with 11 px 600 digits; the current event is 24 px with a 2 px white ring and no halo.
