@@ -48,8 +48,9 @@ export interface SessionNetwork extends Network {
   baseline: { max_loading: number; overloaded: string[]; load_shed_mw: number; islands: Timeline["summary"]["islands"] };
 }
 /** One substation in POST /api/v1/grids/dependency (docs/dependency.md): criticality measures and people it feeds. */
+/** The criticality fields come only when the request asked for criticality (Criticidad); Dependencia gets the last three. */
 export interface DependencyNode {
-  degree: number; articulation: boolean; own_load_mw: number; isolated_mw: number; collateral_mw: number; collateral_share: number;
-  collateral_people: number; extra_loading: number; lines_stressed: number; criticality: number; band: "alta" | "media" | "baja" | "ninguna";
+  degree?: number; articulation?: boolean; own_load_mw?: number; isolated_mw?: number; collateral_mw?: number; collateral_share?: number;
+  collateral_people?: number; extra_loading?: number; lines_stressed?: number; criticality?: number; band?: "alta" | "media" | "baja" | "ninguna";
   gen_mw: number; people_fed: number; share_of_people: number;
 }

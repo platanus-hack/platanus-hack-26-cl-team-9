@@ -13,7 +13,7 @@ import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourcePick } from "./GridSources";
 import { addBus, addLine, changesOf, countFailures, dropBus, dropChange, dropLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits, setFactor, type Edits, type StressChange, type Target } from "./edits";
 import { composeGrid, loadContextDocument, loadDependency, prepareScenario, simulateGrid, type Prepared, type SimulationResult } from "./gridsApi";
-import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } from "./heat";
+import { HEAT_OPTIONS, heatLayers, heatPoints, heatRequestKey, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
 import { MapLegend } from "./MapLegend";
 import { MapOverlays, type LocatedMarker } from "./MapOverlays";
@@ -189,7 +189,7 @@ export function CascadeApp() {
   }, [located, states]);
 
   const changes = s.sid ? [] : changesOf(edits);
-  const heatKey = `${pointId}|${[...cuts].sort()}|${[...outBuses].sort()}|${JSON.stringify(changes)}`;
+  const heatKey = heatRequestKey(heat, `${pointId}|${[...cuts].sort()}|${[...outBuses].sort()}|${JSON.stringify(changes)}`);
   const heatData = dependency?.key === heatKey ? dependency.nodes : null;
   const darkSet = useMemo(() => new Set(frame?.dark ?? []), [frame]);
   const affected = useMemo(() => (network ? affectedByComuna(darkSet, buses, network, comunas) : { people: 0, rows: [] }), [darkSet, buses, network, comunas]);
@@ -383,12 +383,13 @@ export function CascadeApp() {
     });
   }
 
-  /** Dependency and criticality come from the server, computed on the grid after the changes and their cascade. */
+  /** Dependency and criticality come from the server, computed on the grid after the changes and their cascade.
+   *  Dependencia asks without criticality (milliseconds); only Criticidad waits for one cascade per substation. */
   function _loadHeat() {
     setHeatError(null);
     if (!needsDependency(heat) || dependency?.key === heatKey) return;
     const key = heatKey;
-    loadDependency({ point: pointId, open_lines: cuts, out_buses: outBuses, changes })
+    loadDependency({ point: pointId, open_lines: cuts, out_buses: outBuses, changes, criticality: heat === "criticality" })
       .then((r) => { if (live.current.heatKey === key) setDependency({ key, nodes: r.nodes }); })
       .catch((e) => { if (live.current.heatKey === key) setHeatError(String(e.message)); });
   }

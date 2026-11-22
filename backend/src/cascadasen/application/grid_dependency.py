@@ -2,12 +2,15 @@
 
 Why: the heat maps must describe the grid the user is looking at. With cuts or substations out, the flow changes and so
 does who depends on whom: the changes are applied, their cascade settles, and the measures run on what is left.
-Stateless; the last results are kept in memory because criticality runs one cascade per substation (about 2 s).
+Stateless; the last results are kept in memory because criticality runs one cascade per substation (0.2 to 1.9 s on
+an M4, several times that on production). Dependencia alone (`criticality=False`) skips it and takes milliseconds.
+`warm_workflow` fills the memory at API startup with the base case of every hour and the web's Desastres.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 from collections import OrderedDict
 
 from cascadasen.application.grid_simulation import prepare_edits
@@ -18,31 +21,68 @@ from cascadasen.domain.cascade.tracing import dependency_workflow
 from cascadasen.domain.theater.world import TheaterWorld
 
 CACHE_SIZE = 32  # (point, changes) results kept per process
+# Warmed at API startup with the base case of every hour: the Desastres of web/src/cascade/Scenarios.tsx (Apagón 25F,
+# Apagón 2011 Ancoa, Terremoto 2010 Charrúa) as (point, open_lines, out_buses). Keep in sync with that list.
+DISASTERS: list[tuple[str, list[str], list[str]]] = [
+    ("feb2025-1500", ["R239"], []),
+    ("nov2026-2000", ["R006"], []),
+    ("nov2026-2000", [], ["B043"]),
+]
 
 
 class GridDependency:
     def __init__(self, world: TheaterWorld) -> None:
         self.world = world
         self._cache: OrderedDict[tuple, dict] = OrderedDict()
+        self._lock = threading.Lock()  # request threads and the startup warm-up share the cache
 
     def dependency_workflow(
-        self, point: str, open_lines: list[str], out_buses: list[str], changes: list[dict] | None = None
+        self,
+        point: str,
+        open_lines: list[str],
+        out_buses: list[str],
+        changes: list[dict] | None = None,
+        *,
+        criticality: bool = True,
     ) -> dict:
+        """`criticality=False` returns only who feeds whom (`gen_mw`, `people_fed`, `share_of_people`), the same
+        values as the full answer, for the same substations."""
         key = (
             point,
             tuple(sorted(set(open_lines))),
             tuple(sorted(set(out_buses))),
             json.dumps(changes or [], sort_keys=True),
+            criticality,
         )
-        if key not in self._cache:
-            self._cache[key] = self._compute(point, open_lines, out_buses, changes)
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit is not None:
+                self._cache.move_to_end(key)
+                return hit
+        out = self._compute(
+            point, open_lines, out_buses, changes, criticality=criticality
+        )  # not under the lock
+        with self._lock:
+            self._cache[key] = out
+            self._cache.move_to_end(key)
             if len(self._cache) > CACHE_SIZE:
                 self._cache.popitem(last=False)
-        self._cache.move_to_end(key)
-        return self._cache[key]
+        return out
+
+    def warm_workflow(self) -> None:
+        """Compute the full answer (with criticality) for the base case of every hour and the Desastres, so those maps
+        are instant even right after a deploy. Called once at API startup in a background thread."""
+        for point, open_lines, out_buses in [(p, [], []) for p in self.world.points()] + DISASTERS:
+            self.dependency_workflow(point, open_lines, out_buses)
 
     def _compute(
-        self, point: str, open_lines: list[str], out_buses: list[str], changes: list[dict] | None
+        self,
+        point: str,
+        open_lines: list[str],
+        out_buses: list[str],
+        changes: list[dict] | None,
+        *,
+        criticality: bool = True,
     ) -> dict:
         _, edited, kept, _ = prepare_edits(
             self.world, point, open_lines, out_buses, allow_empty=True, changes=changes
@@ -52,8 +92,13 @@ class GridDependency:
             r["bus"]: r
             for r in dependency_workflow(edited.net, settled.gen, settled.load, settled.people, still_open)
         }
+        if criticality:
+            rows = criticality_workflow(edited.net, settled, still_open)
+        else:  # the substations criticality would score: those with a line still in service
+            in_service = {b for ln in edited.net.lines if ln.id not in still_open for b in (ln.a, ln.b)}
+            rows = {bus: {} for bus in sorted(in_service)}
         nodes = {}
-        for bus, row in criticality_workflow(edited.net, settled, still_open).items():
+        for bus, row in rows.items():
             key = f"B{bus:03d}"
             extra = fed.get(key, {})
             nodes[key] = {

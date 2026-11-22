@@ -47,7 +47,7 @@ Each one is stated elsewhere in the docs; this list gathers them.
 - **Not predictions.** Cyber scenarios are consequence estimates; no public measurement exists to test them (`docs/idea.md` section 5). Cost is a regulatory valuation (VoLL 8.79 US$/kWh), not a measured loss (`docs/engine.md`, "Cost").
 - **No user validated.** The user and decision in `docs/idea.md` section 3.1 are a hypothesis.
 - **Tests.** The four Chilean source adapters have no unit test, and neither does `useSession`, `useAssistant` nor `CascadeApp` (867 lines). The web bundle is one chunk of about 3.1 MB. `npm ci` prints an `npm audit` notice that has not been triaged, and `npm run build` warns about a chunk over 500 kB.
-- **Access.** No authentication anywhere: the session id in the path is the credential (`docs/adr/0004-sessions-on-s3-by-url-capability.md`), and CORS allows any origin (`api/app.py:74`).
+- **Access.** No authentication anywhere: the session id in the path is the credential (`docs/adr/0004-sessions-on-s3-by-url-capability.md`), and CORS allows any origin (`api/app.py:105`).
 - **UI not built:** the tabs "Qué lo habría evitado" and "Validación" (disabled or hidden, `docs/mapa3.md` section 4), and the defence-mode and cause selectors described in `docs/idea.md` section 3.2.
 - **Shared sessions are hidden in the web** since #101 (`docs/mapa3.md` section 11). The API, the MCP server and the assistant still use them.
 - **Data.** The IDE Energía licence was not checked (`docs/datasets.md` section 2.3). The raw downloads are not committed; `data/processed/` is.
