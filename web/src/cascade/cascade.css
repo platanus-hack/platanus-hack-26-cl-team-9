@@ -60,6 +60,28 @@
 .shell .crumbs { display: flex; align-items: center; gap: 8px; height: 28px; padding-left: 12px; }
 .shell .crumbs h1 { margin: 0; color: var(--fg); font-size: 16px; font-weight: 600; line-height: 20px; white-space: nowrap; }
 .shell .crumbs span { color: var(--faint); font-size: 14px; line-height: 18px; white-space: nowrap; }
+/* Network picker (issue #49): the header's h1 opens the list of networks; one network is on the map at a time. */
+.shell .picker { position: relative; min-width: 0; }
+.shell .picker h1 { min-width: 0; flex-shrink: 1; }
+.shell .picker > span { min-width: 0; }
+.shell .picker-btn { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 0; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.shell .picker-btn[aria-disabled] { cursor: default; }
+.shell .picker-btn:hover:not([aria-disabled]) { color: var(--fg-2); }
+.shell .picker-pop { position: absolute; z-index: 5; top: 32px; left: 4px; width: 300px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid var(--border-strong); }
+.shell .picker-pop h3 { margin: 6px 6px 2px; color: var(--muted); font-size: 12px; font-weight: 600; line-height: 16px; }
+.shell .picker-pop h3:first-child { margin-top: 0; }
+.shell .picker-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; flex: 1; height: 30px; padding: 0 8px; background: none; border: 0; color: var(--fg-2); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; }
+.shell .picker-item:hover { background: var(--selected); }
+.shell .picker-item.on { background: var(--selected); color: var(--fg); font-weight: 500; }
+.shell .picker-item.upload { margin-top: 6px; border-top: 1px solid var(--border); color: var(--muted); }
+.shell .picker-meta { flex-shrink: 0; color: var(--faint); font-size: 11px; font-weight: 400; }
+.shell .picker-row { display: flex; align-items: center; gap: 8px; padding-right: 6px; }
+.shell .data-form.upload-form { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.shell .upload-form code { font-family: var(--font-mono); font-size: 11px; }
+.shell .upload-form .note ul { margin: 4px 0 0; padding-left: 16px; }
+.shell .upload-form .note p { margin: 0; }
+.shell .row-btns { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.shell .upload-form .notice { flex-direction: column; }
 .shell .view-head { justify-content: space-between; height: 40px; padding: 0 12px 12px; }
 .shell .tabs { display: flex; gap: 4px; margin: 0; padding-top: 6px; border: 0; }
 .shell .tabs button { height: 38px; padding: 0 12px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--faint); font-size: 14px; line-height: 18px; white-space: nowrap; cursor: pointer; }

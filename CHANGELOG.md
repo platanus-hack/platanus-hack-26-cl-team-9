@@ -1,6 +1,27 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(map): one network at a time, per-country camera, selector and upload
+
+- **Changed:** Mapa 3 draws one network at a time.
+  - **Selector:** the panel header (`NetworkPicker.tsx`) picks Chile, a country with a drawn layer, or a network uploaded in this browser. `?pais=PER` opens Peru framed (`url.ts` writes and drops `pais`).
+  - **Camera:** `BaseMap.setTarget(target, ms)` flies to the network's frame keeping 2D/3D. On Mapbox it swaps `maxBounds`, the min zoom (frame − 1.5) and the over-land check to that country; the offline map gets the same frame and zoom limits.
+  - **Loading:** `regional.ts` loads one country on demand (`loadCountryGrid`, replaces `loadRegionalGrid`) and its outline (`loadOutline`).
+- **Changed:** Networks other than Chile's are view only. The Simulación tab and the Escenarios tree are disabled with `VIEW_ONLY`, and `?cut=` is ignored. The timeline, legend and pins are hidden. The Red tab shows `latam/manifest.json` figures (`summaryFromManifest`) or computes them from an upload (`summaryFromGrid`).
+- **Changed:** Upload ("Subir una red…", `UploadNetwork.tsx`):
+  - the form takes a file and a required ISO3 country, and asks to confirm when the file names another country;
+  - `upload.ts` `parseUpload` accepts the regional GeoJSON v2 or the v1 JSON, checks it and refuses it with a list of reasons;
+  - `uploadStore.ts` keeps uploads in IndexedDB; "Quitar" removes one.
+- **Changed:** Fixed the offline map's frame offset. `_viewState` spread a viewport and lost its longitude, so wide frames slid under the panel.
+- **Why:** Issue #49 parts B and C, with the user's choices: a selector only; both upload formats; the Red figures follow the network.
+- **Agents:**
+  - Only `networkId === "CHL"` draws `buildCascadeLayers`; the other networks draw `buildRegionalLayers` only. The cascade no longer takes a `regional` param from the app.
+  - A session forces CHL and locks the selector.
+  - Names from an upload are text only: React text and the deck.gl tooltip `text` field, never `html`.
+  - Tested by `upload.test.ts`, which includes Brazil's real `network.json` and a malicious name, and by `url.test.ts` (`pais`).
+  - Checked in the browser on the offline basemap (no Mapbox token on this machine): the five countries and an upload, in 2D and 3D, with no console errors. **The Mapbox path was not run in a browser.**
+- **Files:** `web/src/cascade/{CascadeApp,NetworkPicker,UploadNetwork,NetworkPanel}.tsx`, `web/src/cascade/{networkSummary,url}.ts`, `web/src/cascade/cascade.css`, `web/src/map/{baseMap,regional,upload,uploadStore}.ts`, tests.
+
 ## 2026-11-22 · feat(map): network catalog, camera bounds from data and ISO3 list
 
 - **Changed:** New pure modules:

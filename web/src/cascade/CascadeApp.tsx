@@ -1,17 +1,24 @@
 import type { Layer, PickingInfo } from "@deck.gl/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
-import { buildRegionalLayers, loadRegionalGrid, regionalTooltip, type RegionalGrid } from "../map/regional";
+import { BUILT_IN, DEFAULT_COUNTRY, isUpload, networkFromParam, UPLOAD_PREFIX, VIEW_ONLY, type NetworkInfo } from "../map/country";
+import { cameraTarget, type LonLat } from "../map/countryBounds";
+import { countryName } from "../map/iso3";
+import { buildRegionalLayers, loadCountryGrid, loadOutline, regionalCountries, regionalTooltip, type RegionalGrid } from "../map/regional";
+import { deleteUpload, listUploads, newUploadId, saveUpload, type StoredNetwork } from "../map/uploadStore";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { HelpPanel, SourcesPanel } from "./Legend";
 import { MapLegend } from "./MapLegend";
 import { MapOverlays, type LocatedMarker } from "./MapOverlays";
-import { NetworkPanel } from "./NetworkPanel";
+import { NetworkPanel, type Origin } from "./NetworkPanel";
+import { NetworkPicker } from "./NetworkPicker";
+import { summaryFromGrid, summaryFromManifest } from "./networkSummary";
 import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
+import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, SUBSTATION_PREFIX, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
@@ -27,12 +34,15 @@ import "./cascade.css";
 import "../session/session.css";
 
 type Tab = "red" | "sim" | "datos";
-type View = "tabs" | "sources" | "help" | "session";
+type View = "tabs" | "sources" | "help" | "session" | "upload";
 const TABS: [Tab | "avoid" | "validation", string][] = [["red", "Red"], ["sim", "Simulación"], ["avoid", "Qué lo habría evitado"], ["validation", "Validación"]];
 // In a session the two placeholder tabs are left out so Datos fits the 440 px panel.
 const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"]];
 const SOON = "Todavía no está en la app: el motor aún no calcula esta vista.";
 const PINNED = "En una sesión el punto está fijo; corta y repara líneas en el mapa y en Simulación.";
+const SESSION_NETWORK = "Una sesión compartida usa la red de Chile.";
+// Networks shipped with the build: Chile plus every country whose drawn layer exists (docs/regional.md).
+const AVAILABLE: NetworkInfo[] = BUILT_IN.filter((n) => n.id === DEFAULT_COUNTRY || regionalCountries.includes(n.id));
 const FLOW_PERIOD_S = 3.0;
 const FLOW_CYCLE = 1 + 2 / 3;
 
@@ -49,7 +59,9 @@ export function CascadeApp() {
   // ?point=<id>&cut=<line id | sub-<bus id>>&vista=3d&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
   const params = useMemo(() => new URLSearchParams(location.search), []);
   const s = useSession();
-  const startCut = s.sid ? null : params.get("cut"); // a session owns its cut
+  // ?pais=<ISO3> opens that country's network; a session is always Chile's (its API is Chile-only).
+  const startNetwork = s.sid ? DEFAULT_COUNTRY : networkFromParam(params.get("pais"), AVAILABLE.map((n) => n.id));
+  const startCut = s.sid || startNetwork !== DEFAULT_COUNTRY ? null : params.get("cut"); // a session owns its cut
   const [index, setIndex] = useState<Index | null>(null);
   const [pointId, setPointId] = useState(params.get("point") ?? DEFAULT_POINT);
   const [network, setNetwork] = useState<Network | null>(null);
@@ -72,6 +84,16 @@ export function CascadeApp() {
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const pickRef = useRef<((lon: number, lat: number) => void) | null>(null); // map pick mode of the Datos tab
+  // One network on the map at a time (issue #49): Chile's (simulated) or a view-only one, built-in or uploaded.
+  const [networkId, setNetworkId] = useState(startNetwork);
+  const [uploads, setUploads] = useState<StoredNetwork[]>([]);
+  const [shown, setShown] = useState<{ id: string; grid: RegionalGrid } | null>(null);
+  const networks = useMemo<NetworkInfo[]>(() => [...AVAILABLE, ...uploads.map((u) => (
+    { id: `${UPLOAD_PREFIX}${u.id}`, country: u.country, name: u.name, system: `Red subida · ${countryName(u.country)}`, simulable: false, uploaded: true }
+  ))], [uploads]);
+  const current = networks.find((n) => n.id === networkId) ?? AVAILABLE[0];
+  const isChile = networkId === DEFAULT_COUNTRY;
+  const shownGrid = !isChile && shown?.id === networkId ? shown.grid : null;
 
   const point = index?.points.find((p) => p.id === pointId);
   const timeline = loaded?.timeline ?? null;
@@ -97,12 +119,12 @@ export function CascadeApp() {
     return out;
   }, [located, states]);
 
-  const [regional, setRegional] = useState<RegionalGrid | null>(null);
-  const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional, colorMode) : []), [regional, colorMode]);
+  const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, colorMode) : []), [shownGrid, colorMode]);
 
   const hasCascade = cuts.length > 0 && !!timeline && timelineReady && timeline.events.length > 1;
-  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine });
-  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine };
+  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine, isChile });
+  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine, isChile };
+  const fitted = useRef<string | null>(null); // the network the camera last flew to
   const prevSid = useRef(s.sid);
   const clickMemory = useRef(NO_CLICK);
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -110,7 +132,10 @@ export function CascadeApp() {
   const timelineRequest = useRef("");
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
-  useEffect(() => { loadRegionalGrid().then(setRegional).catch((e) => console.error("No se pudo cargar la red regional", e)); }, []);
+  useEffect(() => { listUploads().then(setUploads).catch(() => { /* no local storage: uploads last for the visit */ }); }, []);
+  useEffect(() => { if (s.sid && networkId !== DEFAULT_COUNTRY) chooseNetwork(DEFAULT_COUNTRY); }, [s.sid]);
+  useEffect(() => _loadShown(), [networkId, uploads]);
+  useEffect(() => _fitNetwork(), [networkId, network, shownGrid]);
   useEffect(() => { if (!s.sid) _loadPoint(); }, [pointId, index, s.sid]);
   useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, cut, network, s.sid]);
   useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
@@ -119,7 +144,7 @@ export function CascadeApp() {
   useEffect(() => _mountMap(), []);
   useEffect(() => { baseMap.current?.setMode(mode); }, [mode]);
   useEffect(() => _animate(), []);
-  useEffect(() => { _syncUrl(); }, [pointId, cut, mode, s.sid]);
+  useEffect(() => { _syncUrl(); }, [pointId, cut, mode, s.sid, networkId]);
   useEffect(() => _keyboard(), []);
   // A new selection opens at the top of the panel, so bring the top back into view if the panel was scrolled.
   useEffect(() => { if (selection) panelBodyRef.current?.scrollTo({ top: 0 }); }, [selection]);
@@ -164,8 +189,66 @@ export function CascadeApp() {
     else if (was && !s.sid) { setCut(null); setLoaded(null); setTab((x) => (x === "datos" ? "red" : x)); }
   }
   function _syncUrl() {
-    const search = syncedSearch(location.search, { pointId, cut, mode, sid: s.sid });
+    const search = syncedSearch(location.search, { pointId, cut, mode, sid: s.sid, country: isUpload(networkId) ? DEFAULT_COUNTRY : networkId });
     history.replaceState(null, "", location.pathname + search + location.hash);
+  }
+
+  /** The view-only network: an uploaded one is already in memory, a built-in country is fetched once (regional.ts). */
+  function _loadShown() {
+    if (networkId === DEFAULT_COUNTRY) return;
+    if (isUpload(networkId)) {
+      const u = uploads.find((x) => `${UPLOAD_PREFIX}${x.id}` === networkId);
+      if (u) setShown({ id: networkId, grid: u.grid });
+      return;
+    }
+    let stale = false;
+    loadCountryGrid(networkId).then((grid) => { if (!stale) setShown({ id: networkId, grid }); })
+      .catch((e) => { if (!stale) setError(`No se pudo cargar la red de ${current.name}: ${e.message}`); });
+    return () => { stale = true; };
+  }
+
+  /**
+   * Flies to the network once it is loaded: the frame comes from its buses, the limits from its country's outline
+   * (countryBounds.ts). The first fit (page load, `?pais=`) jumps; later ones fly. Uploads get no land check: their
+   * country is only declared.
+   */
+  function _fitNetwork() {
+    const map = baseMap.current;
+    if (!map || fitted.current === networkId) return;
+    const buses: LonLat[] | null = networkId === DEFAULT_COUNTRY ? network?.nodes.map((n) => [n.lon, n.lat] as LonLat) ?? null : shownGrid?.substations.map((x) => x.position) ?? null;
+    if (!buses?.length) return;
+    const first = fitted.current === null;
+    const key = networkId;
+    fitted.current = key;
+    (isUpload(key) ? Promise.resolve(null) : loadOutline(current.country)).then((outline) => {
+      const target = cameraTarget(buses, outline);
+      if (target && fitted.current === key) map.setTarget(target, first ? 0 : undefined);
+    });
+  }
+
+  /** Shows another network: the previous one leaves the map. Only Chile's can be simulated, so others drop the cut. */
+  function chooseNetwork(id: string) {
+    setNetworkId(id);
+    setSelection(null);
+    setNotice(null);
+    setView("tabs");
+    if (id !== DEFAULT_COUNTRY) { setCut(null); setPlaying(false); setTab("red"); setColorMode("voltage"); }
+  }
+
+  function addUpload(n: UploadedNetwork) {
+    const stored: StoredNetwork = { id: newUploadId(), name: n.name, country: n.country, grid: n.grid, savedAt: new Date().toISOString() };
+    const id = `${UPLOAD_PREFIX}${stored.id}`;
+    setUploads((u) => [...u, stored]);
+    setShown({ id, grid: stored.grid });
+    chooseNetwork(id);
+    saveUpload(stored).catch(() => setNotice("La red se muestra, pero este navegador no permitió guardarla: se perderá al recargar la página."));
+  }
+
+  function removeUpload(id: string) {
+    const raw = id.slice(UPLOAD_PREFIX.length);
+    setUploads((u) => u.filter((x) => x.id !== raw));
+    if (networkId === id) chooseNetwork(DEFAULT_COUNTRY);
+    deleteUpload(raw).catch(() => { /* not stored: nothing to delete */ });
   }
 
   function _mountMap() {
@@ -194,14 +277,16 @@ export function CascadeApp() {
 
   function _tooltip(info: PickingInfo) {
     const { network: net, frame: f, buses: b } = live.current;
-    if (!info.object || !net) return null;
+    if (!info.object) return null;
     // deck.gl puts the tooltip at the pointer and lets it run off the map: place it beside the pointer and flip it near the right and bottom edges.
     const box = mapRef.current;
     const flipX = info.x > (box?.clientWidth ?? Infinity) - 340, flipY = info.y > (box?.clientHeight ?? Infinity) - 120;
     const transform = `translate(${flipX ? `calc(${info.x - 12}px - 100%)` : `${info.x + 12}px`}, ${flipY ? `calc(${info.y - 12}px - 100%)` : `${info.y + 12}px`})`;
     const style = { background: "#1E1F21F7", color: "#E6E6E8", border: "1px solid #FFFFFF1A", borderRadius: "0", padding: "8px 10px", font: "12px/16px var(--font-sans)", whiteSpace: "pre-line", fontVariantNumeric: "tabular-nums", maxWidth: "320px", transform };
     const layer = info.layer?.id ?? "";
+    // `text`, never `html`: names from an uploaded file are shown as typed, not interpreted.
     if (layer.startsWith("regional-")) return { text: regionalTooltip(layer, info.object) ?? "", style };
+    if (!net) return null;
     if (layer.startsWith("lines")) {
       const obj = info.object as { id?: string; line?: { id: string } };
       const id = obj.line?.id ?? obj.id!;
@@ -220,6 +305,7 @@ export function CascadeApp() {
   function _animate() {
     let raf = 0;
     let last = performance.now();
+    let drawn: Layer[] | null = null; // a view-only network's layers do not animate: set them only when they change
     const tick = (now: number) => {
       const v = live.current;
       const dt = Math.min(0.1, (now - last) / 1000);
@@ -231,12 +317,16 @@ export function CascadeApp() {
         if (next >= v.duration) setPlaying(false);
       }
       const map = baseMap.current;
-      if (map && v.network && v.frame) {
+      if (map && !v.isChile) {
+        if (drawn !== v.regionalLayers) { map.setLayers(v.regionalLayers); drawn = v.regionalLayers; }
+        _placeOverlays(map);
+      } else if (map && v.network && v.frame) {
+        drawn = null;
         const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
         const zoom = map.camera().zoom;
         const sel = v.selection;
         map.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame: v.frame, time, colorMode: v.colorMode, selectedNode: sel?.kind === "node" ? sel.id : null,
-          selectedLine: sel?.kind === "line" ? sel.id : null, mode: v.mode, zoom, toggles: v.toggles, regional: v.regionalLayers }));
+          selectedLine: sel?.kind === "line" ? sel.id : null, mode: v.mode, zoom, toggles: v.toggles }));
         _placeOverlays(map);
       }
       raf = requestAnimationFrame(tick);
@@ -366,6 +456,7 @@ export function CascadeApp() {
     setPicking(true);
   }
   function openScenario(next: ScenarioChoice) {
+    if (!current.simulable) return;
     setSelection(null);
     setNotice(null);
     setPointId(next.point);
@@ -380,13 +471,15 @@ export function CascadeApp() {
   const shutDown = selection?.kind === "node" && (s.sid
     ? selectedNodeLines.length > 0 && selectedNodeLines.every((l) => cuts.includes(l))
     : cut === `${SUBSTATION_PREFIX}${selection.id}`);
-  const sourceNote = hasLabels ? "Mapa base: Mapbox" : "Contorno: data/processed/chile.geojson";
+  const sourceNote = hasLabels ? "Mapa base: Mapbox" : isChile ? "Contorno: data/processed/chile.geojson" : "Contornos: data/processed/latam/outlines.geojson (geoBoundaries)";
+  const shownSummary = shownGrid ? (shownGrid.countries[0] ? summaryFromManifest(shownGrid.countries[0]) : summaryFromGrid(shownGrid)) : null;
+  const shownOrigin = shownGrid ? originOf(current, shownGrid) : undefined;
 
   return (
     <div className="shell">
       <div className="map" ref={mapRef} />
       <div className="map-overlays" ref={overlayRef}>
-        {network && <MapOverlays markers={located} states={mapStates} visible={visible} network={network} impact={impact} showCities={!hasLabels} select={seek} />}
+        {isChile && network && <MapOverlays markers={located} states={mapStates} visible={visible} network={network} impact={impact} showCities={!hasLabels} select={seek} />}
       </div>
 
       <nav className="rail" aria-label="Navegación">
@@ -395,7 +488,7 @@ export function CascadeApp() {
           <Icon><path d="M1.5 3.5l4-1.5 5 2 4-1.5v10l-4 1.5-5-2-4 1.5z M5.5 2v10 M10.5 4v10" /></Icon><span>Mapa</span>
         </button>
         <div className="rail-item static"><Icon><path d="M2 13.5h12M4 11V7M8 11V3M12 11V8" /></Icon><span>Escenarios</span></div>
-        <ScenarioTree points={index?.points ?? []} pointId={pointId} cuts={cuts} network={network} open={openScenario} locked={s.sid ? PINNED : undefined} />
+        <ScenarioTree points={index?.points ?? []} pointId={pointId} cuts={cuts} network={network} open={openScenario} locked={s.sid ? PINNED : !current.simulable ? VIEW_ONLY : undefined} />
         <button className="rail-item" aria-disabled="true" data-tip={SOON}><Icon><path d="M3 8.5l3 3 7-7" /></Icon><span>Validación</span></button>
         <button className={view === "sources" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "sources" ? "tabs" : "sources")}>
           <Icon><ellipse cx="8" cy="4" rx="5.5" ry="2" /><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" /></Icon><span>Fuentes y supuestos</span>
@@ -413,21 +506,22 @@ export function CascadeApp() {
         <header className="panel-head">
           {view === "tabs" ? (
             <>
-              <div className="crumbs"><h1>Chile</h1><span>Sistema Eléctrico Nacional</span></div>
+              <NetworkPicker current={current} networks={networks} choose={chooseNetwork} remove={removeUpload} upload={() => setView("upload")} locked={s.sid ? SESSION_NETWORK : undefined} />
               {s.sid && <SessionBar s={s} compact />}
               <div className="tabs" role="tablist">
                 {tabs.map(([k, label]) => {
                   const soon = k === "avoid" || k === "validation";
+                  const viewOnly = !current.simulable && k === "sim";
                   return (
-                    <button key={k} role="tab" aria-selected={tab === k} aria-disabled={soon || undefined} className={tab === k ? "on" : ""}
-                      data-tip={soon ? SOON : undefined} onClick={() => !soon && chooseTab(k as Tab)}>{label}</button>
+                    <button key={k} role="tab" aria-selected={tab === k} aria-disabled={soon || viewOnly || undefined} className={tab === k ? "on" : ""}
+                      data-tip={soon ? SOON : viewOnly ? VIEW_ONLY : undefined} onClick={() => !soon && !viewOnly && chooseTab(k as Tab)}>{label}</button>
                   );
                 })}
               </div>
             </>
           ) : (
             <div className="crumbs view-head">
-              <h1>{view === "sources" ? "Fuentes y supuestos" : view === "session" ? "Sesión compartida" : "Ayuda"}</h1>
+              <h1>{view === "sources" ? "Fuentes y supuestos" : view === "session" ? "Sesión compartida" : view === "upload" ? "Subir una red" : "Ayuda"}</h1>
               <button className="text-btn" onClick={() => setView("tabs")}>Cerrar</button>
             </div>
           )}
@@ -437,18 +531,22 @@ export function CascadeApp() {
           {view === "session" && <SessionBar s={s} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}
           {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
-          {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={regional} />}
-          {view === "tabs" && !network && !error && <Loading text="Cargando la red" />}
-          {view === "tabs" && network && selection && (
+          {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={shownGrid} />}
+          {view === "upload" && <UploadNetwork add={addUpload} cancel={() => setView("tabs")} />}
+          {view === "tabs" && !(isChile ? network : shownGrid) && !error && <Loading text="Cargando la red" />}
+          {view === "tabs" && !isChile && tab === "red" && shownGrid && (
+            <NetworkPanel source={sourceNote} summary={shownSummary} origin={shownOrigin} viewOnly={VIEW_ONLY} />
+          )}
+          {view === "tabs" && isChile && network && selection && (
             <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year}
               select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut && s.sid ? [selectedCut] : undefined)}
               shutDown={shutDown} shutdown={shutdownSubstation} powerOn={powerOn} />
           )}
-          {view === "tabs" && tab === "red" && network && <NetworkPanel source={sourceNote} />}
-          {view === "tabs" && tab === "sim" && s.sid && s.state && network && (
+          {view === "tabs" && isChile && tab === "red" && network && <NetworkPanel source={sourceNote} />}
+          {view === "tabs" && isChile && tab === "sim" && s.sid && s.state && network && (
             <SessionCut network={network} open={s.state.open_lines} notice={s.state.notice} repair={(lines) => restore(lines)} />
           )}
-          {view === "tabs" && tab === "sim" && network && (timeline && timelineReady ? (
+          {view === "tabs" && isChile && tab === "sim" && network && (timeline && timelineReady ? (
             <SimulationPanel network={network} timeline={timeline} cuts={cuts} t={t} impact={impact} islands={islands} totalPeople={totalPeople}
               seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} />
           ) : !error && <Loading text="Cargando la simulación" />)}
@@ -458,8 +556,8 @@ export function CascadeApp() {
         </div>
       </section>
 
-      <TimelineCard timeline={cuts.length && timelineReady ? timeline : null} loading={cuts.length > 0 && !timelineReady} markers={markers} t={t} clock={clock(point?.snapshot, t).tenths} islands={cuts.length ? islands : []} playing={playing} speed={speed}
-        setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />
+      {isChile && <TimelineCard timeline={cuts.length && timelineReady ? timeline : null} loading={cuts.length > 0 && !timelineReady} markers={markers} t={t} clock={clock(point?.snapshot, t).tenths} islands={cuts.length ? islands : []} playing={playing} speed={speed}
+        setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />}
 
       <div className="map-controls" ref={controlsRef}>
         <button className={layersOpen ? "ctl on" : "ctl"} aria-label="Capas y vista" aria-expanded={layersOpen} onClick={() => setLayersOpen(!layersOpen)}>
@@ -469,7 +567,7 @@ export function CascadeApp() {
           <button className="ctl" aria-label="Acercar" onClick={() => baseMap.current?.zoomBy(1)}><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><path d="M7 2v10M2 7h10" stroke="#E6E6E8" strokeWidth="1.4" strokeLinecap="round" /></svg></button>
           <button className="ctl" aria-label="Alejar" onClick={() => baseMap.current?.zoomBy(-1)}><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><path d="M2 7h10" stroke="#E6E6E8" strokeWidth="1.4" strokeLinecap="round" /></svg></button>
         </div>
-        <button className="ctl" aria-label="Ver todo Chile" data-tip="Ver todo Chile" onClick={() => baseMap.current?.fitAll()}>
+        <button className="ctl" aria-label="Ver toda la red" data-tip="Ver toda la red" onClick={() => baseMap.current?.fitAll()}>
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><path d="M1.5 5V1.5H5M9 1.5h3.5V5M12.5 9v3.5H9M5 12.5H1.5V9" fill="none" stroke="#E6E6E8" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
         {layersOpen && (
@@ -487,11 +585,25 @@ export function CascadeApp() {
 
       <div className="map-foot">
         <div className="scale" ref={scaleRef}><span className="scale-bar" /><span className="scale-label" /></div>
-        {network && <MapLegend mode={colorMode} setMode={setColorMode} network={network} frame={frame} />}
+        {isChile && network && <MapLegend mode={colorMode} setMode={setColorMode} network={network} frame={frame} />}
       </div>
       <TipLayer />
     </div>
   );
+}
+
+/** Where a view-only network's figures come from: the manifest's sources for a country, the file for an upload. */
+function originOf(n: NetworkInfo, grid: RegionalGrid): Origin {
+  const entry = grid.countries[0];
+  if (!entry) {
+    const what = `de la red subida (${n.name})`;
+    return { source: `archivo subido por el usuario, país declarado ${n.country}`, km: `Suma del largo de las líneas ${what}; si una línea no trae length_km se mide su trazo.`,
+      substations: `Subestaciones ${what}.`, mw: `Potencia de las centrales ${what}.`, bands: `Largo de las líneas ${what} por nivel de tensión.` };
+  }
+  const sources = entry.sources.map((x) => x.name).join("; ");
+  const reduced = "de la capa reducida (una barra por subestación, líneas paralelas plegadas; docs/regional.md sección 2), en data/processed/latam/manifest.json";
+  return { source: `${sources} (data/processed/latam/manifest.json)`, km: `Largo de las líneas ${reduced}. Cuenta el circuito más largo de cada corredor, así que subestima.`,
+    substations: `Subestaciones ${reduced}.`, mw: `Potencia instalada de las centrales asignadas a una subestación ${reduced}.`, bands: `Largo de las líneas ${reduced}, por nivel de tensión.` };
 }
 
 const Loading = ({ text }: { text: string }) => <div className="card loading" role="status" aria-live="polite"><span className="loading-bar" /><p>{text}</p></div>;
