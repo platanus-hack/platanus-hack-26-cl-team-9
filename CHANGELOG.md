@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(assistant): no session for map changes, no comparison the result does not give
+
+- **Changed:** `SessionTools.defers_session`: a first `start_session` at the default point answers `deferred: true` and opens nothing (another point still opens one). The prepared summary carries `overloaded_lines_note`. The system prompt says prepare_scenario needs no session.
+- **Why:** Checked on sub50.cl with the real model after #110: points land right, but the model opened a session before every map change (each counts against the per-IP creation limit), and it said "8 líneas sobrecargadas, las mismas que en la base" when the base had 1.
+- **Agents:** `test_the_conversation_continues_and_can_be_read_and_deleted` now opens its session through `describe_network`. Known flaky test, not touched: `test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened` fails about 1 run in 20 (also on a clean main) because the open_field run the toolbox opens can draw an unplanned `E2_renewable_drop`.
+- **Files:** `backend/src/cascadasen/mcp/{toolbox,digest}.py`, `backend/src/cascadasen/api/assistant_routes.py`, `backend/tests/{unit/test_assistant.py,integration/test_assistant_api.py}`, `docs/assistant.md`.
+
 ## 2026-11-22 · chore(web): quitar el ítem Validación del menú lateral (#112)
 
 - **Changed:** The disabled "Validación" item of the nav rail and its unused `SOON` tip are gone.

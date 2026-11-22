@@ -9,7 +9,7 @@ from typing import Any
 from cascadasen.domain.ports import ToolCall, ToolSpec
 from cascadasen.mcp.client import ToolError
 from cascadasen.mcp.specs import tool_specs
-from cascadasen.mcp.tools import Sub50Tools
+from cascadasen.mcp.tools import DEFAULT_POINT, Sub50Tools
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +78,13 @@ class SessionTools:
         if call.name not in self.names:
             return False, {"error": f"Herramienta desconocida: {call.name}"}
         args = dict(call.arguments)
+        if self.defers_session(call.name, args):
+            return True, {
+                "deferred": True,
+                "point": DEFAULT_POINT,
+                "nota": "No hace falta abrir una sesión: prepare_scenario no la usa y la sesión se abre sola "
+                "cuando una herramienta la necesita.",
+            }
         if call.name in USER_SIZED and self.said is not None and not stated(args.get("mw"), self.said):
             return False, {
                 "error": f"El usuario no indicó {args.get('mw')} MW. No elijas la potencia: pregúntale "
@@ -139,6 +146,16 @@ class SessionTools:
             if add is not None and not stated(abs(add) if isinstance(add, int | float) else add, self.said):
                 return f"{add} {'personas' if change['target'] == 'population' else 'MW'}"
         return None
+
+    def defers_session(self, name: str, args: dict[str, Any]) -> bool:
+        """A first start_session at the default point waits: the model opened one before every map change, which
+        prepare_scenario never uses, and each counted against the per-IP creation limit. A tool that needs a session
+        opens it on first use; another operating point (an incident's) still opens one now."""
+        return (
+            name == "start_session"
+            and self.tools.state.session_id is None
+            and args.get("point") in (None, "", DEFAULT_POINT)
+        )
 
     def context(self) -> dict[str, str | None]:
         return {"session_id": self.tools.state.session_id, "run_id": self.tools.state.run_id}

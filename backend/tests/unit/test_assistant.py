@@ -358,3 +358,21 @@ def test_add_substation_refuses_mw_the_user_never_wrote():
     ok, _ = box.run(ToolCall(id="1", name="add_substation", arguments={**args, "load_mw": 80}))
     bad, out = box.run(ToolCall(id="2", name="add_substation", arguments={**args, "load_mw": 500}))
     assert ok and not bad and "500" in out["error"]
+
+
+def test_a_first_session_at_the_default_point_waits_until_a_tool_needs_it():
+    """The model opened a session before every map change; prepare_scenario never uses one."""
+    opened = []
+
+    class Tools(Sub50Tools):
+        def start_session(self, point: str | None = None, label: str | None = None):
+            opened.append(point)
+            self.state.session_id = SID
+            return {"session_id": SID, "point": point}
+
+    box = SessionTools(Tools(Sub50Client(base_url="http://x")))
+    ok, out = box.run(call("start_session"))
+    assert ok and out["deferred"] and not opened
+    assert box.run(call("start_session", point="nov2026-1300"))[1]["deferred"] and not opened
+    ok, out = box.run(call("start_session", point="feb2025-1500"))  # an incident's own point: open it now
+    assert ok and out["session_id"] == SID and opened == ["feb2025-1500"]
