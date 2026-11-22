@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(assistant): add_substation resuelve las conexiones por id y por lugar (#124)
+
+- **Changed:** `add_substation` ya no manda la tupla `(bus, how)` de `resolve_bus` como `to`, y pasa el cliente para resolver lugares ("Vallenar") por `/grids/places`.
+- **Why:** en la sesión de pruebas la herramienta falló 8 veces: `422 connections.0.to: Input should be a valid string` y "No pude elegir una barra para 'Vallenar'". Una sola causa, en `mcp/tools.py`.
+- **Agents:** `add_substation` tiene ahora un test unitario y uno de integración contra la app (antes ninguno la ejecutaba). Las demás prioridades (#125, #126, #127) van en PRs aparte.
+- **Files:** `backend/src/cascadasen/mcp/tools.py`, `backend/tests/unit/test_mcp_tools.py`, `backend/tests/integration/test_mcp_server.py`.
+
 ## 2026-11-22 · feat(assistant): quita las reglas de uso dual, deja solo la de tema
 
 - **Changed:** the assistant's system prompt no longer forbids searching or comparing the worst case; its only strong rule is topic (the network and how to test it, nothing else). The MCP `INSTRUCTIONS` and two tool docstrings drop "do not rank / compare" and "never the attack technique". `docs/assistant.md` section 4 records the decision.

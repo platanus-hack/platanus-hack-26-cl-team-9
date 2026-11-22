@@ -247,7 +247,7 @@ class Sub50Tools:
         conns = []
         for c in connections:
             conn = {
-                "to": digest.resolve_bus(net, c.get("to", "")),
+                "to": digest.resolve_bus(net, c.get("to", ""), self.client)[0],
                 **{k: c[k] for k in ("capacity_mw", "x_pu") if c.get(k)},
             }
             conns.append(conn)
