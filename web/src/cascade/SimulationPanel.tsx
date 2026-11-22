@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
-import { hz, int, lineName, narrate, pct, secs } from "./text";
+import { cutName, hz, int, narrate, pct, secs, shutdownNode } from "./text";
 import type { Network, Timeline } from "./types";
 import { Chevron, Info } from "./ui";
 
@@ -69,8 +69,8 @@ function ImpactCard(p: Props) {
         </div>
       </div>
       <div className="cut-row">
-        <p className="meta cut-name">Corte: {p.cuts.map((id) => lineName(p.network, id)).join(", ")}</p>
-        <button className="secondary-btn" onClick={() => p.restore()}>{p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea"}</button>
+        <p className="meta cut-name">Corte: {p.cuts.map((id) => cutName(p.network, id)).join(", ")}</p>
+        <button className="secondary-btn" onClick={() => p.restore()}>{p.cuts.length === 1 && shutdownNode(p.cuts[0]) ? "Encender subestación" : p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea"}</button>
       </div>
     </div>
   );

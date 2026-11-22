@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): shut down a substation from its card
+
+- **Changed:** The substation card has **Apagar esta subestación** ("Abre sus N líneas en t = 0.") and, while it is shut down, **Encender subestación**. Without a session it sets the cut to `sub-B###` and plays `<point>/sub-B###.json`; in a session it opens the substation's closed lines in one `POST /{sid}/cut` and repairs exactly those lines to power it on.
+- **Changed:** `text.ts` adds `SUBSTATION_PREFIX`, `shutdownNode`, `substationLines`, `cutName` ("Subestación Polpaico" or the line name) and a plural `line_cut` narration ("Salen de servicio las líneas A, B y C."). The impact card (`Corte: Subestación ...`, button **Encender subestación**) and the Escenarios row use `cutName`.
+- **Why:** Second kind of scenario asked by the user: shutting down a substation = opening every line of it at t = 0.
+- **Agents:** A static `cut` is `R###` or `sub-B###`, and `?cut=sub-B012` works; the hour change in Escenarios and the missing-file fallback are unchanged. Sessions have no `sub-` id, only open lines. Verification: `npm test` 55 passed, `npm run build` ok. "Bloquear" is still out of scope.
+- **Files:** `web/src/cascade/{text.ts,text.test.ts,SelectionCard.tsx,CascadeApp.tsx,SimulationPanel.tsx,Scenarios.tsx}`, `docs/mapa3.md`.
+
 ## 2026-11-21 · chore(cache): regenerate the cache with substation cuts
 
 - **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache`: 752 new `sub-B###.json` (188 per point) and the 1,097 existing files rewritten. Size went from 23 MB to 42 MB (`du -sh`); the docs say so.
