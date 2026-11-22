@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): historial de cambios y reinicio total al elegir escenario
+
+- **Changed:** the rail's Incidentes button is hidden (panel code kept) and replaced by "Historial de cambios" (`web/src/changelog/`): blue "Ajuste" entries for changes by the user or assistant, red "Caída" entries for a disaster's first failures, the cascade and cyberattack events. Clicking any scenario or Benchmark condition now resets everything (changes, selection, time, heat, history).
+- **Why:** a Benchmark click used to keep the user's failures and changes; the user wants every click to restart the state.
+- **Agents:** history is in memory only; falls are derived from the loaded timeline, adjustments are diffs of `edits`. `ScenarioChoice.edits === null` now means the base case.
+- **Files:** web/src/cascade/CascadeApp.tsx, web/src/cascade/Scenarios.tsx, web/src/changelog/*.
+
 ## 2026-11-22 · feat(web): affected-population heat map and Comunas sin suministro in Simulación
 
 - **Changed:** New heat kind `affected` (`heat.ts`): a fault-red heat map of the `people` of the buses in `frame.dark`, so it grows as the cascade plays. New card **Comunas sin suministro** in the Simulación tab (after the impact card, only with a cut or outage): the toggle "Mapa de calor de personas sin suministro", people without supply per comuna at the current second (bar = share of the comuna, "estimado" when partly dark), a line for EDAC people not assigned to a comuna, and the source line "Fuente: INE Censo 2024. Asignación de comunas a subestaciones: supuesto.". The impact card gets a red bar for its share of the country.
