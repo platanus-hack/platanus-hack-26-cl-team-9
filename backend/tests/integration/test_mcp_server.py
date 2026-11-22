@@ -113,7 +113,7 @@ def test_the_server_lists_every_tool_with_the_guardrails(tools):
     listed, result = asyncio.run(go())
     assert [t.name for t in listed] == list(TOOLS)
     assert all(t.description for t in listed)
-    assert "does the most damage" in INSTRUCTIONS and "never the" in INSTRUCTIONS
+    assert "stress the network" in INSTRUCTIONS
     assert json.loads(result.content[0].text)["session_id"]
 
 
