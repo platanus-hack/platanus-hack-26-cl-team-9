@@ -287,7 +287,7 @@ web/src/cascade/*  reads cache/*.json and draws it
 
 The frontend only reads files. All physics is in `backend/src/cascadasen/domain/cascade/`.
 
-Regenerate data, in order (needs `openpyxl` and `scipy`, not in the repo dependencies; `build_operating_points.py` downloads PyPSA-CL files into git-ignored `data/raw/pypsa_cl/`):
+Regenerate data, in order (needs `scipy`: `cd backend && uv sync --group data`, and run the scripts with `uv run`; `build_operating_points.py` downloads PyPSA-CL files into git-ignored `data/raw/pypsa_cl/`):
 
 ```bash
 python data/scripts/build_node_index.py

@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(deps): add a `data` dependency group with scipy
+- **Changed:** `backend/pyproject.toml` gets `[dependency-groups] data = ["scipy"]` and `backend/uv.lock` adds scipy 1.18.1 (75 added lines, no other package changed). `docs/mapa3.md` now says `cd backend && uv sync --group data`.
+- **Why:** Review R-23: `data/scripts/build_baseline_opf.py` imports scipy, which was in no dependency list. openpyxl is already a main dependency.
+- **Agents:** The Dockerfiles use `uv sync --locked --no-dev`, so the image does not get scipy. Run data scripts with `uv sync --group dev --group data` first. A later plain `uv sync --group dev` removes scipy again.
+- **Files:** `backend/pyproject.toml`, `backend/uv.lock`, `docs/mapa3.md`.
 ## 2026-11-22 · fix(data): safer PyPSA-CL download in build_operating_points.py
 - **Changed:** `_ensure_loads_file` returns before the SharePoint cookie request when the four files already exist in `data/raw/pypsa_cl/`, uses `curl -fsSL` (an HTTP error fails instead of saving HTML as `.xlsx`), and downloads to `<name>.part` then renames.
 - **Why:** Review D-01. An offline rebuild needed the network, and an error page or an interrupted download left a corrupt `.xlsx` that later runs trusted.
