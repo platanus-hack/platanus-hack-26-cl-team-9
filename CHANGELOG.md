@@ -45,6 +45,51 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The branch was cut before #108 brought the index, so the merged tree had an index without this branch's `CHANGELOG.md` entry and stylesheet change; the `repo-index` job would have turned red.
 - **Agents:** The fix itself is the 2026-11-21 entry "fix(web): draw the event pins and callout above the grid". Since #52 the callout is docked next to the panel, so the fix now matters mostly for the numbered event pins and the placed-point pins, which the grid was still painted over on Mapbox. Still not seen in a browser.
 - **Files:** `docs/index/repo-index.json`, `CHANGELOG.md`.
+## 2026-11-22 · feat(cyber): dificultades balanceadas a 75, 60, 40 y 25 % de victorias de la defensa (#121)
+
+- **Changed:** Difficulty presets retuned for a defence win rate of 75 / 60 / 40 / 25 % (average of rules A, B, C, 9 crews): bisection on seeds 1-200, measured on seeds 201-400. Measured: Fácil 74 %, Normal 57 % (the default), Difícil 36 %, Muy difícil 24 %. Only `spread_p`, `isolation_p`, `eradicate_p` and `generation_share` move between levels.
+- **Why:** the previous curve was 93 / 56 / 3 / 0 %: Difícil and Muy difícil could not be won.
+- **Agents:** `scripts/cyber_difficulty.py` takes a 4th argument, the first seed. Policy B (preventive) wins 12-24 points more than A and C at every level. The LLM commander was not measured. When measuring, set `PYTHONPATH=backend/src`: a shared venv can point to another worktree.
+- **Files:** `backend/src/cascadasen/domain/theater/params/theater.yaml`, `scripts/cyber_difficulty.py`, `docs/attack-sim.md`.
+
+## 2026-11-22 · feat(cyber): curva de dificultad medida con 100 simulaciones por nivel (#121)
+
+- **Changed:** New difficulty presets, measured with seeds 1-100 per preset and rules policy, 9 crews. Defence win rate A / B / C: Fácil 92 / 96 / 91 % (5-8 cycles), Normal 46 / 71 / 51 %, Difícil 0 / 8 / 0 %, Muy difícil 0 % (the attack wins 93-100 %). "Extremo" is now "Muy difícil" (`muy_dificil`). Defaults = Normal.
+- **Why:** the target curve: Fácil instant, Normal winnable, Difícil almost impossible, Muy difícil impossible. The old presets left most Fácil and Normal runs undecided.
+- **Agents:** re-measure with `cd backend && uv run python ../scripts/cyber_difficulty.py - 100 ABC` (about 45 s on 10 cores). The LLM commander was not measured.
+- **Files:** `backend/src/cascadasen/domain/theater/params/theater.yaml`, `scripts/cyber_difficulty.py`, `docs/attack-sim.md`, `backend/tests/unit/test_cyber_attack.py`.
+
+## 2026-11-22 · feat(cyber): la velocidad del timeline controla el ciberataque (#121)
+
+- **Changed:** The Ciberataque uses the timeline card's own speed selector (1×, 2×, 4×): one cycle every 1.4 s at 1×, divided by the speed, live and in the replay. The selector is one shared component (`Speed` in `Timeline.tsx`) and the `speed` state lives once in `CascadeApp`.
+- **Why:** the user wants to set the speed, and the attack had its own fixed pace next to the timeline's.
+- **Agents:** `useCyber(speed)` takes the speed. At 4× the backend step time limits the pace (11 cycles in 6 s measured, not 17).
+- **Files:** `web/src/cascade/{Timeline.tsx,CascadeApp.tsx}`, `web/src/cyber/useCyber.ts`, `docs/attack-sim.md`.
+
+## 2026-11-22 · feat(cyber): tabs Componente y Salud de la red, y la línea de tiempo inferior maneja el ciberataque (#121)
+
+- **Changed:** The monitor adds **Componente** (the card of a clicked line or substation at the cycle on screen, read only; a click on the map no longer leaves the view) and **Salud de la red** (served demand, dark substations, open and overloaded lines, islands, observability, level, resources left, pre-fault health).
+- **Changed:** The bottom `TimelineCard` gets a cycle mode (`cycles` prop, `CycleRun`) and drives the run: clock, play/pause, rail over the horizon with attack and defence marks, Terminar turno / Ver cascada. The progress bar and turn bar inside the panel are gone.
+- **Why:** both bars did the same job; one component now plays seconds of a cascade and cycles of an attack.
+- **Agents:** `SelectionCard` takes `readOnly`; `PrefaultHealth` is exported from `SimulationPanel.tsx`. In the cyber view a second click on the map does not switch anything off.
+- **Files:** `web/src/cascade/{Timeline.tsx,CascadeApp.tsx,SelectionCard.tsx,SimulationPanel.tsx,cascade.css}`, `web/src/cyber/*`, `docs/attack-sim.md`.
+
+## 2026-11-22 · feat(cyber): el mapa muestra la red de cada ciclo del ciberataque (#121)
+
+- **Changed:** In the Ciberataque view the main map draws the run's grid at the cycle on screen (`snapshot.grid`, the map's Frame format): dark substations, open and overloaded lines, on line colour Carga. Before, the map kept the base grid and only the panel changed.
+- **Why:** the attack looked indicative only: the lights did not go out on the map as the cycles passed.
+- **Agents:** `CyberFrame.grid` holds the frame; `CascadeApp` uses `cyb.gridNow` as `frame` while the view is open and no cycle cascade is playing.
+- **Files:** `web/src/cyber/{cyber.ts,useCyber.ts,cyber.test.ts}`, `web/src/cascade/CascadeApp.tsx`, `docs/attack-sim.md`.
+
+## 2026-11-22 · feat(cyber): monitor del ciberataque con defensa por algoritmo, LLM o usuario, y dificultades (#121)
+
+- **Changed:** Runs play turn by turn: with an algorithm or the LLM one cycle every 0.7 s (pause and continue), shown on a progress bar over the horizon instead of a slider that always sat at the right end, with the user one cycle per **Terminar turno**; before, the monitor showed only the final state.
+- **Changed:** One monitor for every defender (the reference design): attack and defence counters, operating areas with people and state, Territorio / Jugadas / Reglas, cycle bar, area labels with leader lines on the map (`web/src/cyber/`, `layoutTags` in the overlay loop).
+- **Changed:** `manual_defense` on runs: the staff proposes nothing and only actions from `POST .../actions` run (Usuario mode, turn by turn). Snapshots' `cyber` adds `people_out` per area, `segmented`, `dark` and `defense_actions`; the catalog adds area population and anchor coordinates, `defense_actions` and `presets`.
+- **Changed:** The intrusion is latent until it strikes; the defence wins when no intrusion is left and at most 5 % of the demand is lost; Operations re-segments when a clean-up did not hold and no longer holds a crew in local control while repairing. New defaults = Normal.
+- **Why:** issue #121, and runs ended in a few cycles: the defence saw the intrusion at once and contained it before it moved.
+- **Agents:** difficulty presets and their measured outcomes are in `theater.yaml` → `cyber_attack_presets`. A user defending sees what supervision sees (latent areas hidden until the end).
+- **Files:** `domain/agents/{propagation,operations}.py`, `domain/theater/{cycle,grid,config}.py`, `domain/theater/params/theater.yaml`, `application/run_experiment.py`, `api/simulation_schemas.py`, `web/src/cyber/*`, `web/src/cascade/CascadeApp.tsx`, `docs/attack-sim.md`, tests.
 
 ## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
 
@@ -58,6 +103,16 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** #106 (atomic `add_substation`), #111 (cyberattack scenario) and #115 landed while PR #108 was merging; the informational `repo-index` job was red on `main`.
 - **Agents:** After a change that moves a symbol named in those docs, re-point the reference and regenerate the index.
 - **Files:** `docs/code-map.md`, `docs/for-reviewers.md`, `docs/README.md`, `docs/index/repo-index.json`.
+## 2026-11-22 · feat(web): tab Componente, reinicio al cambiar de escenario y aparición de islas en el timeline (#118)
+
+- **Changed:** The card of the selected line or substation moved to a fourth tab, **Componente**, which a map click opens; the other tabs show only their own content.
+- **Changed:** The app always starts on Demanda mínima (`DEFAULT_POINT = "feb2025-0300"`) with no changes; edits are no longer restored from localStorage on load.
+- **Changed:** Choosing any scenario calls `resetComponents`: every cut, substation off, change, selection and incident/Ciberataque cascade is cleared and the timeline goes to 0; a disaster then applies only its own failures. Before, a Benchmark entry kept the failures of the previous disaster.
+- **Changed:** The timeline rail marks each instant islands form ("isla" / "N islas"), clickable.
+- **Why:** issue #118.
+- **Agents:** a bare `/` is now `feb2025-0300`, so `?point=nov2026-1300` is written in links to the solar midday. `saveEdits`/`loadEdits` stay in `edits.ts` but the app no longer calls them. `docs/mapa3.md` sections 2 and 4 updated.
+- **Files:** `web/src/cascade/{CascadeApp.tsx,Timeline.tsx,simulation.ts,simulation.test.ts,url.ts,url.test.ts,cascade.css}`, `docs/mapa3.md`.
+
 ## 2026-11-22 · fix(web): fecha real de los desastres 2011 y 2010 (#115)
 
 - **Changed:** The Desastres entries "Apagón 2011 · Ancoa" and "Terremoto 2010 · Charrúa" show the date of the real event (24 sep 2011 · 20:31, 14 mar 2010 · 20:43) instead of the date of the 2026 hour they run on. `Disaster` gets an optional `date`.

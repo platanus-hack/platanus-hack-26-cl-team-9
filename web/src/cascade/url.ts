@@ -1,7 +1,7 @@
 import { DEFAULT_COUNTRY } from "../map/country";
 
 /** The operating point a bare `/` opens. */
-export const DEFAULT_POINT = "nov2026-1300";
+export const DEFAULT_POINT = "feb2025-0300"; // Demanda mínima: where the app always starts
 
 export interface UrlState {
   pointId: string;
