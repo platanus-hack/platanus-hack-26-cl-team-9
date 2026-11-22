@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "../cascade/types";
-import { cardFigures, cycleRows, incidentError, cascadeCycles, cycleMinutes, effectText, incidentTag, pointText, responseFigures, sessionPlan, type IncidentCard, type RunSnapshot } from "./incidents";
+import { absorbed, cardFigures, cycleRows, dateText, incidentError, cascadeCycles, cycleMinutes, effectText, incidentTag, placeText, plainText, pointText, responseFigures, sessionPlan, sourceOf, type IncidentCard, type RunSnapshot } from "./incidents";
 
 const tl = (label: string, shed = 100) => ({ scenario: label, label, failed_elements: [], truncated: false, duration_s: 10, events: [], frames: [{ t: 0 }], frequency_hz: {},
   summary: { load_shed_mw: shed, dark_buses: 0, lines_opened: [] }, assumptions: [] }) as unknown as Timeline;
@@ -27,11 +27,37 @@ describe("incidents", () => {
   });
 
   it("writes effects and points in Spanish", () => {
-    expect(effectText({ cycle: 2, type: "C1_generation_loss", target: "A01", params: { mw: 88.1 } })).toBe("Ciclo 2: Pérdida de generación en área A01 (88 MW)");
-    expect(effectText({ cycle: 2, type: "C2_common_mode_loss", target: "NC", params: { share: 0.5, tech: "eolica" } })).toMatch(/Pérdida simultánea .* \(50 % de la eólica\)$/);
-    expect(effectText({ cycle: 2, type: "C3_transmission_opening", target: "A06-A07", params: {} })).toBe("Ciclo 2: Apertura de transmisión en corredor A06-A07");
-    expect(pointText("feb2025-1500")).toBe("feb. 2025, 15:00");
+    const areas = { A01: "Arica–Iquique", A06: "Vallenar", A07: "La Serena–Coquimbo" };
+    expect(effectText({ cycle: 2, type: "C1_generation_loss", target: "A01", params: { mw: 88.1 } }, areas)).toBe("Ciclo 2: Pérdida de generación en Arica–Iquique (88 MW)");
+    expect(effectText({ cycle: 2, type: "C1_generation_loss", target: "A01", params: { mw: 88.1 } })).toBe("Ciclo 2: Pérdida de generación en el área A01 (88 MW)");
+    expect(effectText({ cycle: 2, type: "C2_common_mode_loss", target: "NC", params: { share: 0.5, tech: "eolica" } })).toBe("Ciclo 2: Pérdida simultánea por zona y tecnología en la zona Norte Chico (50 % de la eólica)");
+    expect(effectText({ cycle: 2, type: "C3_transmission_opening", target: "A06-A07", params: {} }, areas)).toBe("Ciclo 2: Apertura de transmisión en el corredor entre Vallenar y La Serena–Coquimbo");
+    expect(pointText("feb2025-1500")).toBe("15:00 del 1 feb 2025");
+    expect(pointText("nov2026-1300")).toBe("13:00 del 1 nov 2026");
     expect(pointText("raro")).toBe("raro");
+    expect(dateText("2026-08-26")).toBe("26 ago 2026");
+    expect(dateText("2025-02-01")).toBe("1 feb 2025");
+    expect(dateText("pronto")).toBe("pronto");
+    expect(placeText("A99", areas)).toBe("el área A99");
+    expect(placeText("XX")).toBe("XX");
+  });
+
+  it("removes codes, reference numbers and file names from backend text", () => {
+    const areas = { A06: "Vallenar", A07: "La Serena–Coquimbo", A09: "Santiago" };
+    expect(plainText("Rearmar la defensa edac:centro_sur", areas)).toBe("Rearmar la defensa EDAC Centro-Sur");
+    expect(plainText("Rearmar la defensa edac:norte_grande")).toBe("Rearmar la defensa EDAC Norte Grande");
+    expect(plainText("Restablecer A06-A07", areas)).toBe("Restablecer el corredor entre Vallenar y La Serena–Coquimbo");
+    expect(plainText("Reforzar la vigilancia de A09", areas)).toBe("Reforzar la vigilancia de Santiago");
+    expect(plainText("Pérdida simultánea por zona y tecnología en NC")).toBe("Pérdida simultánea por zona y tecnología en la zona Norte Chico");
+    expect(plainText("La batería informada no aparece en storage.geojson: no se modela.")).toBe("La batería informada no aparece en los datos del modelo: no se modela.");
+    expect(plainText("calibrado con el 25F [44], CNE [19].")).toBe("calibrado con el 25F, CNE.");
+    expect(plainText("el mismo de Estado de la red")).toBe("el mismo de la pestaña Cambios");
+  });
+
+  it("names repository sources for people and keeps the others", () => {
+    expect(sourceOf({ label: "docs/idea.md [3]", url: "docs/idea.md" })).toEqual({ label: "Informe del Coordinador Eléctrico Nacional sobre el 25F", url: expect.stringMatching(/^https:\/\/www\.coordinador\.cl\//) });
+    const press = { label: "T13", url: "https://www.t13.cl/x" };
+    expect(sourceOf(press)).toBe(press);
   });
 
   it("keeps only the cycles whose snapshot carries a visible cascade", () => {
@@ -46,28 +72,33 @@ describe("incidents", () => {
   it("explains where MWh and cost come from: the engine's calibrated method, with the assumed hour flagged", () => {
     const f = cardFigures(card);
     expect(f.map((x) => x.value)).toEqual(["3.512.405", "2.029", "8.114", "US$ 17,8 M"]);
-    expect(f[2].tip).toContain("igual que Estado de la red");
+    expect(f.map((x) => x.label)).toEqual(["personas sin suministro", "MW de carga perdida", "MWh no servidos", "costo de falla"]);
+    expect(f[2].tip).toContain("pestaña de cambios");
     expect(f[2].tip).toContain("1 h (supuesto)");
-    expect(f[3].tip).toContain("7,34 h de arranque en negro [44]");
-    expect(f[3].tip).toContain("el deslastre paga 1 h (supuesto)");
+    expect(f[3].tip).toContain("7,34 h de arranque en negro, calibradas con el 25F");
+    expect(f.every((x) => !/\[\d+\]|report\.|\.md/.test(x.tip))).toBe(true);
+    expect(f[3].tip).toContain("el corte de carga paga 1 h (supuesto)");
   });
 
   it("labels the hours of a total blackout as calibrated, not assumed", () => {
     const blackout = { ...card, outage_duration_h: { value: 7.34, is_assumption: false } };
-    expect(cardFigures(blackout)[2].tip).toContain("7,34 h (calibrado con el 25F, [44])");
+    expect(cardFigures(blackout)[2].tip).toContain("7,34 h (calibrado con el 25F)");
+    expect(absorbed(card)).toBe(false);
+    expect(absorbed({ ...card, consequence_level: "L0", people_without_power: 0, load_shed_mw: 0 })).toBe(true);
   });
 
   it("labels the agentic response as experimental, with TTU in cycles and minutes", () => {
     const f = responseFigures({ mission_continuity: 0.8877, wrong_decisions: 2, operational_reserve: { final: 0.5972 }, situational_awareness: { time_to_understanding_cycles: 10, understood: true } }, 5);
     expect(f.map((x) => x.value)).toEqual(["10 ciclos · 50 min", "89 %", "2", "60 %"]);
     expect(f.every((x) => x.tip.includes("experimental"))).toBe(true);
-    expect(responseFigures({ situational_awareness: { time_to_understanding_cycles: null, understood: false } }, 5)[0].value).toBe("no llegó a entender");
+    const none = responseFigures({ situational_awareness: { time_to_understanding_cycles: null, understood: false } }, 5)[0];
+    expect(none).toMatchObject({ value: "no se identificó en el horizonte", text: true });
   });
 
   it("explains failures in Spanish", () => {
-    expect(incidentError(null, "Failed to fetch")).toContain("No se pudo conectar con el backend");
+    expect(incidentError(null, "Failed to fetch")).toBe("No se pudo conectar con el servidor.");
     expect(incidentError(429, "x", 7)).toContain("espera 7 s");
-    expect(incidentError(503, "x")).toContain("503");
+    expect(incidentError(503, "x")).toContain("no puede simular ahora");
     expect(incidentError(422, "el incidente corre a las feb2025-1500")).toContain("feb2025-1500");
   });
 });

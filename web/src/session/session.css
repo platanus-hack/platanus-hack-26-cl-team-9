@@ -2,9 +2,12 @@
    cascade.css tokens (docs/design.md section 2). `.tag` is the session label: `.shell .badge` is the event marker. */
 
 /* ---- Session strip (panel head) and the Sesión compartida view ---- */
-.shell .session-strip { display: flex; align-items: center; gap: 6px; height: 24px; padding-left: 12px; color: var(--fg-2); font-size: 12px; line-height: 16px; }
-.shell .session-strip > span:first-child { margin-right: auto; color: var(--fg); font-weight: 500; white-space: nowrap; }
-.shell .session-strip .text-btn { margin-left: 6px; }
+/* The name takes the free width and ends in an ellipsis: a long incident label never pushes the strip past the panel. */
+.shell .session-strip { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; height: 24px; padding-left: 12px; color: var(--fg-2); font-size: 12px; line-height: 16px; }
+.shell .session-strip .session-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-weight: 500; }
+.shell .session-strip .tag, .shell .session-strip .text-btn { flex-shrink: 0; }
+.shell .session-strip .text-btn { margin-left: 6px; white-space: nowrap; }
+.shell .session-actions .session-name { color: var(--fg); font-weight: 500; }
 .shell .session-join { display: flex; gap: 6px; }
 .shell .session-join input { flex: 1; }
 .shell .session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -39,8 +42,19 @@
 .shell .data-row .row-btn { border-top: 0; }
 .shell .data-row.off .row-btn { color: var(--faint); }
 .shell .data-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); color: var(--fg-2); font-size: 13px; line-height: 16px; }
-.shell .data-filter { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+/* the filter keeps a visible label; its placeholder uses --muted (6.5:1 on the panel) */
+.shell .data-filter { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 4px; }
+.shell .data-filter label { color: var(--muted); font-size: 11px; line-height: 14px; }
+.shell .data-filter-row { display: flex; align-items: center; gap: 8px; }
 .shell .data-filter input { flex: 1; }
+.shell .data-form input::placeholder, .shell .data-filter input::placeholder, .shell .session-join input::placeholder { color: var(--muted); opacity: 1; }
+/* one write at a time: the whole editor is disabled while a change and its reload are pending */
+.shell .data-fieldset { display: flex; flex-direction: column; min-width: 0; margin: 0; padding: 0; border: 0; }
+.shell .data-fieldset:disabled { opacity: 0.6; }
+.shell .data-form label.bad input, .shell .data-form label.bad select { border-color: var(--fault); }
+.shell .data-error { color: #e8b4a6; font-size: 11px; line-height: 14px; }
+.shell .data-actions .primary-btn { height: 28px; padding: 0 12px; font-size: 12px; }
+.shell .data-panel .primary-btn:disabled, .shell .data-panel .secondary-btn:disabled, .shell .data-panel .text-btn:disabled { opacity: 0.6; cursor: default; }
 
 /* ---- Controls a session pins ---- */
 .shell .condition[aria-disabled="true"] { cursor: default; }

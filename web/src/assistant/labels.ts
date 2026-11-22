@@ -142,7 +142,7 @@ export function errorMessage(status: number, retryAfter?: number | null): string
     case 413: case 422: return "El mensaje está vacío o supera 2000 caracteres.";
     case 429: return retryAfter ? `Demasiados mensajes; espera ${retryAfter} s.` : "Demasiados mensajes; espera un momento.";
     case 502: return "El modelo falló; tu mensaje quedó guardado, intenta de nuevo.";
-    case 503: return "El asistente no está habilitado en este servidor.";
+    case 503: return "El asistente no está disponible en este servidor. El resto del mapa funciona sin él.";
     default: return "El asistente falló; reintenta.";
   }
 }

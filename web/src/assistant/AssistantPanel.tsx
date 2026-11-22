@@ -11,13 +11,15 @@ const CONTINUE = "continúa";
 /**
  * The Asistente view of mapa 3 (docs/assistant.md section 2c): the history with each step of the model as it happens
  * (text, tool cards with their state, final reply), and the message box. It shows only what the tools returned; the
- * scenario notice goes with each reply because it carries the assumption note (AGENTS.md section 4).
+ * scenario notice goes with each reply because it carries the assumption note (AGENTS.md section 4). Opening the view
+ * asks the server once whether the assistant is available; when it is not, one notice says so and the box is disabled.
  */
 export function AssistantPanel({ a }: { a: Assistant }) {
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const { turns, restoredTools } = a.state;
   const lastTurn = turns[turns.length - 1];
+  useEffect(() => { a.probe(); }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [turns]);
 
   const submit = (msg: string) => {
@@ -29,15 +31,12 @@ export function AssistantPanel({ a }: { a: Assistant }) {
 
   return (
     <div className="assistant">
-      <div className="card">
-        <div className="card-head">
-          <h3>Asistente</h3>
-          <button className="text-btn" onClick={() => void a.reset()} disabled={!turns.length && !a.state.conversationId}>Nueva conversación</button>
-        </div>
-        <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, avanzar una corrida. El mapa muestra lo que el asistente cambia en la sesión.</p>
+      <div className="chat-intro">
+        <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, avanzar una corrida. El mapa muestra el escenario que prepara el asistente.</p>
+        {(turns.length > 0 || !!a.state.conversationId) && <button className="text-btn" onClick={() => void a.reset()}>Nueva conversación</button>}
       </div>
 
-      {!a.enabled && <p className="note">{errorMessage(503)}</p>}
+      {!a.enabled && <div className="notice" role="status"><span>{errorMessage(503)}</span></div>}
       {a.restoring && <p className="meta">Recuperando la conversación…</p>}
 
       {restoredTools.length > 0 && (
@@ -52,13 +51,15 @@ export function AssistantPanel({ a }: { a: Assistant }) {
         : <AssistantTurnView key={i} turn={t} last={t === lastTurn} onContinue={() => submit(CONTINUE)} busy={a.busy} />))}
 
       <form className="chat-form" onSubmit={(e) => { e.preventDefault(); submit(text); }}>
-        <textarea aria-label="Mensaje para el asistente" rows={2} placeholder={a.enabled ? "Agrega un datacenter de 120 MW en Antofagasta y corta R014" : "El asistente no está disponible"}
+        <textarea aria-label="Mensaje para el asistente" rows={2} placeholder={a.enabled ? "Por ejemplo: agrega un datacenter de 120 MW en Antofagasta" : "El asistente no está disponible"}
           value={text} disabled={!a.enabled} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text); } }} />
         <div className="chat-form-foot">
-          <span className={tooLong ? "meta fault" : "meta"}>{text.length.toLocaleString("es-CL")} / {MAX_MESSAGE.toLocaleString("es-CL")}</span>
-          <span className="meta">Enter envía · Shift+Enter, nueva línea</span>
-          <button type="submit" className="btn" disabled={!a.enabled || a.busy || !text.trim() || tooLong}>{a.busy ? "Trabajando…" : "Enviar"}</button>
+          {a.enabled && <>
+            <span className={tooLong ? "meta fault" : "meta"}>{text.length.toLocaleString("es-CL")} / {MAX_MESSAGE.toLocaleString("es-CL")}</span>
+            <span className="meta">Enter envía · Shift+Enter, nueva línea</span>
+          </>}
+          <button type="submit" className="primary-btn" disabled={!a.enabled || a.busy || !text.trim() || tooLong}>{a.busy ? "Trabajando…" : "Enviar"}</button>
         </div>
       </form>
       <div ref={endRef} />
@@ -77,7 +78,7 @@ function AssistantTurnView({ turn, last, busy, onContinue }: { turn: AssistantTu
       {truncated && (
         <div className="notice"><span>{truncated}</span>{last && <button className="text-btn" disabled={busy} onClick={onContinue}>Continuar</button>}</div>
       )}
-      {turn.status === "error" && turn.error && <p className="note">{errorMessage(turn.error.status, typeof turn.error.detail === "number" ? turn.error.detail : null)}</p>}
+      {turn.status === "error" && turn.error && turn.error.status !== 503 && <p className="note" role="alert">{errorMessage(turn.error.status, typeof turn.error.detail === "number" ? turn.error.detail : null)}</p>}
       {turn.status === "interrupted" && <p className="note">Se cortó la conexión antes de terminar. El servidor termina el mensaje y lo guarda: se intenta recuperar la respuesta.</p>}
     </div>
   );

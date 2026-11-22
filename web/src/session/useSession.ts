@@ -26,6 +26,7 @@ export function useSession(): Session {
   const [error, setError] = useState<string | null>(null);
   const loaded = useRef(-1);  // revision of the session on screen
   const data = useRef(-1);    // dataset_revision of the network on screen
+  const writing = useRef(false); // a write and its reload are in flight
   const loader = useRef<ReturnType<typeof createLoader> | null>(null);
   loader.current ??= createLoader({ getSession, getNetwork, getState }, {
     doc: (doc) => { loaded.current = doc.revision; setSession(doc); },
@@ -62,22 +63,29 @@ export function useSession(): Session {
     });
     return () => { alive = false; clearTimeout(retry); sub.close(); };
   }, [sid, load, loadDoc, leave]);
+  // One write at a time, with the dataset_revision of the newest network applied (not the one of the render that made
+  // this callback): a second write never goes out with a revision the first one already replaced.
   const edit: Edit = useCallback(async (fn) => {
-    if (!sid || !network) return false;
+    if (!sid || !network || writing.current) return false;
+    writing.current = true;
     try {
-      await fn(sid, network.dataset_revision);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 412) {
-        setError("Otro cliente cambió la sesión antes que tú. Se recargó: revisa y vuelve a intentarlo.");
-        await load(sid).catch((e) => { console.warn("session reload after a 412 failed", e); });
-      } else setError((e as Error).message);
-      return false;
+      try {
+        await fn(sid, data.current);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 412) {
+          setError("Otro cliente cambió la sesión antes que tú. Se recargó: revisa y vuelve a intentarlo.");
+          await load(sid).catch((e) => { console.warn("session reload after a 412 failed", e); });
+        } else setError(e instanceof ApiError ? e.message : "No se pudo conectar con el servidor.");
+        return false;
+      }
+      // The write landed: report success even if the reload fails (after call()'s busy retries), so a form is not
+      // resubmitted; the network on screen stays until the next revision event reloads it.
+      setError(null);
+      await load(sid).catch((e) => setError(`El cambio se guardó, pero no se pudo recargar la sesión: ${(e as Error).message}`));
+      return true;
+    } finally {
+      writing.current = false;
     }
-    // The write landed: report success even if the reload fails (after call()'s busy retries), so a form is not
-    // resubmitted; the network on screen stays until the next revision event reloads it.
-    setError(null);
-    await load(sid).catch((e) => setError(`El cambio se guardó, pero no se pudo recargar la sesión: ${(e as Error).message}`));
-    return true;
   }, [sid, network, load]);
   return {
     sid, session, network, state, live, error,
