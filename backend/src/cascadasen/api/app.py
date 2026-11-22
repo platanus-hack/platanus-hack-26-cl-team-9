@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 
 from cascadasen.api import agent_openapi
 from cascadasen.api.assistant_routes import router as assistant_router
+from cascadasen.api.grid_routes import router as grid_router
 from cascadasen.api.limits import BodyLimitMiddleware, SessionLocks, SseSlots, TokenBucket
 from cascadasen.api.schemas import EdgePage, Health, IslandsRequest, IslandsResponse, NodePage, Page
 from cascadasen.api.session_routes import router as session_router
@@ -82,6 +83,8 @@ def create_app(
     app.state.session_locks = SessionLocks(  # one request at a time per session
         settings.session_lock_timeout_s, settings.session_lock_max_waiters
     )
+    app.state.grids = None  # GridComposer, built lazily on the first /grids request
+    app.include_router(grid_router)
     app.include_router(simulation_router)
     app.include_router(session_router)
     app.state.assistant = None  # built lazily on the first /assistant request, only when the LLM is set up

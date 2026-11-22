@@ -39,7 +39,7 @@ def _points(processed: Path, wanted: list[str] | None) -> list[dict]:
 
 def _build_point(processed: Path, out: Path, point: dict) -> int:
     net, op = load_network_and_point(processed, point["id"])
-    _write(out / f"network-{point['year']}.json", _network_json(net))
+    _write(out / f"network-{point['year']}.json", network_json(net))
     folder = out / point["id"]
     folder.mkdir(exist_ok=True)
     _write(
@@ -59,7 +59,7 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
     return len(net.lines)
 
 
-def _network_json(net: ReducedNetwork) -> dict:
+def network_json(net: ReducedNetwork) -> dict:
     ids = [f"B{i:03d}" for i in range(net.size)]
     return {
         "nodes": [

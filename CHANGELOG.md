@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(grids): grids as documents per country, published to S3 and composed by the backend (#63)
+
+- **Changed:** new port `GridStore` with `LocalGridStore` and `S3GridStore` (never overwrite), pure layout in `domain/grids.py`, use cases in `application/grids.py` (publish, verify, catalogue, `GridComposer`), routes `GET /api/v1/grids/sources`, `GET /api/v1/grids/scenarios`, `POST /api/v1/grids/compose`, CLI `cascadasen-grids publish|verify|list`, seed scenarios in `data/scenarios/*.json`.
+- **Why:** a grid is a JSON document the browser keeps and edits. The backend reads the documents the user picks (by country) from S3 and composes one grid; scenarios are preset grids (point, open lines, edits).
+- **Agents:** documents live under `grids/v1/` of the session bucket (the lifecycle rules only expire `sessions/` and `runs/`). Settings `CASCADASEN_GRIDS_STORE` (`local` default, `s3`), `_GRIDS_BUCKET`, `_GRIDS_PREFIX`. The prod task role `cascadasen-task` cannot read `grids/*` until IAM allows it (no Terraform yet). `operating_point_from_docs` and `network_json` are now public. Compose does not apply `overlay` yet; the simulator will. Details in `docs/grids.md`.
+- **Files:** `backend/src/cascadasen/{domain,application,infrastructure,api}/*grid*`, `domain/cascade/scenario.py`, `application/cache_builder.py`, `data/scenarios/`, `docs/grids.md`.
+
 ## 2026-11-21 · fix(assistant): guard the tool loop against lost events, invented MW and unkept promises
 
 - **Changed:** `SessionTools` opens an `open_field` run when `inject_event` or `submit_action` arrive with no active run, and refuses `add_datacenter`/`add_generator` with MW the user never wrote (`numbers`, `stated`). `Assistant.loop` adds one hidden nudge when the model promises an action and stops (`announces`, `NUDGE`; hidden turns are left out of `view`), predicts the deadline with the mean call duration, and the trace carries each call's `arguments`. The factory is now `toolbox_for(session_id, run_id, said)`, where `said` is everything the user wrote in the conversation.
