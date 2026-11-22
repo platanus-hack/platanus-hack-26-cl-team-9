@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(infra): bake data/processed at /data/processed in the backend image
+- **Changed:** `backend.Dockerfile` copies `data/processed` to `/data/processed` (it copied it to `/data`). `docs/infrastructure.md` says so.
+- **Why:** The code reads `CASCADASEN_DATA_DIR/processed/grid_snapshot.json`, so with the old layout production answered 503 "No hay snapshot de la red" on `/api/v1/nodes`, `/sim/*` and `/sessions` (health said `sin snapshot`). Local compose mounts `./data` at `/data`, so it never showed. Mapa 3 reads the static cache and was not affected.
+- **Agents:** Any endpoint that needs the grid snapshot only works in the deployed image from this commit on. Check `GET /api/v1/health`: `status` must be `ok`.
+- **Files:** `infrastructure/docker/backend.Dockerfile`, `docs/infrastructure.md`.
 ## 2026-11-21 · fix(assistant): guard the tool loop against lost events, invented MW and unkept promises
 
 - **Changed:** `SessionTools` opens an `open_field` run when `inject_event` or `submit_action` arrive with no active run, and refuses `add_datacenter`/`add_generator` with MW the user never wrote (`numbers`, `stated`). `Assistant.loop` adds one hidden nudge when the model promises an action and stops (`announces`, `NUDGE`; hidden turns are left out of `view`), predicts the deadline with the mean call duration, and the trace carries each call's `arguments`. The factory is now `toolbox_for(session_id, run_id, said)`, where `said` is everything the user wrote in the conversation.
