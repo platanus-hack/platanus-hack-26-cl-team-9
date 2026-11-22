@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(review): technical review of the repository (issue #79)
+- **Changed:** New `reports/technical-review.md`: scores from 1 to 5 per area (backend, MCP and assistant, frontend, data scripts, tests and CI, documentation of the code, modularity), tool results (ruff, mypy, pytest with coverage, tsc, vitest, build), findings with file and line, stale docs and a prioritised fix list.
+- **Why:** Issue #79 asks for a technical evaluation of the repository against the Platanus Hack 26 criteria, with a report in `reports/`.
+- **Agents:** The review audited `8664add`, not this tip: the first lines of the report say so, and some findings (the committed `web/node_modules` symlink, the assistant UI) may already be fixed. Re-check a finding before acting on it. Nothing was changed in the code.
+- **Files:** `reports/technical-review.md`.
 ## 2026-11-22 · Merge origin/main into feat/network-selector
 
 - **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.
