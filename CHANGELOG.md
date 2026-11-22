@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): the Ciberataque panel stops above its timeline card
+
+- **Changed:** `CascadeApp` has one `timelineOn` flag (a timeline to play, or the Ciberataque view) for both the `no-timeline` shell class and the `TimelineCard`.
+- **Why:** user bug: on Ciberataque the card was drawn but the shell said `no-timeline`, so the panel took the full height and covered the Play button.
+- **Agents:** none.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · test(cascade): real-network golden hashes from the Linux CI runner
 
 - **Changed:** `REAL_CASCADE` holds the digests the CI runner printed (#152); the test runs on Linux again (CI) and skips on other platforms instead of skipping on CI.
