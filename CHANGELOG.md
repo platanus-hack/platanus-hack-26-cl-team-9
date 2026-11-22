@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(web): error boundary, typed tooltip, logged catches, helper tests
+- **Changed:** New `web/src/ErrorBoundary.tsx` wraps only `<CascadeApp />` in `main.tsx` (error shows `Algo salió mal al mostrar el mapa.` and a `Recargar` button; without an error it renders children unchanged). `_tooltip` in `map/mapboxMap.ts` no longer uses `any`. Five silent catch sites now `console.warn` (sessionApi poll, CascadeApp uploads list and delete, NetworkPanel summary, useSession 412 reload, baseMap picking). Deleted unused `web/src/cascade/icons.ts`. New tests `map/iso3.test.ts` and `map/shapes.test.ts`.
+- **Why:** Review W-07 and W-08. No behaviour, API or cache change.
+- **Agents:** `docs/mapa3.md` line 130 still names `web/src/cascade/icons.ts` (deleted): the docs commit must drop that sentence. `useSession` stays untested (no jsdom or testing-library). Legacy maps 1 and 2 and unused `sessionApi` run helpers were left in place on purpose.
+- **Files:** `web/src/ErrorBoundary.tsx`, `web/src/main.tsx`, `web/src/map/mapboxMap.ts`, `web/src/map/baseMap.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/NetworkPanel.tsx`, `web/src/session/*`, `web/src/map/*.test.ts`.
 ## 2026-11-22 · docs(adr): add architecture decision records
 - **Changed:** New `docs/adr/` with `README.md` (index and format) and five records: 0001 two engines, 0002 reduced 188-bus network, 0003 DC power flow with the voltage rule, 0004 sessions on S3 with the session id as capability, 0005 hexagonal layering and its test. `docs/architecture.md` links the folder.
 - **Why:** Review R-18. The reasons behind these decisions were spread over `plan.md` section 9, `engine.md` and `sessions-api.md`. Each record cites its source doc and holds no new facts.

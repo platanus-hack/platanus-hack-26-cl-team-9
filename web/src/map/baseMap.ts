@@ -111,7 +111,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
     try {
       const info = overlay.pickObject({ x: e.point.x, y: e.point.y, radius: 8 });
       if (info && handlers.isClickable(info)) e.preventDefault(); // stops ClickZoomHandler (MapMouseEvent.preventDefault)
-    } catch { /* picking unavailable: keep the default zoom */ }
+    } catch (e) { console.warn("picking unavailable, keeping the default zoom", e); /* picking unavailable: keep the default zoom */ }
   });
   const setMode = (mode: ViewMode) => {
     // 2D is the same map seen from straight above: it cannot be tilted or rotated.

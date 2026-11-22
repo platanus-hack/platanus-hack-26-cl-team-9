@@ -165,7 +165,7 @@ export function CascadeApp() {
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
   // Only Chile by default; another network replaces it on the map when picked in the header or in Fuentes de la grilla.
-  useEffect(() => { listUploads().then(setUploads).catch(() => { /* no local storage: uploads last for the visit */ }); }, []);
+  useEffect(() => { listUploads().then(setUploads).catch((e) => { console.warn("listing stored uploads failed", e); /* no local storage: uploads last for the visit */ }); }, []);
   useEffect(() => { if (s.sid && networkId !== DEFAULT_COUNTRY) chooseNetwork(DEFAULT_COUNTRY); }, [s.sid]);
   useEffect(() => _loadShown(), [networkId, uploads]);
   useEffect(() => _fitNetwork(), [networkId, network, shownGrid]);
@@ -288,7 +288,7 @@ export function CascadeApp() {
     const raw = id.slice(UPLOAD_PREFIX.length);
     setUploads((u) => u.filter((x) => x.id !== raw));
     if (networkId === id) chooseNetwork(DEFAULT_COUNTRY);
-    deleteUpload(raw).catch(() => { /* not stored: nothing to delete */ });
+    deleteUpload(raw).catch((e) => { console.warn("deleting a stored upload failed", e); /* not stored: nothing to delete */ });
   }
 
   function _loadTimeline() {

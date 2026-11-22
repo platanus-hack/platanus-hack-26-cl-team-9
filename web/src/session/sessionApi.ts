@@ -93,7 +93,7 @@ export function subscribe(id: string, onRevision: (e: RevisionEvent) => void, op
         const doc = (await r.json()) as SessionDoc;
         if (!closed) onRevision({ type: "revision", ...doc.last_op, revision: doc.revision });
       }
-    } catch { /* network error: try again on the next tick */ }
+    } catch (e) { console.warn("session poll failed, retrying on the next tick", e); /* network error: try again on the next tick */ }
     if (!closed) timer = setTimeout(poll, pollMs);
   };
   const startPolling = () => { mode = "poll"; opts.onMode?.("poll"); poll(); };
