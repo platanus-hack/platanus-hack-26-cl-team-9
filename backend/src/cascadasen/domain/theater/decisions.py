@@ -35,6 +35,22 @@ class COA:
         }
 
 
+def add_unless_active(
+    coas: list[COA],
+    active: set[str],
+    proposer: str,
+    action: str,
+    target: str,
+    rationale_key: str,
+    benefit: float,
+    risk: float = 0.0,
+) -> None:
+    """Append a COA unless the same action on the same target (its `key`) is already running."""
+    coa = COA(action, target, proposer, rationale_key, benefit=benefit, risk=risk)
+    if coa.key not in active:
+        coas.append(coa)
+
+
 @dataclass(frozen=True)
 class Verdict:
     ok: bool

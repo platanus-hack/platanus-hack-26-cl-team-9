@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(agents): one add_unless_active helper builds the COA and checks its key
+
+- **Changed:** New `theater/decisions.py::add_unless_active(coas, active, proposer, action, target, rationale_key, benefit, risk=0.0)`. It builds the `COA` and skips it when `coa.key` is in `active`, instead of rebuilding `f"{action}:{target}"`. `OperationsAgent.propose` uses it through `functools.partial`; `StabilizationAgent.propose` keeps its own one-line `add` (extra rule: one COA per action) that calls it.
+- **Why:** F17 of the duplication report. Same COAs in the same order. `auditor.py` is untouched: its four `f"{action}:{target}"` strings key plain dicts, not COA objects, so `COA.key` does not apply there.
+- **Agents:** Use `add_unless_active` for a new agent that proposes COAs. Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped (coverage run: `decisions.py` 100%, both agents' `add` lines executed).
+- **Files:** `backend/src/cascadasen/domain/theater/decisions.py`, `domain/agents/operations.py`, `domain/agents/stabilization.py`.
 ## 2026-11-22 · refactor(theater): remove the two unused `param` helpers on COA and EventRequest
 
 - **Changed:** Deleted `COA.param` and `EventRequest.param` (`dict(self.params).get(name, default)`). Both were identical and neither had a caller in src, tests, scripts or docs.
