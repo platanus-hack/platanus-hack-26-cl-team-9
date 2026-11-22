@@ -3,11 +3,16 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 
 ## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
 
-- **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`.
+- **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`. After merging #117, three more references that #110 had shifted point at the right line again: `ConverseToolChat.turn` (`llm_tools.py:85`), `simulate` (`grid_routes.py:122`), `prepare_workflow` (`grid_stress.py:55`).
 - **Why:** The `repo-index` job of PR #114 failed: the branch was cut before #108, so the merged tree had an index without its changes.
 - **Agents:** Nothing new: regenerate with `cd backend && uv run python ../scripts/build_index.py` after `git add`, as `docs/index/README.md` says.
 - **Files:** `docs/index/repo-index.json`, `docs/{README.md,code-map.md,for-reviewers.md}`, `backend/tests/unit/test_mcp_tools.py` (the exact digest test from #108 now also checks `overloaded_lines_note`).
 
+## 2026-11-22 · docs(index): regenerate the index and re-point 25 references after #106, #111 and #115
+- **Changed:** `docs/index/repo-index.json` is regenerated and 25 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` follow the code that moved (`sessions.py`, `session_routes.py`, `overlay.py`, `cycle.py`, `run_experiment.py`, `simulation_schemas.py`). No code changed.
+- **Why:** #106 (atomic `add_substation`), #111 (cyberattack scenario) and #115 landed while PR #108 was merging; the informational `repo-index` job was red on `main`.
+- **Agents:** After a change that moves a symbol named in those docs, re-point the reference and regenerate the index.
+- **Files:** `docs/code-map.md`, `docs/for-reviewers.md`, `docs/README.md`, `docs/index/repo-index.json`.
 ## 2026-11-22 · fix(web): fecha real de los desastres 2011 y 2010 (#115)
 
 - **Changed:** The Desastres entries "Apagón 2011 · Ancoa" and "Terremoto 2010 · Charrúa" show the date of the real event (24 sep 2011 · 20:31, 14 mar 2010 · 20:43) instead of the date of the 2026 hour they run on. `Disaster` gets an optional `date`.
