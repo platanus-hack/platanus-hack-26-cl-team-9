@@ -11,6 +11,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from cascadasen.domain.model import GridSnapshot, SourceBundle, SourceInfo
 from cascadasen.domain.regional import RegionalBundle
+from cascadasen.domain.regional_network import OnsDataset
 
 
 @runtime_checkable
@@ -29,6 +30,15 @@ class RegionalGridSource(Protocol):
     country: str  # ISO 3166-1 alpha-3
 
     def fetch(self, refresh: bool = False) -> RegionalBundle: ...
+
+
+@runtime_checkable
+class FlowNetworkSource(Protocol):
+    """Declared line ends and line parameters of one country (docs/network-format.md)."""
+
+    country: str  # ISO 3166-1 alpha-3
+
+    def fetch(self, refresh: bool = False) -> OnsDataset: ...
 
 
 class SnapshotRepository(Protocol):

@@ -1,6 +1,17 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(regional): add ONS adapter and pure flow-network builder for Brazil
+
+- **Changed:** New `domain/regional_network.py` (pure). It turns ONS line and substation rows into a flow network: one bus per ONS substation (`id_subestacao`), AC circuits folded like Chile's `_parallel`, HVDC records as `dc_links`, and EPE plants attached by distance. It also holds `deduction_error`, which compares typical x and capacity, and the distance-snapped drawn topology, against the real values (issue part A5). New adapter `infrastructure/sources/regional/ons_brasil.py` reads `LINHA_TRANSMISSAO.csv` and `SUBESTACAO.csv`. New port `FlowNetworkSource`; settings `ons_lines_url` and `ons_substations_url`.
+- **Why:** Brazil was only a drawn layer. ONS declares each line's two bus numbers and positive-sequence r, x and shunt, and `SUBESTACAO.csv` gives each bus a substation **and coordinates** (older docs say it has none). Line ends no longer need to be guessed.
+- **Agents:**
+  - ONS states no units. From the magnitudes, r and x are percent on 100 MVA and shunt is Mvar at nominal voltage (ANAREDE), so `x_pu = val_reatancia / 100` with no kV conversion.
+  - The thermal base is `val_capacoperlongacomlimit` (long duration, with limiting factor). Missing amperes, including 0 A, use the ONS median MW per circuit at the same kV and are marked `assumed_fields: ["capacity_mw"]`.
+  - Lines that are deactivated or enter service after `as_of` are excluded, as in `_built_by`. *Ramal* rows and line ends outside the ONS registry (Uruguay, Argentina, Paraguay, Venezuela) are dropped with a warning naming the substation and kV.
+  - `regional_reduction._km` and `_nearest` are now public as `km_xy` and `nearest`.
+- **Files:** `backend/src/cascadasen/domain/{regional_network,regional_reduction,ports}.py`, `backend/src/cascadasen/infrastructure/{settings.py,sources/regional/ons_brasil.py}`, `backend/tests/unit/test_ons_brasil.py`.
+
 ## 2026-11-21 · docs(assistant): document the step stream for map clients
 
 - **Changed:** `docs/assistant.md` section 2b: the events of `POST /chat/stream` with examples, which session routes to fetch after each tool to draw, pings and the 90 s stream deadline, disconnect behaviour, a `fetch` reader for browsers (`EventSource` only does GET) and a `curl -N` example. `docs/stack.md` 7.3 lists the route.
