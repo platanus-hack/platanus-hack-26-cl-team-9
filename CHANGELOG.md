@@ -15,6 +15,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** A lookup by name only (`docs/cyber.md` section 8): no ranking and no criticality field; a test checks the id order. Every one of the 273 lines is found by the names of its two ends. A substation named exactly wins over a partial match ("Maitencillo" is S/E MAITENCILLO, R216, not NUEVA MAITENCILLO). `docs/openapi/agents.openapi.json` regenerated; `docs/stress.md` section 3.2, `docs/mcp.md` section 3, `docs/assistant.md` labels row.
 - **Files:** `backend/src/cascadasen/{application/line_lookup.py,api/grid_routes.py,api/stress_schemas.py,mcp/tools.py,mcp/toolbox.py}`, `backend/tests/{unit/test_line_lookup.py,unit/test_mcp_tools.py,integration/test_assistant_api.py}`, `web/src/assistant/{labels.ts,labels.test.ts}`, `docs/{stress,mcp,assistant}.md`, `docs/openapi/agents.openapi.json`.
 
+## 2026-11-22 · fix(web): Salud de la red lists its figures one per row
+
+- **Changed:** `.cy-figures` (the Cyber "Salud de la red" card) is a column, label left and value right, instead of the 2-column grid.
+- **Why:** nine figures in one row overlapped each other.
+- **Agents:** `.mini-figures` is unchanged for the other cards. No test: CSS only.
+- **Files:** `web/src/cyber/cyber.css`.
+
 
 ## 2026-11-22 · feat: el mapa simula un escenario sin fallas (apagar todas las hidro) y el asistente tiene un solo encabezado
 - **Changed:** `GridSimulator.simulate_workflow` and `cost_workflow` accept changes with no failure (`prepare_edits(allow_empty=bool(changes))`); nothing at all is still 422. The cascade starts by opening the lines the redispatch overloads. The web simulates every prepared scenario (`cached = fromCache(edits)`), so the map and Estado de la red show that cascade. `prepare_scenario` (MCP) simulates changes alone too, with `without_changes` at 0. The assistant prompt no longer says "nada queda en rojo si no hay falla". Asistente: the card with the repeated title is gone; "Nueva conversación" sits in the panel header next to Cerrar (`.head-actions`).
