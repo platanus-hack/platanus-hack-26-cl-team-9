@@ -280,3 +280,22 @@
 /* Keyboard focus on the shell's controls. */
 .shell button:focus-visible, .shell .row-btn:focus-visible, .shell .check input:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
 .shell .speed:has(select:focus-visible), .shell .legend-mode:has(select:focus-visible) { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+
+/* Fuentes de la grilla: opens downward in the rail, under the item */
+.shell .rail-label { white-space: nowrap; }
+.shell .rail-item > svg { flex-shrink: 0; }
+.shell .rail-chevron { margin-left: auto; display: flex; color: var(--faint); }
+.shell .sources { margin-top: 2px; }
+.shell .source-row { display: flex; align-items: center; gap: 8px; height: 28px; flex-shrink: 0; padding: 0 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 16px; cursor: pointer; }
+.shell .source-row:hover { color: var(--fg); }
+.shell .source-row input { margin: 0; accent-color: var(--fg-2); flex-shrink: 0; }
+.shell .source-row .ellipsis { flex: 1 1 0; }
+.shell .source-status { font-size: 11px; line-height: 16px; flex-shrink: 0; color: var(--faint); }
+.shell .source-status.complete { color: var(--fg-3); }
+.shell .source-note { margin: 4px 4px; color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .source-reset { padding: 4px; text-align: left; }
+
+/* Estado de la red */
+.shell .state-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; color: var(--fg-2); font-size: 13px; line-height: 16px; }
+.shell .state-row .ellipsis { flex: 1 1 0; min-width: 0; }
+.shell .state-list .list-head { margin-top: 8px; }

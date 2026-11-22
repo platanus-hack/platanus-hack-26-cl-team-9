@@ -4,6 +4,7 @@ const ZONES: Record<string, string> = { centro_sur: "Centro-sur", norte_grande: 
 const REASONS: Record<string, string> = {
   no_generation: "queda sin generación", no_load: "queda sin demanda y su generación se desconecta",
   no_inertia: "no tiene inercia sincrónica", frequency: "la frecuencia cae bajo 47,5 Hz",
+  voltage: "colapsa por tensión al separarse el corredor del 25F con un flujo previo fuera del rango del esquema de defensa",
 };
 
 export const zoneName = (zone: string) => ZONES[zone] ?? zone;

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from cascadasen.application.build_grid import BuildGridSnapshot
 from cascadasen.application.build_regional import BuildFlowNetwork, BuildRegionalGrid
-from cascadasen.domain.ports import DocumentStore, RegionalGridSource
+from cascadasen.domain.ports import DocumentStore, GridStore, RegionalGridSource
 from cascadasen.domain.unify import GridUnifier
 from cascadasen.infrastructure.document_store import FileDocumentStore, MemoryDocumentStore, S3DocumentStore
 from cascadasen.infrastructure.exporters import StaticFilesExporter
+from cascadasen.infrastructure.grid_store import LocalGridStore, S3GridStore
 from cascadasen.infrastructure.http import CachedHttp
 from cascadasen.infrastructure.settings import Settings
 from cascadasen.infrastructure.snapshot_repository import JsonSnapshotRepository
@@ -52,6 +53,16 @@ def document_store(settings: Settings) -> DocumentStore:
             raise ValueError("CASCADASEN_SESSION_BUCKET is required when CASCADASEN_SESSION_STORE=s3")
         return S3DocumentStore(settings.session_bucket, settings.aws_region, settings.aws_profile)
     return MemoryDocumentStore(ttl_s=ttl_s)
+
+
+def grid_store(settings: Settings) -> GridStore:
+    """Where the grid documents are read from (`CASCADASEN_GRIDS_STORE`)."""
+    if settings.grids_store == "s3":
+        bucket = settings.grids_bucket or settings.session_bucket
+        if not bucket:
+            raise ValueError("CASCADASEN_GRIDS_BUCKET is required when CASCADASEN_GRIDS_STORE=s3")
+        return S3GridStore(bucket, settings.grids_prefix, settings.aws_region, settings.aws_profile)
+    return LocalGridStore(settings.grids_dir)
 
 
 DEFAULT_COUNTRIES = ("BRA", "PER", "ARG", "BOL")

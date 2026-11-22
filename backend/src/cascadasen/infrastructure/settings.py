@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     sse_max_s: float = 55.0
     session_lock_timeout_s: float = 10.0  # wait for the request before it on the same session, then 409
     session_lock_max_waiters: int = 10  # requests queued behind the one in progress; more get 409 at once
+    # grid documents (docs/grids.md): "local" reads `grids_dir`, "s3" reads `grids_prefix` of `grids_bucket`
+    # (default: the session bucket). The prod task role cannot read grids/* until its IAM policy allows it
+    grids_store: Literal["local", "s3"] = "local"
+    grids_bucket: str | None = None
+    grids_prefix: str = "grids/v2"
     ide_energia_url: str = (
         "https://ide-energia.minenergia.cl/server/rest/services/IDE_Energia/Visor_IDE_Energ%C3%ADa/MapServer"
     )
@@ -102,6 +107,10 @@ class Settings(BaseSettings):
     @property
     def snapshot_path(self) -> Path:
         return self.processed_dir / "grid_snapshot.json"
+
+    @property
+    def grids_dir(self) -> Path:
+        return self.data_dir / "grids"
 
     @property
     def sessions_dir(self) -> Path:
