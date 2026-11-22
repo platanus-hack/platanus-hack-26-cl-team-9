@@ -13,20 +13,24 @@ export interface ScenarioChoice { point: string; cut: string | null }
 /**
  * "Escenarios" in the nav rail as a two-level tree (Paper Design v6, docs/design.md 3.3). A scenario is a cut; each one
  * lists the operating conditions it can run under. The active condition of the active scenario carries the selection.
+ * `cuts` holds the open lines (one outside a session, any number in one). `locked` (the tip text) is set in a shared
+ * session, which pins its operating point: rows only expand and collapse, and the conditions are disabled.
  */
-export function ScenarioTree({ points, pointId, cut, network, open }: {
-  points: PointInfo[]; pointId: string; cut: string | null; network: Network | null; open(next: ScenarioChoice): void;
+export function ScenarioTree({ points, pointId, cuts, network, open, locked }: {
+  points: PointInfo[]; pointId: string; cuts: string[]; network: Network | null; open(next: ScenarioChoice): void; locked?: string;
 }) {
-  const active: Key = cut === CASE_25F.cut ? "25f" : cut ? "custom" : "new";
+  const cut = cuts[0] ?? null;
+  const active: Key = cuts.length === 1 && cut === CASE_25F.cut ? "25f" : cut ? "custom" : "new";
   const year = points.find((p) => p.id === pointId)?.year;
   const [expanded, setExpanded] = useState<Set<Key>>(() => new Set([active]));
   // A scenario that becomes active (from the rail, a map click or the URL) opens; collapsing it again is up to the user.
   useEffect(() => { setExpanded((s) => (s.has(active) ? s : new Set(s).add(active))); }, [active]);
 
-  const cutName = cut && network ? lineName(network, cut) : cut ?? "";
+  const names = cuts.map((id) => (network ? lineName(network, id) : id));
+  const cutName = names.join(", ");
   const rows: Row[] = [
     { key: "25f", name: "Apagón 25F", cut: CASE_25F.cut, year: active === "25f" ? year : 2025 },
-    ...(active === "custom" ? [{ key: "custom" as const, name: `Corte ${cutName.replace(/ \(.*\)$/, "")}`, title: cutName, cut, year }] : []),
+    ...(active === "custom" ? [{ key: "custom" as const, name: `Corte ${names.map((n) => n.replace(/ \(.*\)$/, "")).join(", ")}`, title: cutName, cut, year }] : []),
     { key: "new", name: "Escenario nuevo", cut: null, faint: active !== "new" },
   ];
 
@@ -35,7 +39,7 @@ export function ScenarioTree({ points, pointId, cut, network, open }: {
   }
 
   function clickRow(row: Row) {
-    if (row.key === active) return toggle(row.key);
+    if (row.key === active || locked) return toggle(row.key);
     setExpanded((s) => new Set(s).add(row.key));
     open({ point: row.key === "25f" ? CASE_25F.point : pointId, cut: row.cut });
   }
@@ -59,8 +63,8 @@ export function ScenarioTree({ points, pointId, cut, network, open }: {
                 {points.map((p) => {
                   const current = on && p.id === pointId;
                   return (
-                    <button key={p.id} className={current ? "condition on" : "condition"} aria-current={current || undefined} title={p.label}
-                      onClick={() => open({ point: p.id, cut: row.cut })}>
+                    <button key={p.id} className={current ? "condition on" : "condition"} aria-current={current || undefined} title={locked ? undefined : p.label}
+                      aria-disabled={locked && !current ? "true" : undefined} data-tip={locked} onClick={() => !locked && open({ point: p.id, cut: row.cut })}>
                       <span className="cond-name ellipsis">{conditionName(p.label)}</span>
                       <span className="cond-date">{conditionDate(p.snapshot)}</span>
                     </button>

@@ -1,0 +1,284 @@
+"""The assistant's tool-use loop with a scripted model and a fake toolbox (docs/assistant.md)."""
+
+import pytest
+
+from cascadasen.application.assistant import (
+    Assistant,
+    AssistantInputError,
+    ConversationConflictError,
+    ConversationNotFoundError,
+    trim_history,
+    trim_result,
+)
+from cascadasen.domain.ports import AssistantTurn, ToolCall, ToolChatError, ToolSpec
+from cascadasen.infrastructure.document_store import MemoryDocumentStore
+from cascadasen.mcp.client import Sub50Client, ToolError
+from cascadasen.mcp.state import McpState
+from cascadasen.mcp.toolbox import SessionTools
+from cascadasen.mcp.tools import Sub50Tools
+
+SID = "A" * 22
+
+
+class ScriptedModel:
+    """Answers with the next scripted turn and records what it was sent."""
+
+    def __init__(self, *turns):
+        self.turns, self.seen = list(turns), []
+
+    def turn(self, system, messages, tools):
+        self.seen.append([dict(m) for m in messages])
+        nxt = self.turns.pop(0)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
+
+
+class FakeBox:
+    def __init__(self, fail=False):
+        self.calls, self.fail, self.ctx = [], fail, {"session_id": None, "run_id": None}
+
+    def specs(self):
+        return [ToolSpec("start_session", "x", {"type": "object"})]
+
+    def run(self, call):
+        self.calls.append(call)
+        if call.name == "start_session":
+            self.ctx["session_id"] = SID
+        return (False, {"error": "mal"}) if self.fail else (True, {"ok": call.name})
+
+    def context(self):
+        return dict(self.ctx)
+
+
+def call(name="start_session", id="c1", **arguments):
+    return ToolCall(id, name, arguments)
+
+
+def make(model, **kw):
+    return Assistant(model, MemoryDocumentStore(), "sistema", notice="aviso", **kw)
+
+
+def test_plain_answer_without_tools():
+    a = make(ScriptedModel(AssistantTurn("hola")))
+    out = a.chat("hola", None, None, lambda s, r, t: FakeBox())
+    assert out["reply"] == "hola" and out["tool_calls"] == [] and out["truncated"] is None
+    assert out["steps"] == 1 and out["notice"] == "aviso" and len(out["conversation_id"]) == 22
+
+
+def test_tool_calls_run_and_the_session_is_remembered_across_messages():
+    model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("listo"), AssistantTurn("otra vez"))
+    a, boxes = make(model), []
+
+    def box(sid, rid, said):
+        boxes.append((sid, rid))
+        return FakeBox()
+
+    first = a.chat("crea una sesión", None, None, box)
+    assert first["reply"] == "listo" and first["steps"] == 2
+    assert first["tool_calls"] == [
+        {"name": "start_session", "arguments": {}, "ok": True, "result": {"ok": "start_session"}}
+    ]
+    assert first["session_id"] == SID
+    second = a.chat("sigue", first["conversation_id"], None, box)
+    assert boxes == [(None, None), (SID, None)] and second["reply"] == "otra vez"
+    assert second["tool_calls"] == []  # the trace is of this message only
+    assert len(model.seen[2]) == 5  # user, assistant+call, tool, assistant, user: the history came back
+
+
+def test_a_failed_tool_goes_back_to_the_model_and_the_loop_continues():
+    model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("no se pudo"))
+    out = make(model).chat("x", None, None, lambda s, r, t: FakeBox(fail=True))
+    assert out["tool_calls"][0]["ok"] is False and out["reply"] == "no se pudo"
+    assert model.seen[1][-1] == {
+        "role": "tool",
+        "tool_call_id": "c1",
+        "ok": False,
+        "result": {"error": "mal"},
+    }
+
+
+def test_the_step_cap_ends_the_message_and_keeps_roles_alternating():
+    model = ScriptedModel(*[AssistantTurn("", (call(id=f"c{i}"),)) for i in range(3)])
+    a = make(model, max_steps=3)
+    out = a.chat("x", None, None, lambda s, r, t: FakeBox())
+    assert out["truncated"] == "steps" and "continúa" in out["reply"] and out["steps"] == 3
+    doc, _ = a.load(out["conversation_id"])
+    assert doc["messages"][-1]["role"] == "assistant"
+
+
+def test_the_deadline_stops_before_the_next_model_call():
+    now = iter([0.0, 0.0, 0.0, 1.0, 30.0, 30.0, 30.0])
+    model = ScriptedModel(AssistantTurn("", (call(),)))
+    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r, t: FakeBox())
+    assert out["truncated"] == "deadline" and out["steps"] == 1
+
+
+def test_a_model_failure_keeps_the_turn_and_raises():
+    a = make(ScriptedModel(ToolChatError("no disponible"), AssistantTurn("ya")))
+    with pytest.raises(ToolChatError):
+        a.chat("primero", None, None, lambda s, r, t: FakeBox())
+    cid = next(k for k in a.store._docs).removeprefix("assistant/").removesuffix(".json")
+    doc, _ = a.load(cid)
+    assert [m["role"] for m in doc["messages"]] == ["user", "assistant"]
+    assert a.chat("de nuevo", cid, None, lambda s, r, t: FakeBox())["reply"] == "ya"
+
+
+def test_unknown_conversation_bad_session_id_and_delete():
+    a = make(ScriptedModel(AssistantTurn("hola")))
+    with pytest.raises(ConversationNotFoundError):
+        a.chat("x", "nope", None, lambda s, r, t: FakeBox())
+    with pytest.raises(AssistantInputError):
+        a.chat("x", None, "corto", lambda s, r, t: FakeBox())
+    cid = a.chat("x", None, SID, lambda s, r, t: FakeBox())["conversation_id"]
+    a.delete(cid)
+    with pytest.raises(ConversationNotFoundError):
+        a.load(cid)
+
+
+def test_a_concurrent_message_loses_with_a_conflict():
+    a = make(ScriptedModel(AssistantTurn("uno"), AssistantTurn("dos"), AssistantTurn("tres")))
+    cid = a.chat("x", None, None, lambda s, r, t: FakeBox())["conversation_id"]
+
+    def racing(sid, rid, said):
+        a.store.put(f"assistant/{cid}.json", {**a.load(cid)[0], "updated_at": "otro"})  # another writer
+        return FakeBox()
+
+    with pytest.raises(ConversationConflictError):
+        a.chat("y", cid, None, racing)
+
+
+def test_history_is_trimmed_at_a_user_turn_and_big_results_are_cut():
+    msgs = [
+        {"role": "user", "text": "1"},
+        {"role": "assistant", "text": "", "tool_calls": [{"id": "a", "name": "n", "arguments": {}}]},
+        {"role": "tool", "tool_call_id": "a", "ok": True, "result": {}},
+        {"role": "assistant", "text": "r"},
+        {"role": "user", "text": "2"},
+        {"role": "assistant", "text": "r2"},
+    ]
+    assert [m["role"] for m in trim_history(msgs, 4)] == ["user", "assistant"]  # starts at "2"
+    assert trim_history(msgs, 10) == msgs
+    cut = trim_result({"x": "y" * 20000})
+    assert cut["truncated"] is True and len(cut["preview"]) == 8000
+
+
+def test_session_tools_reject_unknown_and_excluded_tools_and_cap_step_cycles():
+    seen = {}
+
+    class Tools(Sub50Tools):
+        def step(self, cycles: int = 1):
+            seen["cycles"] = cycles
+            return {"cycles": cycles}
+
+        def cut_lines(self, lines: list[str]):
+            raise ToolError("sin sesión")
+
+    box = SessionTools(Tools(Sub50Client(base_url="http://x"), McpState(SID)))
+    assert box.run(call("end_session")) == (False, {"error": "Herramienta desconocida: end_session"})
+    assert box.run(call("nada"))[0] is False
+    assert box.run(call("step", cycles=500)) == (True, {"cycles": 24}) and seen["cycles"] == 24
+    assert box.run(call("cut_lines", lines=["R1"])) == (False, {"error": "sin sesión"})
+    assert box.run(call("cut_lines", otra=1))[1]["error"].startswith("Argumentos inválidos")
+    assert "end_session" not in {s.name for s in box.specs()}
+
+
+def test_the_first_tool_that_needs_a_session_opens_one_and_says_so():
+    started = []
+
+    class Tools(Sub50Tools):
+        def start_session(self, point: str | None = None, label: str | None = None):
+            started.append(1)
+            self.state.session_id = SID
+            return {"session_id": SID}
+
+        def describe_network(self, focus: str | None = None):
+            return {"areas": []}
+
+        def list_options(self):
+            return {"templates": []}
+
+    box = SessionTools(Tools(Sub50Client(base_url="http://x")))
+    assert box.run(call("list_options")) == (True, {"templates": []})  # needs no session
+    assert not started
+    ok, first = box.run(call("describe_network"))
+    assert ok and "automáticamente" in first["nota"] and started == [1]
+    ok, second = box.run(call("describe_network"))
+    assert ok and "nota" not in second and started == [1]
+    assert box.context()["session_id"] == SID
+
+
+def test_an_announced_but_unrun_action_gets_one_hidden_nudge():
+    model = ScriptedModel(
+        AssistantTurn("La línea es R007. La cortaré junto con las anteriores."),
+        AssistantTurn("", (call(),)),
+        AssistantTurn("Listo, la corté."),
+    )
+    a = make(model)
+    out = a.chat("corta la línea entre A y B", None, None, lambda s, r, t: FakeBox())
+    assert out["reply"] == "Listo, la corté." and [t["name"] for t in out["tool_calls"]] == ["start_session"]
+    nudge = model.seen[1][-1]
+    assert nudge["role"] == "user" and nudge["hidden"] is True
+    turns = a.load(out["conversation_id"])[0]
+    from cascadasen.application.assistant import view
+
+    assert all("interno" not in t["text"] for t in view(turns)["turns"])  # the user never sees it
+
+
+def test_no_nudge_for_questions_past_tense_or_twice():
+    from cascadasen.application.assistant import announces
+
+    assert announces("Voy a cortar R007.") and announces("Cortaré R007 ahora.")
+    assert not announces("¿Quieres que la corte?") and not announces("Reparé todas las líneas.")
+    assert not announces("Comparé las dos políticas.")
+    model = ScriptedModel(AssistantTurn("Haré el corte."), AssistantTurn("Haré el corte."))
+    out = make(model).chat("x", None, None, lambda s, r, t: FakeBox())
+    assert out["reply"] == "Haré el corte." and out["steps"] == 2  # only one nudge
+
+
+def test_megawatts_must_come_from_the_user():
+    from cascadasen.mcp.toolbox import numbers, stated
+
+    assert numbers("un datacenter de 1.200 MW y otro de 0,5 GW o 120") == {1200.0, 0.5, 120.0}
+    assert stated(120, "agrega 120 MW") and stated(500, "medio GW: 0,5 GW") and not stated(500, "en Calama")
+
+    class Tools(Sub50Tools):
+        def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter"):
+            return {"mw": mw}
+
+    tools = Tools(Sub50Client(base_url="http://x"), McpState(SID))
+    box = SessionTools(tools, said="Agrega un datacenter en Calama")
+    ok, out = box.run(call("add_datacenter", bus="Calama", mw=500))
+    assert not ok and "pregúntale" in out["error"]
+    box = SessionTools(tools, said="Agrega un datacenter en Calama\n300 MW")
+    assert box.run(call("add_datacenter", bus="Calama", mw=300)) == (True, {"mw": 300})
+
+
+def test_the_toolbox_gets_everything_the_user_said():
+    seen = []
+    model = ScriptedModel(AssistantTurn("¿Cuántos MW?"), AssistantTurn("ok"))
+    a = make(model)
+
+    def box(sid, rid, said):
+        seen.append(said)
+        return FakeBox()
+
+    cid = a.chat("datacenter en Calama", None, None, box)["conversation_id"]
+    a.chat("300", cid, None, box)
+    assert seen == ["datacenter en Calama", "datacenter en Calama\n300"]
+
+
+def test_offers_waiting_for_the_user_get_no_nudge():
+    from cascadasen.application.assistant import announces
+
+    assert not announces("Dime tu acción y la ejecutaré inmediatamente.")
+    assert not announces("Si quieres, cortaré otra línea.")
+    assert announces("La línea es R007. La cortaré junto con las anteriores.")
+
+
+def test_a_call_that_would_end_past_the_deadline_is_not_started():
+    # start 0; step 1: check 0, call 0 -> 12 (mean 12); step 2: check 14 + 12 > 25 -> stop
+    now = iter([0.0, 0.0, 0.0, 12.0, 14.0])
+    model = ScriptedModel(AssistantTurn("", (call(),)), AssistantTurn("no debería llegar"))
+    out = make(model, deadline_s=25, clock=lambda: next(now)).chat("x", None, None, lambda s, r, t: FakeBox())
+    assert out["truncated"] == "deadline" and out["steps"] == 1 and len(model.turns) == 1

@@ -29,6 +29,33 @@ class Settings(BaseSettings):
     aws_region: str | None = None
     aws_profile: str | None = None
 
+    # in-app natural-language assistant (docs/assistant.md); needs llm_enabled and bedrock-converse
+    assistant_max_steps: int = 8  # tool-use rounds per message
+    assistant_deadline_s: float = 25.0  # CloudFront cuts a request at 30 s
+    assistant_call_timeout_s: float = 20.0  # one Bedrock call
+    assistant_history_messages: int = 30
+    rate_assistant_per_minute: int = 10
+
+    # shared sessions and persisted runs (docs/stack.md 7.1): "memory" (one process), "file"
+    # (`sessions_dir`, one machine) or "s3" (`session_bucket`, several instances)
+    session_store: Literal["memory", "file", "s3"] = "memory"
+    session_bucket: str | None = None
+    session_dir: Path | None = None  # default data_dir / "sessions"
+    session_ttl_hours: float = 24
+    run_cache_size: int = 20  # strategic runs kept in memory per process; evicted runs are rebuilt
+    admin_enabled: bool = False  # POST /api/v1/admin/reload; off in production
+    version: str = "dev"  # code version recorded in each run record
+    rate_create_per_hour: int = 10
+    trusted_proxy_hops: int = 0  # proxies that append to X-Forwarded-For; 2 behind CloudFront + ALB
+    rate_writes_per_minute: int = 60
+    rate_cuts_per_minute: int = 30
+    sse_per_session_ip: int = 5
+    sse_heartbeat_s: float = 15.0
+    sse_poll_s: float = 1.0
+    sse_head_s: float = 5.0
+    sse_max_s: float = 55.0
+    session_lock_timeout_s: float = 10.0  # wait for the request before it on the same session, then 409
+    session_lock_max_waiters: int = 10  # requests queued behind the one in progress; more get 409 at once
     ide_energia_url: str = (
         "https://ide-energia.minenergia.cl/server/rest/services/IDE_Energia/Visor_IDE_Energ%C3%ADa/MapServer"
     )
@@ -67,6 +94,10 @@ class Settings(BaseSettings):
     @property
     def snapshot_path(self) -> Path:
         return self.processed_dir / "grid_snapshot.json"
+
+    @property
+    def sessions_dir(self) -> Path:
+        return self.session_dir or self.data_dir / "sessions"
 
 
 def get_settings() -> Settings:

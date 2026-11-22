@@ -52,6 +52,7 @@ Dependency rule: `domain/` imports nothing from `api/`, `application/` or `infra
 | `ContractExporter` | Static files for the frontend | `infrastructure/exporters.py` |
 | `Interpreter` | Narration and after-action review | `domain/theater/narrative.py` (`TemplateInterpreter`), `infrastructure/llm.py` (`ClaudeInterpreter`) |
 | `CommanderAdvisor` | An LLM that picks among validated COAs for C2 | `infrastructure/llm.py` (Claude API, Bedrock, Bedrock Converse) |
+| `DocumentStore` | JSON documents by key with conditional writes (`if_match`, `if_none_match`; a lost race raises `ConflictError`) for run records and sessions | `infrastructure/document_store.py` (memory, file, S3) |
 
 Adding a data source means writing one adapter and registering it in `container.py`; domain and application do not change.
 
@@ -62,6 +63,7 @@ Adding a data source means writing one adapter and registering it in `container.
 | `model.py`, `unify.py`, `topology_inference.py`, `naming.py`, `geo.py` | Grid model; joins the sources into one snapshot (substations by CEN id, line ends from geometry, PyPSA-CL parameters, population) as pure functions |
 | `validation.py` | Checks run on every build (coverage, connectivity, agreement between sources, reactance per km) |
 | `cascade/` | **188-bus cascade engine** (`engine.md`): network reduction, DC flow per island, island frequency (reserve with droop, batteries, EDAC, extreme EDAC), overload cascade, voltage-limited verdict. Parameters in `cascade/params/cascade.yaml`. Drives the map cuts and the theatre |
+| `cascade/overlay.py` | **Session overlay** (`stack.md` 6.2): validated edits of the 188-bus network and per-bus arrays (added buses, lines, loads and datacenters, generators, overrides, out-of-service), rebalanced per island by proportional synchronous redispatch (an assumption). Pure, no wall clock |
 | `simulation/` | **13-area engine** for `POST /api/v1/simulate` and validation cases V1-V10. Parameters in `simulation/params/*.yaml`; its `params.py` loader is shared by the other modules |
 | `theater/` | **Strategic theatre** (`strategy.md`): real state on the mapa 3 network (`grid.py`), digital engine (`digital.py`), events and actions (`catalog.py`, `execution.py`), validator, resources, crews, chance (`rng.py`, `stochastic.py`), evaluator, hash-chained audit log, the cycle (`cycle.py`). Parameters in `theater/params/*.yaml` |
 | `agents/` | C2, ISR, Operations, Stabilisation, Logistics, Auditor and the adaptive adversary (`strategy.md` section 5, `agents.md`). They receive views (`base.py`) and never the real state |
@@ -75,8 +77,9 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 | Build the unified snapshot | `build_grid.py` | `cascadasen-build` (`cli.py`) |
 | Query the grid | `grid_queries.py` | `/api/v1/nodes`, `/edges`, `/graph/*`, ... |
 | Simulate a scenario (13 areas) | `simulate.py` | `POST /api/v1/simulate` |
-| Theatre world (network + operating points, cached) | `theater_world.py` | used by runs and campaigns |
-| Runs: create, step, inject, replay (in-memory LRU) | `run_experiment.py` | `/api/v1/sim/runs*` |
+| Theatre world (network + operating points, cached); `SessionWorld` = one pinned point with a session overlay applied | `theater_world.py` | used by runs, campaigns and session runs |
+| Sessions: document CRUD with revisions and conditional writes, overlay edits, network view with baseline, sandbox cut/repair, nested runs on `RunManager` pinned to their overlay, revision/head for SSE | `sessions.py` | `/api/v1/sessions*` (API in a later change) |
+| Runs: create, step, inject, external actions, replay; every command persists a run record in the `DocumentStore`, a bounded `RunCache` (LRU) keeps live simulations and rebuilds evicted ones | `run_experiment.py` | `/api/v1/sim/runs*` |
 | Campaigns with fragility and adaptation indices | `run_campaign.py` | `/api/v1/sim/campaigns*` |
 | Facade over simulation and theatre | `simulation_service.py` | `api/simulation_routes.py` |
 | Precompute every single-line cut | `cache_builder.py` | `cascadasen-cache` → `web/public/cache/` |
@@ -90,12 +93,13 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 - `http.py`, `arcgis.py`: cached HTTP client and ArcGIS paging.
 - `snapshot_repository.py`, `exporters.py`: persistence and static files.
 - `llm.py`: Claude API and Amazon Bedrock clients. Optional extra `llm`, off by default (`CASCADASEN_LLM_ENABLED`).
+- `document_store.py`: `MemoryDocumentStore` (default), `FileDocumentStore` (`data/sessions/`, git-ignored; atomic writes, rejects keys with `..`) and `S3DocumentStore` (S3 conditional writes `IfMatch`/`IfNoneMatch`). Chosen by `CASCADASEN_SESSION_STORE` (`memory`, `file`, `s3` with `CASCADASEN_SESSION_BUCKET`) in `container.document_store`. Memory and file entries expire `CASCADASEN_SESSION_TTL_HOURS` (24) after their last write; S3 relies on a bucket lifecycle rule.
 - `settings.py`: settings `CASCADASEN_*` from the environment or `backend/.env`. Keys are never stored there.
 - `container.py`: composition root.
 
 ### 2.5 API (`api/`)
 
-`app.py` creates the FastAPI app (grid queries, health, admin reload, the `static/map.html` test page) and includes `simulation_routes.py` (`/api/v1/simulate`, `/api/v1/sim/*`). Schemas are in `schemas.py` and `simulation_schemas.py`. HTTP contract: `stack.md` sections 7 and 7.1. Command: `cascadasen-api`.
+`app.py` creates the FastAPI app (grid queries, health, admin reload when `CASCADASEN_ADMIN_ENABLED=true`, the `static/map.html` test page) and sets `app.state.settings` and `app.state.store` and includes `simulation_routes.py` (`/api/v1/simulate`, `/api/v1/sim/*`) and `session_routes.py` (`/api/v1/sessions/*`, built lazily on `app.state.sessions` from the simulation service). `limits.py` holds the per-process rate limits (`TokenBucket`), SSE slots and the 64 KB `BodyLimitMiddleware` for session routes. Schemas are in `schemas.py`, `simulation_schemas.py` and `session_schemas.py`. `agent_openapi.py` holds the shared `ErrorResponse` and builds the agent-only spec from the routes marked `openapi_extra=AGENT` and serves it at `/api/v1/agents/openapi.json` (rules in `openapi.md`; versioned copy in `docs/openapi/agents.openapi.json`, regenerated with `uv run python -m cascadasen.api.agent_openapi`). HTTP contract: `stack.md` sections 7, 7.1 and 7.2, and `sessions-api.md`. Command: `cascadasen-api`.
 
 ## 3. Simulation flows
 
@@ -121,13 +125,25 @@ tick (expire effects, restore, settle frequency)
 
 There are three states (`strategy.md` section 3). The real state is seen only by the engine, the validator and the evaluator. Agents see the observed state through their role. Each agent keeps its own estimate. A run can be replayed exactly from its recipe: configuration, seed, injected events and recorded LLM picks.
 
+### 3.3 A session edit and its live update (`sessions-api.md`)
+
+```
+client A: POST /sessions/{sid}/loads ─► SessionService.mutate: get doc ─► overlay.add + apply_overlay (validate, rebalance)
+          ─► revision+1, last_op ─► store.put(if_match=etag) (conflict: re-read, ≤ 3 retries, then 409) ─► 201 + ETag
+client B: GET /sessions/{sid}/events (SSE) ─► every 1 s: cached revision; every 5 s: store head (another instance wrote?)
+          ─► event: revision {revision, op, ids, by} ─► B refetches /network and /state
+```
+
+The network view is cached per `(sid, revision)`. Runs created in the session pin the overlay of that moment in their record, so later edits do not change them.
+
 ## 4. Frontend (`web/`)
 
 Vite + React + TypeScript; deck.gl layers over an offline base map or Mapbox (token as build arg).
 
 | Folder | Responsibility |
 |---|---|
-| `src/cascade/` | Mapa 3 (`CascadeApp.tsx`): Red, Simulación, Leyenda and Supuestos tabs; line cut, cascade layers, network panel, timeline player. Data from `web/public/cache/` (`api.ts`) |
+| `src/cascade/` | Mapa 3 (`CascadeApp.tsx`, Design v5 shell): Red and Simulación tabs (plus Datos in a session), Fuentes y supuestos and Ayuda views; line cut, cascade layers, network panel, timeline. Data from `web/public/cache/` (`api.ts`), or from the sessions API with `?sesion=` (`src/session/`) |
+| `src/session/` | Session mode of mapa 3: API client with SSE and polling (`sessionApi.ts`), `useSession`, session bar, Datos tab, nearest-bus geometry. Calls `/api`, proxied by the Vite dev server (`VITE_API_TARGET`) |
 | `src/map/` | Base map (offline or Mapbox), shared layers, node detail, regional context layer (`regional.ts`) |
 | `src/assets/icons/` | 2D icons |
 

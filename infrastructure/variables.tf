@@ -20,3 +20,8 @@ variable "alb_certificate_arn" {
   type        = string
   default     = null
 }
+variable "session_ttl_days" {
+  description = "Days before S3 expires session and run objects (the app TTL is 24 h; S3 rounds to the next UTC midnight)."
+  type        = number
+  default     = 1
+}

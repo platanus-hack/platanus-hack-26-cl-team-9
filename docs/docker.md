@@ -10,7 +10,7 @@ docker compose down              # stop
 | `web` | http://localhost:5173 | Vite dev server (npm). `./web` and `./data` are bind-mounted, so edits hot-reload. `node_modules` lives in the container |
 | `backend` | http://localhost:8000 | Grid data API (`/docs`, `/map`, `/api/v1/*`). Reads `./data/processed/` mounted at `/data` |
 
-The two services are independent: the web app reads the committed files in `data/processed/` and the mapa 3 caches under `web/public/cache/`, and does not call the backend yet. The strategic theatre API (`/api/v1/sim/*`) is served by `backend`; its frontend contract is `docs/mapa3.md` section 10.
+Without a session the web app reads only the committed files in `data/processed/` and the mapa 3 caches under `web/public/cache/`, so it keeps working when `backend` is stopped. Session mode (`/?sesion=<sid>`, `docs/mapa3.md` section 11) calls `/api`, which the `web` dev server proxies to `backend` (`VITE_API_TARGET=http://backend:8000`, set by compose; `web` depends on `backend`). Sessions and runs persist in `data/sessions/` (git-ignored) across `docker compose restart backend`. The strategic theatre API (`/api/v1/sim/*`) is served by `backend`; its frontend contract is `docs/mapa3.md` section 10.
 
 `?mapa=2` (Mapbox basemap) needs a public token. Create `web/.env.local` with `VITE_MAPBOX_TOKEN=pk...` (see `web/.env.example`); it is git-ignored and the bind mount makes it visible in the container. Restart `web` after changing it. Without a token the offline map is used.
 
@@ -22,7 +22,7 @@ Port already in use? Set `WEB_PORT` and `BACKEND_PORT`, for example `WEB_PORT=51
 docker compose --profile data run --rm data-build              # uses the cache in data/raw/
 docker compose --profile data run --rm data-build cascadasen-build --refresh
 ```
-Restart `backend` or call `POST /api/v1/admin/reload` afterwards.
+Restart `backend` or call `POST /api/v1/admin/reload` afterwards. The reload route only exists with `CASCADASEN_ADMIN_ENABLED=true`, which compose sets for `backend`. Compose also sets `CASCADASEN_SESSION_STORE=file`, so strategic runs persist in `data/sessions/` (git-ignored) across restarts.
 
 ## Notes
 - The backend image uses `uv sync --locked`, so `backend/uv.lock` must be current.

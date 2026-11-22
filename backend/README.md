@@ -16,7 +16,18 @@ uv run cascadasen-regional                 # other countries (BRA PER ARG BOL) -
 uv run pytest
 ```
 
-After a rebuild, `POST /api/v1/admin/reload` reloads the snapshot without restarting the server.
+After a rebuild, `POST /api/v1/admin/reload` reloads the snapshot without restarting the server. It answers 404 unless `CASCADASEN_ADMIN_ENABLED=true` (docker compose sets it; leave it off in production).
+
+Agent-only OpenAPI spec (routes marked `openapi_extra=AGENT`, rules in `docs/openapi.md`): served at `/api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`) and versioned in `docs/openapi/agents.openapi.json`. After adding or changing a marked route or its models, regenerate and validate the file, then commit it; `tests/integration/test_agent_openapi.py` fails while it is stale:
+
+```bash
+uv run python -m cascadasen.api.agent_openapi            # writes ../docs/openapi/agents.openapi.json
+uvx openapi-spec-validator ../docs/openapi/agents.openapi.json
+```
+
+MCP server (natural-language simulations through the agent API, `docs/mcp.md`): `uv run --extra mcp cascadasen-mcp` over stdio, with `SUB50_API_URL` pointing at the API. Register it with `claude mcp add sub50 --env SUB50_API_URL=http://localhost:8000 -- uv run --directory <abs>/backend --extra mcp cascadasen-mcp`.
+
+In-app assistant (the same tools behind a chat endpoint, `docs/assistant.md`): with `CASCADASEN_LLM_ENABLED=true`, `CASCADASEN_LLM_PROVIDER=bedrock-converse` and a tool-capable `CASCADASEN_LLM_MODEL`, `POST /api/v1/assistant/chat` takes `{"message": "..."}` in natural language and runs the simulation; without them it answers 503.
 
 Build outputs in `data/processed/`:
 
@@ -74,7 +85,7 @@ The simulation layer sits on top of the snapshot (concepts in `docs/strategy.md`
   - Record and orchestration: hash-chained audit log (`audit.py`), indicators and the Freedom of Action Index (`evaluator.py`), and the six-step cycle (`cycle.py`).
   - Experiment design lives in `params/theater.yaml` and `params/templates.yaml`.
 - `domain/agents/`: C2, ISR, Operations, Stabilisation, Logistics, Auditor and the adaptive Adversary. They are deterministic and seeded. Views (`base.py`) never carry the real state, which a test checks.
-- `application/run_experiment.py`: `RunManager` (in-memory LRU of 100 runs; replay re-injects events at their cycles, so an unchanged replay gives the same trace hash) and the catalog. Endpoints are under `/api/v1/sim/*` (`docs/stack.md` 7.1).
+- `application/run_experiment.py`: `RunManager` and the catalog. Every command persists a run record in the `DocumentStore` (`CASCADASEN_SESSION_STORE=memory|file|s3`); a process-wide `RunCache` (LRU, `CASCADASEN_RUN_CACHE_SIZE=20`, 64 striped locks that serialise commands on a run) keeps live simulations, and a run missing from it is rebuilt from its recipe (`rebuilt`, `trace_matches` in the summary). `RunManager.action` queues an external agent action (`Simulation.submit_action`), validated when the next cycle runs. Replay re-submits events and actions at their cycles, so an unchanged replay gives the same trace hash. Endpoints are under `/api/v1/sim/*` (`docs/stack.md` 7.1).
 - `domain/theater/narrative.py` and `params/narrative_es.yaml`: Spanish templates for every key the API returns, plus the deterministic after-action review (`TemplateInterpreter`, behind the `Interpreter` port in `domain/ports.py`). An LLM-backed interpreter can implement the same port later; it would explain, never decide.
 - Optional LLM (off by default): `uv sync --extra llm`, then in `backend/.env` (git-ignored; settings only, **never keys**):
   - Amazon Bedrock:

@@ -225,13 +225,43 @@ These fields support the scenario classes in `cyber.md` section 4. All are optio
 - `consequence_level`: `L0` absorbed, `L1` contained, `L2` regional blackout, `L3` national blackout.
 - `failure_cost_usd` = `unserved_energy_mwh` x 1,000 x 8.79 US$/kWh [19]. The value is a regulatory valuation and depends on the assumed duration.
 
-### 6.2 Regional context layer (draft)
+### 6.2 Session overlay
+A session edits the 188-bus engine network (`domain/cascade/network.py`) of one pinned operating point through a JSON overlay (`domain/cascade/overlay.py`). The base dataset is never changed. The session document `sessions/<sid>.json` (`application/sessions.py`) is:
+```json
+{
+  "session_id": "<22 chars, secrets.token_urlsafe(16)>", "label": null, "point": "nov2026-1300",
+  "revision": 3, "dataset_revision": 2, "open_lines": ["R014"],
+  "overlay": {
+    "buses": [{"id": "B188", "name": "Nueva SE", "lat": -33.5, "lon": -70.7, "kv": 220}],
+    "lines": [{"id": "U001", "a": "B010", "b": "B188", "kv": 220, "capacity_mw": 500, "x_pu": 0.0123}],
+    "loads": [{"id": "D001", "bus": "B010", "mw": 300, "kind": "datacenter", "name": "DC"}],
+    "generators": [{"id": "G001", "bus": "B188", "mw": 100, "tech": "solar"}],
+    "bus_overrides": {"B002": {"load_mw": 120, "in_service": true}},
+    "line_overrides": {"R001": {"capacity_mw": 800, "in_service": false}},
+    "seq": {"line": 1, "load": 1, "generator": 1}
+  },
+  "runs": {"<run_id>": {"created_at": "...", "dataset_revision": 1, "cycle": 5, "status": "running"}},
+  "created_at": "...", "updated_at": "...",
+  "last_op": {"op": "load_added", "ids": ["D001"], "by": "web", "revision": 3, "dataset_revision": 2}
+}
+```
+- **Ids.** Added buses continue the base numbering (`B188`, `B189`… on the real network). Added lines are `U###`, loads and datacenters `D###`, generators `G###`; the `seq` counters never reuse an id. Element references use these ids (`a`, `b`, `bus`).
+- **Edits.** `add`, `patch` and `remove` per kind (`bus`, `line`, `load`, `generator`). A patch on a base bus or line writes `bus_overrides`/`line_overrides` (bus: `name`, `kv`, `lat`, `lon`, `load_mw`, `gen_mw`, `sync_mw`, `inertia_mws`, `in_service`; line: `capacity_mw`, `x_pu`, `in_service`); a `null` clears a field. Base elements are never deleted (409, use `in_service: false`). An out-of-service bus keeps its index with load, generation, synchronous MW and inertia at 0, and its lines are dropped. Deleting a session bus leaves a tombstone (`removed: true`, hidden from views) so later ids stay stable; it is refused (409) while lines, loads or generators reference it.
+- **Bounds.** `kv` in the base set (66, 110, 154, 220, 500); line ends distinct, existing and in service; `capacity_mw` in (0, 5000]; `x_pu` in [5e-4, 1.0], default `haversine_km × mean(X_PER_KM[kv]) / (kv²/100)` (`domain/validation.py`); load and generator `mw` in (0, 3000]; bus overrides `load_mw`, `gen_mw`, `sync_mw` in [0, base value + 3000] with `sync_mw ≤ gen_mw` and `inertia_mws ≤ 10 s × sync_mw`; lat in [-56, -17], lon in [-76, -66]; at most 50 added elements and 5000 MW of added load plus generation plus the absolute `load_mw` and `gen_mw` change of bus overrides. Generator `tech` is `hidro`, `termica`, `bioenergia`, `geotermica` (synchronous by default, inertia `inertia_h × mw`, `inertia_h` default 4 s, an assumption) or `solar`, `eolica`; load `kind` is `datacenter` or `consumo`.
+- **Balance rule (`is_assumption: true`).** Per island of the edited network, `delta = Σ(gen'−load') − Σ(gen−load)` (edited versus base arrays) is redispatched as `−delta` over the base synchronous units of the island in proportion to their base `sync_mw`; `gen` and `sync_mw` change, inertia does not; a unit is clamped at 0. A bus whose `gen_mw` or `sync_mw` the overlay sets keeps that value and takes no share. A bus out of service loses its base load and generation; when it (or a group of adjacent out-of-service buses) touched a single live island through its in-service base lines, that island redispatches the loss, so the base case stays balanced. When it touched several islands it split them, and each part keeps its base imbalance (`unbalanced_island`). Out-of-service buses get no warnings of their own. Each redispatch is reported as `balance: [{buses: {"B000": 54.5, …}, redispatch_mw, is_assumption: true, rule}]`. It is not an OPF: a large added load can overload lines in the base case, and the baseline shows it.
+- **Warnings** `{code, ids, message}`: `isolated_bus` (a bus with no line in service), `no_sync_to_redispatch` (no base synchronous generation, or clamped units, so the island stays unbalanced), `unbalanced_island` (a topology split, e.g. a line or bus taken out of service, keeps its base imbalance of ≥ 1 MW; splits belong in the sandbox cut).
+- **Concurrency.** Every change bumps `revision` and records `last_op`. Edits, reset, cut and repair also bump `dataset_revision`; run activity (`run_created`, `run_updated`) does not. Writes are conditional on the store etag and retried 3 times, then 409; a client `If-Match` that does not match `dataset_revision` gives 412. The network view and the session world are cached by `(sid, dataset_revision)`. A `run_updated` index write that loses 3 retries is skipped (the run record is already persisted) instead of answering 409. A backend process serves one request at a time per session (`SessionLocks` in `api/limits.py`, every `{sid}` route except the SSE stream): a request waits up to `session_lock_timeout_s` (10 s) and then gets 409 with `Retry-After: 1`, and beyond `session_lock_max_waiters` (10) queued requests it gets the 409 at once; across processes the conditional writes and `If-Match` remain the guard.
+- **Sandbox and runs.** `open_lines` holds the sandbox cut (1-3 lines per cut, repair some or all); each call re-runs the cascade from the edited base case. Edits that drop a line also drop it from `open_lines`. Runs are nested under the session (`sessions/<sid>/runs/<rid>.json`, at most 20) and pin the overlay of their creation in the run record's `extra`, so later edits never change them and a rebuilt run uses the same dataset.
+- **Network view.** The `theater_network` shape (`GET /api/v1/sim/network`) on the edited network plus `origin` (`base`/`session`), `overridden`, `in_service` and `is_assumption` on nodes and lines, `loads`, `generators`, `out_of_service {buses, lines}`, `warnings`, `balance`, `baseline {max_loading, overloaded, islands, load_shed_mw}` (the edited base case with no cut), `revision`, `dataset_revision` and `session_id`.
+### 6.3 Regional context layer (draft)
 
 `data/processed/latam/<ISO3>/{lines,substations,plants}.geojson` reduced like Chile's network: buses (`substations`), straight folded `lines` between buses (`a`, `b`, `kv`, `circuits`, `length_km`) and generation per bus (`plants`: `bus`, `mw`, `mw_by_tech`, `count`), plus `manifest.json` (counts reduced and raw, km per kV, sources with licence and attribution). Full schema and rules in `regional.md` section 2. It is not part of `network.json` and no engine reads it.
 
 ## 7. API
 
 The backend serves everything under `/api/v1` (FastAPI, `backend/src/cascadasen/api/`); the live schema is at `/docs`. The frontend can still work from fixtures only, which also gives the offline behaviour in section 9.
+
+External agents (and the MCP server, `docs/mcp.md`) use a separate spec with only the routes marked `x-sub50-agent`: `GET /api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`), versioned in `docs/openapi/agents.openapi.json`. Marking rules, operationIds, error model, tags and the regeneration command: `docs/openapi.md`. It holds `/sim/catalog`, `/sim/network`, `/sim/runs*` (section 7.1) and every session route except the SSE stream (section 7.2).
 
 `POST /api/v1/simulate` runs one physical contingency on the reduced network (`strategy.md` section 2.1) and returns a `timeline.json` (section 6). `elements_out` accepts corridor ids, area ids (`A01`-`A13`) or real snapshot node ids (`SE…`), resolved to the area that contains them.
 
@@ -273,9 +303,28 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 
 - `POST /sim/runs` takes `point` (mapa 3 operating point; alias `operating_point`). `target` accepts an area, zone, corridor, `B###`, `R###` or real `SE...` id; the response echoes `resolved_target` (a bus id for a substation), so a click on mapa 3 works directly.
 - Each cycle snapshot (`/step`, `GET /runs/{id}`) carries, besides `real`/`observed`/`estimated`/`decisions`: `grid` (mapa 3 `Frame`: `edges`, `dark`, `islands`, plus `buses` served MW), `transient` (a full mapa 3 `Timeline` when a physical event ran a cascade in that cycle, else null), `areas` (`observability` 0-1, `posture` normal/manual/segmented, active `effects` with source) and `crews` (`position`, `bus`, `lon`/`lat`, `target`, `target_bus`, `arrival`, `status`). Contract and viewer notes: `docs/mapa3.md` section 10.
-- Errors: 404 unknown run, element or template; 422 invalid input; 409 event injected into a finished run.
-- Runs live in memory (the most recent 100 are kept). Any run can be rebuilt from its recipe (`GET /sim/runs/{id}/trace`). An unchanged replay gives the same trace hash.
+- Errors: 404 unknown run, element or template (a run id that is not 12 hex characters is always 404); 422 invalid input; 409 event injected into a finished run, or the run record changed in another instance (retry); 429 when a client IP sends more than `CASCADASEN_RATE_WRITES_PER_MINUTE` (60) creates, events, steps or replays per minute (`Retry-After`); 413 on a body over 64 KB.
+- Runs are persisted: every command writes `runs/<run_id>.json` (`{run_id, recipe, cycle, trace_head, code_version, created_at, updated_at, extra}`) to the document store (`CASCADASEN_SESSION_STORE`: memory, file or s3), with a conditional write on the last etag. Each process keeps at most `CASCADASEN_RUN_CACHE_SIZE` (20) simulations in memory; a run that is not cached (evicted, restarted, or created by another instance) is rebuilt from its recipe and its summary reports `rebuilt: true` and `trace_matches` (rebuilt hash equals the recorded one). A record expires 24 h after its last command. The recipe (`GET /sim/runs/{id}/trace`) holds `config`, `injected`, `llm_choices`, `cycle` and `actions` (external agent actions, with `after_events` to keep the input order). An unchanged replay gives the same trace hash. LLM-commander runs report `trace_matches: false` after a rebuild, because their recorded picks enter the `run_created` entry.
 - Campaign body: `mode` (`diagnostic`, `adversarial`, `capability`), `templates`, `policies`, `seeds` (up to 10), `uncertainty_levels`, `adversary_variants` (`none`, `static`, `adaptive`), `capability_variants` (`[{id, capabilities}]`, the first one is the baseline), `horizon`, `objective`, `budget`, `point`, `random_seeds` (1-10: draw fresh seeds instead of `seeds`, returned in `spec.seeds` and shared by every cell). Each table row adds `spread` (p10/p50/p90 of mission continuity and recoverability across seeds). It runs synchronously and is capped at 240 runs (422 above).
+
+### 7.2 Sessions API
+
+Shared, persistent sessions under `/api/v1/sessions` (`api/session_routes.py`). The guide for agents and other clients, with every route, curl examples, the SSE format, limits and error codes, is `docs/sessions-api.md`; the session document is section 6.2.
+
+| Group | Routes | Notes |
+|---|---|---|
+| Session | `POST /sessions`, `GET`/`DELETE /sessions/{sid}`, `POST /{sid}/reset` | One pinned operating point; `GET` has `ETag: "<revision>"`, `If-None-Match` → 304; edits, `/network`, `/state`, cut and repair use `ETag`/`If-Match` with `dataset_revision`; 24 h TTL after the last change |
+| Network | `GET /{sid}/network`; POST, PATCH, DELETE on `/{sid}/buses`, `/lines`, `/loads`, `/generators` | Overlay edits (6.2); `If-Match` → 412; base elements are never deleted (409) |
+| Sandbox | `POST /{sid}/cut`, `POST /{sid}/repair`, `GET /{sid}/state` | Shared `open_lines`, cascade from the edited base case |
+| Runs | `POST /{sid}/runs`, `GET /{sid}/runs/{rid}` and `events`, `step`, `actions`, `replay`, `snapshots`, `trace`, `report`, `after_action` | Same bodies as 7.1; the run pins the session dataset; `actions` queues an external agent's COA |
+| Live | `GET /{sid}/events` | SSE `event: revision`, `: ping` every 15 s, closes after 55 s; not an agent tool |
+
+- Every agent endpoint takes `{sid}` in the path. Agent routes carry `x-sub50-agent`, an explicit `operationId` and English OpenAPI text (`docs/openapi.md`); error details stay in Spanish.
+- Limits (per process): 64 KB bodies (413), creation per client IP, cuts and writes per session (429 with `Retry-After`), 5 SSE streams per session and IP, one request in progress per session (up to 10 others wait up to 10 s, then 409; more get 409 at once). Knobs are the `CASCADASEN_RATE_*`, `CASCADASEN_SSE_*`, `CASCADASEN_SESSION_LOCK_TIMEOUT_S` and `CASCADASEN_SESSION_LOCK_MAX_WAITERS` settings.
+
+### 7.3 Assistant API
+
+`POST /api/v1/assistant/chat` and `GET`/`DELETE /api/v1/assistant/conversations/{cid}` (`api/assistant_routes.py`) run natural-language requests through an LLM that calls the MCP tools over the app's own routes. Contract, limits and guardrails: `docs/assistant.md`. These routes are for the web client and are not marked `x-sub50-agent`.
 
 ## 8. Testing and CI
 

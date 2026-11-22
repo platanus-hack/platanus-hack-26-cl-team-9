@@ -4,7 +4,7 @@ Browser app for the demo: a 2D map of Chile with the SEN grid standing in 3D on 
 
 ## Run locally (guide for people and agents)
 
-Requirements: Node 20 or newer and npm. Tested with Node 22.23 and npm 10.9 on macOS. No backend, API key, cloud account or internet connection is needed once dependencies are installed.
+Requirements: Node 20 or newer and npm. Tested with Node 22.23 and npm 10.9 on macOS. No backend, API key, cloud account or internet connection is needed once dependencies are installed, except for session mode (`?sesion=`), which needs the backend.
 
 ```bash
 cd web
@@ -55,6 +55,8 @@ Click a line or substation to see its detail; double click a line (or use "Sacar
 cd backend && uv run cascadasen-cache      # about 23 MB, 4 hours x 273 cuts, takes a few seconds
 ```
 
+Session mode: `?sesion=<sid>` (or the **Sesión compartida** rail item) opens a shared, editable copy of the network served by the backend; the **Datos** tab edits buses, lines, generators, loads and datacenters, and every client of the session sees the changes live (SSE, with a 2 s polling fallback). Guide: [`docs/mapa3.md`](../docs/mapa3.md) section 11, API: [`docs/sessions-api.md`](../docs/sessions-api.md). The browser calls `/api`, which `npm run dev` proxies to `VITE_API_TARGET` (default `http://localhost:8000`, start it with `cd backend && uv run cascadasen-api`; docker compose sets `http://backend:8000`). Without `?sesion=` the app makes no `/api` request and needs no backend.
+
 Deep links: `?mapa=3&point=feb2025-1500&cut=R239` opens the 25F corridor cut. It uses Mapbox when `VITE_MAPBOX_TOKEN` is set and the offline outline otherwise.
 
 Mapa 3 keeps the camera near Chile (`maxBounds` lon -110 to -35, lat -62 to -5, wide enough that the whole country fits at 1440 px; zoom 4 to 13, constants in `src/map/baseMap.ts`) and turns off 3D buildings, points of interest, transit and pedestrian roads in the Mapbox Standard style. The camera center must also stay on land or near it (`src/map/regionLimit.ts`: the margin is a quarter of the shorter viewport side, so it shrinks as you zoom in); after a move that ends too far offshore, the map snaps back to the last valid center. To allow another country, add its land GeoJSON URL to `LAND_URLS` in `baseMap.ts`. Add `?limite=0` to remove all of it and compare performance.
@@ -71,6 +73,9 @@ Mapa 3 keeps the camera near Chile (`maxBounds` lon -110 to -35, lat -62 to -5, 
 | `src/map/mapboxMap.ts` | `?mapa=2`: Mapbox basemap with deck.gl on top (`MapboxOverlay`) |
 | `src/map/gridData.ts` | Loads the GeoJSON files and aggregates plants per substation |
 | `src/map/layers.ts` | deck.gl layers and colour tables (the legend reads the same tables) |
+| `src/session/sessionApi.ts` | Sessions API client: typed calls, `ApiError`, `sessionIdFrom`, `subscribe` (SSE or polling) |
+| `src/session/useSession.ts`, `loader.ts`, `SessionBar.tsx`, `SessionCut.tsx`, `DataPanel.tsx`, `session.css` | Session state and refetch, the **Sesión compartida** view and panel-head strip, the open lines in **Simulación**, the **Datos** tab, and their styles |
+| `src/session/geo.ts` | Nearest bus of at least 220 kV (great-circle distance only, no physics) |
 
 Data files are imported with Vite `?url` from `../data/processed/`, so they are bundled into the build and the deployed site works offline:
 
