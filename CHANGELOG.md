@@ -1,5 +1,15 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · feat(web): tab Componente, reinicio al cambiar de escenario y aparición de islas en el timeline (#118)
+
+- **Changed:** The card of the selected line or substation moved to a fourth tab, **Componente**, which a map click opens; the other tabs show only their own content.
+- **Changed:** The app always starts on Demanda mínima (`DEFAULT_POINT = "feb2025-0300"`) with no changes; edits are no longer restored from localStorage on load.
+- **Changed:** Choosing any scenario calls `resetComponents`: every cut, substation off, change, selection and incident/Ciberataque cascade is cleared and the timeline goes to 0; a disaster then applies only its own failures. Before, a Benchmark entry kept the failures of the previous disaster.
+- **Changed:** The timeline rail marks each instant islands form ("isla" / "N islas"), clickable.
+- **Why:** issue #118.
+- **Agents:** a bare `/` is now `feb2025-0300`, so `?point=nov2026-1300` is written in links to the solar midday. `saveEdits`/`loadEdits` stay in `edits.ts` but the app no longer calls them. `docs/mapa3.md` sections 2 and 4 updated.
+- **Files:** `web/src/cascade/{CascadeApp.tsx,Timeline.tsx,simulation.ts,simulation.test.ts,url.ts,url.test.ts,cascade.css}`, `docs/mapa3.md`.
+
 ## 2026-11-22 · fix(web): fecha real de los desastres 2011 y 2010 (#115)
 
 - **Changed:** The Desastres entries "Apagón 2011 · Ancoa" and "Terremoto 2010 · Charrúa" show the date of the real event (24 sep 2011 · 20:31, 14 mar 2010 · 20:43) instead of the date of the 2026 hour they run on. `Disaster` gets an optional `date`.

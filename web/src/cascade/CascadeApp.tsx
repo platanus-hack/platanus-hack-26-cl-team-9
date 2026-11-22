@@ -10,7 +10,7 @@ import { loadBuses, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./a
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourcePick } from "./GridSources";
-import { addBus, addLine, changesOf, countFailures, dropBus, dropChange, dropLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits, setFactor, type Edits, type StressChange, type Target } from "./edits";
+import { addBus, addLine, changesOf, countFailures, dropBus, dropChange, dropLine, editKey, fromCache, NO_EDITS, setFactor, type Edits, type StressChange, type Target } from "./edits";
 import { composeGrid, loadContextDocument, loadDependency, prepareScenario, simulateGrid, type Prepared, type SimulationResult } from "./gridsApi";
 import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
@@ -47,12 +47,12 @@ import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
 import "../session/session.css";
 
-type Tab = "estado" | "red" | "sim" | "datos";
+type Tab = "estado" | "red" | "sim" | "datos" | "componente";
 type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "cyber" | "upload";
 // "Qué lo habría evitado" and "Validación" are not built yet and left out so the four tabs fit the 440 px panel.
-const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"]];
+const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"], ["componente", "Componente"]];
 // In a session Datos replaces Estado de la red: the session owns its changes.
-const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"]];
+const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"], ["componente", "Componente"]];
 const PINNED = "En una sesión el punto está fijo; corta y repara líneas en el mapa y en Simulación.";
 const SESSION_NETWORK = "Una sesión compartida usa la red de Chile.";
 // Networks shipped with the build: Chile plus every country whose drawn layer exists (docs/regional.md).
@@ -94,7 +94,8 @@ export function CascadeApp() {
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
   // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
   // A link's cut wins; otherwise the changes saved in this browser come back (a refresh never loses them).
-  const [edits, setEdits] = useState<Edits>(() => (s.sid ? NO_EDITS : !startCut ? loadEdits() : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
+  // The app always starts on the base case (Demanda mínima, no changes) unless a link carries a cut.
+  const [edits, setEdits] = useState<Edits>(() => (s.sid || !startCut ? NO_EDITS : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   // The prepared grid of the scenario's changes (POST /grids/prepare), keyed like the changes it belongs to.
   const [prepared, setPrepared] = useState<{ key: string; value: Prepared } | null>(null);
@@ -199,7 +200,6 @@ export function CascadeApp() {
   useEffect(() => { if (s.sid && networkId !== DEFAULT_COUNTRY) chooseNetwork(DEFAULT_COUNTRY); }, [s.sid]);
   useEffect(() => _loadShown(), [networkId, uploads]);
   useEffect(() => _fitNetwork(), [networkId, network, shownGrid]);
-  useEffect(() => { if (!s.sid) saveEdits(edits); }, [edits, s.sid]);
   useEffect(() => _loadHeat(), [heat, heatKey]);
   useEffect(() => { if (!s.sid && !composed) _loadPoint(); }, [pointId, index, s.sid, composed]);
   useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
@@ -544,9 +544,11 @@ export function CascadeApp() {
   }
 
   /** Selecting never switches tabs or the line colour; it only leaves Ayuda or Fuentes for the tabs. */
+  /** A click on a line or substation opens its card in the Componente tab; the other tabs keep only their own content. */
   function select(target: Pick) {
     setSelection(target);
     setView("tabs");
+    setTab("componente");
   }
 
   /** Without a session the cut adds to the list of changes; in a session the line opens for everyone through `POST /{sid}/cut`. */
@@ -674,13 +676,24 @@ export function CascadeApp() {
     pickRef.current = onPoint;
     setPicking(true);
   }
-  function openScenario(next: ScenarioChoice) {
-    if (!current.simulable) return;
+  /**
+   * Puts every component back in its base state: no line cut, no substation off, no change of the scenario, no selection,
+   * no incident or Ciberataque cascade on the map, timeline at 0 paused. `next` are the changes of the new setup (a disaster).
+   */
+  function resetComponents(next: Edits = NO_EDITS) {
+    inc.stop();
+    cyb.showOnMap(null);
     setSelection(null);
     setNotice(null);
+    setEdits({ lines: [...next.lines], buses: [...next.buses] });
+    seek(0);
+    setPlaying(false);
+  }
+
+  function openScenario(next: ScenarioChoice) {
+    if (!current.simulable) return;
     setPointId(next.point);
-    // A disaster replaces the changes; a Benchmark condition keeps the failures. A prepared scenario never carries over.
-    setEdits((e) => ({ lines: (next.edits ?? e).lines, buses: (next.edits ?? e).buses }));
+    resetComponents(next.edits ?? NO_EDITS); // a new setup starts from scratch: a disaster brings only its own failures
     if (composed === DEFAULT_COUNTRY) void composeFromSources(next.point, picksRef.current); // the composed grid follows the chosen hour
     setColorMode("load");
     chooseTab(next.edits ? "sim" : "red"); // a disaster opens on Simulación, a Benchmark condition on Red; both on Carga
@@ -765,7 +778,10 @@ export function CascadeApp() {
           {view === "tabs" && !isChile && tab === "red" && shownGrid && (
             <NetworkPanel source={sourceNote} summary={shownSummary} origin={shownOrigin} viewOnly={VIEW_ONLY} />
           )}
-          {view === "tabs" && isChile && network && selection && (
+          {view === "tabs" && tab === "componente" && !selection && (
+            <p className="meta">Haz clic en una línea o una subestación del mapa para ver sus datos aquí.</p>
+          )}
+          {view === "tabs" && tab === "componente" && isChile && network && selection && (
             <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year}
               select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut ? [selectedCut] : undefined)}
               shutDown={shutDown} shutdown={outBus} powerOn={powerOn}
