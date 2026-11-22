@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): reduce assistant events to steps
+
+- **Changed:** New `web/src/assistant/steps.ts`: pure chat state (`ChatState`, turns, steps, `ToolCard`) with `begin`, `reduce(state, event)`, `interrupt`, `fail`, `annotate` and `fromConversation(view)`.
+- **Changed:** New `web/src/assistant/labels.ts`: Spanish tool names for the 23 MCP tools (`toolName`), readable arguments (`argsText`), short result summaries (`resultText`), `refreshFor(tool)` → `"network" | "state" | "snapshots" | null`, and error texts per status (`errorMessage`, `truncatedText`).
+- **Why:** The chat panel (#73) shows each step live, grouped by `step`, with tool cards that go from running to ok or failed.
+- **Agents:** A result pairs with its call by `id`; `done` and `error` turn cards still running into failed. `GET /conversations/{cid}` does not say which turn ran each tool, so `fromConversation` merges the assistant texts of one user message into one turn (last text = reply) and puts the tool trace in `restoredTools`. Summaries only repeat fields the tool returned. Tests: `steps.test.ts`, `labels.test.ts`.
+- **Files:** `web/src/assistant/{steps.ts,labels.ts,steps.test.ts,labels.test.ts}`.
+
 ## 2026-11-21 · feat(web): parse the assistant event stream
 
 - **Changed:** New `web/src/assistant/sse.ts` with `createSseParser(onEvent)`: `push(chunk)` parses `text/event-stream` chunks cut anywhere into `{event, data}`; `flush()` parses a last block left without a blank line.
