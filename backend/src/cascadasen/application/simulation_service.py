@@ -139,6 +139,7 @@ def theater_network_view(
                 "kv": b.kv[i],
                 "zone": b.zone(i),
                 "map_nodes": b.map_nodes[i],
+                "country": b.country,
                 "area": net.area_of_bus[i],
             }
             for i in range(b.size)
@@ -153,6 +154,7 @@ def theater_network_view(
                 "x_pu": ln.x_pu,
                 "map_edges": list(ln.map_edges),
                 "branches": list(ln.branches),
+                "country": ln.country,
                 "corridor": net.line_corridor.get(ln.id),
             }
             for ln in b.lines

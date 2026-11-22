@@ -174,6 +174,8 @@ def test_regional_document_has_the_shape_the_web_draws(store):
     assert doc["lines"][0].keys() >= {"id", "kv", "circuits", "lengthKm", "source", "path"}
     assert doc["substations"][0].keys() >= {"id", "name", "kv", "kind", "source", "position"}
     assert doc["plants"][0].keys() >= {"id", "name", "tech", "mw", "count", "source", "position"}
+    # issue #49: every element says its country, as data/processed/latam does
+    assert all(x["country"] == "PER" for x in doc["lines"] + doc["substations"] + doc["plants"])
 
 
 def test_compose_rejects_a_network_that_does_not_fit_the_point(store):
