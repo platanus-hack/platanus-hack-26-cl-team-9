@@ -47,6 +47,21 @@ describe("cascade at time t", () => {
   });
 });
 
+describe("dark substations at the blackout's own time", () => {
+  const twoBlackouts: Timeline = {
+    ...timeline,
+    events: [ev(0, "line_cut"), ev(1, "island_formed"), { ...ev(1.4, "island_blackout"), ids: ["B1"] }, { ...ev(3.2, "island_blackout"), ids: ["B2", "B3"] }],
+    frames: [{ t: 0, edges: {}, dark: [], islands: [] }, { t: 1, edges: {}, dark: ["B1", "B2", "B3", "B9"], islands: [] }],
+  };
+
+  it("darkens each island of one stage when its own blackout fires", () => {
+    expect([...darkAt(twoBlackouts, 1.2)]).toEqual(["B9"]); // B9: dark in the frame but in no blackout (out of service)
+    expect([...darkAt(twoBlackouts, 1.4)].sort()).toEqual(["B1", "B9"]);
+    expect([...darkAt(twoBlackouts, 3.2)].sort()).toEqual(["B1", "B2", "B3", "B9"]);
+  });
+
+});
+
 describe("line state", () => {
   const line: NetLine = { id: "R1", a: "B1", b: "B2", kv: 220, capacity_mw: 100, x_pu: 0.1, map_edges: [], branches: ["x"] };
   const frame = (edge: { flow_mw: number; status: "ok" | "overload" | "open"; loading: number }, dark: string[] = []) => ({ t: 0, edges: { R1: edge }, dark, islands: [] });

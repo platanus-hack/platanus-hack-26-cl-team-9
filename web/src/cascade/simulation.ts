@@ -15,10 +15,23 @@ export function frameIndexAt(tl: Timeline, t: number): number {
 }
 
 /**
- * Buses without power at time t. A frame stores the dark set at the end of its stage, but the island only goes dark
- * when its blackout event fires (it can be seconds later, after the frequency falls), so new dark buses wait for it.
+ * Buses without power at time t. Each `island_blackout` lists its buses (`ids`), so they go dark at the event's own
+ * time, also when several islands of one stage go dark at different times. Buses dark in the last frame that no
+ * blackout lists (a substation taken out of service) are dark from t = 0. Timelines whose blackouts carry no ids
+ * (older caches and sessions) fall back to the frame logic: a frame's dark set appears at its first blackout.
  */
 export function darkAt(tl: Timeline, t: number): Set<string> {
+  const blackouts = tl.events.filter((e) => e.type === "island_blackout");
+  if (blackouts.length === 0 || blackouts.every((e) => e.ids.length > 0)) {
+    const listed = new Set(blackouts.flatMap((e) => e.ids));
+    const out = new Set((tl.frames[tl.frames.length - 1]?.dark ?? []).filter((id) => !listed.has(id)));
+    for (const e of blackouts) if (e.t <= t + 1e-9) for (const id of e.ids) out.add(id);
+    return out;
+  }
+  return frameDarkAt(tl, t);
+}
+
+function frameDarkAt(tl: Timeline, t: number): Set<string> {
   const k = frameIndexAt(tl, t);
   const prev = new Set(k > 0 ? tl.frames[k - 1].dark : []);
   const frame = tl.frames[k];

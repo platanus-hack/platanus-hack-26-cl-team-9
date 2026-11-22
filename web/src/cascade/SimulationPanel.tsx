@@ -137,6 +137,9 @@ function ImpactCard(p: Props) {
           <span>{p.islands.length > 1 ? `frecuencia ${lowest?.name.toLowerCase() ?? "más baja"}` : "frecuencia"}</span>
         </div>
       </div>
+      {p.timeline.truncated && (
+        <p className="notice truncated" role="note">{`La cascada se cortó en ${p.timeline.summary.stages} etapas (límite del motor); podría seguir.`}</p>
+      )}
       <EventHealth timeline={p.timeline} />
       <div className="cut-row">
         <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => cutName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>

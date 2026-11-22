@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(timeline): exact darkAt and truncated notice
+
+- **Changed:** `darkAt` (`web/src/cascade/simulation.ts`) builds the dark set from the `ids` of every `island_blackout` with `e.t <= t`. Buses in the last frame's `dark` that no blackout lists (substations out of service from `/grids/simulate`) are dark from t = 0. Timelines whose blackouts have no ids fall back to the old frame rule (`frameDarkAt`).
+- **Changed:** The impact card in `SimulationPanel.tsx` says "La cascada se cortó en N etapas (límite del motor); podría seguir." when `timeline.truncated`.
+- **Why:** Issue #90. The old `darkAt` darkened a whole frame at its first blackout, even when islands of one stage go dark seconds apart. `truncated` was in the contract but no UI showed it.
+- **Agents:** `eventLocation` and the map pins compare `darkAt` before and after an event, so they now place each blackout on its own buses. Test: "dark substations at the blackout's own time" in `simulation.test.ts`.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,SimulationPanel.tsx,cascade.css}`, `docs/mapa3.md`.
+
 ## 2026-11-22 · chore(cache): regenerate cascade cache
 
 - **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache` after the issue #90 engine changes. That is 1,851 files: 4 hours x (273 lines + 188 substations + baseline + buses + health).
