@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): parse the assistant event stream
+
+- **Changed:** New `web/src/assistant/sse.ts` with `createSseParser(onEvent)`: `push(chunk)` parses `text/event-stream` chunks cut anywhere into `{event, data}`; `flush()` parses a last block left without a blank line.
+- **Why:** First piece of the assistant chat in the web (#73). `EventSource` only does GET, so the POST `/api/v1/assistant/chat/stream` is read with `fetch` and this parser.
+- **Agents:** It skips `: ping` comments and blocks without `event:`, accepts `\r\n` (also split between chunks), joins multi-line `data:` with `\n`, and passes non-JSON data as a string. Tests in `sse.test.ts`.
+- **Files:** `web/src/assistant/{sse.ts,sse.test.ts}`.
+
 ## 2026-11-21 · docs(mapa3): document Prender todo
 
 - **Changed:** `docs/mapa3.md`. §3 places the control next to the layers button. §4 gets new item 9, **Prender todo**: what it clears, what it keeps, when it is disabled. The placeholder tabs become item 10. §8 adds `powerAll.ts` to the file table. §11 adds the session behaviour: confirm, repair every open line for everyone, dataset edits kept.
