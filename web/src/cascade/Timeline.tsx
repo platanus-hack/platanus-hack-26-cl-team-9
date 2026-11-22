@@ -54,7 +54,7 @@ export function TimelineCard(p: Props) {
         </div>
       </div>
       {!p.timeline ? (
-        <p className="timeline-empty">{p.loading ? "Cargando la simulación" : "Sin corte activo. Haz doble clic en una línea del mapa para simular su salida de servicio segundo a segundo."}</p>
+        <p className="timeline-empty">{p.loading ? "Cargando la simulación" : "Sin corte activo. Haz clic en una línea del mapa y clic otra vez para simular su salida de servicio segundo a segundo."}</p>
       ) : (
       <div className="timeline-row">
         <button className="play" disabled={!hasCascade} aria-label={p.playing ? "Pausa" : atEnd ? "Repetir" : "Reproducir"}

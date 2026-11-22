@@ -301,7 +301,11 @@ def event_cost(summary: dict, voltage_rule: bool) -> dict[str, Any]:
     cost = (
         {k: summary[k] for k in ("failure_cost_usd", "unserved_energy_mwh", "outage_duration_h")}
         if "failure_cost_usd" in summary
-        else failure_cost(float(summary["load_shed_mw"]))
+        else failure_cost(
+            float(summary["load_shed_mw"]),
+            summary.get("dark_load_mw"),
+            float(summary.get("load_total_mw", 0.0)),
+        )
     )
     return {
         "cost_usd": cost["failure_cost_usd"],

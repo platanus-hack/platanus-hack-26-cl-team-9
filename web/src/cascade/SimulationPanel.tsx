@@ -74,7 +74,7 @@ function EmptyCard({ health }: { health: HealthReport | null }) {
   return (
     <div className="card empty">
       <h3>Escenario nuevo</h3>
-      <p>Haz doble clic en una línea del mapa para sacarla de servicio, o haz clic para ver su detalle y usa Sacar de servicio. El motor calcula la cascada: líneas que se sobrecargan, islas que se separan, cortes automáticos de carga y apagones.</p>
+      <p>Haz clic en una línea o una subestación del mapa para ver su detalle; un segundo clic, o el botón de su detalle, la saca de servicio. El motor calcula la cascada: líneas que se sobrecargan, islas que se separan, cortes automáticos de carga y apagones.</p>
       <p className="meta">Sin cortes, el sistema opera normal en este punto de operación.</p>
       {health && <PrefaultHealth health={health} />}
     </div>
@@ -143,7 +143,7 @@ function ImpactCard(p: Props) {
       <EventHealth timeline={p.timeline} />
       <div className="cut-row">
         <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => cutName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>
-        <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Encender subestación"}</button>
+        <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Volver a conectar todas" : "Volver a conectar") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Volver a encender"}</button>
       </div>
     </div>
   );

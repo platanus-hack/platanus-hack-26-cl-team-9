@@ -151,10 +151,25 @@ def test_overload_cascade_darkens_the_grid():
     kinds = [e["type"] for e in timeline["events"]]
     assert kinds[0] == "line_cut" and "line_overload_open" in kinds and "island_blackout" in kinds
     assert timeline["summary"]["load_shed_mw"] == 300 and timeline["summary"]["people_without_power"] == 2000
-    # failure cost of the lost load: MW x 4 h (assumption) x 1,000 x 8.79 US$/kWh (CNE [19])
-    assert timeline["summary"]["unserved_energy_mwh"] == pytest.approx(300 * 4.0)
-    assert timeline["summary"]["failure_cost_usd"] == pytest.approx(300 * 4.0 * 1000 * 8.79)
-    assert timeline["summary"]["outage_duration_h"] == {"value": 4.0, "is_assumption": True}
+    # a total blackout: dark MW x 7.34 h of black start [44] x 8.79 US$/kWh (CNE [19]) x 1.375 for a full blackout [44]
+    assert timeline["summary"]["dark_load_mw"] == 300
+    assert timeline["summary"]["unserved_energy_mwh"] == pytest.approx(300 * 7.34)
+    assert timeline["summary"]["failure_cost_usd"] == pytest.approx(
+        300 * 7.34 * 1000 * 8.79 * 1.375, rel=1e-6
+    )
+    assert timeline["summary"]["cost_per_hour_usd"] == pytest.approx(300 * 1000 * 8.79 * 1.375, rel=1e-6)
+    assert timeline["summary"]["outage_duration_h"] == {"value": 7.34, "is_assumption": False}
+
+
+def test_load_shed_in_a_surviving_island_costs_an_hour_and_no_blackout_premium():
+    from cascadasen.domain.cascade.engine import failure_cost
+
+    shed = failure_cost(100.0, 0.0, 1000.0)
+    assert shed["failure_cost_usd"] == pytest.approx(100 * 1.0 * 1000 * 8.79)
+    dark = failure_cost(
+        100.0, 100.0, 1000.0
+    )  # same MW, but dark: black start and 10 % of the blackout premium
+    assert dark["failure_cost_usd"] == pytest.approx(100 * 7.34 * 1000 * 8.79 * (1 + 0.375 * 0.1), rel=1e-6)
 
 
 def test_cut_that_the_network_absorbs_sheds_nothing():

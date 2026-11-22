@@ -20,7 +20,7 @@ export function NetworkState({ network, buses, point, edits, result, timeline, r
     return (
       <div className="card empty">
         <h3>Sin cambios</h3>
-        <p>La red está como en el punto de operación elegido. Haz doble clic en una línea del mapa para sacarla de servicio, o en una subestación para apagarla. Cada cambio se suma a los anteriores y queda en esta lista.</p>
+        <p>La red está como en el punto de operación elegido. Haz clic en una línea o una subestación del mapa para ver su detalle, y clic otra vez para sacarla de servicio o apagarla. Cada cambio se suma a los anteriores y queda en esta lista.</p>
       </div>
     );
   }
@@ -54,7 +54,7 @@ export function NetworkState({ network, buses, point, edits, result, timeline, r
       {result && edits.buses.length > 0 && (
         <p className="meta">Apagar {edits.buses.length === 1 ? "esa subestación" : "esas subestaciones"} deja sin suministro a {formatPeople(result.direct.people)} personas y quita {int(result.direct.load_mw)} MW de demanda y {int(result.direct.gen_mw)} MW de generación, antes de la cascada.</p>
       )}
-      {result?.warnings.map((w) => <p className="note" key={w.code + w.message}>{w.message}</p>)}
+      {result?.warnings.map((w, i) => <p className="note" key={`${w.code}-${i}`}>{w.message}</p>)}
       <p className="source">Con una sola línea se lee la simulación precalculada; con más cambios la calcula el motor en el servidor, todos juntos.</p>
     </>
   );
@@ -87,7 +87,7 @@ const REASON: Record<string, string> = {
 
 /**
  * Final result of the cascade, read with the same `impactAt` the Simulación tab uses at its last second, so both tabs give
- * the same figures. The cost comes from the backend (issue #82); until it exists the card says so instead of estimating it.
+ * the same figures. The cost comes from the backend (`POST /grids/cost`): total, per hour of outage, and blackout or load shedding.
  */
 function Outcome({ timeline, buses, point, edits }: { timeline: Timeline; buses: Record<string, BusState>; point: string; edits: Edits }) {
   const end = impactAt(timeline, buses, timeline.duration_s);
@@ -106,12 +106,24 @@ function Outcome({ timeline, buses, point, edits }: { timeline: Timeline; buses:
         <div><div className="value-row"><b>{int(end.lostGenMw)} <small>MW</small></b></div><span>generación perdida</span></div>
         <div><div className="value-row"><b>{dark}</b></div><span>{dark === 1 ? "isla apagada" : "islas apagadas"}</span></div>
       </div>
-      <div className="value-row status-row">
-        {cost.state === "ready" && cost.value
-          ? <span>Costo de la caída: <b>US$ {int(cost.value.cost_usd)}</b> · {int(cost.value.energy_not_served_mwh)} MWh no suministrados en {cost.value.outage_hours.value} h{cost.value.outage_hours.is_assumption ? " (supuesto)" : ""}</span>
-          : <span className="meta">{cost.state === "error" ? cost.error : cost.state === "loading" ? "Calculando el costo…" : "Costo de la caída: pendiente. El backend aún no lo calcula (issue #82)."}</span>}
-        {cost.value && <Info tip={[cost.value.unserved_cost_usd_per_mwh.source ?? "Supuesto", ...cost.value.assumptions].join(" · ")} />}
-      </div>
+      <CostRow cost={cost} />
+    </div>
+  );
+}
+
+/** Total and per hour, and whether it is a total blackout (black start) or load shedding in a grid that holds. */
+function CostRow({ cost }: { cost: CostState }) {
+  if (cost.state !== "ready" || !cost.value) {
+    return <p className="meta">{cost.state === "error" ? cost.error : cost.state === "loading" ? "Calculando el costo…" : "Costo de la caída: el servidor aún no lo calcula."}</p>;
+  }
+  const c = cost.value;
+  const kind = c.breakdown.dark_mw <= 0 ? "corte parcial de carga (EDAC)" : c.breakdown.dark_share >= 0.9 ? "apagón total" : "apagón parcial";
+  const tip = [`Costo de falla CNE ${int(c.unserved_cost_usd_per_mwh.value / 1000)} US$/kWh`, ...c.assumptions].join(" · ");
+  return (
+    <div className="mini-figures ruled">
+      <div><div className="value-row"><b>US$ {formatPeople(c.cost_usd)}</b><Info tip={tip} /></div><span>costo de la caída</span></div>
+      <div><div className="value-row"><b>US$ {formatPeople(c.cost_per_hour_usd)}</b></div><span>por hora de corte</span></div>
+      <div><div className="value-row"><b>{int(c.energy_not_served_mwh)} <small>MWh</small></b></div><span>{kind} · {c.outage_hours.value} h</span></div>
     </div>
   );
 }

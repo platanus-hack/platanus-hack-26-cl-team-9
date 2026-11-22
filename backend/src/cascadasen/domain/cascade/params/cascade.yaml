@@ -95,3 +95,25 @@ voltage_limit:
   note: >-
     Pre-fault flow across the 25F boundary above these limits gives 'voltage_limited (uncertain)'
     instead of a frequency verdict. The DC model has no voltage; this is the only corridor with published limits.
+
+# Failure cost of a cascade (docs/engine.md, "Cost"). The CNE failure cost per kWh is in simulation/params/physics.yaml.
+# [44] ISCI for Enel Foundation, "Estimación de Impactos de Blackouts en Chile" (R. Moreno, 2025): 81,430 MWh not
+# served and about US$ 984 M of economic loss for the 25F, by sector and with the interdependencies of the economy.
+cost:
+  blackout_restoration_h:
+    value: 7.34
+    source: "[44] 81,430 MWh not served in the 25F over its 11,096 MW of demand (feb2025-1500): hours at full outage"
+    note: >-
+      Cross-check: the restoration reports (58 % of clients back at 00:00 per Gobierno, 220,000 without power at 08:15)
+      give 8.2 h; the CEN's 90 % at 00:00 gives 5.4 h
+  shed_restoration_h:
+    value: 1.0
+    is_assumption: true
+    note: "Load shed by EDAC in an island that survives is reconnected once its frequency recovers: no black start"
+  total_blackout_multiplier:
+    value: 1.375
+    source: "[44] US$ 984 M / 81,430 MWh = 12.08 US$/kWh, over the CNE failure cost of 8.79 US$/kWh [19]"
+    note: >-
+      A total blackout costs more per kWh than lost energy alone: it stops transport, water, telecom and industry
+      together (the study's interdependencies). It grows linearly with the share of the demand that went dark
+      (assumption), so load shedding in a surviving grid pays none of it
