@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): Salud de la red lists its figures one per row
+
+- **Changed:** `.cy-figures` (the Cyber "Salud de la red" card) is a column, label left and value right, instead of the 2-column grid.
+- **Why:** nine figures in one row overlapped each other.
+- **Agents:** `.mini-figures` is unchanged for the other cards. No test: CSS only.
+- **Files:** `web/src/cyber/cyber.css`.
+
 ## 2026-11-22 · feat: el mapa simula un escenario sin fallas (apagar todas las hidro) y el asistente tiene un solo encabezado
 - **Changed:** `GridSimulator.simulate_workflow` and `cost_workflow` accept changes with no failure (`prepare_edits(allow_empty=bool(changes))`); nothing at all is still 422. The cascade starts by opening the lines the redispatch overloads. The web simulates every prepared scenario (`cached = fromCache(edits)`), so the map and Estado de la red show that cascade. `prepare_scenario` (MCP) simulates changes alone too, with `without_changes` at 0. The assistant prompt no longer says "nada queda en rojo si no hay falla". Asistente: the card with the repeated title is gone; "Nueva conversación" sits in the panel header next to Cerrar (`.head-actions`).
 - **Why:** Issue #145. "Apaga todas las hidroeléctricas" changed the grid (−2,340 MW, 11 lines over their limit at nov2026-1300) but the map showed the base case. The engine opens 12 lines and leaves 17.85 M people without power.
