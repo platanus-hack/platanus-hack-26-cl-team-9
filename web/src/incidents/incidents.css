@@ -11,8 +11,6 @@
 .shell .inc-effects, .shell .inc-list-text, .shell .inc-cycles ul { margin: 0; padding-left: 16px; color: var(--fg-3); font-size: 12px; line-height: 17px; }
 .shell .inc-sources a { color: var(--fg-3); }
 .shell .inc-sources a:hover { color: var(--fg); }
-.shell .inc-hours { display: flex; align-items: center; gap: 8px; }
-.shell .inc-hours input { width: 72px; padding: 4px 6px; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font: 13px/16px var(--font-sans); }
 .shell .inc-go { align-self: flex-start; }
 .shell .inc-text { margin: 0; color: var(--fg-2); font-size: 13px; line-height: 19px; }
 /* two per row: four nowrap figures do not fit the 440 px panel side by side */

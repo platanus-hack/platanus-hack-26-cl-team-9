@@ -200,11 +200,11 @@ Issue #49. The map draws **one network at a time**. The panel header names it ("
 
 Continuation of issue #74 (`attack-sim.md` section 3.1). The **Incidentes** rail item (below Asistente) replays a public incident as a simulated scenario on Chile's network. It needs the backend.
 - **Catalog:** one card per incident from `GET /api/v1/attacks/catalog`, in the order of the file, never sorted by damage. Each card shows title, date, the hour it runs at, the effects in text, the sources as links, and a tag `no verificado` (press only) or `referencia, no es ciber` (25F).
-- **Options:** defence policy A/B/C, outage hours (0.25-720, labelled "supuesto": it only scales MWh and cost) and **Simular incidente**.
+- **Options:** defence policy A/B/C and **Simular incidente**. There is no outage-duration field: MWh and cost use the calibrated hours of the engine (section 4.2 "Result").
 - **Own session:** an incident runs at its own hour (`operating_point`), and the API answers 422 when the session's hour differs. Without a session, or in one at another hour, the web creates a session at the incident's hour, labelled "Incidente: <título>", and enters it (asking first when it leaves another session). In a session at the same hour the run is added to it.
 - **Flow:** `POST /{sid}/attacks/runs`, then `step` to the horizon (the snapshots), then the report and the after-action.
 - **Result:**
-  1. Consequence card: level, people, MW, and MWh and cost with a tip "N h supuestas (editable)".
+  1. Consequence card: level, people, MW, and MWh and cost from the cascade engine, the same as Estado de la red (25F: US$ 984 M, 81,443 MWh, [44]). The tips say how many hours of black start the dark load pays (7.34 h, calibrated) and that load shed pays 1 h (supuesto).
   2. Agentic response from `report.indicators`, labelled "indicador experimental": time to understanding in cycles and minutes, mission continuity, unnecessary decisions, final reserve.
   3. "Qué lo habría evitado".
   4. The cycles (`after_action.timeline`).

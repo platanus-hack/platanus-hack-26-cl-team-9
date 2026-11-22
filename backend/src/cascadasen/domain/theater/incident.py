@@ -1,15 +1,16 @@
 """Consequence card and public metadata of a documented-incident run (docs/attack-sim.md).
 
-Only the effect is modelled (cyber.md 8). The outage duration scales unserved energy and cost: the
-theatre horizon is about two hours, a real interruption lasts longer, so the card extrapolates the
-peak shed power over `duration_h`, which is an assumption and editable per run.
+Only the effect is modelled (cyber.md 8). Unserved energy and cost are the cascade engine's own
+(`blackout_cost`, docs/engine.md "Cost"): dark demand needs a black start (hours and a total-blackout premium
+from the 25F study [44]) and load shed in a surviving island is back in about an hour (an assumption). The card
+takes the most expensive cascade of the run, so it equals what "Estado de la red" shows for the same event.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from cascadasen.domain.simulation.consequence import outage_cost
+from cascadasen.domain.cascade.frequency import cascade_params
 from cascadasen.domain.theater.config import Incident
 
 NOTICES = (
@@ -39,23 +40,40 @@ def incident_public(
     }
 
 
+def cost_basis() -> dict[str, Any]:
+    """The calibrated cost terms with their source or `is_assumption`, as the engine reads them."""
+    return {
+        k: {
+            "value": v["value"],
+            "source": v.get("source"),
+            "is_assumption": bool(v.get("is_assumption", False)),
+        }
+        for k, v in cascade_params()["cost"].items()
+    }
+
+
 def incident_card(
-    inc: Incident,
-    series: list[Any],
-    worst_level: str,
-    voll_usd_per_kwh: float,
-    duration_h: float,
-    duration_is_assumption: bool,
+    inc: Incident, series: list[Any], worst_level: str, cascades: list[dict[str, Any]]
 ) -> dict[str, Any]:
+    """`cascades`: the engine summaries of the cycles that ran a cascade (`transient.summary`)."""
+    worst = max(cascades, key=lambda c: c.get("failure_cost_usd", 0), default=None)
     peak_mw = max((max(0.0, m.demand_mw - m.served_mw) for m in series), default=0.0)
-    cost = outage_cost(peak_mw, duration_h, duration_is_assumption, voll_usd_per_kwh)
+    cost = {
+        "unserved_energy_mwh": worst["unserved_energy_mwh"] if worst else 0.0,
+        "failure_cost_usd": worst["failure_cost_usd"] if worst else 0,
+        "cost_per_hour_usd": worst["cost_per_hour_usd"] if worst else 0,
+        "outage_duration_h": worst["outage_duration_h"] if worst else {"value": 0, "is_assumption": False},
+        "cost_breakdown": worst["cost_breakdown"] if worst else {},
+    }
     return {
         "incident": inc.id,
         "consequence_level": worst_level,
         "people_without_power": round(max((m.people_without_power for m in series), default=0.0)),
         "load_shed_mw": round(peak_mw, 1),
         **cost,
-        "note": "MWh y costo extrapolan la potencia no servida máxima durante la duración indicada.",
+        "cost_basis": cost_basis(),
+        "note": "Costo de falla del motor de cascadas (CNE 8,79 US$/kWh), el mismo de Estado de la red: la carga "
+        "apagada paga un arranque en negro y un recargo por apagón total; el deslastre, una hora.",
         "notices": list(NOTICES),
     }
 
@@ -83,6 +101,6 @@ def incident_catalog(cfg: Any) -> dict[str, Any]:
         )
     return {
         "notices": list(NOTICES),
-        "default_duration_h": {"value": cfg.incident_duration_h, "is_assumption": True},
+        "cost_basis": cost_basis(),
         "incidents": items,
     }

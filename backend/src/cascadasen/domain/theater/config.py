@@ -85,7 +85,6 @@ class TheaterConfig:
     missions: dict[str, Mission]
     templates: dict[str, Template]
     incidents: dict[str, Incident] = field(default_factory=dict)
-    incident_duration_h: float = 4.0  # assumption (incidents.yaml `defaults`)
     stochastic: dict[str, Any] = field(default_factory=dict)
     crews: dict[str, Any] = field(default_factory=dict)
     physics_alarms: dict[str, float] = field(default_factory=dict)
@@ -159,7 +158,6 @@ def theater_config() -> TheaterConfig:
         missions=missions,
         templates=templates,
         incidents=incidents,
-        incident_duration_h=float(value(inc["defaults"])["duration_h"]),
         stochastic=v.get("stochastic", {}),
         crews=v.get("crews", {}),
         physics_alarms={k: float(x) for k, x in v.get("physics_alarms", {}).items()},

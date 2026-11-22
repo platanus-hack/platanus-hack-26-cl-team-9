@@ -287,21 +287,19 @@ class Sub50Tools:
         scenario: str,
         policy: Literal["A", "B", "C"] = "C",
         seed: int | None = None,
-        duration_h: float | None = None,
     ) -> dict[str, Any]:
         """Start a strategic run from a documented incident (ids from list_incident_scenarios) in the
         active session and make it the active run. The defensive agents respond with the chosen policy;
         the adversary is off. Then call step (about 24 cycles), run_report (its `incident` has the
-        consequence card and mitigations) and after_action. `duration_h` is the outage length used for
-        MWh and cost: an assumption, say so. Describe effects and prevention only; never attribute.
+        consequence card and mitigations) and after_action. MWh and cost come from the engine's calibrated
+        method (the card carries its sources); say which hours are an assumption. Describe effects and
+        prevention only; never attribute.
         Each incident runs at its own operating_point (see list_incident_scenarios): the session must
         use it, e.g. 25f-referencia needs start_session(point="feb2025-1500"); otherwise a 422 lists
         the valid point."""
         body: dict[str, Any] = {"scenario": scenario, "policy": policy}
         if seed is not None:
             body["seed"] = seed
-        if duration_h is not None:
-            body["duration_h"] = duration_h
         run = self.client.post(f"{self._base()}/attacks/runs", body)
         self.state.run_id = run["run_id"]
         return {

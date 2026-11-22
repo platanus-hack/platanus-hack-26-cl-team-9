@@ -248,7 +248,7 @@ def incident_catalog_digest(cat: dict[str, Any]) -> dict[str, Any]:
             }
             for i in cat["incidents"]
         ],
-        "default_duration_h": cat["default_duration_h"],
+        "cost_basis": cat["cost_basis"],
         "notices": cat["notices"],
     }
 

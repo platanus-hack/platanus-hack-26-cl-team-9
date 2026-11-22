@@ -9,9 +9,9 @@ export interface IncidentResult {
   card: IncidentCard; indicators: Indicators; aar: IncidentAar | null; timeline: AarCycle[]; cascades: CascadeCycle[]; minutesPerCycle: number;
 }
 export interface Incident {
-  catalog: IncidentCatalog | null; selected: string | null; policy: Policy; durationH: number; busy: boolean; error: string | null;
+  catalog: IncidentCatalog | null; selected: string | null; policy: Policy; busy: boolean; error: string | null;
   result: IncidentResult | null; playing: number | null;
-  load(): void; select(id: string): void; setPolicy(p: Policy): void; setDurationH(h: number): void;
+  load(): void; select(id: string): void; setPolicy(p: Policy): void;
   launch(): Promise<void>; play(cycle: number): void; stop(): void; close(): void; cascadeAt(cycle: number): Timeline | null;
 }
 
@@ -25,13 +25,12 @@ export function useIncident(s: Session): Incident {
   const [catalog, setCatalog] = useState<IncidentCatalog | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [policy, setPolicy] = useState<Policy>("C");
-  const [durationH, setDurationH] = useState(4);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IncidentResult | null>(null);
   const [playing, setPlaying] = useState<number | null>(null);
-  const live = useRef({ s, catalog, selected, policy, durationH, busy });
-  live.current = { s, catalog, selected, policy, durationH, busy };
+  const live = useRef({ s, catalog, selected, policy, busy });
+  live.current = { s, catalog, selected, policy, busy };
   const loading = useRef(false);
 
   const load = useCallback(() => {
@@ -40,7 +39,6 @@ export function useIncident(s: Session): Incident {
     getIncidentCatalog().then((raw) => {
       const cat = raw as unknown as IncidentCatalog;
       setCatalog(cat); setError(null);
-      setDurationH(cat.default_duration_h?.value ?? 4);
     }, (e) => setError(errorOf(e))).finally(() => { loading.current = false; });
   }, []);
 
@@ -48,7 +46,7 @@ export function useIncident(s: Session): Incident {
   useEffect(() => { if (result && s.sid !== result.sid) setPlaying(null); }, [s.sid, result]);
 
   const launch = useCallback(async () => {
-    const { s: cur, catalog: cat, selected: id, policy: pol, durationH: hours, busy: running } = live.current;
+    const { s: cur, catalog: cat, selected: id, policy: pol, busy: running } = live.current;
     const incident = cat?.incidents.find((x) => x.id === id);
     if (!incident || running) return;
     const plan = sessionPlan(cur.sid ? cur.session?.point ?? null : null, incident);
@@ -61,7 +59,7 @@ export function useIncident(s: Session): Incident {
         sid = doc.session_id;
         cur.join(sid); // the map enters the new session: network and state come from it
       }
-      const run = await startIncidentRun(sid, { scenario: incident.id, policy: pol, duration_h: hours });
+      const run = await startIncidentRun(sid, { scenario: incident.id, policy: pol });
       const rid = String(run.run_id);
       const stepped = await stepRun(sid, rid, Number(run.horizon) || incident.horizon || 24);
       const [report, aar] = await Promise.all([getRunReport(sid, rid), getRunAfterAction(sid, rid)]);
@@ -83,8 +81,8 @@ export function useIncident(s: Session): Incident {
 
   const cascadeAt = useCallback((cycle: number) => result?.cascades.find((c) => c.cycle === cycle)?.timeline ?? null, [result]);
   return {
-    catalog, selected, policy, durationH, busy, error, result, playing,
-    load, select: setSelected, setPolicy, setDurationH, launch, cascadeAt,
+    catalog, selected, policy, busy, error, result, playing,
+    load, select: setSelected, setPolicy, launch, cascadeAt,
     play: (cycle) => setPlaying(cycle),
     stop: () => setPlaying(null),
     close: () => { setPlaying(null); setResult(null); setError(null); },

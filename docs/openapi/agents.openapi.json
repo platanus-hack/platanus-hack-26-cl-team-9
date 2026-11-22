@@ -5327,11 +5327,11 @@
             "title": "Notices",
             "description": "Notices every result carries: hypothetical, not a prediction."
           },
-          "default_duration_h": {
+          "cost_basis": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Default Duration H",
-            "description": "Default outage hours, with is_assumption true."
+            "title": "Cost Basis",
+            "description": "The calibrated cost terms (black-start hours, shed hours, total-blackout multiplier), each with its source or is_assumption true."
           },
           "incidents": {
             "items": {
@@ -5347,7 +5347,7 @@
         "type": "object",
         "required": [
           "notices",
-          "default_duration_h",
+          "cost_basis",
           "incidents"
         ],
         "title": "IncidentCatalogOut",
@@ -5381,20 +5381,6 @@
             ],
             "title": "Seed",
             "description": "Random seed; omitted means a fresh one."
-          },
-          "duration_h": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 720.0,
-                "exclusiveMinimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Duration H",
-            "description": "Outage hours that scale unserved energy and cost in the incident card. Always an assumption; omitted uses the catalog default."
           },
           "uncertainty": {
             "type": "number",

@@ -44,11 +44,11 @@ describe("sessionApi", () => {
   it("reads the incident catalog outside /sessions and launches an incident inside the session", async () => {
     fetchMock.mockImplementation(() => Promise.resolve(json(200, {})));
     await getIncidentCatalog();
-    await startIncidentRun(SID, { scenario: "huatacondo-2026", policy: "C", duration_h: 6 });
+    await startIncidentRun(SID, { scenario: "huatacondo-2026", policy: "C", seed: 6 });
     const calls = fetchMock.mock.calls.map(([url, init]) => `${init.method} ${url}`);
     expect(calls).toEqual(["GET /api/v1/attacks/catalog", `POST /api/v1/sessions/${SID}/attacks/runs`]);
     expect(fetchMock.mock.calls[0][1].headers["X-Sub50-Agent"]).toBe("web");
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ scenario: "huatacondo-2026", policy: "C", duration_h: 6 });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ scenario: "huatacondo-2026", policy: "C", seed: 6 });
   });
 
   it("raises ApiError with the status and the Spanish message", async () => {

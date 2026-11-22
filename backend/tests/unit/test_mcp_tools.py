@@ -187,7 +187,9 @@ def test_incident_tools_list_the_catalog_and_start_a_run_without_ids_in_the_answ
                 200,
                 json={
                     "notices": ["n"],
-                    "default_duration_h": {"value": 4, "is_assumption": True},
+                    "cost_basis": {
+                        "blackout_restoration_h": {"value": 7.34, "source": "[44]", "is_assumption": False}
+                    },
                     "incidents": [
                         {
                             "id": "huatacondo-2026",
@@ -207,6 +209,6 @@ def test_incident_tools_list_the_catalog_and_start_a_run_without_ids_in_the_answ
     tools = Sub50Tools(client_for(handler), McpState(session_id="s"))
     cat = tools.list_incident_scenarios()
     assert cat["incidents"][0]["effects"] == ["ciclo 2: C1_generation_loss en A01"]
-    run = tools.start_incident_run("huatacondo-2026", duration_h=6)
+    run = tools.start_incident_run("huatacondo-2026", seed=6)
     assert tools.state.run_id == "r1" and run["scenario_notices"][0].startswith("Escenario hipotético")
-    assert b'"duration_h":6' in seen[-1][2].replace(b" ", b"") and seen[-1][1].endswith("/s/attacks/runs")
+    assert b'"seed":6' in seen[-1][2].replace(b" ", b"") and seen[-1][1].endswith("/s/attacks/runs")

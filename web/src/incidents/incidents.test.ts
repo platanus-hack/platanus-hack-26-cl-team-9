@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "../cascade/types";
-import { cardFigures, cycleRows, incidentError, cascadeCycles, cycleMinutes, effectText, incidentTag, parseDuration, pointText, responseFigures, sessionPlan, type IncidentCard, type RunSnapshot } from "./incidents";
+import { cardFigures, cycleRows, incidentError, cascadeCycles, cycleMinutes, effectText, incidentTag, pointText, responseFigures, sessionPlan, type IncidentCard, type RunSnapshot } from "./incidents";
 
 const tl = (label: string, shed = 100) => ({ scenario: label, label, failed_elements: [], truncated: false, duration_s: 10, events: [], frames: [{ t: 0 }], frequency_hz: {},
   summary: { load_shed_mw: shed, dark_buses: 0, lines_opened: [] }, assumptions: [] }) as unknown as Timeline;
 const card: IncidentCard = {
   incident: "polonia-2025", consequence_level: "L2", people_without_power: 3512405, load_shed_mw: 2028.5, unserved_energy_mwh: 8114.1,
-  failure_cost_usd: 71322605, outage_duration_h: { value: 4, is_assumption: true }, note: "", notices: [],
+  failure_cost_usd: 17834910, cost_per_hour_usd: 17834910, outage_duration_h: { value: 1, is_assumption: true },
+  cost_breakdown: { dark_mw: 0, shed_mw: 2029 },
+  cost_basis: { blackout_restoration_h: { value: 7.34, source: "[44]", is_assumption: false }, shed_restoration_h: { value: 1, source: null, is_assumption: true } },
+  note: "", notices: [],
 };
 
 describe("incidents", () => {
@@ -40,11 +43,18 @@ describe("incidents", () => {
     expect(rows.map((r) => r.cycle)).toEqual([2, 15, 20]);
   });
 
-  it("flags duration, MWh and cost as assumptions on the card", () => {
+  it("explains where MWh and cost come from: the engine's calibrated method, with the assumed hour flagged", () => {
     const f = cardFigures(card);
-    expect(f.map((x) => x.value)).toEqual(["3.512.405", "2.029", "8.114", "US$ 71,3 M"]);
-    expect(f[2].tip).toContain("4 h supuestas (editable)");
-    expect(f[3].tip).toContain("Supuesto");
+    expect(f.map((x) => x.value)).toEqual(["3.512.405", "2.029", "8.114", "US$ 17,8 M"]);
+    expect(f[2].tip).toContain("igual que Estado de la red");
+    expect(f[2].tip).toContain("1 h (supuesto)");
+    expect(f[3].tip).toContain("7,34 h de arranque en negro [44]");
+    expect(f[3].tip).toContain("el deslastre paga 1 h (supuesto)");
+  });
+
+  it("labels the hours of a total blackout as calibrated, not assumed", () => {
+    const blackout = { ...card, outage_duration_h: { value: 7.34, is_assumption: false } };
+    expect(cardFigures(blackout)[2].tip).toContain("7,34 h (calibrado con el 25F, [44])");
   });
 
   it("labels the agentic response as experimental, with TTU in cycles and minutes", () => {
@@ -52,14 +62,6 @@ describe("incidents", () => {
     expect(f.map((x) => x.value)).toEqual(["10 ciclos · 50 min", "89 %", "2", "60 %"]);
     expect(f.every((x) => x.tip.includes("experimental"))).toBe(true);
     expect(responseFigures({ situational_awareness: { time_to_understanding_cycles: null, understood: false } }, 5)[0].value).toBe("no llegó a entender");
-  });
-
-  it("clamps the typed duration to what the API accepts", () => {
-    expect(parseDuration("6,5")).toBe(6.5);
-    expect(parseDuration("0.1")).toBe(0.25);
-    expect(parseDuration("9999")).toBe(720);
-    expect(parseDuration("")).toBeNull();
-    expect(parseDuration("abc")).toBeNull();
   });
 
   it("explains failures in Spanish", () => {

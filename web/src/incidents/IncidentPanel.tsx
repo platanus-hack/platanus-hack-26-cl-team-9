@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Info } from "../cascade/ui";
-import { cardFigures, cycleRows, effectText, incidentTag, LEVELS, MAX_DURATION_H, MIN_DURATION_H, NOTICES, parseDuration, pointText, POLICIES, responseFigures, type IncidentSource } from "./incidents";
+import { cardFigures, cycleRows, effectText, incidentTag, LEVELS, NOTICES, pointText, POLICIES, responseFigures, type IncidentSource } from "./incidents";
 import type { Incident } from "./useIncident";
 import "./incidents.css";
 
@@ -10,12 +10,9 @@ import "./incidents.css";
  * cycles (those with a cascade play it on the map) and the sources. Every result carries both notices.
  */
 export function IncidentPanel({ inc, sessionPoint }: { inc: Incident; sessionPoint: string | null }) {
-  const [hours, setHours] = useState(String(inc.durationH));
   useEffect(() => { inc.load(); }, []);
-  useEffect(() => setHours(String(inc.durationH)), [inc.catalog]); // the catalog default, once it loads
   const { catalog, result } = inc;
   const chosen = catalog?.incidents.find((x) => x.id === inc.selected) ?? null;
-  const typed = parseDuration(hours);
 
   return (
     <div className="incidents">
@@ -54,15 +51,7 @@ export function IncidentPanel({ inc, sessionPoint }: { inc: Incident; sessionPoi
                 <button key={p} className={inc.policy === p ? "on" : ""} aria-pressed={inc.policy === p} data-tip={name} onClick={() => inc.setPolicy(p)}>{short} · {name}</button>
               ))}
             </div>
-            <label className="inc-hours">
-              <span className="meta">Duración de la interrupción (h)</span>
-              <input type="number" min={MIN_DURATION_H} max={MAX_DURATION_H} step={0.25} value={hours}
-                onChange={(e) => { setHours(e.target.value); const h = parseDuration(e.target.value); if (h != null) inc.setDurationH(h); }}
-                onBlur={() => { const h = parseDuration(hours); if (h != null) setHours(String(h)); }} />
-              <Info tip={`Supuesto, editable: escala los MWh y el costo de la tarjeta (${MIN_DURATION_H}-${MAX_DURATION_H} h). Por defecto ${catalog.default_duration_h.value} h.`} />
-              <span className="meta">supuesto</span>
-            </label>
-            <button className="btn inc-go" disabled={!chosen || inc.busy || typed == null} onClick={() => void inc.launch()}>
+            <button className="btn inc-go" disabled={!chosen || inc.busy} onClick={() => void inc.launch()}>
               {inc.busy ? "Simulando…" : "Simular incidente"}
             </button>
             <p className="meta">{chosen
@@ -99,7 +88,7 @@ function Result({ inc }: { inc: Incident }) {
             <div key={f.label}><span className="value-row"><b>{f.value}</b><Info tip={f.tip} /></span><span>{f.label}</span></div>
           ))}
         </div>
-        <p className="meta">{r.card.note} Duración: {r.card.outage_duration_h.value.toLocaleString("es-CL")} h{r.card.outage_duration_h.is_assumption ? " supuestas (editable en Opciones al simular de nuevo)" : ""}.</p>
+        <p className="meta">{r.card.note} Interrupción: {r.card.outage_duration_h.value.toLocaleString("es-CL", { maximumFractionDigits: 2 })} h{r.card.outage_duration_h.is_assumption ? " (supuesto)" : " (calibrado con el 25F [44])"}.</p>
       </div>
 
       <div className="card">

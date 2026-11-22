@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(incidents): cost from the calibrated cascade method, no editable duration
+
+- **Changed:** The incident card takes `unserved_energy_mwh`, `failure_cost_usd`, `cost_per_hour_usd`, `outage_duration_h` and `cost_breakdown` from the most expensive cascade of the run (`transient.summary`, `blackout_cost` of #82) and adds `cost_basis` (the calibrated terms with their source or `is_assumption`, also in the catalog). The 25F now gives US$ 984.3 M and 81,443 MWh, as "Estado de la red".
+  - Removed the editable duration: `duration_h` in `RunConfig`, the API body, the MCP tool and the web field, `default_duration_h` in the catalog and `incidents.yaml` `defaults`. The web tips say the dark load pays a 7.34 h black start (calibrated, [44]) and load shed pays 1 h (assumption).
+- **Why:** The card used the flat 4 h x 8.79 US$/kWh over the peak power (US$ 390 M for the 25F) while Estado de la red used #82's calibrated cost (US$ 984 M): two figures for the same event. Decision by Ricardo, 2026-11-22: use the calibrated one.
+- **Agents:** `POST /attacks/runs` no longer takes `duration_h` and an old recipe that has it is read without it. Shed-only incidents (Polonia: US$ 17.8 M) pay 1 h flagged `is_assumption`; an absorbed one (Huatacondo) costs 0. Only the 25F is checked against a real figure. `agents.openapi.json` regenerated.
+- **Files:** `backend/src/cascadasen/domain/theater/{incident,cycle,config,narrative}.py`, `domain/theater/params/incidents.yaml`, `api/incident_routes.py`, `mcp/{tools,digest}.py`, `application/run_experiment.py`, tests, `web/src/incidents/*`, `web/src/session/sessionApi*.ts`, `docs/{attack-sim,mapa3,mcp,sessions-api}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-22 · Merge origin/main into feat/incident-scenarios
 
 - **Changed:** Integrates #92 (select on the first click, switch off on the second) and #97/#99 (prepared scenarios, `prepare_scenario`) with the incident scenarios.
