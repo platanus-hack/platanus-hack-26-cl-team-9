@@ -32,6 +32,7 @@ const TOOL_NAMES: Record<string, string> = {
   list_incident_scenarios: "Ver incidentes documentados",
   start_incident_run: "Iniciar un incidente",
   prepare_scenario: "Preparar el mapa",
+  find_line: "Buscar línea",
 };
 const TARGETS: Record<string, string> = { demand: "demanda", generation: "generación", population: "personas", lines: "capacidad de líneas", substation: "subestación nueva" };
 const TECHS: Record<string, string> = {
@@ -93,6 +94,7 @@ export function resultText(name: string, ok: boolean, result: unknown): string {
   if (!ok) return failureText(result);
   if (!isObj(result)) return typeof result === "string" ? result.slice(0, 140) : "";
   if (name === "prepare_scenario") return scenarioResult(result);
+  if (name === "find_line" && Array.isArray(result.lines)) return lineResult(result.lines.filter(isObj));
   const parts: string[] = [];
   if (typeof result.id === "string") parts.push(`id ${result.id}`);
   if (typeof result.bus_name === "string") parts.push(`en ${result.bus_name}`);
@@ -118,6 +120,12 @@ function scenarioResult(result: Json): string {
     empty ? `${empty} ${empty === 1 ? "cambio no tocó" : "cambios no tocaron"} ninguna subestación` : "",
     sim && typeof sim.people_without_power === "number" ? `${num(sim.people_without_power)} personas sin suministro` : "",
   ].filter(Boolean).join(" · ") || "mapa preparado";
+}
+
+/** The line find_line found ("R239 · S/E NUEVA MAITENCILLO – S/E NUEVA PAN DE AZUCAR (500 kV)"), or how many matched. */
+function lineResult(lines: Json[]): string {
+  if (lines.length === 1) return `${String(lines[0].id)} · ${String(lines[0].name)}`;
+  return `${lines.length} líneas: ${lines.slice(0, 4).map((l) => String(l.id)).join(", ")}${lines.length > 4 ? "…" : ""}`;
 }
 
 function failureText(result: unknown): string {

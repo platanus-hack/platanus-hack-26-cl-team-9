@@ -191,6 +191,83 @@
         "x-sub50-agent": true
       }
     },
+    "/api/v1/grids/lines": {
+      "get": {
+        "tags": [
+          "grids",
+          "grid-stress"
+        ],
+        "summary": "Find a line by its name",
+        "description": "Finds the lines of the 188-bus network a person names: a line id (R###), its two end substations (\"Nueva Maitencillo – Nueva Pan de Azúcar\", \"entre Ancoa y Alto Jahuel\", either order) or one substation (every line that ends there). A voltage in the text (\"500 kV\") narrows the answer. Lines come in id order: this is a lookup by name, it never ranks lines (docs/cyber.md section 8). Use the id in `open_lines` of /grids/simulate or prepare_scenario to take the line out of service.",
+        "operationId": "find_line",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "description": "The line as a person names it.",
+              "examples": [
+                "Nueva Maitencillo – Nueva Pan de Azúcar"
+              ],
+              "title": "Q"
+            },
+            "description": "The line as a person names it."
+          },
+          {
+            "name": "point",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Operating point id (the network is the same at every point).",
+              "examples": [
+                "nov2026-1300"
+              ],
+              "default": "nov2026-1300",
+              "title": "Point"
+            },
+            "description": "Operating point id (the network is the same at every point)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The lines whose name matches the query, in id order (a lookup, never a ranking).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineLookupOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown line or substation, or no direct line between them.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Empty query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
     "/api/v1/sim/network": {
       "get": {
         "tags": [
@@ -5851,6 +5928,94 @@
           "capacity_mw"
         ],
         "title": "LineIn"
+      },
+      "LineLookupOut": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The line as it was asked."
+          },
+          "how": {
+            "type": "string",
+            "title": "How",
+            "description": "How the name was read, in Spanish (which substations)."
+          },
+          "matched": {
+            "type": "integer",
+            "title": "Matched",
+            "description": "Lines that match."
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LineMatch"
+            },
+            "type": "array",
+            "title": "Lines",
+            "description": "At most 12 matching lines, in id order."
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "True when more than 12 lines matched: name both ends."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "query",
+          "how",
+          "matched",
+          "lines",
+          "truncated"
+        ],
+        "title": "LineLookupOut",
+        "description": "The lines whose name matches the query, in id order (a lookup, never a ranking)."
+      },
+      "LineMatch": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Line id R### (use it in `open_lines` or `lines`)."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its two end substations and voltage, as the web names it."
+          },
+          "kv": {
+            "type": "number",
+            "title": "Kv",
+            "description": "Voltage level, kV."
+          },
+          "a": {
+            "type": "string",
+            "title": "A",
+            "description": "Substation id B### of one end."
+          },
+          "b": {
+            "type": "string",
+            "title": "B",
+            "description": "Substation id B### of the other end."
+          },
+          "capacity_mw": {
+            "type": "number",
+            "title": "Capacity Mw",
+            "description": "Thermal capacity of the reduced line, MW."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kv",
+          "a",
+          "b",
+          "capacity_mw"
+        ],
+        "title": "LineMatch",
+        "description": "One line that matches the name."
       },
       "LinePatch": {
         "properties": {

@@ -1,11 +1,26 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(merge): PR #120 reduced to find_line, on top of current main
+
+- **Changed:** PR #120 now carries only `find_line` (route, MCP tool, web label, docs, OpenAPI). Dropped from it: the web fix for the 25F "50 Hz" panel (#147 fixed it with `systemFrequency`), the `factor` 0 error of `lines` changes and the prompt and `INSTRUCTIONS` rewording about sessions.
+- **Why:** Keep the PR to one reviewable change after #125-#149 landed; the other pieces were covered or are not needed to use `find_line`.
+- **Agents:** The assistant prompt only gains the pointer to `find_line` in `TOOL_GUIDE` and `SYSTEM`. A `lines` change with `factor` 0 still answers the generic "Debe ser mayor que 0". `file:line` references re-pointed; index regenerated.
+- **Files:** `backend/src/cascadasen/{api/assistant_routes.py,mcp/tools.py}`, `docs/{README,code-map,for-reviewers,assistant,mcp,stress}.md`, `docs/index/repo-index.json`.
+
+## 2026-11-22 · feat(stress): find a line by its name or its two end substations
+
+- **Changed:** New `application/line_lookup.py` (`find_lines`) and route `GET /api/v1/grids/lines?q=` (agent operation `find_line`, `LineLookupOut` in `api/stress_schemas.py`). It reads a line id, two end substations in either order ("Nueva Maitencillo – Nueva Pan de Azúcar", "entre Ancoa y Alto Jahuel", optional "500 kV") or one substation, and lists at most 12 matching lines in id order. New MCP tool `find_line` (in `NO_SESSION_NEEDED`, so the assistant uses it without a session), labelled "Buscar línea" in the web chat. `describe_network` and `prepare_scenario` point to it.
+- **Why:** Nothing resolved a line by name (`places` resolves buses only), so the assistant searched areas one by one with `describe_network` and ran out of its 8 steps on "corta la línea Nueva Maitencillo – Nueva Pan de Azúcar".
+- **Agents:** A lookup by name only (`docs/cyber.md` section 8): no ranking and no criticality field; a test checks the id order. Every one of the 273 lines is found by the names of its two ends. A substation named exactly wins over a partial match ("Maitencillo" is S/E MAITENCILLO, R216, not NUEVA MAITENCILLO). `docs/openapi/agents.openapi.json` regenerated; `docs/stress.md` section 3.2, `docs/mcp.md` section 3, `docs/assistant.md` labels row.
+- **Files:** `backend/src/cascadasen/{application/line_lookup.py,api/grid_routes.py,api/stress_schemas.py,mcp/tools.py,mcp/toolbox.py}`, `backend/tests/{unit/test_line_lookup.py,unit/test_mcp_tools.py,integration/test_assistant_api.py}`, `web/src/assistant/{labels.ts,labels.test.ts}`, `docs/{stress,mcp,assistant}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-22 · merge: upstream/main (free map camera, #143) into cleanup/dedupe
 - **Changed:** merged `upstream/main` 99539ca8 again. Conflicts: `CHANGELOG.md` (both sides kept), `docs/index/repo-index.json` (regenerated with `build_index.py`) and `web/src/map/baseMap.ts` (main's free-camera code wins, `START_TARGET` keeps `SEN_BOUNDS` from `map/constants.ts`, which still fits).
 - **Why:** main moved after the first merge with 250101b7, so the PR would have conflicted.
 - **Agents:** nothing new beyond the previous merge entry below. `docs/openapi/agents.openapi.json` is unchanged against main.
 - **Files:** `CHANGELOG.md`, `docs/index/repo-index.json`, `web/src/map/baseMap.ts`.
+
 
 ## 2026-11-22 · fix(web): Salud de la red lists its figures one per row
 
@@ -13,6 +28,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** nine figures in one row overlapped each other.
 - **Agents:** `.mini-figures` is unchanged for the other cards. No test: CSS only.
 - **Files:** `web/src/cyber/cyber.css`.
+
 
 ## 2026-11-22 · feat: el mapa simula un escenario sin fallas (apagar todas las hidro) y el asistente tiene un solo encabezado
 - **Changed:** `GridSimulator.simulate_workflow` and `cost_workflow` accept changes with no failure (`prepare_edits(allow_empty=bool(changes))`); nothing at all is still 422. The cascade starts by opening the lines the redispatch overloads. The web simulates every prepared scenario (`cached = fromCache(edits)`), so the map and Estado de la red show that cascade. `prepare_scenario` (MCP) simulates changes alone too, with `without_changes` at 0. The assistant prompt no longer says "nada queda en rojo si no hay falla". Asistente: the card with the repeated title is gone; "Nueva conversación" sits in the panel header next to Cerrar (`.head-actions`).
@@ -838,7 +854,6 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Issue #42 phase A: a line could be cut before its data was seen. User decision: phase A only, values stay plain text.
 - **Agents:** Switching back on is only from the card; a second click on something already off does nothing. Without a session a substation is off when it is in `edits.buses` (its lines are not off by themselves); in a session when all its lines are open. A double click on an element that is already selected switches it off on its first click (that click is a second click on the selection). Open: phase B (editing generation, demand, people). `docs/plan-2.0.md`, cited by the issue, does not exist.
 - **Files:** `web/src/cascade/{clicks.ts,clicks.test.ts,outage.ts,outage.test.ts,CascadeApp.tsx,SelectionCard.tsx,SimulationPanel.tsx,NetworkState.tsx,Timeline.tsx,Legend.tsx}`.
-
 
 ## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
 
@@ -1667,7 +1682,6 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The team needs material for the pitch.
 - **Agents:** `docs/pitch_idea.md` is pitch material, in Spanish. Costs of the measures (e.g. US$ per MW of battery) are assumed values, not sourced data. The note in the doc says no user has been interviewed yet; do not turn the benefits into claims of validated demand.
 - **Files:** `docs/pitch_idea.md`, `CHANGELOG.md`.
-
 
 ## 2026-11-21 · fix(web): the event callout is docked in a quiet corner (#52)
 
