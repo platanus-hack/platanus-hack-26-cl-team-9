@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+LAYERS = ("substations", "taps", "lines", "plants", "storage", "comunas")  # map layers, as GeoJSON
+
 
 class NodeKind(StrEnum):
     SUBSTATION = "substation"

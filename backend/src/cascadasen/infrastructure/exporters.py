@@ -11,9 +11,8 @@ import json
 from pathlib import Path
 
 from cascadasen.application.grid_queries import GridQueryService
-from cascadasen.domain.model import GridSnapshot
+from cascadasen.domain.model import LAYERS, GridSnapshot
 
-LAYERS = ("substations", "taps", "lines", "plants", "storage", "comunas")
 MAP_TEMPLATE = Path(__file__).resolve().parents[1] / "api" / "static" / "map.html"
 EMBED_TAG = '<script id="sen-embed" type="application/json">null</script>'
 

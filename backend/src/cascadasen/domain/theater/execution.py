@@ -21,7 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from cascadasen.domain.theater.areas import TheaterNetwork, UnknownTargetError, bus_id
+from cascadasen.domain.cascade.network import bus_id
+from cascadasen.domain.theater.areas import TheaterNetwork, UnknownTargetError
 from cascadasen.domain.theater.catalog import EVENTS
 from cascadasen.domain.theater.config import TheaterConfig
 from cascadasen.domain.theater.decisions import COA, FieldReport

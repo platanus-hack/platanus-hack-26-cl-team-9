@@ -8,12 +8,13 @@ from typing import Any
 from cascadasen.application.run_campaign import CampaignRunner
 from cascadasen.application.run_experiment import RunCache, RunManager, catalog
 from cascadasen.application.simulate import PhysicsSimulator, SimulateCommand
+from cascadasen.domain.cascade.network import bus_id
 from cascadasen.domain.cascade.scenario import OperatingPoint
 from cascadasen.domain.model import GridSnapshot
 from cascadasen.domain.ports import CommanderAdvisor, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics, build_state
 from cascadasen.domain.simulation.network import NetworkSpec, ReducedNetwork, build_reduced_network
-from cascadasen.domain.theater.areas import TheaterNetwork, bus_id
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.world import TheaterWorld
 
 REFERENCE_OPERATING_POINT = "midday_2026"

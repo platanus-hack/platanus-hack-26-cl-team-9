@@ -19,6 +19,7 @@ from functools import cached_property
 import numpy as np
 
 from cascadasen.domain.cascade.network import ReducedNetwork as BusNetwork
+from cascadasen.domain.cascade.network import bus_id
 from cascadasen.domain.simulation.network import AreaSpec, NetworkSpec
 
 EDAC_ZONES = ("norte_grande", "centro_sur")
@@ -26,10 +27,6 @@ EDAC_ZONES = ("norte_grande", "centro_sur")
 
 class UnknownTargetError(KeyError):
     pass
-
-
-def bus_id(i: int) -> str:
-    return f"B{i:03d}"
 
 
 @dataclass(frozen=True)

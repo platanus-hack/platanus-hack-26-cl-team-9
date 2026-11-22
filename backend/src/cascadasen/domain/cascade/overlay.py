@@ -18,11 +18,10 @@ import numpy as np
 
 from cascadasen.domain.errors import InputError
 from cascadasen.domain.geo import haversine_km
-from cascadasen.domain.theater.areas import bus_id
 from cascadasen.domain.validation import X_PER_KM
 
 from .flow import BASE_MVA, find_islands
-from .network import X_MIN_PU, Line, ReducedNetwork
+from .network import X_MIN_PU, Line, ReducedNetwork, bus_id
 from .scenario import OperatingPoint
 
 MAX_ADDED = 50  # buses + lines + loads + generators added by one session

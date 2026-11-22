@@ -78,7 +78,7 @@ def get_sessions(request: Request) -> SessionService:
             sim.run_cache,
             interpreter=sim.runs.interpreter,
             advisor=sim.runs.advisor,
-            ttl_s=settings.session_ttl_hours * 3600,
+            ttl_s=settings.session_ttl_s,
             version=settings.version,
         )
         request.app.state.sessions = svc

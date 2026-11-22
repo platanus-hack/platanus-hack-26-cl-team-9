@@ -22,8 +22,9 @@ from cascadasen.domain.cascade.engine import CascadeParams, run_cascade_state
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
 from cascadasen.domain.cascade.frequency import F0
 from cascadasen.domain.cascade.frequency import Params as FrequencyParams
+from cascadasen.domain.cascade.network import bus_id
 from cascadasen.domain.cascade.scenario import OperatingPoint
-from cascadasen.domain.theater.areas import EDAC_ZONES, TheaterNetwork, bus_id
+from cascadasen.domain.theater.areas import EDAC_ZONES, TheaterNetwork
 
 RESERVE_SHARE = FrequencyParams().reserve_share_of_sync  # same primary reserve the engine uses
 KINDS = ("sync", "renewable")

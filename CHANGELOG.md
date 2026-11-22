@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(sessions): bus_id, iso_utc, session_ttl_s, LAYERS and the live-lines check have one home
+- **Changed:** `bus_id` moves from `domain/theater/areas.py` to `domain/cascade/network.py`; `theater/{areas,cycle,grid,execution}.py`, `cascade/overlay.py`, `cascade/engine.py`, `application/{cache_builder,simulation_service}.py` import it from there. The inline `f"B{i:03d}"` in `cache_builder.py` (twice) and `cascade/engine.py` now call it. `cascade/overlay.py` no longer imports from `theater`.
+- **Changed:** `iso_utc(ts)` in `application/run_experiment.py` replaces the two `_now()` bodies and the `expires_at` formatting in `sessions.py`. `Settings.session_ttl_s` (property) replaces `session_ttl_hours * 3600` in `api/session_routes.py` and `infrastructure/container.py`. `LAYERS` lives in `domain/model.py` and `api/app.py` and `infrastructure/exporters.py` import it.
+- **Changed:** `SessionService._register` calls `_check_room` (same condition and message, only when the run id is new); `_live_lines(applied)` replaces three copies of the live-line set.
+- **Why:** F11 of the duplication report: small repeats, and a cascade to theater import in the wrong direction.
+- **Agents:** Import `bus_id` from `cascadasen.domain.cascade.network`; `theater.areas` no longer exports it. `SessionService.__init__` still defaults `ttl_s` to 86400 (tests rely on it); the 24 h default is therefore written in `Settings` and there. `docs/openapi/agents.openapi.json` is unchanged. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 247 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/cascade/network.py`, `domain/theater/areas.py`, `application/run_experiment.py`, `application/sessions.py`, `infrastructure/settings.py`, `domain/model.py`, `api/app.py`, plus the importers listed above.
 ## 2026-11-22 · refactor(api): ReplayIn.overrides() and RunCreate.config_dict() replace the copied route bodies
 - **Changed:** `api/simulation_schemas.py`: `ReplayIn.overrides()` builds the replay overrides (policy, uncertainty, seed, adversary as `AdversaryConfig`, capabilities as a sorted tuple) and `RunCreate.config_dict()` builds the `run_config` input (`model_dump` without `auto_run`, events dumped).
 - **Changed:** `replay_run` and `create_run` in `api/simulation_routes.py` and the session replay and create-run handlers in `api/session_routes.py` call them instead of repeating the blocks.

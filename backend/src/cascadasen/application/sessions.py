@@ -16,10 +16,10 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
-from cascadasen.application.run_experiment import RunCache, RunManager, RunNotFoundError, run_config
+from cascadasen.application.run_experiment import RunCache, RunManager, RunNotFoundError, iso_utc, run_config
 from cascadasen.application.simulation_service import theater_network_view
 from cascadasen.application.theater_world import SessionWorld
 from cascadasen.domain.cascade import overlay as ov
@@ -106,7 +106,7 @@ class SessionService:
         return f"sessions/{sid}.json"
 
     def _now(self) -> str:
-        return datetime.fromtimestamp(self.clock(), UTC).isoformat(timespec="seconds")
+        return iso_utc(self.clock())
 
     def _fetch(self, sid: str) -> tuple[dict[str, Any], str]:
         found = self.store.get(self._key(sid))
@@ -118,7 +118,7 @@ class SessionService:
 
     def _public(self, doc: dict[str, Any]) -> dict[str, Any]:
         updated = datetime.fromisoformat(doc["updated_at"]).timestamp()
-        expires = datetime.fromtimestamp(updated + self.ttl_s, UTC).isoformat(timespec="seconds")
+        expires = iso_utc(updated + self.ttl_s)
         return {**copy.deepcopy(doc), "share_path": f"/?sesion={doc['session_id']}", "expires_at": expires}
 
     def _world(self, doc: dict[str, Any]) -> SessionWorld:
@@ -222,7 +222,7 @@ class SessionService:
             net, point = self._base(doc["point"])
             doc["overlay"], out = change(doc["overlay"], net, point)
             applied = SessionWorld(self.world, doc["point"], doc["overlay"], self.spec).applied
-            live = {ln.id for ln in applied.net.lines}
+            live = self._live_lines(applied)
             doc["open_lines"] = [lid for lid in doc["open_lines"] if lid in live]
             return out
 
@@ -310,7 +310,7 @@ class SessionService:
             ln["origin"] = "session" if session else "base"
             ln["overridden"] = not session and ln["id"] in line_overrides
             ln["is_assumption"] = session or ln["overridden"]
-        live = {ln.id for ln in applied.net.lines}
+        live = self._live_lines(applied)
         view["out_of_service"] = {
             "buses": [nd["id"] for nd in view["nodes"] if not nd["in_service"]],
             "lines": sorted({ln.id for ln in base_net.lines} - live)
@@ -339,8 +339,12 @@ class SessionService:
         net, op = self._world(doc).load(doc["point"])
         return run_cascade_workflow(net.buses, op, sorted(doc["open_lines"]))
 
+    @staticmethod
+    def _live_lines(applied: Any) -> set[str]:
+        return {ln.id for ln in applied.net.lines}
+
     def _check_lines(self, doc: dict[str, Any], lines: list[str]) -> None:
-        live = {ln.id for ln in self._world(doc).applied.net.lines}
+        live = self._live_lines(self._world(doc).applied)
         unknown = sorted(set(lines) - live)
         if unknown:
             raise ov.OverlayError(
@@ -422,8 +426,8 @@ class SessionService:
         rid = run["run_id"]
 
         def fn(doc: dict[str, Any]) -> None:
-            if rid not in doc["runs"] and len(doc["runs"]) >= MAX_RUNS_PER_SESSION:
-                raise SessionLimitError(f"Máximo {MAX_RUNS_PER_SESSION} corridas por sesión.")
+            if rid not in doc["runs"]:
+                self._check_room(doc)
             doc["runs"][rid] = {
                 "created_at": self._now(),
                 "dataset_revision": dataset_revision,

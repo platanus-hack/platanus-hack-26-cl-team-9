@@ -34,6 +34,11 @@ LOCK_STRIPES = 64
 RUN_ID = re.compile(r"^[0-9a-f]{12}$")
 
 
+def iso_utc(ts: float) -> str:
+    """Unix time as ISO-8601 UTC with second precision, the format of every stored timestamp."""
+    return datetime.fromtimestamp(ts, UTC).isoformat(timespec="seconds")
+
+
 class RunNotFoundError(KeyError):
     pass
 
@@ -123,7 +128,7 @@ class RunManager:
         return f"{self.prefix}{run_id}.json"
 
     def _now(self) -> str:
-        return datetime.fromtimestamp(self.clock(), UTC).isoformat(timespec="seconds")
+        return iso_utc(self.clock())
 
     def _load(self, run_id: str) -> CachedRun:
         """The cached run, or the run rebuilt from its record. Call with the run's lock held."""

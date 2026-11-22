@@ -22,12 +22,12 @@ from cascadasen.api.simulation_routes import router as simulation_router
 from cascadasen.application.grid_queries import GridQueryService, NotFoundError
 from cascadasen.application.sessions import SessionService
 from cascadasen.application.simulation_service import SimulationService
+from cascadasen.domain.model import LAYERS
 from cascadasen.domain.ports import DocumentStore
 from cascadasen.infrastructure.container import document_store, repository
 from cascadasen.infrastructure.settings import Settings, get_settings
 
 STATIC = Path(__file__).parent / "static"
-LAYERS = ("substations", "taps", "lines", "plants", "storage", "comunas")
 
 
 def get_service(request: Request) -> GridQueryService:

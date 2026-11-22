@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 
 from cascadasen.domain.cascade.engine import ASSUMPTIONS, run_cascade_workflow
-from cascadasen.domain.cascade.network import ReducedNetwork
+from cascadasen.domain.cascade.network import ReducedNetwork, bus_id
 from cascadasen.domain.cascade.scenario import load_network_and_point
 
 
@@ -45,7 +45,7 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
     _write(
         folder / "buses.json",
         {
-            f"B{i:03d}": {
+            bus_id(i): {
                 "gen_mw": round(float(op.gen[i]), 1),
                 "load_mw": round(float(op.load[i]), 1),
                 "people": round(float(op.people[i])),
@@ -60,7 +60,7 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
 
 
 def _network_json(net: ReducedNetwork) -> dict:
-    ids = [f"B{i:03d}" for i in range(net.size)]
+    ids = [bus_id(i) for i in range(net.size)]
     return {
         "nodes": [
             {

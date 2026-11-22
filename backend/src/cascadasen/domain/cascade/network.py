@@ -18,6 +18,11 @@ NORTE_GRANDE_MAX_LAT = (
 )  # Arica, Tarapacá and Antofagasta; everything south counts as centro-sur (NTSyCS EDAC tables)
 
 
+def bus_id(i: int) -> str:
+    """Public id of bus `i` of the reduced network: 'B000', 'B001', ..."""
+    return f"B{i:03d}"
+
+
 def substation_of(bus_name: str) -> str:
     """'S/E ALTO JAHUEL_500' -> 'S/E ALTO JAHUEL' (also handles '_154_II' style suffixes)."""
     match = _SUBSTATION.match(bus_name)

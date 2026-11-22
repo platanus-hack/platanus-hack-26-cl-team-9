@@ -16,7 +16,7 @@ from cascadasen.domain.simulation.params import value
 
 from .flow import dc_flow, find_islands
 from .frequency import IslandInput, IslandResult, Params, cascade_params, edac_tables, simulate_island
-from .network import ReducedNetwork
+from .network import ReducedNetwork, bus_id
 from .scenario import OperatingPoint
 
 ASSUMPTIONS = [
@@ -427,7 +427,7 @@ def _frame(s: _State, islands: list[list[int]], flows: np.ndarray, t: float) -> 
     return {
         "t": round(t, 2),
         "edges": edges,
-        "dark": sorted(f"B{b:03d}" for b in s.dark),
+        "dark": sorted(bus_id(b) for b in s.dark),
         "islands": [
             {
                 "buses": len(i),

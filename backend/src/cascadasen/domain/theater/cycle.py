@@ -25,11 +25,11 @@ from cascadasen.domain.agents.isr import ISRAgent
 from cascadasen.domain.agents.logistics import LogisticsAgent
 from cascadasen.domain.agents.operations import OperationsAgent
 from cascadasen.domain.agents.stabilization import StabilizationAgent
+from cascadasen.domain.cascade.network import bus_id
 from cascadasen.domain.errors import InputError
 from cascadasen.domain.ports import CommanderAdvisor
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
-from cascadasen.domain.theater.areas import bus_id
 from cascadasen.domain.theater.audit import AuditLog
 from cascadasen.domain.theater.catalog import ACTIONS, EVENTS, OBJECTIVES
 from cascadasen.domain.theater.config import TheaterConfig, theater_config

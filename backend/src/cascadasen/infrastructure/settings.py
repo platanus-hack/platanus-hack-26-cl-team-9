@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     def sessions_dir(self) -> Path:
         return self.session_dir or self.data_dir / "sessions"
 
+    @property
+    def session_ttl_s(self) -> float:
+        return self.session_ttl_hours * 3600
+
 
 def get_settings() -> Settings:
     return Settings()

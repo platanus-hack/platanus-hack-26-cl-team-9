@@ -38,7 +38,7 @@ def build_use_case(settings: Settings) -> BuildGridSnapshot:
 
 def document_store(settings: Settings) -> DocumentStore:
     """Where sessions and run records live (`CASCADASEN_SESSION_STORE`)."""
-    ttl_s = settings.session_ttl_hours * 3600
+    ttl_s = settings.session_ttl_s
     if settings.session_store == "file":
         return FileDocumentStore(settings.sessions_dir, ttl_s=ttl_s)
     if settings.session_store == "s3":
