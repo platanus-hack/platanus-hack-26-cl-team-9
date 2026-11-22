@@ -60,7 +60,7 @@ function IndexFigure({ report, tip }: { report: HealthReport; tip: string }) {
 }
 
 /** Pre-fault index and N-1 money at risk, side by side; nothing when health.json is missing. */
-function PrefaultHealth({ health }: { health: HealthReport }) {
+export function PrefaultHealth({ health }: { health: HealthReport }) {
   const cost = isN1(health.cost) ? health.cost : null;
   const hours = cost ? `${cost.outage_duration_h.value} h` : "4 h";
   return (

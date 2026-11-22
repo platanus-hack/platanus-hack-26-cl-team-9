@@ -368,6 +368,26 @@ def test_edit_tools_send_the_documented_body_and_report_the_baseline_change():
     assert seen[-2][2] == {"name": "S/E Nueva", "lat": -33.0, "lon": -70.0, "kv": 110}
 
 
+def test_add_substation_sends_each_connection_as_a_bus_id_string_and_resolves_places():
+    # Regression (#124): `resolve_bus` returns (bus, how); the tuple went into `to` (422) and a place name
+    # such as "Antofagasta" failed because the client was not passed.
+    places = {"bus": "B001", "how": "comuna de Antofagasta, servida por S/E B"}
+    client, seen = _recording({"/network": NET, "/places": places, "/substations": EDIT})
+    tools = Sub50Tools(client, McpState(session_id="s"))
+    tools.add_substation(
+        "S/E Nueva",
+        -28.6,
+        -70.8,
+        220,
+        [{"to": "B000", "capacity_mw": 200}, {"to": "Antofagasta"}],
+        generator_mw=120,
+        generator_tech="solar",
+    )
+    body = next(b for m, path, b in seen if m == "POST" and path.endswith("/substations"))
+    assert body["connections"] == [{"to": "B000", "capacity_mw": 200}, {"to": "B001"}]
+    assert body["generator"] == {"mw": 120, "tech": "solar"}
+
+
 def test_run_tools_send_the_adversary_the_share_and_report_the_status():
     run = {"run_id": "r1", "status": "running", "cycle": 3, "horizon": 8, "seed": 5}
     client, seen = _recording(

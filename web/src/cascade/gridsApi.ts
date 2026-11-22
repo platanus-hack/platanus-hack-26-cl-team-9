@@ -62,8 +62,9 @@ export async function loadOutageCost(body: GridChanges): Promise<OutageCost | nu
   return r.json();
 }
 
-/** Heat-map data of the grid as it stands after the changes (`POST /grids/dependency`): about 2 s per new set of changes. */
-export const loadDependency = (body: GridChanges) =>
+/** Heat-map data of the grid as it stands after the changes (`POST /grids/dependency`). With `criticality: false` only
+ *  who feeds whom comes back, in milliseconds; criticality runs one cascade per substation and takes seconds. */
+export const loadDependency = (body: GridChanges & { criticality: boolean }) =>
   request<{ point: string; open_lines: string[]; nodes: Record<string, DependencyNode> }>("dependency", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 /** One element a change touched, before and after (`[before, after]`). */
