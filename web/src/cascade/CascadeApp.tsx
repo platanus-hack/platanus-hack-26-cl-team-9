@@ -20,6 +20,7 @@ import { NetworkPanel, type Origin } from "./NetworkPanel";
 import { NetworkPicker } from "./NetworkPicker";
 import { summaryFromGrid, summaryFromManifest } from "./networkSummary";
 import { NetworkState } from "./NetworkState";
+import { batches, isSwitchedOff } from "./outage";
 import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
@@ -56,9 +57,12 @@ const AVAILABLE: NetworkInfo[] = BUILT_IN.filter((n) => n.id === DEFAULT_COUNTRY
 const SIM_TABS = new Set<Tab>(["estado", "sim"]);
 const FLOW_PERIOD_S = 3.0;
 const FLOW_CYCLE = 1 + 2 / 3;
+const OFF_HINT = "Fuera de servicio · vuelve a conectarla desde la ficha";
+const NODE_OFF_HINT = "Apagada · vuelve a encenderla desde la ficha";
 
 /**
- * Mapa 3 in the Design v5 shell: click selects, double click cuts a line, and the cascade computed by the engine plays.
+ * Mapa 3 in the Design v5 shell: a click selects a line or substation, a second click on the selected one switches it off
+ * (a fast double click does nothing), and the cascade computed by the engine plays. Switching back on is only from the card.
  * Without a session it reads web/public/cache and never calls /api; with ?sesion=<sid> the network, the cut and the
  * timeline come from the sessions API (docs/mapa3.md section 11).
  */
@@ -129,6 +133,7 @@ export function CascadeApp() {
   const cuts = s.sid ? s.state?.open_lines ?? [] : edits.lines;
   const outBuses = s.sid ? [] : edits.buses;
   const edited = cuts.length + outBuses.length > 0;
+  const offState: Edits = { lines: cuts, buses: outBuses }; // what the user switched off, for the second click and the hints
   const duration = timeline?.duration_s ?? 0;
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
   const darkCount = timeline ? darkAt(timeline, t).size : 0;
@@ -154,8 +159,8 @@ export function CascadeApp() {
   const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, colorMode) : []), [shownGrid, colorMode]);
 
   const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 1;
-  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile });
-  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile };
+  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile });
+  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile };
   const fitted = useRef<string | null>(null); // the network the camera last flew to
   const prevSid = useRef(s.sid);
   const clickMemory = useRef(NO_CLICK);
@@ -354,10 +359,10 @@ export function CascadeApp() {
           setPicking(false);
           return;
         }
-        const { action, memory } = interpretClick(pickOf(info.layer?.id ?? "", info.object), tapCount, performance.now(), clickMemory.current);
+        const { action, memory } = interpretClick(pickOf(info.layer?.id ?? "", info.object), tapCount, performance.now(), live.current.selection, clickMemory.current);
         clickMemory.current = memory;
         if (action.type === "select") select(action.target);
-        else if (action.type === "cut") (action.kind === "line" ? live.current.cutLine : live.current.outBus)(action.id);
+        else if (action.type === "toggle") live.current.switchOff(action.target);
         else if (action.type === "clear") setSelection(null);
       },
       getTooltip: (info: PickingInfo) => _tooltip(info),
@@ -370,7 +375,7 @@ export function CascadeApp() {
   }
 
   function _tooltip(info: PickingInfo) {
-    const { network: net, frame: f, buses: b } = live.current;
+    const { network: net, frame: f, buses: b, selection: sel, offState: off, sid } = live.current;
     if (!info.object) return null;
     // deck.gl puts the tooltip at the pointer and lets it run off the map: place it beside the pointer and flip it near the right and bottom edges.
     const box = mapRef.current;
@@ -386,13 +391,16 @@ export function CascadeApp() {
       const id = obj.line?.id ?? obj.id!;
       const e = f?.edges[id];
       const state = e?.status === "open" ? "fuera de servicio" : e ? `${Math.abs(e.flow_mw).toLocaleString("es-CL")} MW · ${pct(e.loading)} de su capacidad` : "sin flujo calculado";
-      // A line that is already out of service cannot be taken out again: only offer its detail.
-      return { text: `${lineName(net, id)}\n${state}\n${e?.status === "open" ? "Clic: detalle" : "Clic: detalle · doble clic: sacar de servicio"}`, style };
+      const selected = sel?.kind === "line" && sel.id === id;
+      const hint = !selected ? "Clic para ver el detalle" : isSwitchedOff({ kind: "line", id }, net, off, !!sid) ? OFF_HINT : "Clic otra vez para cortarla";
+      return { text: `${lineName(net, id)}\n${state}\n${hint}`, style };
     }
     const n = info.object as { id: string; name: string; kv: number; zone: string };
     const bus = b[n.id];
     const dark = f?.dark.includes(n.id);
-    return { text: `${placeName(n.name)}\n${Math.round(n.kv)} kV · ${zoneName(n.zone)}${bus ? `\n${Math.round(bus.load_mw).toLocaleString("es-CL")} MW de demanda · ${formatPeople(bus.people)} personas` : ""}${dark ? "\nSin suministro" : ""}\nClic: detalle`, style };
+    const selected = sel?.kind === "node" && sel.id === n.id;
+    const hint = !selected ? "Clic para ver el detalle" : isSwitchedOff({ kind: "node", id: n.id }, net, off, !!sid) ? NODE_OFF_HINT : "Clic otra vez para apagarla";
+    return { text: `${placeName(n.name)}\n${Math.round(n.kv)} kV · ${zoneName(n.zone)}${bus ? `\n${Math.round(bus.load_mw).toLocaleString("es-CL")} MW de demanda · ${formatPeople(bus.people)} personas` : ""}${dark ? "\nSin suministro" : ""}\n${hint}`, style };
   }
 
   /** One loop moves the simulation clock, redraws the deck.gl layers and moves the HTML overlays with the camera. */
@@ -498,7 +506,8 @@ export function CascadeApp() {
 
   /**
    * Shutting down a substation is one more change on the list (out of service with its load and generation). In a session
-   * its lines that are still closed open for everyone through `POST /{sid}/cut`.
+   * its lines that are still closed open for everyone through `POST /{sid}/cut`, in batches of three (the route's limit),
+   * passing each answer's dataset_revision as the next If-Match.
    */
   function outBus(id: string) {
     setSelection(null);
@@ -506,7 +515,7 @@ export function CascadeApp() {
     if (!s.sid) setEdits((e) => addBus(e, id));
     else if (network) {
       const closed = substationLines(network, id).filter((l) => !s.state?.open_lines.includes(l));
-      if (closed.length) s.edit((sid, rev) => cutLines(sid, closed, rev));
+      if (closed.length) s.edit(async (sid, rev) => { for (const group of batches(closed)) rev = (await cutLines(sid, group, rev)).dataset_revision; });
     }
     setView("tabs");
     setTab("sim");
@@ -523,7 +532,14 @@ export function CascadeApp() {
     else s.edit((sid, rev) => repairLines(sid, lines ? { lines } : { all: true }, rev));
   }
   function restoreBus(id: string) { setEdits((e) => dropBus(e, id)); }
-  /** "Encender subestación": puts that substation back; in a session it repairs its lines. */
+  /** Second click on the selected element: switch it off, unless it already is (switching on is only from the card). */
+  function switchOff(pick: Pick) {
+    if (!network || isSwitchedOff(pick, network, offState, !!s.sid)) return;
+    if (pick.kind === "line") cutLine(pick.id);
+    else if (s.sid ? substationLines(network, pick.id).length > 0 : true) outBus(pick.id);
+  }
+
+  /** "Volver a encender": puts that substation back; in a session it repairs its lines. */
   function powerOn(id: string) {
     if (!s.sid) restoreBus(id);
     else if (network) restore(substationLines(network, id));
@@ -585,9 +601,7 @@ export function CascadeApp() {
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
   const selectedCut = selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null;
   const canPower = canPowerAll({ cuts, edited: outBuses.length > 0 });
-  const shutDown = selection?.kind === "node" && (s.sid
-    ? !!network && substationLines(network, selection.id).length > 0 && substationLines(network, selection.id).every((l) => cuts.includes(l))
-    : edits.buses.includes(selection.id));
+  const shutDown = selection?.kind === "node" && !!network && isSwitchedOff(selection, network, offState, !!s.sid);
   const sourceNote = hasLabels ? "Mapa base: Mapbox" : isChile ? "Contorno: data/processed/chile.geojson" : "Contornos: data/processed/latam/outlines.geojson (geoBoundaries)";
   const shownSummary = shownGrid ? (shownGrid.countries[0] ? summaryFromManifest(shownGrid.countries[0]) : summaryFromGrid(shownGrid)) : null;
   const shownOrigin = shownGrid ? originOf(current, shownGrid) : undefined;

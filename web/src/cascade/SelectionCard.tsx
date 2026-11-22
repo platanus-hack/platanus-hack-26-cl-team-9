@@ -70,9 +70,9 @@ function LineCard(p: Props & { line: NetLine }) {
       })}
       <div className="actions">
         {isCut
-          ? <button className="primary-btn" onClick={p.restore}>Reponer línea</button>
+          ? <button className="primary-btn" onClick={p.restore}>Volver a conectar</button>
           : <button className="primary-btn" onClick={() => p.cutLine(line.id)}>Sacar de servicio</button>}
-        <span className="meta">{isCut ? "Vuelve al caso base en este punto de operación." : "O doble clic en la línea del mapa."}</span>
+        <span className="meta">{isCut ? "Vuelve al caso base en este punto de operación." : "O clic otra vez en la línea del mapa."}</span>
       </div>
     </div>
   );
@@ -91,7 +91,7 @@ function NodeCard(p: Props & { node: string }) {
         <div className="title"><h3>{placeName(n.name)}</h3></div>
         <button className="text-btn" onClick={p.clear}>Cerrar</button>
       </div>
-      <p className="meta">{Math.round(n.kv)} kV · {zoneName(n.zone)}{dark ? " · sin suministro" : ""}</p>
+      <p className="meta">{Math.round(n.kv)} kV · {zoneName(n.zone)}{p.shutDown ? " · apagada" : dark ? " · sin suministro" : ""}</p>
       <div className="mini-figures">
         <div><div className="value-row"><b>{int(b?.gen_mw ?? 0)} <small>MW</small></b><Info tip={opTip("Generación")} /></div><span>generación</span></div>
         <div><div className="value-row"><b>{int(b?.load_mw ?? 0)} <small>MW</small></b><Info tip={opTip("Demanda")} /></div><span>demanda</span></div>
@@ -110,9 +110,9 @@ function NodeCard(p: Props & { node: string }) {
       {lines.length > 0 && (
         <div className="actions">
           {p.shutDown
-            ? <button className="primary-btn" onClick={() => p.powerOn(n.id)}>Encender subestación</button>
-            : <button className="primary-btn" onClick={() => p.shutdown(n.id)}>Apagar esta subestación</button>}
-          <span className="meta">{p.shutDown ? "Vuelve a operar con sus líneas." : "Sale de servicio con su demanda y su generación. O doble clic en el mapa."}</span>
+            ? <button className="primary-btn" onClick={() => p.powerOn(n.id)}>Volver a encender</button>
+            : <button className="primary-btn" onClick={() => p.shutdown(n.id)}>Apagar subestación</button>}
+          <span className="meta">{p.shutDown ? "Vuelve a operar con sus líneas." : "Sale de servicio con su demanda y su generación. O clic otra vez en la subestación del mapa."}</span>
         </div>
       )}
     </div>
