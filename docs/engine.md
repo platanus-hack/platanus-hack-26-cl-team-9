@@ -101,7 +101,7 @@ Findings of the review:
 
 ## Cost
 
-The summary of every timeline carries `failure_cost_usd`, `cost_per_hour_usd`, `unserved_energy_mwh`, `outage_duration_h`, `dark_load_mw` and `cost_breakdown`. `POST /api/v1/grids/cost` (`{point, open_lines, out_buses}`) returns the same for the changes of Estado de la red. The formula tells a total blackout from a slow grid (`blackout_cost` in `domain/simulation/consequence.py`, parameters in `cascade.yaml` `cost`):
+The summary of every timeline carries `failure_cost_usd`, `cost_per_hour_usd`, `unserved_energy_mwh`, `outage_duration_h`, `dark_load_mw` and `cost_breakdown`. `POST /api/v1/grids/cost` (`{point, open_lines, out_buses}`) returns the same for the changes of the Cambios tab. The formula tells a total blackout from a slow grid (`blackout_cost` in `domain/simulation/consequence.py`, parameters in `cascade.yaml` `cost`):
 
 ```
 cost      = VoLL x [ dark_MW x H_blackout x (1 + (k - 1) x dark_share) + shed_MW x H_shed ]

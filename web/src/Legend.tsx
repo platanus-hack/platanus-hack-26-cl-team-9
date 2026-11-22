@@ -1,13 +1,4 @@
-import { KV_COLORS, LOW_KV_COLOR, TECH_COLORS, type Rgb } from "./map/layers";
-
-const TECH_LABELS: Record<string, string> = {
-  solar: "Solar",
-  eolica: "Eólica",
-  hidro: "Hidroeléctrica",
-  termica: "Térmica",
-  bioenergia: "Bioenergía",
-  geotermica: "Geotérmica",
-};
+import { KV_COLORS, LOW_KV_COLOR, TECH_COLORS, TECH_NAMES as TECH_LABELS, type Rgb } from "./map/layers";
 
 /** Why: every colour and height on the map must be readable without asking the team. */
 export function Legend() {
