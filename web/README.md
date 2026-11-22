@@ -1,6 +1,6 @@
 # web: Sub50 frontend
 
-Browser app for the demo: a 2D map of Chile with the SEN grid standing in 3D on top (deck.gl). It reads the processed grid files committed in `data/processed/` and contains no physics, as `docs/stack.md` requires. Every number on screen comes from those files.
+Browser app for the demo: a 2D map of Chile with the SEN grid standing in 3D on top (deck.gl). It reads the engine cache committed in `web/public/cache/` and, in session mode, the API (`/api`). It contains no physics, as `docs/stack.md` requires: the physics runs in the backend. Every number on screen comes from the cache or the API.
 
 ## Run locally (guide for people and agents)
 

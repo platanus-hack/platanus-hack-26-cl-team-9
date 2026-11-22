@@ -99,11 +99,11 @@ Largest plants: Atacama (thermal, 716 MW), Guacolda (703 MW), Ralco (hydro, 685 
 
 ### 2.3 Unified file and where it lives
 
-A previous session wrote these under `/Users/alonsoutreras/Desktop/Hackathon/cascadasen/datos/` on Alonso's machine (outside this repo):
+A previous session wrote these under `~/Desktop/Hackathon/cascadasen/datos/` on Alonso's machine (outside this repo):
 - `raw/centrales_{bioenergia,eolicas,geotermicas,hidroelectricas,solares,termoelectricas}.geojson`
 - `centrales_sen.geojson`: 1,193 operating SEN plants with fields `nombre, tecnologia, mw, combustible, propietario, region_cod, region, comuna_cod, fuente`.
 
-To get them in the repo, copy those files into `data/` or regenerate with Appendix A and B. Raw files are about 800 KB; the unified file is about 430 KB, small enough to commit. Licence and terms of use of the IDE Energia data were not checked.
+To get them in the repo, copy those files into `data/` or regenerate with Appendix A and B (the scripts were not committed, see the appendices). Raw files are about 800 KB; the unified file is about 430 KB, small enough to commit. Licence and terms of use of the IDE Energia data were not checked.
 
 ### 2.4 Data quirks (read before filtering)
 
@@ -139,7 +139,7 @@ INE Census 2024 by region/commune (https://censo2024.ine.gob.cl/resultados/). Th
 
 ## 5. Plant -> node assignment (task)
 
-The engine has about 10-14 nodes. Every plant in `centrales_sen.geojson` must be assigned to a node by the nearest substation or by zone polygon, and node generation per scenario is built from the assigned plants. Document the rule. This step has not been done.
+The reduced network has 188 buses (`plan.md` section 9, decision 4). Every plant in `centrales_sen.geojson` must be assigned to a node by the nearest substation or by zone polygon, and node generation per scenario is built from the assigned plants. Document the rule. This step has not been done.
 
 ## 6. Provenance rule
 
@@ -186,6 +186,7 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 Numbering follows the team's earlier research notes; gaps are sources not needed here.
 
 ## Appendix A: download script (`data/scripts/descargar_centrales.py`)
+Not in the repo: the script was not committed, so the file named here does not exist.
 
 ```python
 """Download IDE Energia plant layers as GeoJSON into ../raw/."""
@@ -220,6 +221,7 @@ for capa, nombre in CAPAS.items():
 ```
 
 ## Appendix B: unify script (`data/scripts/unificar_centrales.py`)
+Not in the repo: the script was not committed, so the file named here does not exist.
 
 ```python
 """Unify plant layers into centrales_sen.geojson (operating SEN plants only)."""

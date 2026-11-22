@@ -73,7 +73,7 @@ Run `cd backend && uv run mypy src`. The configuration is `[tool.mypy]` in `pypr
 - Layering is enforced by `tests/unit/test_architecture.py` (see `docs/adr/0005-hexagonal-layering.md`).
 ## Main endpoints
 
-`/api/v1/nodes`, `/nodes/{id}` (connections, plants, storage, served comunas), `/edges`, `/edges/{id}`, `/plants`, `/storage`, `/comunas`, `/zones` (macro zones and links between them with known capacity), `/graph/path`, `POST /graph/islands` (connectivity after removing lines or nodes), `/model/buses`, `/model/branches`, `/geo/{layer}.geojson`, `/sources`, `/validation`, `/assumptions`.
+`/api/v1/nodes`, `/nodes/{id}` (connections, plants, storage, served comunas), `/edges`, `/edges/{id}`, `/plants`, `/storage`, `/comunas`, `/zones` (macro zones and links between them with known capacity), `/graph/path`, `POST /graph/islands` (connectivity after removing lines or nodes), `/model/buses`, `/model/branches`, `/geo/{layer}.geojson`, `/sources`, `/validation`, `/assumptions`, `/health`, `/stats`, `POST /simulate` and `GET /simulate/network` (the 13-area engine), `POST /admin/reload` (development only), and the grid documents under `/grids/*` (`/sources`, `/scenarios`, `/compose`, `/documents/{key}`, `POST /simulate`, `POST /dependency`). The strategic theatre is under `/sim/*`, sessions under `/sessions`, the assistant under `/assistant` (sections below and `docs/stack.md` section 7).
 
 ## Simulation
 

@@ -25,7 +25,7 @@ Principles (`stack.md` section 2):
 - Physics lives only in the backend. The frontend draws what the engine returns and never computes physics.
 - The demo works without a server: every line cut is precomputed into `web/public/cache/`.
 - Every parameter carries a source or `is_assumption: true` (`datasets.md` section 6). The YAML loaders reject bare numbers.
-- Runs are deterministic: one seed per run, independent seeded streams, no wall clock in the domain.
+- Runs are deterministic: one seed per run, independent seeded streams, no wall clock in the simulation. The one exception is `domain/unify.py`, which stamps `built_at` with `datetime.now(UTC)` as metadata of the snapshot; no simulation reads it.
 
 ## 2. Backend: ports and adapters (hexagonal)
 

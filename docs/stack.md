@@ -1,17 +1,13 @@
 # Stack and architecture
 
-Status: revised after the planning session of 2026-11-21 and updated the same day to match the repo. Implemented so far: the grid data pipeline and read-only API (`backend/`, `datasets.md` section 0), the web map (`web/`, deck.gl offline map plus an optional Mapbox basemap), operating points and a secure DC-OPF base case (`data/scripts/`), Docker Compose and lint CI. Not implemented: the cascade engine, the timeline player and the fixtures in section 6. Visual direction: `design.md`.
+Status: revised after the planning session of 2026-11-21; sections 0 and 1 updated to match the repo on 2026-11-23. Implemented: the grid data pipeline and API (`backend/`), the two cascade engines, the strategic theatre, shared sessions, the MCP server and the assistant, the engine cache (`cascadasen-cache`, `web/public/cache/`), the web map (`web/`, deck.gl plus an optional Mapbox basemap), operating points and a secure DC-OPF base case (`data/scripts/`), Docker Compose and CI. Architecture as built: `architecture.md`. Visual direction: `design.md`.
 
-## 0. MVP scope
-
-The first MVPs are frontend only. The browser app reads a hand-written `network.json` and `timeline.json` fixture (the data contract in section 6). The app contains no physics and no server.
-
-Backend work (simulation engine, API, cache builder, CI) is backlog. Each backlog item gets a GitHub issue. The first MVPs do not depend on any backend item.
-
-Consequences for the first MVPs:
-- Every result on screen comes from fixtures, not from a computed simulation. Fixture numbers are placeholders and must carry an "assumption" or "fixture" label. The validation table stays empty or marked "not computed" until the engine exists.
-- When the engine arrives, it writes files in the same format as the fixtures. The frontend code should not change.
-- Frontend tests cover the logic the app owns: the playback clock, narration templates, layer mapping and fixture validation against the JSON schema.
+## 0. MVP scope (history)
+The first MVPs were planned as frontend only: the browser app would read a hand-written `network.json` and `timeline.json` fixture (the data contract in section 6), with no physics and no server. Backend work was backlog.
+That plan is superseded. The web app now reads the engine cache in `web/public/cache/` (written by `cascadasen-cache` from the backend engine) and, in session mode, the API under `/api`. The frontend still computes no physics. The cache files keep the fixture format, so the frontend did not change when the engine arrived.
+Rules kept from the MVP plan:
+- A number on screen carries a source or an "assumption" label.
+- Frontend tests cover the logic the app owns (`web/src/**/*.test.ts`, Vitest).
 
 ## 1. Decisions
 
@@ -22,13 +18,13 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 | Frontend | React + Vite + TypeScript | MVP | Decided earlier |
 | Map and 3D-style layers | deck.gl; Mapbox basemap when `VITE_MAPBOX_TOKEN` is set, offline Chile outline otherwise (`createBaseMap`) | Done | The main map (`/`, also `?mapa=3`) is mapa 3, the cascade viewer (`docs/mapa3.md`), with a 2D / 3D toggle (`?vista=2d`) and city labels. `?mapa=1` (offline deck.gl map) and `?mapa=2` (Mapbox) are deprecated and kept as reference. The strategic theatre's operation mode is specified for this map (`mapa3.md` section 10) |
 | Chile outline | Local simplified GeoJSON (Natural Earth admin-1 or IDE Chile/BCN, simplified with mapshaper) | MVP | Continental Chile only; see `datasets.md` |
-| State | Zustand | MVP | Holds one playback clock `t` that drives all animations |
-| Charts | uPlot | MVP | Frequency curve synchronised with `t`, read from fixture data |
-| Simulation engine | Python 3.11, numpy, networkx | Backlog (base case started) | Started: `data/scripts/build_operating_points.py` (PyPSA-CL demand and merit-order dispatch for 4 hours) and `build_baseline_opf.py` (DC-OPF so no branch exceeds s_nom, with an inertia floor; N-1 not enforced). No cascade or frequency model yet. Plan: one-equation-per-island frequency model; DC power flow solved with numpy. pandapower only if the full official network arrives (Plan A, optional). The MVP uses fixtures instead |
-| API | FastAPI (REST; WebSocket optional for live combinations) | Backlog | Needed only for combinations not in the cache |
-| Precompute | Script that runs every single-element failure for every scenario x defences x behaviour and writes static JSON | Backlog | MVP ships hand-written files in `web/public/cache/` in the same format |
-| Tests | Vitest (frontend logic) | MVP | pytest (engine, validation, provenance) is backlog |
-| CI | GitHub Actions | Lint: done. Rest: backlog | `.github/workflows/lint.yml` runs ruff and requires a `CHANGELOG.md` change in each pull request. Generating the validation table from the tests is still backlog |
+| State | React hooks (`useState`, `useEffect`); no state library | Done | The playback clock `t` lives in `CascadeApp.tsx` and drives the animations |
+| Charts | Custom SVG in `web/src/cascade/Timeline.tsx` (no chart library) | Done | Frequency curve synchronised with `t`, read from the cached timeline |
+| Simulation engine | Python 3.12, numpy, networkx, scipy | Done | Two engines (`architecture.md`, `adr/0001-two-engines.md`): 13 areas (`domain/simulation`, DC power flow, island swing-equation frequency, EDAC) and 188 buses (`domain/cascade`). Base case: `data/scripts/build_operating_points.py` and `build_baseline_opf.py` (DC-OPF so no branch exceeds s_nom, with an inertia floor; N-1 not enforced) |
+| API | FastAPI (REST, SSE for session changes) | Done | `backend/src/cascadasen/api/`, section 7. `POST /simulate` runs a combination that is not in the cache |
+| Precompute | `uv run cascadasen-cache` runs every single-line cut for every operating point and writes static JSON | Done | Output is committed in `web/public/cache/`; the offline theatre runs are written by `cascadasen-sim-fixtures` and git-ignored |
+| Tests | pytest (backend: unit, integration, validation), Vitest (frontend logic) | Done | Validation cases V1-V10 are in `backend/tests/validation` (`plan.md` section 5) |
+| CI | GitHub Actions | Done | `.github/workflows/`. Lint (ruff) and the `CHANGELOG.md` check run on pull requests; the other checks are listed in the root `README.md` section "Checks (CI)". Generating the validation table from the tests is still backlog |
 | Lint and agent tooling | ruff (Python), eslint/prettier (frontend, once installed), git and Claude Code hooks | Done | Single entry point `scripts/lint.sh`; rules and hooks in `AGENTS.md` |
 | Local run | Docker Compose (`web` Vite dev server, `backend` data API) | MVP | `docker compose up --build`, only Docker needed. See `docs/docker.md` |
 | Hosting | Static frontend plus fixtures; deploy from a personal mirror (see README of the template) | MVP | Platforms like Vercel cannot access the org repo |
@@ -37,12 +33,12 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 ## 2. Architecture
 
 ```
-datasets (public APIs) --scripts--> data/processed/network.json
+datasets (public APIs) --scripts--> data/processed/sen_network.json
                                          |
                                          v
         engine (Python) --simulate()--> timeline.json (events + frames + summary + provenance)
               |                                  |
-              | build_cache.py                   | POST /simulate (combinations only)
+              | cascadasen-cache                   | POST /simulate (combinations only)
               v                                  v
         web/public/cache/*.json  ------>  frontend player (reads timeline, renders from clock t)
 ```
@@ -170,7 +166,7 @@ Hover on any number shows document and page, or the badge "assumption" / "approx
 
 ## 6. Data contracts (draft; freeze in hour 0)
 
-`data/processed/network.json`:
+`network.json` (the original fixture contract; the shipped network is `data/processed/sen_network.json`, with the same ideas but another shape):
 ```json
 {
   "version": 1,
@@ -285,7 +281,7 @@ External agents (and the MCP server, `docs/mcp.md`) use a separate spec with onl
 
 ### 7.1 Strategic experimentation API
 
-Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON, and narration comes as `rationale_key` + `params` (Spanish templates in the frontend).
+Concepts in `strategy.md`. 14 operations, all paths are under `/api/v1/sim`; responses are JSON, and narration comes as `rationale_key` + `params` (Spanish templates in the frontend).
 
 | Method and path | Purpose |
 |---|---|
@@ -296,6 +292,7 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 | `POST /sim/runs/{id}/step` | Advance `n` cycles; returns one snapshot per cycle |
 | `POST /sim/runs/{id}/replay` | New run with the same seed and injected events, and another policy or capabilities |
 | `GET /sim/runs/{id}` | Real, observed and per-agent estimated state, resources, field crews (`crews`: id, base, position, task, target, arrival, status), live indicators |
+| `GET /sim/runs/{id}/snapshots` | Snapshots already computed from a cycle on (`start`, 0-based, default 0); it returns the run summary too |
 | `GET /sim/runs/{id}/trace` | Hash-chained audit log and the replay recipe |
 | `GET /sim/runs/{id}/report` | Indicators, indices, consequence card (L0-L3, people, unserved MWh, cost) and after-action keys |
 | `POST /sim/campaigns`, `GET /sim/campaigns/{id}` | Campaign matrix (modes I, II, III): comparison table, Decisional Fragility Index, Adaptation Index |
@@ -329,7 +326,7 @@ Shared, persistent sessions under `/api/v1/sessions` (`api/session_routes.py`). 
 
 ## 8. Testing and CI
 
-MVP: Vitest tests for frontend logic (playback clock, narration templates, layer mapping, fixture validation against the JSON schema). Everything below is backlog.
+Implemented: Vitest tests for frontend logic (`web/src/**/*.test.ts`) and pytest for the backend (`backend/tests/{unit,integration,validation}`). The list below is the original test plan; the table-in-README item is still backlog.
 
 - Unit: initial frequency vs analytic formula, each EDAC step firing, power balance per island, island detection on a toy graph, unit check of D, provenance of every parameter.
 - Regression: validation cases in `plan.md` section 5.
