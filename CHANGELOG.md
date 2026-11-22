@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): health index and cost in the simulation panel
+
+- **Changed:** `SimulationPanel.tsx`: the impact card adds a ruled row with the after-cut "índice de margen operativo" (with "incierto") and "US$ X M · costo estimado" ("≥" and "piso" when the result is uncertain), captioned "Al final de la simulación. Índice de margen operativo (modelo) y valoración regulatoria (costo de falla CNE), 4 h supuestas." The empty card ("Escenario nuevo") shows the pre-fault index plus "en riesgo N-1, esperado" and "peor" from `health.json`.
+- **Changed:** `types.ts` adds optional `summary.failure_cost_usd`, `unserved_energy_mwh`, `outage_duration_h`, `uncertain`, `Timeline.health` and the `HealthReport`, `EventCost`, `N1Cost` types. `api.ts` adds `loadHealth(point)`, which resolves to `null` when the file is missing. `text.ts` adds `usdM` ("US$ 69,3 M") and `index2` ("0,67").
+- **Why:** Issue #72: the index and the money side by side in map 3.
+- **Agents:** Every new field is optional: an old cache shows neither row (checked in the browser with `health.json` and the R239 fields removed). The pre-fault row is hidden in a session (`health={s.sid ? null : health}`), because session edits change the network. The figures are end-of-simulation values, not animated with `t`. No duration input in map 3 and no US$ 984 M in the UI (user decisions). Tests: `api.test.ts`, `text.test.ts`.
+- **Files:** `web/src/cascade/{SimulationPanel.tsx,CascadeApp.tsx,api.ts,api.test.ts,types.ts,text.ts,text.test.ts}`.
+
 ## 2026-11-21 · chore(data): regenerate cache with health and cost
 
 - **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache`: 4 new `<point>/health.json`, and every line and substation timeline rewritten with `summary.failure_cost_usd`, `unserved_energy_mwh`, `outage_duration_h` and `health`. Size went from 42 MB to 46 MB; `web/README.md`, `docs/engine.md` and `docs/mapa3.md` say so.

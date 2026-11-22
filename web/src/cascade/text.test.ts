@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clock, conditionDate, conditionName, cutName, narrate, shutdownNode, substationLines } from "./text";
+import { clock, conditionDate, conditionName, cutName, index2, narrate, shutdownNode, substationLines, usdM } from "./text";
 import type { Event, Network } from "./types";
 
 describe("operating condition labels", () => {
@@ -62,5 +62,17 @@ describe("substation shutdown", () => {
     expect(narrate(cutEvent(["R000", "R001", "R002"]), NET)).toBe(
       "Salen de servicio las líneas Cerro Navia – Polpaico (220 kV), Polpaico – Alto Jahuel (500 kV) y Alto Jahuel – Cerro Navia (220 kV).",
     );
+  });
+});
+
+describe("cost and health index", () => {
+  it("formats US$ in millions with a decimal comma", () => {
+    expect(usdM(69335520)).toBe("US$ 69,3 M");
+    expect(usdM(0)).toBe("US$ 0,0 M");
+    expect(usdM(306600000)).toBe("US$ 306,6 M");
+  });
+  it("formats the index with two decimals", () => {
+    expect(index2(0.667)).toBe("0,67");
+    expect(index2(0)).toBe("0,00");
   });
 });

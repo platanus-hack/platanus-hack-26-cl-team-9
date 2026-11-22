@@ -76,6 +76,10 @@ export const mw = (n: unknown) => int(Number(n ?? 0));
 export const hz = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const secs = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 export const pct = (n: number) => `${Math.round(n * 100)} %`;
+/** US$ in millions with one decimal, Chilean format: 69335520 -> "US$ 69,3 M". */
+export const usdM = (n: number) => `US$ ${(n / 1e6).toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M`;
+/** Health index on its 0-1 scale with two decimals: "0,67". */
+export const index2 = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function formatPeople(n: number): string {
   return n >= 1e6 ? `${(n / 1e6).toLocaleString("es-CL", { maximumFractionDigits: 1 })} M` : int(n);
