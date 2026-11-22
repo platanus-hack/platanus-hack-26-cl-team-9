@@ -226,7 +226,9 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
             _BUS_VALUES[:3], (load, gen, sync), (base["load"], base["gen"], base["sync"]), strict=True
         ):
             if key in rec:
-                arr[i] = _number(rec[key], f"{where}.{key}", 0.0, float(ref[i]) + MAX_ELEMENT_MW)
+                # a base value below zero (net injection of embedded generation) may stay, never go lower
+                low = min(0.0, float(ref[i]))
+                arr[i] = _number(rec[key], f"{where}.{key}", low, float(ref[i]) + MAX_ELEMENT_MW)
                 if key != "sync_mw":
                     added_mw += abs(arr[i] - float(ref[i]))
         if "gen_mw" in rec or "sync_mw" in rec:

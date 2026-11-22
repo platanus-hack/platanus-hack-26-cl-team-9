@@ -53,6 +53,10 @@ cascadasen-grids verify --store s3 --bucket <bucket>
 
 Publish refuses a non-empty destination and `write` never overwrites. The manifest is written last. A new layout is a new prefix (`--prefix grids/v3`).
 
+## Prepared scenarios
+
+`POST /grids/prepare` prepares a stressed grid (population, demand, generation, lines) without simulating. `/grids/simulate`, `/grids/dependency` and `/grids/cost` take the same `changes` and run the failure on it. `/grids/simulate` also returns `supply`: people each generator should feed against people it still feeds. See `docs/stress.md`.
+
 ## Settings
 
 `CASCADASEN_GRIDS_STORE` (`local` reads `data/grids`, `s3`), `CASCADASEN_GRIDS_BUCKET` (default: the session bucket), `CASCADASEN_GRIDS_PREFIX` (`grids/v2`). Local web: run the API with the default store after `cascadasen-grids publish`; Vite proxies `/api` to it.
