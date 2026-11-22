@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(assistant): el agente decide dimensiones y ejecuta sin exigir MW al usuario (#125)
+
+- **Changed:** se elimina la guardia "los MW deben venir del usuario" (`stated`, `numbers`, `USER_SIZED`, `SUBSTATION_MW`, `invented_adds`) y el argumento `said` de `toolbox_for`. El prompt del asistente y los docstrings de `add_datacenter`, `add_generator` y `add_substation` dicen que el modelo decide, ejecuta y declara el valor como supuesto.
+- **Why:** el usuario no es técnico y pide ayuda; la guardia hacía fallar la herramienta ("El usuario no indicó 100 MW") y el modelo devolvía preguntas técnicas.
+- **Agents:** `toolbox_for(session_id, run_id)` ya no recibe lo que dijo el usuario. Los tests de la guardia se reemplazan por `test_the_model_sizes_the_megawatts_when_the_user_gave_none`. Riesgo aceptado: el modelo puede elegir MW sin revisión humana; cada valor debe salir marcado como supuesto en la respuesta.
+- **Files:** `backend/src/cascadasen/mcp/{toolbox,tools}.py`, `api/assistant_routes.py`, `application/assistant.py`, `tests/unit/test_assistant.py`, `docs/assistant.md`.
+
 ## 2026-11-22 · fix(assistant): add_substation resuelve las conexiones por id y por lugar (#124)
 
 - **Changed:** `add_substation` ya no manda la tupla `(bus, how)` de `resolve_bus` como `to`, y pasa el cliente para resolver lugares ("Vallenar") por `/grids/places`.

@@ -172,7 +172,7 @@ class Sub50Tools:
     # -- network edits -----------------------------------------------------------------------
 
     def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter") -> dict[str, Any]:
-        """Add a datacenter (a load) of `mw` megawatts; ask the user for `mw` if they did not give it.
+        """Add a datacenter (a load) of `mw` megawatts; if the user gave no `mw`, size it from the network data and say it is your assumption.
         `bus` is the place as the user wrote it (a city or comuna such as "Iquique", a substation name, an
         area, or a bus id B010); the tool resolves it to the substation that serves that place, so never
         guess an id and never ask the user for a specific bus. The result says where it went (bus, bus
@@ -188,7 +188,7 @@ class Sub50Tools:
         return {**place, **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_generator(self, bus: str, mw: float, tech: str, name: str | None = None) -> dict[str, Any]:
-        """Add a generator of `mw` megawatts; ask the user for `mw` if they did not give it. `bus` resolves
+        """Add a generator of `mw` megawatts; if the user gave no `mw`, size it from the network data and say it is your assumption. `bus` resolves
         like add_datacenter (a city is enough, never ask for a specific bus). `tech`: solar, eolica,
         hidro, termica, bioenergia, geotermica (the last four are synchronous); common names such as
         "eólica", "fotovoltaica" or "nuclear" (modelled as termica, an assumption) are accepted."""
@@ -234,8 +234,9 @@ class Sub50Tools:
         generator_mw: float | None = None,
         generator_tech: str | None = None,
     ) -> dict[str, Any]:
-        """Add a substation (a new bus) with 1 to 6 lines, all or nothing. Propose it to the user first
-        (place, kv, which buses it connects to, MW) and call only after they agree; never invent MW.
+        """Add a substation (a new bus) with 1 to 6 lines, all or nothing. Choose the place, kv, buses and MW
+        yourself from the network data when the user did not give them (they asked for your help), create it, and
+        tell the user what you chose and that the MW are your assumption.
         `kv` is a base voltage (66, 110, 154, 220, 500) and every connected bus must have that voltage.
         `connections`: [{"to": place or bus id, "capacity_mw": optional}], `to` resolves like add_datacenter;
         without `capacity_mw` the line takes the typical value of its neighbours. `load_mw` adds demand
