@@ -1,6 +1,17 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(cache): regenerate cascade cache
+
+- **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache` after the issue #90 engine changes. That is 1,851 files: 4 hours x (273 lines + 188 substations + baseline + buses + health).
+- **Why:** The timelines change with the causal stages, `island_blackout.ids`, `params.stage`, no stage-0 `island_formed`, and the new `ASSUMPTIONS` line. `resplit_memory` stays off.
+- **Agents:**
+  - The causality scan finds 0 timelines with a stage-k `load_shed` or `island_blackout` after a later opening (98 before).
+  - Settled live islands stay within 3.3 % of balance.
+  - People and MW per cut are unchanged; only times after a waiting stage moved (for example `nov2026-1300/R026` openings at 7.59 and 8.59 s).
+  - `test_the_committed_cache_matches_the_engine_for_a_single_cut` passes.
+- **Files:** `web/public/cache/`.
+
 ## 2026-11-22 · test(cascade): cascade invariants and hand-checked cuts
 
 - **Changed:** `tests/unit/test_cascade.py` adds `_assert_invariants`, run on toy grids and on four real cuts. It checks:
