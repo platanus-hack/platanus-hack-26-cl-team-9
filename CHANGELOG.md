@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): Iniciar ciberataque sits in the panel header, next to Cerrar
+
+- **Changed:** the start button leaves the bottom of the Ciberataque form (`CyberPanel` `Form`) and goes to the view header in `CascadeApp`, shown while the catalog is loaded and no run is on. `.cy-go` is removed.
+- **Why:** user request: the button was below a long form and the timeline card covered it.
+- **Agents:** none.
+- **Files:** `web/src/cyber/{CyberPanel.tsx,cyber.css}`, `web/src/cascade/CascadeApp.tsx`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · test(cascade): CI skips the real-network golden again
 
 - **Changed:** `test_real_cascade_is_byte_stable_for_every_single_cut` is skipped when `CI` is set (back from the Linux-only rule of #154).

@@ -7,7 +7,6 @@
 .shell .cy-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--fg-3); font-size: 12px; }
 .shell .cy-input { display: flex; align-items: center; gap: 4px; }
 .shell .cy-input input { width: 72px; background: var(--surface); color: var(--fg); border: 1px solid var(--border-strong); padding: 2px 6px; font: inherit; }
-.shell .cy-go { align-self: flex-start; }
 
 .shell .cy-head { display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border); }
 .shell .cy-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
