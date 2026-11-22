@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(assistant): document the step stream for map clients
+
+- **Changed:** `docs/assistant.md` section 2b: the events of `POST /chat/stream` with examples, which session routes to fetch after each tool to draw, pings and the 90 s stream deadline, disconnect behaviour, a `fetch` reader for browsers (`EventSource` only does GET) and a `curl -N` example. `docs/stack.md` 7.3 lists the route.
+- **Why:** The frontend will build partial map views on these events.
+- **Agents:** Live check on Bedrock reached only the error path (the temporary credentials had expired): `start` arrives at once and the model failure arrives as an `error` event. The full flow is covered by the toy-world tests.
+- **Files:** `docs/assistant.md`, `docs/stack.md`.
+
 ## 2026-11-21 · feat(api): stream the assistant's steps as Server-Sent Events
 
 - **Changed:** `POST /api/v1/assistant/chat/stream` takes the `/chat` body and answers `text/event-stream`: `start`, `assistant_text`, `tool_call`, `tool_result` (compact result plus `session_id` and `run_id`), then `done` (the `/chat` fields without the trace) or `error` (`status`, `detail`). A `: ping` comment goes out after `assistant_stream_ping_s` (10 s) without events. The loop runs in a worker thread and keeps going, and saves the conversation, if the client disconnects. `/chat` is unchanged; both share the rate limit (`admit`) and the tool wiring (`toolbox_factory`).

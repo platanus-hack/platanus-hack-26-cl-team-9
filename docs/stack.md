@@ -324,7 +324,7 @@ Shared, persistent sessions under `/api/v1/sessions` (`api/session_routes.py`). 
 
 ### 7.3 Assistant API
 
-`POST /api/v1/assistant/chat` and `GET`/`DELETE /api/v1/assistant/conversations/{cid}` (`api/assistant_routes.py`) run natural-language requests through an LLM that calls the MCP tools over the app's own routes. Contract, limits and guardrails: `docs/assistant.md`. These routes are for the web client and are not marked `x-sub50-agent`.
+`POST /api/v1/assistant/chat`, `POST /api/v1/assistant/chat/stream` (the same steps as Server-Sent Events) and `GET`/`DELETE /api/v1/assistant/conversations/{cid}` (`api/assistant_routes.py`) run natural-language requests through an LLM that calls the MCP tools over the app's own routes. Contract, limits and guardrails: `docs/assistant.md`. These routes are for the web client and are not marked `x-sub50-agent`.
 
 ## 8. Testing and CI
 
