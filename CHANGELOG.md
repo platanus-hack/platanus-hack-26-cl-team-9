@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(health): cost in cascadasen-health
+
+- **Changed:** `application/grid_health.py`: `format_cost` adds a `$` line under each report. Pre-fault: "Dinero en riesgo N-1 (modelo): esperado US$ X M, peor US$ Y M; k de 273 cortes con costo, los 5 más caros suman <banda>". After a cut: "Costo estimado: US$ X M (costo de falla CNE [19], 4 h supuestas; piso, no estimación)" when uncertain. `--json` carries the `cost` object through `extra`.
+- **Changed:** The `n1_worst` margin no longer names the worst line in `measured` ("2065 MW" instead of "2065 MW (R222)").
+- **Why:** Issue #72 asks for the cost next to the index in the CLI. The worst cut is also the costliest one, and `cyber.md` section 8 forbids naming the most costly cuts once the report reaches the web cache.
+- **Agents:** 25F results: R239 at `feb2025-1500` costs US$ 69.3 M (floor, uncertain); N-1 expected US$ 3.5 M, worst US$ 72.6 M. Reference `feb2025-0300`: R239 US$ 22.2 M; N-1 expected US$ 4.1 M, worst US$ 306.6 M (the whole-system artefact of `n1_worst`).
+- **Files:** `backend/src/cascadasen/application/grid_health.py`, `backend/src/cascadasen/domain/cascade/health.py`.
+
 ## 2026-11-21 · feat(health): cost next to the health index
 
 - **Changed:** `domain/cascade/health.py`: new `event_report(summary, scenario, cut)` builds the after-cut report from a cascade `summary` without a new run; `event_health` uses it. Its `extra["cost"]` = `{cost_usd, unserved_energy_mwh, outage_duration_h, is_floor, source, note}`, `is_floor` = the report is uncertain.

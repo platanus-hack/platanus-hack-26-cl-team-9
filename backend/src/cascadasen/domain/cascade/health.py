@@ -185,7 +185,7 @@ def n1_margins(results: list[tuple[str, float]], total_load_mw: float) -> tuple[
     """Share of single cuts with no effect (in the index) and the worst cut (reported only: cutting a
     reduced line cuts the whole corridor, so the worst cut is an artefact of the reduction)."""
     clean = sum(1 for _, shed in results if shed < NO_EFFECT_MW)
-    worst_id, worst = max(results, key=lambda r: r[1], default=("", 0.0))
+    worst = max((shed for _, shed in results), default=0.0)  # no id: cyber.md section 8
     return (
         Margin(
             "n1_security",
@@ -200,7 +200,7 @@ def n1_margins(results: list[tuple[str, float]], total_load_mw: float) -> tuple[
             "n1_worst",
             "Peor corte simple",
             1.0 - worst / total_load_mw if total_load_mw > 0 else 1.0,
-            f"{worst:.0f} MW ({worst_id})",
+            f"{worst:.0f} MW",
             "0 MW",
             in_index=False,
             note="Solo informativa: artefacto de la red reducida",
