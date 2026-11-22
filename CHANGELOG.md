@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): every disaster and condition opens paused
+
+- **Changed:** `openScenario` sets `autoplay` to false for disasters too, and a cut opened from the URL no longer autoplays: the timeline waits at 0 until Play.
+- **Why:** user request: no scenario or Benchmark condition starts simulating on its own.
+- **Agents:** a cut made on the map, the assistant's scenario and Reintentar still autoplay.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · fix(web): picking a disaster or a condition resets the whole scenario
 
 - **Changed:** `openScenario` calls `_resetScenarioState` (stops playback and seeks 0, stops the incident and cyber cascades, clears selection, notice, history, prepared grid, simulation result and error, loaded timeline, last frame, timeline and heat requests, heat map) and starts from `scenarioEdits(next.edits)`: the disaster's own failures or nothing. The "replay the same disaster" shortcut is gone: the same scenario loads again from 0.

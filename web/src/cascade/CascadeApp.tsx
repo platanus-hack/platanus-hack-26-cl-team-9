@@ -114,7 +114,7 @@ export function CascadeApp() {
   const cyb = useCyber(speed); // and for the Ciberataque run
   // Playback starts by itself when the next timeline arrives (D1): after a cut or shutdown, a Desastres entry, a `?cut=`
   // link, or another hour picked while changes are in force. Never after Prender todo or a restore, nor with reduced motion.
-  const autoplay = useRef(!!startCut);
+  const autoplay = useRef(false); // a scenario opened from the URL waits paused too
   // Simulación is the default tab (D8); another country's network opens on Red, the only tab it has.
   const [tab, setTab] = useState<Tab>(startNetwork !== DEFAULT_COUNTRY ? "red" : "sim");
   const [view, setView] = useState<View>("tabs");
@@ -894,7 +894,7 @@ export function CascadeApp() {
     if (!current.simulable) return;
     _resetScenarioState();
     setLastPick(next.edits ? "disaster" : "condition");
-    autoplay.current = !!next.edits; // a disaster plays; a condition is the base case at that hour
+    autoplay.current = false; // every disaster and condition opens paused at 0: the user presses Play
     const fresh = scenarioEdits(next.edits);
     prevEdits.current = fresh; // the scenario's own failures are not adjustments
     setPointId(next.point);
