@@ -9,7 +9,7 @@ cd backend && uv run python ../scripts/build_index.py           # writes docs/in
 cd backend && uv run python ../scripts/build_index.py --check   # exit 1 if the committed file is stale
 ```
 
-- `tests/integration/test_repo_index.py` fails while the committed file differs from the generated one (the same rule as `tests/integration/test_agent_openapi.py`). It runs in the normal `backend-test` job of `.github/workflows/checks.yml`.
+- `tests/integration/test_repo_index.py` fails while the committed file differs from the generated one (the same rule as `tests/integration/test_agent_openapi.py`). It runs in its own job `repo-index` of `.github/workflows/checks.yml`, which is informational (`continue-on-error`): the index holds line numbers and CHANGELOG headings, so it is stale after almost any commit and must not block a deploy.
 - Regenerate before each commit that adds, removes or edits a source, doc or test file, a route, or a CHANGELOG entry. Line counts and symbol line numbers move with every edit.
 - The builder lists `git ls-files` (the git index), so run `git add` on a new file before regenerating. After `git add -A` and a regeneration, committing does not change the index: the file does not list itself and holds no timestamp or commit hash.
 - Output is deterministic: sorted paths, one JSON object per line, no timestamps. Two runs give byte-identical files.

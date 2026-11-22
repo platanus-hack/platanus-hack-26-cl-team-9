@@ -1,5 +1,10 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · chore(ci): the repo-index drift test runs in its own non-blocking job
+- **Changed:** `checks.yml` runs `backend-test` with `--ignore=tests/integration/test_repo_index.py` and adds a job `repo-index` (`continue-on-error: true`) that runs it. AGENTS.md, `docs/index/README.md`, `backend/README.md` and `docs/for-reviewers.md` say so. The index is regenerated.
+- **Why:** The index holds line numbers and CHANGELOG headings, so it is stale after almost any commit by anyone. As part of `backend-test`, which the deploy needs, it would have blocked deploys of every teammate who did not regenerate it.
+- **Agents:** Regenerate the index before you commit (`cd backend && uv run python ../scripts/build_index.py`); a red `repo-index` job is a reminder, not a gate.
+- **Files:** `.github/workflows/checks.yml`, `AGENTS.md`, `docs/index/README.md`, `backend/README.md`, `docs/for-reviewers.md`, `docs/index/repo-index.json`.
 ## 2026-11-22 · fix(tests): pin the seed of the run an assistant event opens, so the deploy gate is not flaky
 - **Changed:** `test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened` patches `cycle.new_seed` to a fixed value.
 - **Why:** The run that `inject_event` opens has no seed, so it draws a fresh one, and about 1 run in 25 a background event (`E1_demand_surge`) landed in the second step and broke the assertion `events_applied == []`. It failed once on CI (and 1 of 25 locally on `main`). Since `deploy.yml` needs the checks, a flaky test could block a deploy for nothing.
