@@ -33,7 +33,8 @@ class IncidentCatalogOut(AgentOut):
     default_duration_h: dict[str, Any] = Field(description="Default outage hours, with is_assumption true.")
     incidents: list[dict[str, Any]] = Field(
         description="id, title, date, kind (cyber_documented or reference_not_cyber), verified, sources, "
-        "notes, mitigations and the effects the scenario applies (cycle, event type, target, params)."
+        "notes, mitigations, operating_point (the session point the incident needs) and the effects the "
+        "scenario applies (cycle, event type, target, params)."
     )
 
 
@@ -82,7 +83,9 @@ def attack_catalog() -> dict[str, Any]:
     description="Creates a strategic run in the session from one catalog incident, with the defensive "
     "agents and the chosen policy. The adversary is off unless asked. Step it with `step_run`, read "
     "`get_run_report` (its `incident` block has the consequence card and mitigations) and "
-    "`get_run_after_action`. Only catalog ids are accepted (422 otherwise). Scenario: the effect is "
+    "`get_run_after_action`. Only catalog ids are accepted (422 otherwise). The incident runs at its own "
+    "`operating_point` (see the catalog): the session must have been created at that point, or the "
+    "call answers 422 with the point in `valid`. Scenario: the effect is "
     "modelled, not the attack; the consequence is simulated on a reduced network, not a prediction.",
     responses=ok(SessionRunOut, 201) | RUN_WRITE_ERRORS,
     openapi_extra=AGENT,
@@ -101,6 +104,7 @@ def start_incident_run(
             422,
             {"field": "scenario", "message": "incidente desconocido", "valid": list(cfg.incidents)},
         )
+    point = cfg.templates[body.scenario].operating_point
     limit(request, "write", sid)
     data = {
         "template": body.scenario,
@@ -112,5 +116,15 @@ def start_incident_run(
         "adversary": body.adversary.model_dump() if body.adversary else None,
     }
     with serial(request, sid):
+        doc = session_call(svc.get, sid)
+        if doc["point"] != point:
+            raise HTTPException(
+                422,
+                {
+                    "field": "scenario",
+                    "message": f"el incidente corre a las {point}; crea una sesión con ese punto",
+                    "valid": [point],
+                },
+            )
         out = session_call(svc.create_run, sid, data, False, agent)
     return _run_etag(response, out)

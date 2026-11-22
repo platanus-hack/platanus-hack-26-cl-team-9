@@ -4229,7 +4229,7 @@
           "incidents"
         ],
         "summary": "Start a run from a documented incident",
-        "description": "Creates a strategic run in the session from one catalog incident, with the defensive agents and the chosen policy. The adversary is off unless asked. Step it with `step_run`, read `get_run_report` (its `incident` block has the consequence card and mitigations) and `get_run_after_action`. Only catalog ids are accepted (422 otherwise). Scenario: the effect is modelled, not the attack; the consequence is simulated on a reduced network, not a prediction.",
+        "description": "Creates a strategic run in the session from one catalog incident, with the defensive agents and the chosen policy. The adversary is off unless asked. Step it with `step_run`, read `get_run_report` (its `incident` block has the consequence card and mitigations) and `get_run_after_action`. Only catalog ids are accepted (422 otherwise). The incident runs at its own `operating_point` (see the catalog): the session must have been created at that point, or the call answers 422 with the point in `valid`. Scenario: the effect is modelled, not the attack; the consequence is simulated on a reduced network, not a prediction.",
         "operationId": "start_incident_run",
         "parameters": [
           {
@@ -5286,7 +5286,7 @@
             },
             "type": "array",
             "title": "Incidents",
-            "description": "id, title, date, kind (cyber_documented or reference_not_cyber), verified, sources, notes, mitigations and the effects the scenario applies (cycle, event type, target, params)."
+            "description": "id, title, date, kind (cyber_documented or reference_not_cyber), verified, sources, notes, mitigations, operating_point (the session point the incident needs) and the effects the scenario applies (cycle, event type, target, params)."
           }
         },
         "additionalProperties": true,

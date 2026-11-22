@@ -131,3 +131,14 @@ def test_the_api_launches_a_run_inside_a_session_and_rejects_unknown_ids():
     assert rep["incident"]["id"] == "huatacondo-2026" and rep["incident"]["adversary"] is False
     aar = c.get(f"/api/v1/sessions/{sid}/runs/{rid}/after_action").json()
     assert "incident" in aar
+
+
+def test_the_incident_point_must_match_the_session_point():
+    c = TestClient(create_app())
+    sid = c.post("/api/v1/sessions", json={"point": "nov2026-1300"}).json()["session_id"]
+    bad = c.post(f"/api/v1/sessions/{sid}/attacks/runs", json={"scenario": "25f-referencia", "seed": 1})
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["field"] == "scenario" and bad.json()["detail"]["valid"] == ["feb2025-1500"]
+    sid = c.post("/api/v1/sessions", json={"point": "feb2025-1500"}).json()["session_id"]
+    ok_ = c.post(f"/api/v1/sessions/{sid}/attacks/runs", json={"scenario": "25f-referencia", "seed": 1})
+    assert ok_.status_code == 201 and ok_.json()["operating_point"] == "feb2025-1500"

@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(incidents): require the session point to match the incident
+
+- **Changed:** `POST /api/v1/sessions/{sid}/attacks/runs` answers 422 `{field: "scenario", message, valid: [<point>]}` when the session's `point` differs from the incident's `operating_point`. The catalog and route descriptions name `operating_point`; the MCP `start_incident_run` docstring says 25F needs `start_session(point="feb2025-1500")`. `agents.openapi.json` regenerated.
+- **Why:** `SessionService.create_run` forces the session point, so `25f-referencia` in a `nov2026-1300` session silently ran at the wrong hour.
+- **Agents:** To replay an incident, create (or join) a session at its `operating_point` (in the catalog). Today three incidents use `nov2026-1300` and `25f-referencia` uses `feb2025-1500`.
+- **Files:** `backend/src/cascadasen/api/incident_routes.py`, `backend/src/cascadasen/mcp/tools.py`, `backend/tests/unit/test_incidents.py`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-22 · docs(incidents): attack-sim is implemented, with its API and tools
 
 - **Changed:** `attack-sim.md` has a new section 3.1 (catalog, results, API, card, tools) and a new status line; `strategy.md` section 6, `mcp.md` section 3, `sessions-api.md` section 4 and `plan.md` section 9 item 10 point to it.
