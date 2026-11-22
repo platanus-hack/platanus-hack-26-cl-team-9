@@ -6,7 +6,8 @@
 #   --check  report only, change nothing (used by the git pre-commit hook and CI)
 #
 # Python      -> ruff check + ruff format (config: backend/pyproject.toml)
-# frontend/*  -> eslint and prettier, once frontend/package.json installs them
+# web/*.ts(x) -> tsc --noEmit on the whole web project (once per run), when web/node_modules is installed
+#                (eslint and prettier run too if web/node_modules/.bin has them; they are not dependencies today)
 # Other files -> skipped
 #
 # Exit code: 0 when clean (or nothing to lint), 1 when problems remain.
@@ -28,8 +29,8 @@ for f in "$@"; do
   case "$abs" in
     "$ROOT"/*/.venv/* | "$ROOT"/node_modules/* | "$ROOT"/*/node_modules/*) continue ;;
     *.py) py_files+=("$abs") ;;
-    "$ROOT"/frontend/*.ts | "$ROOT"/frontend/*.tsx | "$ROOT"/frontend/*.js | "$ROOT"/frontend/*.jsx | \
-    "$ROOT"/frontend/*.mjs | "$ROOT"/frontend/*.cjs | "$ROOT"/frontend/*.css | "$ROOT"/frontend/*.json)
+    "$ROOT"/web/*.ts | "$ROOT"/web/*.tsx | "$ROOT"/web/*.js | "$ROOT"/web/*.jsx | \
+    "$ROOT"/web/*.mjs | "$ROOT"/web/*.cjs | "$ROOT"/web/*.css | "$ROOT"/web/*.json)
       fe_files+=("$abs") ;;
   esac
 done
@@ -58,30 +59,38 @@ if ((${#py_files[@]})); then
   fi
 fi
 
-# --- Frontend: eslint + prettier (only when installed) ----------------------
+# --- Web: tsc + eslint + prettier (each only when installed) -----------------
 if ((${#fe_files[@]})); then
-  bin="$ROOT/frontend/node_modules/.bin"
+  bin="$ROOT/web/node_modules/.bin"
   js_files=()
+  ts_files=()
   for f in "${fe_files[@]}"; do
-    case "$f" in *.css | *.json) ;; *) js_files+=("$f") ;; esac
+    case "$f" in
+      *.css | *.json) ;;
+      *) js_files+=("$f") ;;
+    esac
+    case "$f" in *.ts | *.tsx) ts_files+=("$f") ;; esac
   done
+  # tsc checks the whole project (tsconfig.json), so it runs once; it has nothing to fix.
+  if [[ -x "$bin/tsc" ]] && ((${#ts_files[@]})); then
+    (cd "$ROOT/web" && "$bin/tsc" --noEmit) || status=1
+  fi
   if [[ -x "$bin/eslint" ]] && ((${#js_files[@]})); then
     if [[ "$mode" == "--fix" ]]; then
-      (cd "$ROOT/frontend" && "$bin/eslint" --fix "${js_files[@]}") || status=1
+      (cd "$ROOT/web" && "$bin/eslint" --fix "${js_files[@]}") || status=1
     else
-      (cd "$ROOT/frontend" && "$bin/eslint" "${js_files[@]}") || status=1
+      (cd "$ROOT/web" && "$bin/eslint" "${js_files[@]}") || status=1
     fi
   fi
   if [[ -x "$bin/prettier" ]]; then
     if [[ "$mode" == "--fix" ]]; then
-      (cd "$ROOT/frontend" && "$bin/prettier" --write --log-level warn "${fe_files[@]}") || status=1
+      (cd "$ROOT/web" && "$bin/prettier" --write --log-level warn "${fe_files[@]}") || status=1
     else
-      (cd "$ROOT/frontend" && "$bin/prettier" --check --log-level warn "${fe_files[@]}") || status=1
+      (cd "$ROOT/web" && "$bin/prettier" --check --log-level warn "${fe_files[@]}") || status=1
     fi
   fi
-  if [[ ! -x "$bin/eslint" && ! -x "$bin/prettier" ]]; then
-    echo "lint: frontend linters not installed yet (frontend/node_modules/.bin); skipped." >&2
+  if [[ ! -x "$bin/tsc" ]]; then
+    echo "lint: web/node_modules not installed (cd web && npm ci); web files skipped." >&2
   fi
 fi
-
 exit $status

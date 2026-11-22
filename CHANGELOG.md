@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(repo): bash 3.2 pre-commit hook, lint.sh checks web/, ignore coverage output
+- **Changed:**
+  - `scripts/hooks/pre-commit` no longer uses `mapfile` (bash 4 only), so it runs on macOS bash 3.2. Same checks.
+  - `scripts/lint.sh` and `AGENTS.md` point at `web/` (the `frontend/` directory does not exist). For `web/**/*.ts|tsx` it runs `tsc --noEmit` on the whole project once per run when `web/node_modules/.bin/tsc` exists. eslint and prettier branches stay, but only run if installed there.
+  - `.gitignore` adds `.coverage`, `htmlcov/`, `web/coverage/` and `web/public/cache/theater/` (docs already say that directory is git-ignored).
+- **Why:** Review R-04, R-06, R-10, R-11. The hook failed on macOS, the lint script linted a directory that does not exist, and `.coverage` showed up as untracked.
+- **Agents:** Decision: no eslint or prettier dependency is added, because they would reformat the app. `scripts/lint.sh --check web/src/foo.ts` fails on any type error in the web project, not only in that file. You no longer need `--no-verify` on macOS.
+- **Files:** `.gitignore`, `scripts/lint.sh`, `scripts/hooks/pre-commit`, `AGENTS.md`.
 ## 2026-11-22 · fix(api): enforce the 64 KB body limit on chunked requests
 - **Changed:** `BodyLimitMiddleware` now counts the body of a request without `content-length` (chunked) on the limited prefixes. Over `MAX_BODY_BYTES` it sends the same 413 JSON (`Cuerpo demasiado grande (máximo 64 KB).`). Otherwise it replays the buffered messages to the app. Requests with `content-length` keep the same path and the prefixes are unchanged.
 - **Why:** A chunked request skipped the limit entirely (review B-04).
