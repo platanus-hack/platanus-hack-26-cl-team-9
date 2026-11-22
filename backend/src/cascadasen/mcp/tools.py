@@ -51,9 +51,14 @@ TOOLS = tuple(OPERATIONS)
 
 INSTRUCTIONS = """\
 Sub50 simulates the consequences of events on the Chilean national grid (188 buses, 13 operating areas).
-Work in this order: start_session (or join_session), describe_network to learn areas and ids, edit the
-network (add_datacenter, add_generator, add_line, edit_element) and/or open lines with cut_lines, then
-read the result. For strategic experiments use start_run, inject_event, step, run_report and after_action.
+What the user sees on the web map (new points, changes, lines out, substations off) goes through
+prepare_scenario, which needs no session: do not open one for it. To name a line the user describes by its
+substations ("la línea Nueva Maitencillo – Nueva Pan de Azúcar") call find_line once and use the id it returns;
+never search the network area by area for it. To take a line out of service put its id in `open_lines`; a
+lines change with factor 0 is rejected. Session work, only when the user wants a shared, editable copy:
+start_session (or join_session), describe_network to learn areas and ids, edit the network (add_datacenter,
+add_generator, add_line, edit_element) and/or open lines with cut_lines, then read the result. For
+strategic experiments use start_run, inject_event, step, run_report and after_action.
 To replay a documented incident (Huatacondo, Poland, UK, 25F) use list_incident_scenarios and
 start_incident_run, then step, run_report and after_action; say each result is a simulated scenario.
 Use list_options for valid event, action, policy and template ids. The web map shows the grid that prepare_scenario sets: use it to
@@ -103,8 +108,9 @@ class Sub50Tools:
 
     def start_session(self, point: str | None = None, label: str | None = None) -> dict[str, Any]:
         """Create a new shared session: a private, editable copy of the 188-bus Chilean grid, and make it
-        the active one. Call this first. `point` pins one operating point (feb2025-1500, feb2025-0300,
-        nov2026-1300 default, nov2026-2000). Returns the session id and a link to watch it in the web map."""
+        the active one. Only for session work (edits, cuts, strategic runs, incidents): prepare_scenario and
+        find_line need no session, so never open one for them. `point` pins one operating point
+        (feb2025-1500, feb2025-0300, nov2026-1300 default, nov2026-2000). Returns the session id and a link to watch it in the web map."""
         body = {k: v for k, v in {"point": point, "label": label}.items() if v}
         doc = self.client.post("/sessions", body)
         self.state.session_id, self.state.run_id = doc["session_id"], None
@@ -495,7 +501,8 @@ class Sub50Tools:
         in Iquique is {"target": "generation", "places": ["Iquique"], "tech": ["solar"], "add": 80} (a
         battery is tech bateria; nuclear is modelled as termica). Each change's `places` says which
         substation the place became: tell the user. Failures: `open_lines` (R###; a line the user names by
-        its substations comes from find_line) and `out_buses` (B###).
+        its substations comes from find_line) and `out_buses` (B###). A line out of service goes only in
+        `open_lines`, never as a lines change with factor 0. Needs no session.
         With failures it also simulates the cascade: people without power against the same failures
         without the changes, and per zone the people the generators should feed against the people they
         still feed. `point`: feb2025-1500, feb2025-0300, nov2026-1300 (default), nov2026-2000."""

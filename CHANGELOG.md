@@ -1,5 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · fix(assistant): no session for prepare_scenario, and a named line goes through find_line
+
+- **Changed:** The assistant's `SYSTEM` (`api/assistant_routes.py`) says prepare_scenario and find_line use no session (never open one for them), to call find_line once for a line named by its substations and put the id in `open_lines`, and never to send a lines change with factor 0. The shared MCP `INSTRUCTIONS` (`mcp/tools.py`) no longer start with "start_session first": map work goes straight to prepare_scenario, session work is the second path. `start_session` and `prepare_scenario` descriptions say the same.
+- **Why:** On production the model called "Abrir sesión" before prepare_scenario because the instructions told it to start every task with start_session, then spent its 8 steps searching the line.
+- **Agents:** Prompt change only; the toolbox already opened a session only for tools outside `NO_SESSION_NEEDED`. Tested with a scripted stand-in (`test_a_named_line_is_found_and_cut_without_opening_a_session`: three steps, `session_id` stays null); the real Bedrock model's choices were not checked (no credentials). `docs/assistant.md` section 3, `docs/mcp.md` section 3.
+- **Files:** `backend/src/cascadasen/{api/assistant_routes.py,mcp/tools.py}`, `backend/tests/integration/test_assistant_api.py`, `docs/{assistant,mcp}.md`.
+
 ## 2026-11-22 · feat(stress): find a line by its name or its two end substations
 
 - **Changed:** New `application/line_lookup.py` (`find_lines`) and route `GET /api/v1/grids/lines?q=` (agent operation `find_line`, `LineLookupOut` in `api/stress_schemas.py`). It reads a line id, two end substations in either order ("Nueva Maitencillo – Nueva Pan de Azúcar", "entre Ancoa y Alto Jahuel", optional "500 kV") or one substation, and lists at most 12 matching lines in id order. New MCP tool `find_line` (in `NO_SESSION_NEEDED`, so the assistant uses it without a session), labelled "Buscar línea" in the web chat. `describe_network` and `prepare_scenario` point to it.
