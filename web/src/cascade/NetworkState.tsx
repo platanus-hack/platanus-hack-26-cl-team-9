@@ -87,7 +87,7 @@ const REASON: Record<string, string> = {
 
 /**
  * Final result of the cascade, read with the same `impactAt` the Simulación tab uses at its last second, so both tabs give
- * the same figures. The cost comes from the backend (issue #82); until it exists the card says so instead of estimating it.
+ * the same figures. The cost comes from the backend (`POST /grids/cost`): total, per hour of outage, and blackout or load shedding.
  */
 function Outcome({ timeline, buses, point, edits }: { timeline: Timeline; buses: Record<string, BusState>; point: string; edits: Edits }) {
   const end = impactAt(timeline, buses, timeline.duration_s);
@@ -106,12 +106,24 @@ function Outcome({ timeline, buses, point, edits }: { timeline: Timeline; buses:
         <div><div className="value-row"><b>{int(end.lostGenMw)} <small>MW</small></b></div><span>generación perdida</span></div>
         <div><div className="value-row"><b>{dark}</b></div><span>{dark === 1 ? "isla apagada" : "islas apagadas"}</span></div>
       </div>
-      <div className="value-row status-row">
-        {cost.state === "ready" && cost.value
-          ? <span>Costo de la caída: <b>US$ {int(cost.value.cost_usd)}</b> · {int(cost.value.energy_not_served_mwh)} MWh no suministrados en {cost.value.outage_hours.value} h{cost.value.outage_hours.is_assumption ? " (supuesto)" : ""}</span>
-          : <span className="meta">{cost.state === "error" ? cost.error : cost.state === "loading" ? "Calculando el costo…" : "Costo de la caída: pendiente. El backend aún no lo calcula (issue #82)."}</span>}
-        {cost.value && <Info tip={[cost.value.unserved_cost_usd_per_mwh.source ?? "Supuesto", ...cost.value.assumptions].join(" · ")} />}
-      </div>
+      <CostRow cost={cost} />
+    </div>
+  );
+}
+
+/** Total and per hour, and whether it is a total blackout (black start) or load shedding in a grid that holds. */
+function CostRow({ cost }: { cost: CostState }) {
+  if (cost.state !== "ready" || !cost.value) {
+    return <p className="meta">{cost.state === "error" ? cost.error : cost.state === "loading" ? "Calculando el costo…" : "Costo de la caída: el servidor aún no lo calcula."}</p>;
+  }
+  const c = cost.value;
+  const kind = c.breakdown.dark_mw <= 0 ? "corte parcial de carga (EDAC)" : c.breakdown.dark_share >= 0.9 ? "apagón total" : "apagón parcial";
+  const tip = [`Costo de falla CNE ${int(c.unserved_cost_usd_per_mwh.value / 1000)} US$/kWh`, ...c.assumptions].join(" · ");
+  return (
+    <div className="mini-figures ruled">
+      <div><div className="value-row"><b>US$ {formatPeople(c.cost_usd)}</b><Info tip={tip} /></div><span>costo de la caída</span></div>
+      <div><div className="value-row"><b>US$ {formatPeople(c.cost_per_hour_usd)}</b></div><span>por hora de corte</span></div>
+      <div><div className="value-row"><b>{int(c.energy_not_served_mwh)} <small>MWh</small></b></div><span>{kind} · {c.outage_hours.value} h</span></div>
     </div>
   );
 }

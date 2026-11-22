@@ -39,9 +39,10 @@ export interface SimulationResult {
 export const simulateGrid = (body: { point: string; open_lines: string[]; out_buses: string[] }) =>
   request<SimulationResult>("simulate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-/** Cost of the outage (`POST /grids/cost`, issue #82). Every value comes from the backend with its source or assumption. */
+/** Cost of the outage (`POST /grids/cost`, docs/engine.md "Cost"). Every value comes from the backend with its source or assumption. */
 export interface OutageCost {
-  energy_not_served_mwh: number; cost_usd: number;
+  energy_not_served_mwh: number; cost_usd: number; cost_per_hour_usd: number;
+  breakdown: { dark_mw: number; shed_mw: number; dark_share: number; total_blackout_factor: number };
   outage_hours: { value: number; is_assumption?: boolean; note?: string };
   unserved_cost_usd_per_mwh: { value: number; source?: string; is_assumption?: boolean };
   assumptions: string[];

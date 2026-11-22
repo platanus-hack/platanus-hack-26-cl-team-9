@@ -1,6 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(grids): failure cost that tells a total blackout from a slow grid, per hour, at POST /grids/cost (#82)
+
+- **Changed:** `blackout_cost` (`domain/simulation/consequence.py`) values dark demand with 7.34 h of black start and a total-blackout premium (k = 1.375, scaled by the dark share), and EDAC load shedding with 1 h and no premium; it also gives `cost_per_hour_usd`. The cascade summary adds `dark_load_mw`, `cost_per_hour_usd` and `cost_breakdown`; substations out of service count as dark. New `POST /api/v1/grids/cost` (`cost_workflow`), read by Estado de la red (total, per hour, MWh and "apagón total / parcial / corte parcial de carga"). Cache regenerated.
+- **Why:** #81's flat 4 h x 8.79 US$/kWh gave US$ 390 M for the 25F; the ISCI study for Enel Foundation [44] gives US$ 984 M and 81,430 MWh, and a blackout costs more per hour than load shedding. Now the 25F gives US$ 984.3 M and 81,443 MWh.
+- **Agents:** the two calibrated terms come from [44] (`cascade.yaml` `cost`), not from tuning the engine; only the 25F is checked against a real figure. `failure_cost(shed)` without the dark split counts everything as dark with no premium (N-1 money at risk). The 13-area engine's consequence card (`outage_cost`) is unchanged.
+- **Files:** `backend/src/cascadasen/{domain/simulation/consequence.py,domain/cascade/engine.py,domain/cascade/health.py,domain/cascade/params/cascade.yaml,application/grid_simulation.py,api/grid_routes.py}`, tests, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,gridsApi.ts}`, `docs/{engine,datasets}.md`.
 ## 2026-11-22 · Merge origin/main into feat/network-selector
 
 - **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.

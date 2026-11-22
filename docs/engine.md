@@ -49,6 +49,26 @@ The data scripts need the PyPSA-CL files in `data/raw/pypsa_cl/` (they download 
 
 Measured 2026-11-22. The real 25F left about 19 M people (98.5 %) without power (figure given by the team, source to cite). The model reaches 16.8 M because it assigns 18.16 M people in total and 23 substations over 20 MW have 0 people (`docs/minimum-dataset.md`). The corridor result depends on how loaded it was: that matches the CEN account of the 25F. Do not present these numbers as a forecast. A health index built on these results is in [`health.md`](health.md).
 
+## Cost
+
+The summary of every timeline carries `failure_cost_usd`, `cost_per_hour_usd`, `unserved_energy_mwh`, `outage_duration_h`, `dark_load_mw` and `cost_breakdown`. `POST /api/v1/grids/cost` (`{point, open_lines, out_buses}`) returns the same for the changes of Estado de la red. The formula tells a total blackout from a slow grid (`blackout_cost` in `domain/simulation/consequence.py`, parameters in `cascade.yaml` `cost`):
+
+```
+cost      = VoLL x [ dark_MW x H_blackout x (1 + (k - 1) x dark_share) + shed_MW x H_shed ]
+cost/hour = VoLL x [ dark_MW x (1 + (k - 1) x dark_share) + shed_MW ]
+```
+
+| Term | Value | Source |
+|---|---|---|
+| `dark_MW` | demand of the buses that went dark (islands that collapsed, substations out of service) | engine |
+| `shed_MW` | load cut by EDAC in islands that survive (a slow grid, no black start) | engine |
+| VoLL | 8.79 US$/kWh | CNE failure cost [19] |
+| `H_blackout` | 7.34 h of black start | [44]: 81,430 MWh not served in the 25F over 11,096 MW. Cross-check: the restoration reports give 8.2 h (Gobierno) or 5.4 h (CEN) |
+| `H_shed` | 1 h | ASSUMPTION: EDAC load is back once the frequency recovers |
+| `k` | 1.375 | [44]: US$ 984 M / 81,430 MWh = 12.08 US$/kWh over 8.79: a total blackout also stops transport, water, telecom and industry. ASSUMPTION: it grows linearly with `dark_share` |
+
+EVIDENCE (`POST /grids/cost`, 2026-11-22): 25F US$ 984.3 M and 81,443 MWh (the study: US$ 984 M, 81,430 MWh), US$ 134 M per hour; the same cut at 03:00 sheds 631 MW and costs US$ 5.5 M (1 h, no premium); Apagón 2011 analogue US$ 67 M; Terremoto 2010 analogue US$ 102 M. The 25F matches by construction of `H_blackout` and `k`, which come from the same study; the other cases are not calibrated. Callers that only know the MW lost (the N-1 money at risk of `health.py`) count them as dark without the premium.
+
 ## Assumptions (also returned in every timeline)
 
 See `ASSUMPTIONS` in `engine.py` and the `is_assumption` entries of `cascade.yaml`. The ones that matter most: the 120% opening threshold, 1 s between stages (illustrative), reserve 4% of online synchronous MW with 5% droop, load damping 1.5 %/Hz, no generation ride-through trips, flow DC without voltage. A click on a map line cuts the whole reduced line: where several circuits run in parallel (for example the four 500 kV circuits Alto Jahuel-Ancoa) that is the whole corridor, not one circuit.

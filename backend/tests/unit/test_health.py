@@ -22,7 +22,9 @@ from cascadasen.domain.cascade.health import (
 from cascadasen.domain.cascade.network import Line, ReducedNetwork
 from cascadasen.domain.cascade.scenario import OperatingPoint
 
-USD_PER_MW = 4.0 * 1000 * 8.79  # 4 h assumed outage x CNE failure cost [19]
+USD_PER_MW = (
+    7.34 * 1000 * 8.79
+)  # a lost MW without its dark/shed split counts as dark: 7.34 h [44] x CNE [19]
 
 
 def _m(key: str, raw: float, in_index: bool = True) -> Margin:
@@ -108,8 +110,8 @@ def test_event_cost_follows_the_supply_margin_when_supply_binds():
     supply = {m.key: m for m in report.margins}["supply"]
     assert report.binding == "supply"
     cost = report.as_dict()["cost"]
-    assert cost["cost_usd"] == pytest.approx((1 - supply.raw) * 10000.0 * 4.0 * 1000 * 8.79)
-    assert cost["outage_duration_h"] == {"value": 4.0, "is_assumption": True}
+    assert cost["cost_usd"] == pytest.approx((1 - supply.raw) * 10000.0 * USD_PER_MW)
+    assert cost["outage_duration_h"] == {"value": 7.34, "is_assumption": False}
     assert not cost["voltage_rule"]
 
 
