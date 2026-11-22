@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
+from cascadasen.domain.cascade import health
 from cascadasen.domain.cascade.health import (
     HealthReport,
     Margin,
     corridor_margin,
     event_margins,
+    event_report,
     inertia_margin,
+    n1_cost,
     n1_margins,
+    prefault_health,
 )
+from cascadasen.domain.cascade.network import Line, ReducedNetwork
+from cascadasen.domain.cascade.scenario import OperatingPoint
+
+USD_PER_MW = 4.0 * 1000 * 8.79  # 4 h assumed outage x CNE failure cost [19]
 
 
 def _m(key: str, raw: float, in_index: bool = True) -> Margin:
@@ -86,3 +95,64 @@ def test_event_margins_voltage_limited_island_scores_zero_and_is_uncertain():
 def test_event_margins_blackout_island_scores_zero():
     margins, _ = event_margins(_summary(8000.0, [{"result": "blackout", "min_hz": 47.4}]))
     assert {m.key: m for m in margins}["frequency_islands"].value == 0.0
+
+
+def test_event_cost_follows_the_supply_margin_when_supply_binds():
+    islands = [{"result": "maintains", "min_hz": 49.95}]
+    report = event_report(_summary(3000.0, islands), "x", ["R1"])
+    supply = {m.key: m for m in report.margins}["supply"]
+    assert report.binding == "supply"
+    cost = report.as_dict()["cost"]
+    assert cost["cost_usd"] == pytest.approx((1 - supply.raw) * 10000.0 * 4.0 * 1000 * 8.79)
+    assert cost["outage_duration_h"] == {"value": 4.0, "is_assumption": True}
+    assert not cost["is_floor"]
+
+
+def test_event_cost_is_a_floor_when_the_result_is_uncertain():
+    islands = [{"result": "voltage_limited", "min_hz": 50.0}]
+    cost = event_report(_summary(2000.0, islands, uncertain=True), "x", ["R1"]).extra["cost"]
+    assert cost["is_floor"]
+    assert cost["cost_usd"] == pytest.approx(2000.0 * USD_PER_MW)
+
+
+def test_n1_cost_gives_expected_worst_and_a_band_without_ids():
+    results = [("R1", 0.0), ("R2", 0.0), ("R3", 100.0), ("R4", 300.0)]
+    cost = n1_cost(results)
+    assert cost["n1_expected_cost_usd"] == pytest.approx(400.0 * USD_PER_MW / 4)
+    assert cost["n1_worst_cost_usd"] == pytest.approx(300.0 * USD_PER_MW)
+    assert cost["n1_cuts"] == 4 and cost["n1_cuts_with_cost"] == 2
+    assert cost["n1_cost_share"] == {"count": 4, "share_band": "80-100 %"}
+    assert cost["is_assumption"]
+    assert not any(rid in str(cost) for rid, _ in results)
+
+
+def _toy() -> tuple[ReducedNetwork, OperatingPoint]:
+    lines = [Line("R0", 0, 1, 400.0, 0.01, 220, ("ab",), ()), Line("R1", 0, 2, 400.0, 0.01, 220, ("ac",), ())]
+    net = ReducedNetwork(
+        names=["A", "B", "C"],
+        lat=[-33.0] * 3,
+        lon=[-70.0] * 3,
+        kv=[220.0] * 3,
+        model_buses=[["A_220"], ["B_220"], ["C_220"]],
+        map_nodes=[[], [], []],
+        lines=lines,
+        index={"A": 0, "B": 1, "C": 2},
+        bus_of_model_bus={"A_220": 0, "B_220": 1, "C_220": 2},
+    )
+    gen, load = np.array([300.0, 0, 0]), np.array([0.0, 150.0, 150.0])
+    op = OperatingPoint(
+        "toy", "toy", load, gen, gen.copy(), np.array([30000.0, 0, 0]), np.array([0, 1e3, 1e3])
+    )
+    return net, op
+
+
+def test_prefault_health_reuses_given_n1_results_without_new_runs(monkeypatch):
+    def boom(*_args, **_kwargs):
+        raise AssertionError("no cut must run when n1_results is given")
+
+    monkeypatch.setattr(health, "run_cascade_workflow", boom)
+    net, op = _toy()
+    report = prefault_health(net, op, n1_results=[("R0", 150.0), ("R1", 0.0)])
+    cost = report.as_dict()["cost"]
+    assert cost["n1_worst_cost_usd"] == pytest.approx(150.0 * USD_PER_MW)
+    assert cost["n1_expected_cost_usd"] == pytest.approx(75.0 * USD_PER_MW)

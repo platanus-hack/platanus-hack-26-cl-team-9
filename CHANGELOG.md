@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(health): cost next to the health index
+
+- **Changed:** `domain/cascade/health.py`: new `event_report(summary, scenario, cut)` builds the after-cut report from a cascade `summary` without a new run; `event_health` uses it. Its `extra["cost"]` = `{cost_usd, unserved_energy_mwh, outage_duration_h, is_floor, source, note}`, `is_floor` = the report is uncertain.
+- **Changed:** `prefault_health(..., n1_results=None)` accepts single-cut results already computed. New `n1_cost(results)` goes in `extra["cost"]`: `n1_expected_cost_usd` (mean, equal weights, `is_assumption: true`), `n1_worst_cost_usd`, `n1_cuts`, `n1_cuts_with_cost`, `n1_cost_share: {count: 5, share_band: "60-80 %"}`.
+- **Why:** Issue #72: the index and the money side by side, from the same MW lost, without a new run.
+- **Agents:** The cost never enters the index and the index is never converted to dollars (the index is a minimum, so they can move apart). `n1_cost` never emits line ids: totals, counts and 20-point bands only (`cyber.md` section 8). Pass `n1_results` whenever the cuts already ran.
+- **Files:** `backend/src/cascadasen/domain/cascade/health.py`, `backend/tests/unit/test_health.py`.
+
 ## 2026-11-21 · feat(cascade): failure cost in the cascade summary
 
 - **Changed:** New pure `outage_cost(load_lost_mw, outage_h, outage_is_assumption, voll)` in `domain/simulation/consequence.py` returns `unserved_energy_mwh`, `failure_cost_usd` and `outage_duration_h: {value, is_assumption}`. `consequence_card` uses it; its output is unchanged.
