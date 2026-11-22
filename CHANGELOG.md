@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(theater): remove the two unused `param` helpers on COA and EventRequest
+
+- **Changed:** Deleted `COA.param` and `EventRequest.param` (`dict(self.params).get(name, default)`). Both were identical and neither had a caller in src, tests, scripts or docs.
+- **Why:** F17 of the duplication report named them as a repeated pattern; with zero callers, deleting is simpler than sharing a helper. Read `dict(coa.params)` directly if a param is needed.
+- **Agents:** Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/theater/decisions.py`, `execution.py`.
 ## 2026-11-22 · refactor(dead-code): remove unreferenced backend symbols and unused arguments
 
 - **Changed:** Deleted `geo.polyline_km`, `theater.catalog.DEFENDERS`, `TheaterGrid.island_inertia_mws`, `TheaterGrid.release_hold`, `ISRReport.trust_of`, `simulation.grid.RENEWABLE`, `GridState.add_inertia` and `simulation.engine.CHANGE_KINDS` (each had zero references in src, tests, scripts, docs and YAML outside its definition).

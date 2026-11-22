@@ -23,9 +23,6 @@ class COA:
     def key(self) -> str:
         return f"{self.action}:{self.target}"
 
-    def param(self, name: str, default: Any = None) -> Any:
-        return dict(self.params).get(name, default)
-
     def as_dict(self) -> dict[str, Any]:
         return {
             "action": self.action,
