@@ -21,6 +21,7 @@ import { DataPanel } from "../session/DataPanel";
 import { SessionBar } from "../session/SessionBar";
 import { SessionCut } from "../session/SessionCut";
 import { cutLines, repairLines } from "../session/sessionApi";
+import { canPowerAll, powerAll } from "./powerAll";
 import { useSession } from "../session/useSession";
 import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
@@ -322,6 +323,28 @@ export function CascadeApp() {
     else s.edit((sid, rev) => repairLines(sid, lines ? { lines } : { all: true }, rev));
   }
 
+  /**
+   * "Prender todo": back to the full network at the same point. Clears the cut, the selection and the notice, and puts the
+   * timeline at 0 paused; the tab, the colour mode and the view stay. In a session it repairs every open line for everyone
+   * after a confirmation; session dataset edits stay ("Restablecer" in Datos drops them).
+   */
+  function powerAllOn() {
+    if (s.sid) {
+      if (!confirm("¿Prender toda la red? Repara todas las líneas abiertas para todos los participantes de la sesión.")) return;
+      restore();
+      setSelection(null);
+      seek(0);
+      setPlaying(false);
+      return;
+    }
+    const next = powerAll({ pointId, cut, selection, t: live.current.t, playing: live.current.playing });
+    setCut(next.cut);
+    setSelection(next.selection);
+    seek(next.t);
+    setPlaying(next.playing);
+    setNotice(null);
+  }
+
   function togglePlay() {
     const v = live.current;
     if (v.duration > 0 && v.t >= v.duration - 1e-6) { seek(0); setPlaying(true); } else setPlaying(!v.playing);
@@ -353,6 +376,7 @@ export function CascadeApp() {
   const tabs: [Tab | "avoid" | "validation", string][] = s.sid ? SESSION_TABS : TABS;
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
   const selectedCut = s.sid ? (selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null) : cut;
+  const canPower = canPowerAll({ cuts, edited: false }); // edited: #42 phase B
   const sourceNote = hasLabels ? "Mapa base: Mapbox" : "Contorno: data/processed/chile.geojson";
 
   return (
@@ -432,6 +456,11 @@ export function CascadeApp() {
 
       <TimelineCard timeline={cuts.length && timelineReady ? timeline : null} loading={cuts.length > 0 && !timelineReady} markers={markers} t={t} clock={clock(point?.snapshot, t).tenths} islands={cuts.length ? islands : []} playing={playing} speed={speed}
         setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />
+
+      <button className="power-all" aria-disabled={!canPower || undefined} onClick={() => canPower && powerAllOn()}
+        data-tip={!canPower ? "No hay nada apagado ni editado." : s.sid ? "Repara todas las líneas abiertas de la sesión y vuelve al caso base de esta hora." : "Repone lo apagado y vuelve al caso base de esta hora."}>
+        <Icon size={14}><path d="M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z" /></Icon><span>Prender todo</span>
+      </button>
 
       <div className="map-controls" ref={controlsRef}>
         <button className={layersOpen ? "ctl on" : "ctl"} aria-label="Capas y vista" aria-expanded={layersOpen} onClick={() => setLayersOpen(!layersOpen)}>
