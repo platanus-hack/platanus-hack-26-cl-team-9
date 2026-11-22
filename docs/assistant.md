@@ -115,6 +115,8 @@ The web reads `/chat/stream` and shows each step while the model works. It needs
 - Checked on 2026-11-21 against a local backend whose model was a scripted stand-in (the real app and routes, not Bedrock), with headless Chromium: live cards, `?sesion=` set, datacenter in Datos and cascade playing without reload, second message on the same session, chat restored after reload, **Nueva conversación** clearing it. Also with the stand-in: a run with `step` (snapshot summary on the card), the truncation notice with **Continuar**, the 502, 429 and 503 texts, and a stream cut before `tool_result` recovered by re-reading the conversation.
 - Checked on 2026-11-22 against Bedrock (`deepseek.v3.2`) in the browser: the datacenter + R014 request (`start_session`, `add_datacenter`, `cut_lines`), a second message repairing R014 on the same session, reload, **Nueva conversación**, and a strategic run (`start_run`, `inject_event`, `step` of 3 cycles). The phone layout does not fit, as in the rest of mapa 3.
 
+**Prepared scenarios.** When `prepare_scenario` returns, the web loads its `scenario` (point, changes, lines out, substations off) as the final grid of the map. It replaces what was there, and the timeline waits paused at 0. Shared sessions are hidden from the web for now (#101): the panel no longer joins the assistant's session. See `docs/stress.md` section 7.
+
 ## 3. How it works
 
 - `Assistant.chat` runs a loop: the model answers with text or tool calls, each call runs, the result goes back, until the model answers with text, `assistant_max_steps` is reached or `assistant_deadline_s` passes.

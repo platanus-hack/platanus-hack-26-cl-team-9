@@ -17,7 +17,8 @@ export interface Session {
  * `createLoader` (loader.ts) decides which of overlapping refetches reaches the screen.
  */
 export function useSession(): Session {
-  const [sid, setSid] = useState(() => sessionIdFrom(location.search));
+  // shortcut: shared sessions are hidden from the web for now (issue #101), so ?sesion= is ignored and none starts
+  const [sid, setSid] = useState<string | null>(null);
   const [session, setSession] = useState<SessionDoc | null>(null);
   const [network, setNetwork] = useState<SessionNetwork | null>(null);
   const [state, setState] = useState<CutState | null>(null);

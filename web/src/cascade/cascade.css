@@ -127,6 +127,12 @@
 .shell .mini-figures { display: flex; gap: 8px; }
 .shell .mini-figures > div { flex: 1 1 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .shell .mini-figures b { color: var(--fg); font-size: 16px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+.shell .mini-figures.prepared b { color: var(--place); }
+/* ---- Edit a component in place (prepared scenario, docs/stress.md) ---- */
+.shell .edit-block { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+.shell .factor-input { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--fg-3); }
+.shell .factor-input input { width: 64px; margin-left: 4px; padding: 3px 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg); font: inherit; text-align: right; }
+.shell .factor-input input:focus { outline: 1px solid var(--place); }
 .shell .mini-figures b.fault { color: var(--fault); }
 .shell .mini-figures small { color: var(--muted); font-size: 12px; font-weight: 400; }
 .shell .mini-figures > div > span { color: var(--muted); font-size: 12px; line-height: 16px; }

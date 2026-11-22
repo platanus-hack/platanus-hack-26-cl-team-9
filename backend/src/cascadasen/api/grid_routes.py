@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from cascadasen.api.agent_openapi import AGENT, errors, ok
 from cascadasen.api.limits import client_ip
-from cascadasen.api.stress_schemas import PrepareIn, PrepareOut, StressChange
+from cascadasen.api.stress_schemas import PrepareIn, PrepareOut, SimulateOut, StressChange
 from cascadasen.application.grid_dependency import GridDependency
 from cascadasen.application.grid_simulation import GridSimulator, cost_workflow
 from cascadasen.application.grid_stress import MAX_CHANGES, prepare_workflow
@@ -36,13 +36,26 @@ class ComposeRequest(BaseModel):
 
 
 class SimulateRequest(BaseModel):
-    point: str
-    open_lines: list[str] = []
-    out_buses: list[str] = []
-    changes: list[StressChange] = Field(default=[], max_length=MAX_CHANGES)  # a scenario from /grids/prepare
+    """Failures to simulate on the default grid, optionally prepared with `changes`."""
+
+    point: str = Field(
+        description="Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+    )
+    open_lines: list[str] = Field(default=[], description="Lines out of service (R###).")
+    out_buses: list[str] = Field(default=[], description="Substations out of service (B###).")
+    changes: list[StressChange] = Field(
+        default=[],
+        max_length=MAX_CHANGES,
+        description="A scenario from /grids/prepare, applied before the failures.",
+    )
 
     def change_dicts(self) -> list[dict]:
         return [c.model_dump() for c in self.changes]
+
+
+PREPARE_ERRORS = errors(
+    {404: "Unknown point, bus, line, comuna or zone.", 422: "Invalid change or over the overlay limits."}
+)
 
 
 def _simulator(request: Request) -> GridSimulator:
@@ -94,7 +107,17 @@ def document(key: str, request: Request) -> Response:
     return Response(data, media_type="application/json")
 
 
-@router.post("/simulate")
+@router.post(
+    "/simulate",
+    tags=["grid-stress"],
+    operation_id="simulate_grid",
+    summary="Simulate failures on the default grid, optionally prepared",
+    description="Runs the cascade of the failures (at least one line or substation out) on the grid prepared with "
+    "`changes`. Returns the timeline, the direct loss and `supply`: per generating substation (by id) and per "
+    "zone, the people it should feed before the failure against the people it still feeds.",
+    responses=ok(SimulateOut) | PREPARE_ERRORS,
+    openapi_extra=AGENT,
+)
 def simulate(body: SimulateRequest, request: Request) -> dict:
     s = request.app.state.settings
     request.app.state.limiter.check("simulate", client_ip(request), s.rate_cuts_per_minute, 60.0)
@@ -133,11 +156,6 @@ def cost(body: DependencyRequest, request: Request) -> dict:
     return _run(
         cost_workflow, _simulator(request), body.point, body.open_lines, body.out_buses, body.change_dicts()
     )
-
-
-PREPARE_ERRORS = errors(
-    {404: "Unknown point, bus, line, comuna or zone.", 422: "Invalid change or over the overlay limits."}
-)
 
 
 @router.post(

@@ -14,7 +14,7 @@ from cascadasen.mcp.tools import Sub50Tools
 log = logging.getLogger(__name__)
 
 EXCLUDED = frozenset({"end_session"})  # destructive: the web has its own delete button
-NO_SESSION_NEEDED = frozenset({"start_session", "join_session", "list_options"})
+NO_SESSION_NEEDED = frozenset({"start_session", "join_session", "list_options", "prepare_scenario"})
 NEEDS_RUN = frozenset({"inject_event", "submit_action"})  # a run is opened for them when none is active
 MAX_STEP_CYCLES = 24  # a step of many cycles can outlast the request deadline
 USER_SIZED = frozenset({"add_datacenter", "add_generator"})  # their MW must come from the user
