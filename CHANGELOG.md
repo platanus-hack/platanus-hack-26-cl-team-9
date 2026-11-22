@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): Historial de cambios is back, Incidentes leaves the rail, and the assistant's changes are always simulated
+
+- **Changed:** `CascadeApp` again keeps the adjustments (`diffEdits`), builds `historyEntries` (adjustments with `withPrepared`, cascade falls, attack cycles) and shows `ChangePanel` in a "Historial de cambios" rail item; opening a scenario empties it. The "Incidentes" rail item is removed (the incident code stays). `edited` counts the scenario `changes`, so a scenario with changes and no failure (every thermal plant off) shows Simulación and the timeline instead of the cold start card; `applyScenario` opens Simulación and asks for autoplay.
+- **Why:** user request. The backend already simulates changes without a failure (#146): all thermal off at nov2026-1300 gives a 20 s timeline with no event (the grid holds); all solar off opens 6 lines.
+- **Agents:** a run with no event does not autoplay (`_arrived`); the card shows that the grid holds and Play replays it.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · feat(web): bring back the Ciberataque monitor from #122 (difficulty, attack tags on the map, cycle timeline)
 
 - **Changed:** `web/src/cyber/*` is back to its #122 version (before the #142 merge, #147), keeping #144's one-figure-per-row Salud de la red. `CascadeApp` again wires the monitor: `useCyber(speed)`, the cycle's grid on the map with Carga colours, `CyberMapTags`, `PrefaultHealth` for "Antes del ataque" (`nov2026-1300`), the selected component card, and selecting on the map opens the Componente sub-tab. `Timeline.tsx` gets `CycleRun` and `CycleCard` back (speed uses #142's segmented control); `cascade.css` gets the cycle-mark rules.
