@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clock, conditionDate, conditionName, cutName, index2, narrate, shutdownNode, substationLines, usdM } from "./text";
+import { clock, conditionDate, conditionName, cutName, errorText, hoursText, index2, narrate, OFFLINE, shutdownNode, substationLines, usdM } from "./text";
 import type { Event, Network } from "./types";
 
 describe("operating condition labels", () => {
@@ -74,5 +74,18 @@ describe("cost and health index", () => {
   it("formats the index with two decimals", () => {
     expect(index2(0.667)).toBe("0,67");
     expect(index2(0)).toBe("0,00");
+  });
+});
+
+describe("texts", () => {
+  it("says whether the outage hours are calibrated or assumed (G-07)", () => {
+    expect(hoursText({ value: 7.34, is_assumption: false })).toBe("7,34 h calibradas");
+    expect(hoursText({ value: 4, is_assumption: true })).toBe("4 h supuestas");
+    expect(hoursText({ value: 1, is_assumption: true })).toBe("1 h supuesta");
+  });
+  it("turns a network failure into Spanish", () => {
+    expect(errorText(new TypeError("Failed to fetch"))).toBe(OFFLINE);
+    expect(errorText(new Error("NetworkError when attempting to fetch resource."))).toBe(OFFLINE);
+    expect(errorText(new Error("Indica al menos una línea o una subestación"))).toBe("Indica al menos una línea o una subestación");
   });
 });

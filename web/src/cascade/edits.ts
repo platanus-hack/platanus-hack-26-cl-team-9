@@ -53,11 +53,27 @@ export const dropChange = (e: Edits, index: number): Edits => ({ ...e, changes: 
 const STORAGE_KEY = "sub50.edits.v1";
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
-/** Why: a refresh or a closed tab must not lose the changes; they live in this browser only (localStorage). */
+/**
+ * Why: a refresh or a closed tab must not lose the changes; they live in this browser only (localStorage). A reload
+ * brings them back only when the URL describes them; otherwise the page offers to restore them (`startEdits`).
+ */
 export function saveEdits(e: Edits, store: Store | undefined = globalThis.localStorage): void {
   if (!store) return;
   if (countEdits(e) === 0) store.removeItem(STORAGE_KEY);
   else store.setItem(STORAGE_KEY, JSON.stringify(e));
+}
+
+/**
+ * The changes the page opens with. The URL wins: a link's `cut` (a line, or `sub-<bus>` for a substation) is the only
+ * change. Without one the page starts clean, so a bare `/` never shows a previous visitor's cut (F-14); the changes
+ * saved in this browser come back as `restorable`, for a notice that offers to restore them.
+ */
+export function startEdits(cut: string | null, stored: Edits): { edits: Edits; restorable: Edits | null } {
+  if (cut) {
+    const node = cut.startsWith("sub-") ? cut.slice(4) : null;
+    return { edits: node ? addBus(NO_EDITS, node) : addLine(NO_EDITS, cut), restorable: null };
+  }
+  return { edits: NO_EDITS, restorable: countEdits(stored) > 0 ? stored : null };
 }
 
 /** The saved changes, or none when nothing valid is stored. */
@@ -70,4 +86,20 @@ export function loadEdits(store: Store | undefined = globalThis.localStorage): E
   } catch {
     return NO_EDITS;
   }
+}
+
+/** The backend's bounds for a card factor (`StressChange` in docs/stress.md): 0 to 5, and over 0 for a line's capacity. */
+export const MAX_FACTOR = 5;
+
+/**
+ * A factor typed in a card, or why it cannot be used. A blank or non-numeric field is an error, never 0 (A2-02:
+ * `Number("")` is 0, which the backend refuses for a line). Accepts a decimal comma.
+ */
+export function parseFactor(text: string, target: Target): { factor: number } | { error: string } {
+  const raw = text.trim().replace(",", ".");
+  const f = raw === "" ? NaN : Number(raw);
+  const lineBound = target === "lines";
+  const range = lineBound ? "mayor que 0 y hasta 5" : "entre 0 y 5";
+  if (!Number.isFinite(f) || f > MAX_FACTOR || f < 0 || (lineBound && f === 0)) return { error: `Escribe un número ${range}.` };
+  return { factor: f };
 }

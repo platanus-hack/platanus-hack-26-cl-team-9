@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_POINT, syncedSearch } from "./url";
+import { DEFAULT_POINT, resolvePoint, syncedSearch, urlCutOf } from "./url";
+import { NO_EDITS } from "./edits";
 
 const base = { pointId: DEFAULT_POINT, cut: null, sid: null };
 
@@ -34,5 +35,21 @@ describe("syncedSearch", () => {
   });
   it("a session is always Chile's: no pais", () => {
     expect(syncedSearch("?sesion=abc&pais=PER", { ...base, sid: "abc", country: "PER" })).toBe("?sesion=abc");
+  });
+});
+
+describe("URL of the changes", () => {
+  it("writes one line or one substation shutdown, nothing else (A-03)", () => {
+    expect(urlCutOf(NO_EDITS)).toBeNull();
+    expect(urlCutOf({ lines: ["R239"], buses: [] })).toBe("R239");
+    expect(urlCutOf({ lines: [], buses: ["B012"] })).toBe("sub-B012");
+    expect(urlCutOf({ lines: ["R1", "R2"], buses: [] })).toBeNull();
+    expect(urlCutOf({ lines: ["R1"], buses: ["B1"] })).toBeNull();
+    expect(urlCutOf({ lines: ["R1"], buses: [], changes: [{ target: "demand", buses: ["B1"], factor: 2 }] })).toBeNull();
+  });
+  it("falls back to the default point when the link names an unknown one (A-01)", () => {
+    expect(resolvePoint("xxx", ["nov2026-1300", "feb2025-1500"])).toEqual({ pointId: DEFAULT_POINT, unknown: "xxx" });
+    expect(resolvePoint("feb2025-1500", ["nov2026-1300", "feb2025-1500"])).toEqual({ pointId: "feb2025-1500", unknown: null });
+    expect(resolvePoint(null, [])).toEqual({ pointId: DEFAULT_POINT, unknown: null });
   });
 });

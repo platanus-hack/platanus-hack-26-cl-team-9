@@ -3,12 +3,12 @@ import { loadOutageCost, type OutageCost, type Prepared, type SimulationResult }
 import { impactAt } from "./simulation";
 import type { Edits, StressChange } from "./edits";
 import { changesOf, countEdits, countFailures } from "./edits";
-import { formatPeople, int, lineName, pct, placeName } from "./text";
+import { errorText, formatPeople, hoursText, int, lineName, pct, placeName, secs } from "./text";
 import type { BusState, Network, Timeline } from "./types";
 import { Info } from "./ui";
 
 /**
- * Tab "Estado de la red": every change made to the grid, kept together so that a new cut adds to the others and
+ * Tab "Cambios" (it was "Estado de la red"): every change made to the grid, kept together so that a new cut adds to the others and
  * never replaces them. Each one can be put back alone, or all at once.
  */
 export function NetworkState({ network, buses, point, edits, result, timeline, restoreLine, restoreBus, restoreAll, prepared, dropChange }: {
@@ -85,11 +85,11 @@ function CascadeLines({ network, timeline }: { network: Network; timeline: Timel
       <div className="card-head"><div className="title"><h3>Consecuencias en la red · {opened.length + collapsed.length}</h3></div></div>
       {opened.length > 0 && <div className="list-head"><span>Líneas abiertas por sobrecarga · {opened.length}</span><span>segundo</span></div>}
       {opened.map(({ id, t }) => (
-        <div className="state-row" key={id}><span className="ellipsis" title={lineName(network, id)}>{lineName(network, id)}</span><span className="num">{t.toFixed(1)} s</span></div>
+        <div className="state-row" key={id}><span className="ellipsis" title={lineName(network, id)}>{lineName(network, id)}</span><span className="num">{secs(t)} s</span></div>
       ))}
       {collapsed.length > 0 && <div className="list-head"><span>Islas apagadas · {collapsed.length}</span><span>segundo</span></div>}
       {collapsed.map((e, k) => (
-        <div className="state-row" key={k}><span className="ellipsis">{int(Number(e.params.buses))} subestaciones, {int(Number(e.params.load_mw))} MW · {REASON[String(e.params.reason)] ?? String(e.params.reason)}</span><span className="num">{e.t.toFixed(1)} s</span></div>
+        <div className="state-row" key={k}><span className="ellipsis">{int(Number(e.params.buses))} subestaciones, {int(Number(e.params.load_mw))} MW · {REASON[String(e.params.reason)] ?? String(e.params.reason)}</span><span className="num">{secs(e.t)} s</span></div>
       ))}
       <p className="meta">Estas no las cortaste tú: las abre el motor cuando una línea supera el 120 % de su capacidad, o se apagan cuando una isla pierde la frecuencia o la tensión.</p>
     </div>
@@ -102,16 +102,18 @@ const REASON: Record<string, string> = {
 
 /**
  * Final result of the cascade, read with the same `impactAt` the Simulación tab uses at its last second, so both tabs give
- * the same figures. The cost comes from the backend (`POST /grids/cost`): total, per hour of outage, and blackout or load shedding.
+ * the same figures. The cost comes from the timeline's own summary when it has one (the cache and the server simulation
+ * write it, F-17, G-14); only an older timeline asks the backend (`POST /grids/cost`).
  */
 function Outcome({ timeline, buses, point, edits }: { timeline: Timeline; buses: Record<string, BusState>; point: string; edits: Edits }) {
   const end = impactAt(timeline, buses, timeline.duration_s);
   const dark = timeline.events.filter((e) => e.type === "island_blackout").length;
-  const cost = useOutageCost(point, edits);
+  const own = summaryCost(timeline, end.share);
+  const cost = useOutageCost(point, edits, !own);
   return (
     <div className="card impact">
       <div className="card-head">
-        <div className="title"><h3>Resultado de la caída</h3><Info tip="Estado final de la red tras la cascada, calculado por el motor Sub50 con todos los cambios de esta lista. Es la misma cifra que Simulación muestra al final." /></div>
+        <div className="title"><h3>Al final de la caída</h3><Info tip="Estado final de la red tras la cascada, calculado por el motor Sub50 con todos los cambios de esta lista. Es la misma cifra que Simulación muestra al final." /></div>
         <span className="share">{pct(end.share)} del país</span>
       </div>
       <div className="people">{int(end.people)}</div>
@@ -121,7 +123,29 @@ function Outcome({ timeline, buses, point, edits }: { timeline: Timeline; buses:
         <div><div className="value-row"><b>{int(end.lostGenMw)} <small>MW</small></b></div><span>generación perdida</span></div>
         <div><div className="value-row"><b>{dark}</b></div><span>{dark === 1 ? "isla apagada" : "islas apagadas"}</span></div>
       </div>
-      <CostRow cost={cost} />
+      {own ? <SummaryCostRow cost={own} /> : <CostRow cost={cost} />}
+    </div>
+  );
+}
+
+interface OwnCost { usd: number; mwh: number | null; hours: { value: number; is_assumption: boolean }; kind: string }
+
+/** The failure cost the engine wrote in the timeline summary (CNE failure cost, `docs/health.md` "Cost"), or null without it. */
+export function summaryCost(timeline: Timeline, share: number): OwnCost | null {
+  const s = timeline.summary;
+  if (s.failure_cost_usd == null || !s.outage_duration_h) return null;
+  const dark = timeline.events.some((e) => e.type === "island_blackout");
+  const kind = !dark ? "corte parcial de carga (EDAC)" : share >= 0.9 ? "apagón total" : "apagón parcial";
+  return { usd: s.failure_cost_usd, mwh: s.unserved_energy_mwh ?? null, hours: s.outage_duration_h, kind };
+}
+
+function SummaryCostRow({ cost }: { cost: OwnCost }) {
+  const tip = `Valoración regulatoria (costo de falla CNE, 8,79 US$/kWh) de la energía no servida, con ${hoursText(cost.hours)} de corte. No es la pérdida económica medida.`;
+  return (
+    <div className="mini-figures ruled">
+      <div><div className="value-row"><b>US$ {formatPeople(cost.usd)}</b><Info tip={tip} /></div><span>costo de la caída</span></div>
+      <div><div className="value-row"><b>US$ {formatPeople(cost.usd / Math.max(cost.hours.value, 1e-9))}</b></div><span>por hora de corte</span></div>
+      <div><div className="value-row"><b>{cost.mwh == null ? "s/d" : <>{int(cost.mwh)} <small>MWh</small></>}</b></div><span>{cost.kind} · {hoursText(cost.hours)}</span></div>
     </div>
   );
 }
@@ -138,22 +162,23 @@ function CostRow({ cost }: { cost: CostState }) {
     <div className="mini-figures ruled">
       <div><div className="value-row"><b>US$ {formatPeople(c.cost_usd)}</b><Info tip={tip} /></div><span>costo de la caída</span></div>
       <div><div className="value-row"><b>US$ {formatPeople(c.cost_per_hour_usd)}</b></div><span>por hora de corte</span></div>
-      <div><div className="value-row"><b>{int(c.energy_not_served_mwh)} <small>MWh</small></b></div><span>{kind} · {c.outage_hours.value} h</span></div>
+      <div><div className="value-row"><b>{int(c.energy_not_served_mwh)} <small>MWh</small></b></div><span>{kind} · {hoursText(c.outage_hours)}</span></div>
     </div>
   );
 }
 
 type CostState = { state: "loading" | "ready" | "pending" | "error"; value: OutageCost | null; error?: string };
 
-function useOutageCost(point: string, edits: Edits): CostState {
+function useOutageCost(point: string, edits: Edits, enabled: boolean): CostState {
   const [cost, setCost] = useState<CostState>({ state: "loading", value: null });
-  const key = `${point}|${edits.lines.join(",")}|${edits.buses.join(",")}|${JSON.stringify(changesOf(edits))}`;
+  const key = `${point}|${edits.lines.join(",")}|${edits.buses.join(",")}|${JSON.stringify(changesOf(edits))}|${enabled}`;
   useEffect(() => {
+    if (!enabled) return;
     let live = true;
     setCost({ state: "loading", value: null });
     loadOutageCost({ point, open_lines: edits.lines, out_buses: edits.buses, changes: changesOf(edits) })
       .then((value) => live && setCost({ state: value ? "ready" : "pending", value }))
-      .catch((e) => live && setCost({ state: "error", value: null, error: String(e.message) }));
+      .catch((e) => live && setCost({ state: "error", value: null, error: errorText(e) }));
     return () => { live = false; };
   }, [key]);
   return cost;

@@ -1,3 +1,4 @@
+import { HEAT_ENDS, HEAT_OPTIONS, heatGradient, type HeatKind } from "./heat";
 import { DEAD_LINE, FAULT, LOAD_BANDS, OPEN_LINE, VOLTAGE_TIERS, loadColor, type ColorMode } from "./layers";
 import type { Frame, Network } from "./types";
 import { Chevron } from "./ui";
@@ -6,10 +7,12 @@ import { Chevron } from "./ui";
  * Legend card at the bottom right (Design v5). It lists line samples, never a segmented bar. The load legend always
  * shows the same six items; items absent from the current frame keep a 40 % swatch.
  */
-export function MapLegend({ mode, setMode, network, frame, cascade = false, justDark = false }: {
+export function MapLegend({ mode, setMode, network, frame, cascade = false, justDark = false, heat = null }: {
   mode: ColorMode; setMode(m: ColorMode): void; network: Network; frame: Frame | undefined;
   /** A cut's timeline is on the map: show the ring for substations that just lost supply (`justDark`: one is pulsing now). */
   cascade?: boolean; justDark?: boolean;
+  /** The active heat map, so its key stays visible once the layers popover closes (A2-07): pending while the server computes it. */
+  heat?: { kind: Exclude<HeatKind, "none">; pending: boolean; error: string | null } | null;
 }) {
   return (
     <section className="legend-card" aria-label="Leyenda">
@@ -25,6 +28,7 @@ export function MapLegend({ mode, setMode, network, frame, cascade = false, just
       </div>
       {mode === "voltage" ? <VoltageSamples network={network} /> : <LoadSamples network={network} frame={frame} />}
       {cascade && <div className="samples just-dark"><Sample label="recién sin suministro" absent={!justDark} fault ring /></div>}
+      {heat && <HeatKey {...heat} />}
       <p className="legend-foot">
         {mode === "voltage"
           ? `Red del modelo: ${network.lines.length} líneas entre ${network.nodes.length} subestaciones, en línea recta. El panel cuenta toda la red de IDE Energía.`
@@ -70,6 +74,21 @@ function Sample({ label, style, absent = false, fault = false, dashed = false, r
           : <span className="swatch" style={style} />}
       </span>
       <span>{label}</span>
+    </div>
+  );
+}
+
+/** Key of the active heat map: its name and its ramp from low to high, or the server's progress while it computes. */
+function HeatKey({ kind, pending, error }: { kind: Exclude<HeatKind, "none">; pending: boolean; error: string | null }) {
+  const name = HEAT_OPTIONS.find((o) => o.kind === kind)?.label ?? "";
+  const [low, high] = HEAT_ENDS[kind];
+  return (
+    <div className="heat-key">
+      <span className="heat-name">Mapa de calor: {name.toLowerCase()}</span>
+      {error ? <span className="heat-status" role="alert">{error}</span> : pending ? <span className="heat-status" role="status">Calculando en el servidor…</span> : <>
+        <span className="heat-ramp" style={{ background: heatGradient(kind) }} />
+        <span className="heat-ends"><span>{low}</span><span>{high}</span></span>
+      </>}
     </div>
   );
 }

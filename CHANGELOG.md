@@ -1,6 +1,18 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): autoplay, colour by tab, a cold start card and honest readouts in the map shell
+
+- **Changed:** Fixes from the UI audit, work package 1 of 4 (the map shell, `web/src/cascade` and `web/src/map`).
+  - **Behaviour:** a cut, a shutdown, a Desastres entry, a `?cut=` link or a new hour with changes in force now plays by itself (paused after Prender todo, Reponer, Restaurar and with `prefers-reduced-motion`). Line colour follows the tab (Red is Tensión, Simulación is Carga, Cambios keeps it; other countries always Tensión). A bare `/` opens on Simulación with a first card: the question, a search field for lines and substations (`search.ts`, also the keyboard route to a cut) and "Ver el apagón del 25 feb 2025".
+  - **Names:** tabs are "Simulación | Red | Cambios" ("Estado de la red" renamed, with a count); the rail folder "Benchmark" is "Condiciones" (accessible name "Condiciones de operación"); "Fuentes de la grilla" is "Redes disponibles"; rail order is Mapa, Escenarios, Incidentes, Ciberataque, Asistente, then Redes disponibles, Fuentes y supuestos, Ayuda. "Mapa" is highlighted only when no rail view is open.
+  - **Readouts:** "apagón" replaces "50,00 Hz" when every bus is dark; "Apagón 25F" shows 25 feb 2025 · 15:16; cost and index sit under "Al final de la simulación" with the real hours ("7,34 h calibradas"); a row gives the real event's figure for each Desastres entry; clock and position share one rounding; each island has its own stroke pattern.
+  - **Bugs:** `?point=xxx`, an unknown `?pais=` or `?cut=` show a notice and a normalised URL instead of hanging; a single shutdown is kept in the URL as `cut=sub-<id>`; a failed simulation leaves the loading state with "Reintentar"; the Red tab no longer renders empty; a blank factor no longer commits 0; the chosen history row stays current; saved changes no longer come back on a bare `/` (a notice offers "Restaurar").
+  - The timeline card and "Prender todo" are not rendered when there is nothing to play or restore; the impact card has "Copiar enlace".
+- **Why:** The audit's top findings: the flagship 25F case opened paused on "0 personas", showed a healthy frequency during a total blackout and a wrong date, and the Red tab's voltage key sat next to a map coloured by load. Baseline scores were UI 6.3, UX 5.1, usability 5.2 of 10.
+- **Agents:** The rules above replace older text: `docs/mapa3.md` sections 2 to 5 and 11, `docs/design.md` and `web/README.md` are updated, and `docs/mapa3.md` also carries the incident, cyber and session text of the previous commit. `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` are NOT re-pointed yet: two more packages (visual polish, accessibility and small windows) will move the same files, and the last one re-points them. `pickAll` on the base map returns every element under a click. "Copiar enlace" hides when the URL cannot describe the view (several changes).
+- **Files:** `web/src/cascade/*` (new `search.ts`), `web/src/map/baseMap.ts`, `docs/{mapa3,design,grids,stress,dependency,engine,code-map}.md`, `web/README.md`.
+
 ## 2026-11-22 · fix(web): incident, cyber, assistant and session views after the UI audit
 
 - **Changed:** Fixes from a UI audit (browser testers and design reviewers), work package 2 of 4.

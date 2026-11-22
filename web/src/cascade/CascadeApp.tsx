@@ -10,7 +10,7 @@ import { loadBuses, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./a
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourcePick } from "./GridSources";
-import { addBus, addLine, changesOf, countFailures, dropBus, dropChange, dropLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits, setFactor, type Edits, type StressChange, type Target } from "./edits";
+import { addBus, changesOf, countEdits, countFailures, dropBus, dropChange, dropLine, addLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits, setFactor, startEdits, type Edits, type StressChange, type Target } from "./edits";
 import { composeGrid, loadContextDocument, loadDependency, prepareScenario, simulateGrid, type Prepared, type SimulationResult } from "./gridsApi";
 import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
@@ -22,12 +22,12 @@ import { NetworkPicker } from "./NetworkPicker";
 import { summaryFromGrid, summaryFromManifest } from "./networkSummary";
 import { NetworkState } from "./NetworkState";
 import { batches, isSwitchedOff } from "./outage";
-import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
+import { activeDisaster, DISASTERS, ScenarioTree, type ScenarioChoice, type ScenarioKind } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
-import { SimulationPanel } from "./SimulationPanel";
+import { ColdStartCard, SimulationPanel } from "./SimulationPanel";
 import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, recentDarkAt, timeWarp, type Marker } from "./simulation";
-import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
+import { clock, conditionName, errorText, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
 import type { BusState, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
 import { Icon, TipLayer, Wordmark } from "./ui";
@@ -43,16 +43,18 @@ import { IncidentPanel } from "../incidents/IncidentPanel";
 import { useIncident } from "../incidents/useIncident";
 import { CyberPanel } from "../cyber/CyberPanel";
 import { useCyber } from "../cyber/useCyber";
-import { DEFAULT_POINT, syncedSearch } from "./url";
+import { DEFAULT_POINT, resolvePoint, syncedSearch, urlCutOf } from "./url";
 import "./cascade.css";
 import "../session/session.css";
 
 type Tab = "estado" | "red" | "sim" | "datos";
 type View = "tabs" | "sources" | "help" | "session" | "assistant" | "incidents" | "cyber" | "upload";
-// "Qué lo habría evitado" and "Validación" are not built yet and left out so the four tabs fit the 440 px panel.
-const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"]];
-// In a session Datos replaces Estado de la red: the session owns its changes.
-const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"]];
+// Simulación first, the default tab (D6, D8). "estado" is the Cambios tab (it was "Estado de la red"), with its count.
+const TABS: Tab[] = ["sim", "red", "estado"];
+// In a session Datos replaces Cambios: the session owns its changes.
+const SESSION_TABS: Tab[] = ["sim", "red", "datos"];
+const TAB_NAME: Record<Tab, string> = { sim: "Simulación", red: "Red", estado: "Cambios", datos: "Datos" };
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const PINNED = "En una sesión el punto está fijo; corta y repara líneas en el mapa y en Simulación.";
 const SESSION_NETWORK = "Una sesión compartida usa la red de Chile.";
 // Networks shipped with the build: Chile plus every country whose drawn layer exists (docs/regional.md).
@@ -85,6 +87,9 @@ export function CascadeApp() {
   // ?pais=<ISO3> opens that country's network; a session is always Chile's (its API is Chile-only).
   const startNetwork = s.sid ? DEFAULT_COUNTRY : networkFromParam(params.get("pais"), AVAILABLE.map((n) => n.id));
   const startCut = s.sid || startNetwork !== DEFAULT_COUNTRY ? null : params.get("cut"); // a session owns its cut
+  // A link's cut is the only change; without one the page starts clean and offers the changes saved in this browser (F-14).
+  const start = useMemo(() => (s.sid ? { edits: NO_EDITS, restorable: null } : startEdits(startCut, loadEdits())), []);
+  const [restorable, setRestorable] = useState<Edits | null>(start.restorable);
   const [index, setIndex] = useState<Index | null>(null);
   const [pointId, setPointId] = useState(params.get("point") ?? DEFAULT_POINT);
   const [network, setNetwork] = useState<Network | null>(null);
@@ -93,20 +98,28 @@ export function CascadeApp() {
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
   // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
-  // A link's cut wins; otherwise the changes saved in this browser come back (a refresh never loses them).
-  const [edits, setEdits] = useState<Edits>(() => (s.sid ? NO_EDITS : !startCut ? loadEdits() : shutdownNode(startCut) ? addBus(NO_EDITS, shutdownNode(startCut)!) : addLine(NO_EDITS, startCut)));
+  const [edits, setEdits] = useState<Edits>(start.edits);
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   // The prepared grid of the scenario's changes (POST /grids/prepare), keyed like the changes it belongs to.
   const [prepared, setPrepared] = useState<{ key: string; value: Prepared } | null>(null);
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [tab, setTab] = useState<Tab>(startCut ? "sim" : "red");
+  // Playback starts by itself when the next timeline arrives (D1): after a cut or shutdown, a Desastres entry, a `?cut=`
+  // link, or another hour picked while changes are in force. Never after Prender todo or a restore, nor with reduced motion.
+  const autoplay = useRef(!!startCut);
+  // Simulación is the default tab (D8); another country's network opens on Red, the only tab it has.
+  const [tab, setTab] = useState<Tab>(startNetwork !== DEFAULT_COUNTRY ? "red" : "sim");
   const [view, setView] = useState<View>("tabs");
-  // Desastres (a cut) open on Carga, Benchmark (no cut) on Tensión, also when the rail picks them (chooseTab).
-  const [colorMode, setColorMode] = useState<ColorMode>("load"); // every scenario starts on Carga
+  // Line colour follows the tab (D2): Red is Tensión, Simulación is Carga, Cambios keeps what is on (chooseTab). A choice
+  // made in the legend lasts until the next tab change or scenario open. A network other than Chile is always Tensión.
+  const [colorMode, setColorMode] = useState<ColorMode>(startNetwork !== DEFAULT_COUNTRY ? "voltage" : "load");
   const [selection, setSelection] = useState<Pick | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(() => countryNotice(params.get("pais"), startNetwork, !!s.sid));
+  // The rail folder the user picked from last, so a condition picked with a disaster's changes is the one highlighted.
+  const [lastPick, setLastPick] = useState<ScenarioKind>("disaster");
+  // A failed simulation of the changes, keyed like the timeline it was for: the panel offers "Reintentar" (C-03).
+  const [simError, setSimError] = useState<{ key: string; message: string } | null>(null);
   const mode: ViewMode = "2d"; // the map is 2D only (#115: the 3D view was removed)
   const [toggles, setToggles] = useState<Toggles>({ flow: true, demand: false });
   const [layersOpen, setLayersOpen] = useState(false);
@@ -179,7 +192,7 @@ export function CascadeApp() {
   const heatKey = `${pointId}|${[...cuts].sort()}|${[...outBuses].sort()}|${JSON.stringify(changes)}`;
   const heatData = dependency?.key === heatKey ? dependency.nodes : null;
   const heatLayerList = useMemo<Layer[]>(() => (network ? heatLayers(heat, heatPoints(heat, network, buses, heatData)) : []), [heat, network, buses, heatData]);
-  const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, colorMode) : []), [shownGrid, colorMode]);
+  const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, "voltage") : []), [shownGrid]); // view only: always Tensión (D2)
   const contextLayers = useMemo<Layer[]>(() => (isChile && contextGrid ? buildRegionalLayers(contextGrid, colorMode) : []), [isChile, contextGrid, colorMode]);
 
   const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 0;
@@ -192,26 +205,33 @@ export function CascadeApp() {
   const panelBodyRef = useRef<HTMLDivElement>(null);
   const timelineRequest = useRef("");
   const incidentOn = useRef(false); // an incident cascade is on the map
+  const heatRequest = useRef<string | null>(null); // the grid key a dependency request is in flight for (A2-09)
+  const pointChecked = useRef(false);
+  const cutChecked = useRef(false);
 
-  useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
+  useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(errorText(e))); }, []);
+  useEffect(() => _checkPoint(), [index]);
   // Only Chile by default; another network replaces it on the map when picked in the header or in Fuentes de la grilla.
   useEffect(() => { listUploads().then(setUploads).catch((e) => { console.warn("listing stored uploads failed", e); /* no local storage: uploads last for the visit */ }); }, []);
   useEffect(() => { if (s.sid && networkId !== DEFAULT_COUNTRY) chooseNetwork(DEFAULT_COUNTRY); }, [s.sid]);
   useEffect(() => _loadShown(), [networkId, uploads]);
   useEffect(() => _fitNetwork(), [networkId, network, shownGrid]);
-  useEffect(() => { if (!s.sid) saveEdits(edits); }, [edits, s.sid]);
+  // While the saved changes wait for "Restaurar", the clean start does not overwrite them; the first change does.
+  useEffect(() => { if (!s.sid && !(restorable && countEdits(edits) === 0)) saveEdits(edits); }, [edits, s.sid, restorable]);
+  useEffect(() => { if (countEdits(edits) > 0) setRestorable(null); }, [edits]);
   useEffect(() => _loadHeat(), [heat, heatKey]);
   useEffect(() => { if (!s.sid && !composed) _loadPoint(); }, [pointId, index, s.sid, composed]);
-  useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
+  // A link's unknown cut is dropped before its timeline is asked for, so the request never races the notice.
+  useEffect(() => { if (!s.sid && !_checkCut()) _loadTimeline(); }, [pointId, edits, network, s.sid]);
   useEffect(() => _loadPrepared(), [pointId, JSON.stringify(changes)]);
   // Pre-fault health of the base point; null when the cache predates it. Hidden in a session or a composed grid: they change the network.
   useEffect(() => { let live = true; setHealth(null); loadHealth(pointId).then((h) => { if (live) setHealth(h); }); return () => { live = false; }; }, [pointId]);
   useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
-  useEffect(() => { if (s.state) { timelineRequest.current = "session"; setLoaded({ key: "session", timeline: s.state.timeline }); setT(0); setPlaying(s.state.open_lines.length > 0); } }, [s.state]);
+  useEffect(() => { if (s.state) { timelineRequest.current = "session"; setLoaded({ key: "session", timeline: s.state.timeline }); setT(0); setPlaying(s.state.open_lines.length > 0 && !reducedMotion()); } }, [s.state]);
   useEffect(() => _onSessionChange(), [s.sid]);
   // Choosing an incident cycle plays its cascade from 0; leaving it goes back to the session's timeline, paused at 0.
   useEffect(() => {
-    if (incidentTl) { incidentOn.current = true; seek(0); setPlaying(true); setColorMode("load"); }
+    if (incidentTl) { incidentOn.current = true; seek(0); setPlaying(!reducedMotion()); setColorMode("load"); }
     else if (incidentOn.current) { incidentOn.current = false; seek(0); setPlaying(false); }
   }, [incidentTl]);
   useEffect(() => _mountMap(), []);
@@ -234,7 +254,37 @@ export function CascadeApp() {
       setNetwork(n); setBuses(b); setError(null);
       // The 2025 and 2026 networks share line and substation ids; drop a selection only if the new network lacks it.
       setSelection((s) => (s && (s.kind === "line" ? n.lines : n.nodes).some((x) => x.id === s.id) ? s : null));
-    }).catch((e) => setError(String(e.message)));
+    }).catch((e) => setError(errorText(e)));
+  }
+
+  /**
+   * A link's `?point=` that the index does not know falls back to the default point with a notice, and the URL is
+   * normalised by `_syncUrl` (A-01). Checked once, when the index arrives.
+   */
+  function _checkPoint() {
+    if (!index || pointChecked.current) return;
+    pointChecked.current = true;
+    const r = resolvePoint(pointId, index.points.map((p) => p.id));
+    if (!r.unknown) return;
+    const name = conditionName(index.points.find((p) => p.id === r.pointId)?.label ?? r.pointId);
+    setPointId(r.pointId);
+    setNotice((n) => [n, `No existe la condición «${r.unknown}». Se muestra ${name}.`].filter(Boolean).join(" "));
+  }
+
+  /**
+   * A link's `?cut=` naming a line or substation the network does not have starts clean, and says so (A-04). Checked
+   * once, when the network arrives; true when it dropped the cut.
+   */
+  function _checkCut(): boolean {
+    if (!network || cutChecked.current || !startCut || s.sid) return false;
+    cutChecked.current = true;
+    const node = shutdownNode(startCut);
+    const known = node ? network.nodes.some((n) => n.id === node) : network.lines.some((l) => l.id === startCut);
+    if (known) return false;
+    autoplay.current = false;
+    setEdits(NO_EDITS);
+    setNotice(`No existe ${node ? `la subestación «${node}»` : `la línea «${startCut}»`} en la red. Se muestra la red sin cambios.`);
+    return true;
   }
 
   /**
@@ -315,7 +365,9 @@ export function CascadeApp() {
     setSelection(null);
     setNotice(null);
     setView("tabs");
+    // Another network is view only and always drawn in Tensión (D2); back on Chile the colour follows the tab again.
     if (id !== DEFAULT_COUNTRY) { setPlaying(false); setTab("red"); setColorMode("voltage"); }
+    else setColorMode(tab === "sim" ? "load" : "voltage");
   }
   /** The header picks from the app files and uploads, so it leaves a composed grid. */
   function chooseNetwork(id: string) {
@@ -339,33 +391,62 @@ export function CascadeApp() {
     deleteUpload(raw).catch((e) => { console.warn("deleting a stored upload failed", e); /* not stored: nothing to delete */ });
   }
 
-  function _loadTimeline() {
+  /**
+   * Loads the timeline of the point and the changes. The same key is never asked twice in a row: a new network object
+   * for the same point (the 2025 and 2026 networks load after the point changes) must not restart a run that already
+   * plays. `force` asks again after a failure ("Reintentar").
+   */
+  function _loadTimeline(force = false) {
     if (!network) return;
-    setPlaying(false); seek(0); // a new scenario or cut stops the previous run; the user presses play
-    timelineRequest.current = timelineKey;
     const key = timelineKey;
+    if (!force && timelineRequest.current === key) return;
+    setPlaying(false); seek(0); // a new scenario or cut stops the previous run
+    timelineRequest.current = key;
+    setSimError(null);
     if (!cached) return _simulateEdits(key);
     setSimResult(null);
     loadTimeline(pointId, cut ?? "baseline").then((tl) => {
       if (timelineRequest.current !== key) return; // a newer point or cut was asked for meanwhile
-      setLoaded({ key, timeline: tl }); setT(0); setPlaying(false);
+      _arrived(key, tl);
     }).catch((e) => {
       if (timelineRequest.current !== key) return;
-      if (!cut) return setError(String(e.message));
+      autoplay.current = false;
+      if (!cut) return setError(errorText(e));
       // A cut kept across a change of hour can lack its file at the new point: fall back to the base case and say so.
       setNotice(`No hay simulación de este corte para ${index?.points.find((x) => x.id === pointId)?.label ?? pointId}. Se muestra el caso base.`);
       setEdits(NO_EDITS);
     });
   }
 
+  /** A timeline arrived: it starts at 0, playing at 1x when autoplay was asked for and the cascade has events (D1). */
+  function _arrived(key: string, tl: Timeline) {
+    setLoaded({ key, timeline: tl });
+    seek(0);
+    const play = autoplay.current && tl.events.length > 0 && !reducedMotion();
+    autoplay.current = false;
+    if (play) setSpeed(1);
+    setPlaying(play);
+  }
+
+  /** "Reintentar" after a failed simulation: the same changes are asked for again. */
+  function retrySimulation() {
+    autoplay.current = true;
+    _loadTimeline(true);
+  }
+
   /** Dependency and criticality come from the server, computed on the grid after the changes and their cascade. */
   function _loadHeat() {
-    setHeatError(null);
     if (!needsDependency(heat) || dependency?.key === heatKey) return;
+    // Dependency and criticality come from the same answer: one request per grid key, also when the user switches
+    // between the two maps while it computes (A2-09).
+    if (heatRequest.current === heatKey) return;
+    setHeatError(null);
     const key = heatKey;
+    heatRequest.current = key;
     loadDependency({ point: pointId, open_lines: cuts, out_buses: outBuses, changes })
       .then((r) => { if (live.current.heatKey === key) setDependency({ key, nodes: r.nodes }); })
-      .catch((e) => { if (live.current.heatKey === key) setHeatError(String(e.message)); });
+      .catch((e) => { if (live.current.heatKey === key) setHeatError(errorText(e)); })
+      .finally(() => { if (heatRequest.current === key) heatRequest.current = null; });
   }
 
   /** The prepared grid of the changes, so the cards and the panel show the values the simulation will start from. */
@@ -374,17 +455,18 @@ export function CascadeApp() {
     const key = `${pointId}|${JSON.stringify(changes)}`;
     prepareScenario({ point: pointId, changes })
       .then((value) => { if (`${live.current.pointId}|${JSON.stringify(live.current.changes)}` === key) setPrepared({ key, value }); })
-      .catch((e) => setError(String(e.message)));
+      .catch((e) => setError(errorText(e)));
   }
 
   /** Why: the cache has single cuts only; two or more changes, or a prepared scenario, are simulated by the backend. */
   function _simulateEdits(key: string) {
     simulateGrid({ point: pointId, open_lines: edits.lines, out_buses: edits.buses, changes: changesOf(edits) }).then((r) => {
       if (timelineRequest.current !== key) return;
-      setError(null); setSimResult(r); setLoaded({ key, timeline: r.timeline }); setT(0); setPlaying(false);
+      setSimResult(r); _arrived(key, r.timeline);
     }).catch((e) => {
       if (timelineRequest.current !== key) return;
-      setError(`${String(e.message)} Repón un cambio en Estado de la red.`);
+      autoplay.current = false;
+      setSimError({ key, message: errorText(e) }); // the panel offers Reintentar; Prender todo and Reponer still work
     });
   }
 
@@ -398,7 +480,8 @@ export function CascadeApp() {
   function _syncUrl() {
     // Another country's network is view only: its URL names the country and carries no cut.
     const country = isUpload(networkId) ? DEFAULT_COUNTRY : networkId;
-    const search = syncedSearch(location.search, { pointId, cut: country === DEFAULT_COUNTRY ? cut : null, sid: s.sid, country });
+    // `cut` names one line or one substation (`sub-<id>`); several changes are not written (urlCutOf).
+    const search = syncedSearch(location.search, { pointId, cut: country === DEFAULT_COUNTRY ? urlCutOf(edits) : null, sid: s.sid, country });
     history.replaceState(null, "", location.pathname + search + location.hash);
   }
 
@@ -411,7 +494,7 @@ export function CascadeApp() {
           setPicking(false);
           return;
         }
-        const { action, memory } = interpretClick(pickOf(info.layer?.id ?? "", info.object), tapCount, performance.now(), live.current.selection, clickMemory.current);
+        const { action, memory } = interpretClick(_preferSelection(info), tapCount, performance.now(), live.current.selection, clickMemory.current);
         clickMemory.current = memory;
         if (action.type === "select") select(action.target);
         else if (action.type === "toggle") live.current.switchOff(action.target);
@@ -424,6 +507,18 @@ export function CascadeApp() {
     setHasLabels(map.hasLabels);
     map.setMode(live.current.mode);
     return () => map.dispose();
+  }
+
+  /**
+   * The picked element, except that a click that hits another element while the selected one is also under the pointer
+   * goes to the selection: a second click on the selected line must not lose to a nearby substation dot (F-33, G-16).
+   */
+  function _preferSelection(info: PickingInfo): Pick | null {
+    const target = pickOf(info.layer?.id ?? "", info.object);
+    const sel = live.current.selection;
+    if (!target || !sel || (target.kind === sel.kind && target.id === sel.id) || info.x == null || info.y == null) return target;
+    const all = baseMap.current?.pickAll(info.x, info.y) ?? [];
+    return all.some((i) => { const q = pickOf(i.layer?.id ?? "", i.object); return q?.kind === sel.kind && q.id === sel.id; }) ? sel : target;
   }
 
   function _tooltip(info: PickingInfo) {
@@ -444,7 +539,10 @@ export function CascadeApp() {
       const e = f?.edges[id];
       const state = e?.status === "open" ? "fuera de servicio" : e ? `${Math.abs(e.flow_mw).toLocaleString("es-CL")} MW · ${pct(e.loading)} de su capacidad` : "sin flujo calculado";
       const selected = sel?.kind === "line" && sel.id === id;
-      const hint = !selected ? "Clic para ver el detalle" : isSwitchedOff({ kind: "line", id }, net, off, !!sid) ? OFF_HINT : "Clic otra vez para cortarla";
+      const off_ = isSwitchedOff({ kind: "line", id }, net, off, !!sid);
+      // A line the user cut reads "Fuera de servicio", not "sin flujo calculado" (F-30, G-16).
+      if (off_ && !selected) return { text: `${lineName(net, id)}\nFuera de servicio · clic para ver el detalle`, style };
+      const hint = !selected ? "Clic para ver el detalle" : off_ ? OFF_HINT : "Clic otra vez para cortarla";
       return { text: `${lineName(net, id)}\n${state}\n${hint}`, style };
     }
     const n = info.object as { id: string; name: string; kv: number; zone: string };
@@ -498,8 +596,20 @@ export function CascadeApp() {
     if (root) {
       const width = root.clientWidth;
       const height = root.clientHeight;
+      // Event pins that would overlap are moved right, one after the other, so a group never covers another pin (A2-06).
+      const pins: { x: number; y: number; w: number }[] = [];
       root.querySelectorAll<HTMLElement>("[data-lon]").forEach((el) => {
-        const [x, y] = map.project(Number(el.dataset.lon), Number(el.dataset.lat));
+        let [x, y] = map.project(Number(el.dataset.lon), Number(el.dataset.lat));
+        const pin = el.classList.contains("map-event") ? el.querySelector<HTMLElement>(".pin") : null;
+        if (pin) {
+          const w = pin.offsetWidth || 20;
+          for (let k = 0; k < 12; k++) {
+            const hit = pins.find((q) => Math.abs(q.y - y) < 24 && Math.abs(q.x - x) < (q.w + w) / 2 + 3);
+            if (!hit) break;
+            x = hit.x + (hit.w + w) / 2 + 3;
+          }
+          pins.push({ x, y, w });
+        }
         el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
         el.classList.toggle("flip", x > width - 340);
         el.classList.toggle("up", y > height - 300);
@@ -507,13 +617,14 @@ export function CascadeApp() {
       // The first event keeps a short label, unless it would sit under the current event's callout.
       const label = root.querySelector<HTMLElement>(".pin-label");
       const callout = root.querySelector<HTMLElement>(".callout");
+      // It also hides when it would cover another pin, now that colliding pins are spread apart beside each other.
       if (label) {
         label.style.visibility = "";
-        if (callout) {
-          const a = label.getBoundingClientRect(), b = callout.getBoundingClientRect();
-          const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-          label.style.visibility = overlap ? "hidden" : "";
-        }
+        const a = label.getBoundingClientRect();
+        const hits = (b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        const own = label.parentElement?.querySelector(".pin");
+        const covers = (callout && hits(callout.getBoundingClientRect())) || [...root.querySelectorAll(".map-event .pin")].some((pin) => pin !== own && hits(pin.getBoundingClientRect()));
+        label.style.visibility = covers ? "hidden" : "";
       }
     }
     const scale = scaleRef.current;
@@ -523,6 +634,7 @@ export function CascadeApp() {
       const km = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500, 1000].filter((k) => (k * 1000) / metersPerPx <= 110).pop() ?? 1;
       (scale.firstElementChild as HTMLElement).style.width = `${((km * 1000) / metersPerPx).toFixed(0)}px`;
       (scale.lastElementChild as HTMLElement).textContent = `${km.toLocaleString("es-CL")} km`;
+      scale.classList.add("ready"); // nothing is drawn before the camera exists (G-27)
     }
   }
 
@@ -554,11 +666,9 @@ export function CascadeApp() {
     setSelection(null); // the impact card names the cut and stays at the top of the panel
     setNotice(null);
     inc.stop();
-    if (!s.sid) setEdits((e) => addLine(e, id));
+    if (!s.sid) { autoplay.current = true; setEdits((e) => addLine(e, id)); }
     else if (!s.state?.open_lines.includes(id)) s.edit((sid, rev) => cutLines(sid, [id], rev));
-    setView("tabs");
-    setTab("sim");
-    setColorMode("load");
+    chooseTab("sim");
   }
 
   /**
@@ -570,14 +680,12 @@ export function CascadeApp() {
     setSelection(null);
     setNotice(null);
     inc.stop();
-    if (!s.sid) setEdits((e) => addBus(e, id));
+    if (!s.sid) { autoplay.current = true; setEdits((e) => addBus(e, id)); }
     else if (network) {
       const closed = substationLines(network, id).filter((l) => !s.state?.open_lines.includes(l));
       if (closed.length) s.edit(async (sid, rev) => { for (const group of batches(closed)) rev = (await cutLines(sid, group, rev)).dataset_revision; });
     }
-    setView("tabs");
-    setTab("sim");
-    setColorMode("load");
+    chooseTab("sim");
   }
 
   /**
@@ -586,10 +694,19 @@ export function CascadeApp() {
    */
   function restore(lines?: string[]) {
     setNotice(null);
+    autoplay.current = false; // back towards the base case: the timeline waits at 0
     if (!s.sid) setEdits((e) => (lines ? lines.reduce(dropLine, e) : NO_EDITS));
     else s.edit((sid, rev) => repairLines(sid, lines ? { lines } : { all: true }, rev));
   }
-  function restoreBus(id: string) { setEdits((e) => dropBus(e, id)); }
+  function restoreBus(id: string) { autoplay.current = false; setEdits((e) => dropBus(e, id)); }
+
+  /** "Restaurar" in the notice: the changes saved in this browser come back, paused at 0. */
+  function restoreSaved() {
+    if (!restorable) return;
+    autoplay.current = false;
+    setEdits(restorable);
+    setRestorable(null);
+  }
   /** Second click on the selected element: switch it off, unless it already is (switching on is only from the card). */
   function switchOff(pick: Pick) {
     if (!network || isSwitchedOff(pick, network, offState, !!s.sid)) return;
@@ -624,6 +741,7 @@ export function CascadeApp() {
       setPlaying(false);
       return;
     }
+    autoplay.current = false;
     const next = powerAll({ pointId, cut, selection, t: live.current.t, playing: live.current.playing });
     setEdits(NO_EDITS); // every change goes, lines and substations
     setSelection(next.selection);
@@ -659,10 +777,12 @@ export function CascadeApp() {
     if (v.duration > 0 && v.t >= v.duration - 1e-6) { seek(0); setPlaying(true); } else setPlaying(!v.playing);
   }
 
+  /** Opens a tab; the line colour follows it (D2): Red is Tensión, Simulación is Carga, Cambios and Datos keep it. */
   function chooseTab(next: Tab) {
     setView("tabs");
     setTab(next);
-    // the colour mode stays: every scenario starts on Carga and the user may switch it
+    if (next === "red") setColorMode("voltage");
+    else if (next === "sim") setColorMode("load");
   }
 
   function seek(time: number) {
@@ -674,58 +794,75 @@ export function CascadeApp() {
     pickRef.current = onPoint;
     setPicking(true);
   }
+  /**
+   * A Desastres entry replaces the changes, opens Simulación and plays (D1). A condition keeps the failures and the tab
+   * (so a cut keeps its result on Simulación, B3-03, F-19), and plays when failures are in force. A prepared scenario
+   * never carries over. Opening the disaster already on the map replays it from 0.
+   */
   function openScenario(next: ScenarioChoice) {
     if (!current.simulable) return;
     setSelection(null);
     setNotice(null);
+    setLastPick(next.edits ? "disaster" : "condition");
+    const replay = !!next.edits && next.point === pointId && activeDisaster(pointId, edits) === activeDisaster(next.point, next.edits) && loadedReady;
+    if (replay) { seek(0); setPlaying(!reducedMotion()); chooseTab("sim"); return; }
+    // Plays when a new timeline comes: a disaster, or another hour with failures in force (the same hour changes nothing).
+    autoplay.current = !!next.edits || (next.point !== pointId && countFailures(edits) > 0);
     setPointId(next.point);
-    // A disaster replaces the changes; a Benchmark condition keeps the failures. A prepared scenario never carries over.
     setEdits((e) => ({ lines: (next.edits ?? e).lines, buses: (next.edits ?? e).buses }));
     if (composed === DEFAULT_COUNTRY) void composeFromSources(next.point, picksRef.current); // the composed grid follows the chosen hour
-    setColorMode("load");
-    chooseTab(next.edits ? "sim" : "red"); // a disaster opens on Simulación, a Benchmark condition on Red; both on Carga
+    chooseTab(next.edits ? "sim" : tab === "datos" ? "sim" : tab);
   }
+  const open25F = () => openScenario({ point: DISASTERS[0].point, edits: DISASTERS[0].edits });
 
-  const tabs: [Tab, string][] = s.sid ? SESSION_TABS : TABS;
+  // "Mapa" is the highlighted row only while no other rail view is open (D7).
+  const mapOn = view === "tabs" || view === "upload" || view === "session";
+  const railItem = (v: View, label: string, icon: React.ReactNode, faint = false) => (
+    <button className={`rail-item${faint ? " faint" : ""}${view === v ? " on" : ""}`} aria-current={view === v ? "page" : undefined} onClick={() => setView(view === v ? "tabs" : v)}>
+      <Icon>{icon}</Icon><span>{label}</span>
+    </button>
+  );
+  const tabs: Tab[] = s.sid ? SESSION_TABS : TABS;
+  const changeCount = countEdits(edits);
+  const tabLabel = (k: Tab) => (k === "estado" && changeCount > 0 ? `${TAB_NAME[k]} · ${changeCount}` : TAB_NAME[k]);
+  const disaster = !s.sid && isChile ? activeDisaster(pointId, edits) : null;
+  const shareable = !s.sid && isChile && urlCutOf(edits) !== null;
+  const failed = simError?.key === timelineKey ? simError.message : null;
+  const showTimeline = isChile && edited; // nothing to play: no card (D9)
+  const darkNow = timeline ? frame?.dark.length ?? 0 : 0;
+  const blackout = !!network && network.nodes.length > 0 && darkNow >= network.nodes.length;
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
   const selectedCut = selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null;
-  const canPower = canPowerAll({ cuts, edited: outBuses.length + changes.length > 0 || inc.playing != null });
+  // A cyber cascade on the map counts too (D10, G-23): powerAllOn already takes it off.
+  const canPower = canPowerAll({ cuts, edited: outBuses.length + changes.length > 0 || inc.playing != null || cyb.mapCycle != null });
   const shutDown = selection?.kind === "node" && !!network && isSwitchedOff(selection, network, offState, !!s.sid);
   const sourceNote = hasLabels ? "Mapa base: Mapbox" : isChile ? "Contorno: data/processed/chile.geojson" : "Contornos: data/processed/latam/outlines.geojson (geoBoundaries)";
   const shownSummary = shownGrid ? (shownGrid.countries[0] ? summaryFromManifest(shownGrid.countries[0]) : summaryFromGrid(shownGrid)) : null;
   const shownOrigin = shownGrid ? originOf(current, shownGrid) : undefined;
 
   return (
-    <div className="shell">
+    <div className={showTimeline ? "shell" : "shell no-timeline"}>
       <div className="map" ref={mapRef} />
       <div className="map-overlays" ref={overlayRef}>
         {isChile && network && <MapOverlays markers={located} states={mapStates} visible={visible} network={network} impact={impact} showCities={!hasLabels} placed={placed} select={seek} />}
       </div>
 
+      {/* Rail (D7): one navigation row is highlighted at a time; Escenarios is a section label; the whole rail scrolls. */}
       <nav className="rail" aria-label="Navegación">
         <Wordmark />
-        <button className="rail-item on" aria-current="page" onClick={() => setView("tabs")}>
+        <button className={mapOn ? "rail-item on" : "rail-item"} aria-current={mapOn ? "page" : undefined} onClick={() => setView("tabs")}>
           <Icon><path d="M1.5 3.5l4-1.5 5 2 4-1.5v10l-4 1.5-5-2-4 1.5z M5.5 2v10 M10.5 4v10" /></Icon><span>Mapa</span>
         </button>
-        <div className="rail-item static"><Icon><path d="M2 13.5h12M4 11V7M8 11V3M12 11V8" /></Icon><span>Escenarios</span></div>
-        <ScenarioTree points={index?.points ?? []} pointId={pointId} edits={s.sid ? { lines: cuts, buses: [] } : edits} open={openScenario} locked={s.sid ? PINNED : !current.simulable ? VIEW_ONLY : undefined} />
-        <button className={view === "sources" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "sources" ? "tabs" : "sources")}>
-          <Icon><ellipse cx="8" cy="4" rx="5.5" ry="2" /><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" /></Icon><span>Fuentes y supuestos</span>
-        </button>
-        <GridSources current={networkId} composed={composed} busy={composing} apply={(picks) => void composeFromSources(pointId, picks)} reset={backToCache} locked={!!s.sid} />
-        <button className={view === "assistant" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "assistant" ? "tabs" : "assistant")}>
-          <Icon><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z M5.5 7h.01M8 7h.01M10.5 7h.01" /></Icon><span>Asistente</span>
-        </button>
-        <button className={view === "incidents" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "incidents" ? "tabs" : "incidents")}>
-          <Icon><path d="M8 1.8l6.2 11.2H1.8z M8 6.2v3.3M8 11.3v.1" /></Icon><span>Incidentes</span>
-        </button>
-        <button className={view === "cyber" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "cyber" ? "tabs" : "cyber")}>
-          <Icon><path d="M8 1.5l5.5 2v4c0 3.2-2.3 5.8-5.5 7-3.2-1.2-5.5-3.8-5.5-7v-4z M5.5 8l1.8 1.8L10.8 6.3" /></Icon><span>Ciberataque</span>
-        </button>
+        <div className="rail-section">Escenarios</div>
+        <ScenarioTree points={index?.points ?? []} pointId={current.simulable ? pointId : null} edits={s.sid ? { lines: cuts, buses: [] } : edits} open={openScenario}
+          locked={s.sid ? PINNED : !current.simulable ? VIEW_ONLY : undefined} last={lastPick} />
+        {railItem("incidents", "Incidentes", <path d="M8 1.8l6.2 11.2H1.8z M8 6.2v3.3M8 11.3v.1" />)}
+        {railItem("cyber", "Ciberataque", <path d="M8 1.5l5.5 2v4c0 3.2-2.3 5.8-5.5 7-3.2-1.2-5.5-3.8-5.5-7v-4z M5.5 8l1.8 1.8L10.8 6.3" />)}
+        {railItem("assistant", "Asistente", <path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z M5.5 7h.01M8 7h.01M10.5 7h.01" />)}
         <div className="rail-spacer" />
-        <button className={view === "help" ? "rail-item faint on" : "rail-item faint"} onClick={() => setView(view === "help" ? "tabs" : "help")}>
-          <Icon><circle cx="8" cy="8" r="5.8" /><path d="M6.3 6.3a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1M8 11.3v.1" /></Icon><span>Ayuda</span>
-        </button>
+        <GridSources current={networkId} composed={composed} busy={composing} apply={(picks) => void composeFromSources(pointId, picks)} reset={backToCache} locked={!!s.sid} />
+        {railItem("sources", "Fuentes y supuestos", <><ellipse cx="8" cy="4" rx="5.5" ry="2" /><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" /></>)}
+        {railItem("help", "Ayuda", <><circle cx="8" cy="8" r="5.8" /><path d="M6.3 6.3a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1M8 11.3v.1" /></>, true)}
       </nav>
 
       <section className="panel" aria-label="Panel">
@@ -735,11 +872,11 @@ export function CascadeApp() {
               <NetworkPicker current={current} networks={networks} choose={chooseNetwork} remove={removeUpload} upload={() => setView("upload")} locked={s.sid ? SESSION_NETWORK : undefined} />
               {s.sid && <SessionBar s={s} compact />}
               <div className="tabs" role="tablist">
-                {tabs.map(([k, label]) => {
+                {tabs.map((k) => {
                   const viewOnly = !current.simulable && SIM_TABS.has(k);
                   return (
                     <button key={k} role="tab" aria-selected={tab === k} aria-disabled={viewOnly || undefined} className={tab === k ? "on" : ""}
-                      data-tip={viewOnly ? VIEW_ONLY : undefined} onClick={() => !viewOnly && chooseTab(k)}>{label}</button>
+                      data-tip={viewOnly ? VIEW_ONLY : undefined} onClick={() => !viewOnly && chooseTab(k)}>{tabLabel(k)}</button>
                   );
                 })}
               </div>
@@ -758,6 +895,15 @@ export function CascadeApp() {
           {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
           {view === "cyber" && <CyberPanel c={cyb} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}
+          {view === "tabs" && restorable && (
+            <div className="notice" role="status">
+              <span>{countEdits(restorable) === 1 ? "Tienes 1 cambio guardado de tu visita anterior." : `Tienes ${countEdits(restorable)} cambios guardados de tu visita anterior.`} El enlace no lo incluye, así que la red parte sin cambios.</span>
+              <span className="row-btns"><button className="text-btn strong" onClick={restoreSaved}>Restaurar</button><button className="text-btn" onClick={() => setRestorable(null)}>Cerrar</button></span>
+            </div>
+          )}
+          {view === "tabs" && isChile && failed && (
+            <p className="note" role="alert">{failed} <button className="text-btn" onClick={retrySimulation}>Reintentar</button></p>
+          )}
           {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={shownGrid} />}
           {view === "upload" && <UploadNetwork add={addUpload} cancel={() => setView("tabs")} />}
@@ -780,21 +926,24 @@ export function CascadeApp() {
             <SessionCut network={network} open={s.state.open_lines} notice={s.state.notice} repair={(lines) => restore(lines)} />
           )}
           {view === "tabs" && isChile && tab === "sim" && network && (timeline && timelineReady ? (
-            <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} totalPeople={totalPeople}
+            <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} darkCount={darkNow} totalPeople={totalPeople}
               seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} health={s.sid || composed ? null : health}
-              supply={simResult?.supply ?? null} />
-          ) : !error && <Loading text="Cargando la simulación" />)}
+              supply={simResult?.supply ?? null} disaster={disaster} shareable={shareable} select={select} open25F={open25F} />
+          ) : !edited ? <ColdStartCard network={network} health={s.sid || composed ? null : health} select={select} open25F={open25F} />
+            : !error && !failed && <Loading text="Cargando la simulación" />)}
           {view === "tabs" && tab === "datos" && (s.network
             ? <DataPanel network={s.network} edit={s.edit} pick={_pick} picking={picking} />
             : <p className="meta">Cargando la sesión…</p>)}
         </div>
       </section>
 
-      {isChile && <TimelineCard timeline={edited && timelineReady ? timeline : null} loading={edited && !timelineReady} markers={markers} warp={warp} t={t} clock={clock(point?.snapshot, t).tenths} islands={edited ? islands : []} playing={playing} speed={speed}
+      {showTimeline && <TimelineCard timeline={timelineReady ? timeline : null} loading={!timelineReady && !failed} failed={!!failed} blackout={timelineReady && blackout} markers={markers} warp={warp} t={t}
+        clock={clock(point?.snapshot, t).tenths} islands={islands} playing={playing} speed={speed}
         setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />}
 
-      {isChile && <button className="power-all" aria-disabled={!canPower || undefined} onClick={() => canPower && powerAllOn()}
-        data-tip={!canPower ? "No hay nada apagado ni editado." : s.sid ? "Repara todas las líneas abiertas de la sesión y vuelve al caso base de esta hora." : "Repone lo apagado y vuelve al caso base de esta hora."}>
+      {/* Prender todo exists only while something is off, edited or playing an incident or cyber cascade (D10). */}
+      {isChile && canPower && <button className="power-all" onClick={powerAllOn}
+        data-tip={s.sid ? "Repara todas las líneas abiertas de la sesión y vuelve al caso base de esta hora." : "Repone lo apagado y vuelve al caso base de esta hora."}>
         <Icon size={14}><path d="M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z" /></Icon><span>Prender todo</span>
       </button>}
 
@@ -825,11 +974,19 @@ export function CascadeApp() {
 
       <div className="map-foot">
         <div className="scale" ref={scaleRef}><span className="scale-bar" /><span className="scale-label" /></div>
-        {isChile && network && <MapLegend mode={colorMode} setMode={setColorMode} network={network} frame={frame} cascade={hasCascade} justDark={recent.size > 0} />}
+        {isChile && network && <MapLegend mode={colorMode} setMode={setColorMode} network={network} frame={frame} cascade={hasCascade} justDark={recent.size > 0}
+          heat={heat === "none" ? null : { kind: heat, pending: needsDependency(heat) && !heatData && !heatError, error: heatError }} />}
       </div>
       <TipLayer />
     </div>
   );
+}
+
+/** A `?pais=` the build has no network for opens Chile and says so; nothing when the param is absent or already Chile. */
+function countryNotice(requested: string | null, shown: string, inSession: boolean): string | null {
+  const iso = (requested ?? "").trim();
+  if (!iso || inSession || iso.toUpperCase() === shown) return null;
+  return `No hay una red disponible para «${iso}». Se muestra Chile.`;
 }
 
 const VIEW_TITLES: Partial<Record<View, string>> = { sources: "Fuentes y supuestos", session: "Sesión compartida", assistant: "Asistente", incidents: "Incidentes", cyber: "Ciberataque", upload: "Subir una red" };

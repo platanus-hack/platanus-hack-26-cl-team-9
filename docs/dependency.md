@@ -1,6 +1,6 @@
 # Dependency, criticality and heat maps
 
-Last updated: 2026-11-22. Three questions about people and the grid as it stands (base case, or after the changes in Estado de la red and their cascade), each with a heat map in mapa 3 (layers button, "Mapa de calor"):
+Last updated: 2026-11-22. Three questions about people and the grid as it stands (base case, or after the changes in the Cambios tab and their cascade), each with a heat map in mapa 3 (layers button, "Mapa de calor"):
 
 | Heat map | Question | Data |
 |---|---|---|
@@ -57,7 +57,7 @@ Limits: the measure is for one substation at a time (N-1 on substations); it doe
 
 ## 4. API and code
 
-`POST /api/v1/grids/dependency` with `{point, open_lines, out_buses}` (the changes of Estado de la red; empty for the base case). `application/grid_dependency.py` (`GridDependency`) applies the substations out of service (overlay `in_service: false`, shared with `/grids/simulate` through `prepare_edits`), runs the cascade of the cut lines, and measures tracing and criticality on what is left: the settled generation and load and every line that ended open. Criticality runs one cascade per substation still in service, about 2 s per new set of changes (measured 1.96 s at `feb2025-1500`); the last 32 results are kept in memory per process. Rate-limited like the cuts.
+`POST /api/v1/grids/dependency` with `{point, open_lines, out_buses}` (the changes of the Cambios tab; empty for the base case). `application/grid_dependency.py` (`GridDependency`) applies the substations out of service (overlay `in_service: false`, shared with `/grids/simulate` through `prepare_edits`), runs the cascade of the cut lines, and measures tracing and criticality on what is left: the settled generation and load and every line that ended open. Criticality runs one cascade per substation still in service, about 2 s per new set of changes (measured 1.96 s at `feb2025-1500`); the last 32 results are kept in memory per process. Rate-limited like the cuts.
 
 Response: `{point, open_lines (cuts plus lines the cascade opened), out_buses, nodes}`. `nodes` is keyed by bus id (`B043`) with every field of section 3 plus `gen_mw`, `people_fed` and `share_of_people`; a substation out of service, or with every line open, has no entry. The web reads it as `DependencyNode` (`web/src/cascade/types.ts`), asks only when Dependencia or Criticidad is chosen, and draws deck.gl `HeatmapLayer` (`web/src/cascade/heat.ts`).
 

@@ -24,6 +24,8 @@ const LAND_FILL: [number, number, number] = [58, 59, 63];
 const LAND_LINE: [number, number, number] = [84, 86, 91];
 const STYLE = "mapbox://styles/mapbox/standard";
 const PANEL_CLEARANCE_PX = 664; // nav rail (200) + docked panel (12 + 440) + margin, see .shell in styles.css
+// How far (px) from the pointer a click or hover still reaches a line: at country zoom a line is about 1 to 4 px wide (F-33).
+const PICK_RADIUS_PX = 10;
 
 export type ViewMode = "2d" | "3d";
 export interface Camera { lon: number; lat: number; zoom: number }
@@ -38,6 +40,8 @@ export interface BaseMap {
   camera(): Camera;
   /** True when the basemap draws its own place names (Mapbox); the offline outline has none. */
   hasLabels: boolean;
+  /** Every pickable object within the pick radius of a screen point (px, relative to the map container), nearest first. */
+  pickAll(x: number, y: number): PickingInfo[];
 }
 const pitchOf = (mode: ViewMode) => (mode === "2d" ? 0 : PITCH_DEGREES);
 export type Tooltip = string | { text: string; style?: Partial<CSSStyleDeclaration> } | null;
@@ -100,7 +104,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   setTarget(START_TARGET, 0);
   // MapboxOverlay forwards Mapbox `click` as a click with tapCount 1 and `dblclick` as a click with tapCount 2
   // (@deck.gl/mapbox dist/mapbox-overlay.js, _handleMouseEvent), so a double click arrives as three clicks.
-  const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: (info, event) => handlers.onClick(info, tapsOf(event)), getTooltip: handlers.getTooltip, pickingRadius: 8,
+  const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: (info, event) => handlers.onClick(info, tapsOf(event)), getTooltip: handlers.getTooltip, pickingRadius: PICK_RADIUS_PX,
     // The overlay's own cursor goes on a container with pointer-events none, so it never shows; set it on the map canvas.
     onHover: (info) => { map.getCanvas().style.cursor = handlers.isClickable(info) ? "pointer" : ""; } });
   map.addControl(overlay);
@@ -109,7 +113,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   if (matchMedia("(any-pointer: coarse)").matches) map.doubleClickZoom.disable();
   map.on("dblclick", (e) => {
     try {
-      const info = overlay.pickObject({ x: e.point.x, y: e.point.y, radius: 8 });
+      const info = overlay.pickObject({ x: e.point.x, y: e.point.y, radius: PICK_RADIUS_PX });
       if (info && handlers.isClickable(info)) e.preventDefault(); // stops ClickZoomHandler (MapMouseEvent.preventDefault)
     } catch (e) { console.warn("picking unavailable, keeping the default zoom", e); /* picking unavailable: keep the default zoom */ }
   });
@@ -125,6 +129,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
     project: (lon, lat) => { const p = map.project([lon, lat]); return [p.x, p.y]; },
     camera: () => { const c = map.getCenter(); return { lon: c.lng, lat: c.lat, zoom: map.getZoom() }; },
     hasLabels: true,
+    pickAll: (x, y) => { try { return overlay.pickMultipleObjects({ x, y, radius: PICK_RADIUS_PX }); } catch { return []; } },
   };
 }
 
@@ -158,7 +163,7 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode:
   let hovering = false;
   const deck = new Deck({ canvas, views: view(target), controller: controller(initialMode), initialViewState: viewState,
     onViewStateChange: ({ viewState: next }) => { viewState = next as MapViewState; }, // the controller owns the camera; keep a copy to change only the pitch
-    layers: [...neighbours, outline], getTooltip: handlers.getTooltip, onClick: (info, event) => handlers.onClick(info, tapsOf(event)), pickingRadius: 8,
+    layers: [...neighbours, outline], getTooltip: handlers.getTooltip, onClick: (info, event) => handlers.onClick(info, tapsOf(event)), pickingRadius: PICK_RADIUS_PX,
     onHover: (info) => { hovering = handlers.isClickable(info); }, getCursor: ({ isDragging }) => (isDragging ? "grabbing" : hovering ? "pointer" : "grab") });
   return {
     setLayers: (layers) => deck.setProps({ layers: [...neighbours, outline, ...layers] }),
@@ -177,6 +182,7 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode:
     },
     camera: () => ({ lon: viewState.longitude, lat: viewState.latitude, zoom: viewState.zoom }),
     hasLabels: false,
+    pickAll: (x, y) => { try { return deck.pickMultipleObjects({ x, y, radius: PICK_RADIUS_PX }); } catch { return []; } },
   };
 }
 

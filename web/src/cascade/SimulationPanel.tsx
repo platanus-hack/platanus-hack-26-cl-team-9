@@ -1,21 +1,30 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Pick } from "./clicks";
 import type { Supply } from "./gridsApi";
-import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
-import { cutName, hz, index2, int, narrate, pct, placeName, secs, usdM } from "./text";
-import type { EventCost, HealthReport, N1Cost, Network, Timeline } from "./types";
-import { Chevron, Info } from "./ui";
+import type { Disaster } from "./Scenarios";
+import { findOption, matches, searchOptions } from "./search";
+import { systemFrequency, voltageCollapse, withstandsAt, type Impact, type IslandFrequency } from "./simulation";
+import { cutName, hoursText, hz, index2, int, narrate, pct, placeName, secs, usdM } from "./text";
+import type { Assumed, EventCost, HealthReport, N1Cost, Network, Timeline } from "./types";
+import { Chevron, CopyLink, Info } from "./ui";
 
 interface Props {
   /** network and timeline: what is on the map and its cascade. cuts and outBuses: the lines and substations switched off.
    *  t: playhead in simulated seconds. impact: people and MW out at `t`. islands: frequency per island at `t`.
-   *  totalPeople: people the network assigns to buses. Callbacks: seek the playhead, open the assumptions view, restore
-   *  every change. source: the base-map or outline note added to the "Fuente" line. */
-  network: Network; timeline: Timeline; cuts: string[]; outBuses: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
+   *  darkCount: substations without supply at `t`. totalPeople: people the network assigns to buses. Callbacks: seek the
+   *  playhead, open the assumptions view, restore every change. source: the base-map or outline note added to the "Fuente" line. */
+  network: Network; timeline: Timeline; cuts: string[]; outBuses: string[]; t: number; impact: Impact; islands: IslandFrequency[]; darkCount: number; totalPeople: number;
   seek(t: number): void; openSources(): void; restore(): void; source: string;
   /** Pre-fault health of the point (`<point>/health.json`); null in an old cache or in a session. */
   health: HealthReport | null;
   /** People the generators should feed against the people they still feed (server simulation only). */
   supply: Supply | null;
+  /** The Desastres entry on the map, for the real figure next to the model's (F-06); null for the user's own changes. */
+  disaster: Disaster | null;
+  /** The URL describes the view, so "Copiar enlace" is offered (never in a session). */
+  shareable: boolean;
+  /** Cold start card: select a line or substation from the search field, open the 25F. */
+  select(pick: Pick): void; open25F(): void;
 }
 
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
@@ -24,10 +33,10 @@ export function SimulationPanel(p: Props) {
   const edited = p.cuts.length + p.outBuses.length > 0;
   return (
     <>
-      {edited ? <ImpactCard {...p} /> : <EmptyCard health={p.health} />}
-      {edited && p.supply && <SupplyCard supply={p.supply} />}
+      {edited ? <ImpactCard {...p} /> : <ColdStartCard network={p.network} health={p.health} select={p.select} open25F={p.open25F} />}
+      {/* The history sits right under the impact card, so its current row stays in view while the cascade plays. */}
       {edited && <History {...p} />}
-      {p.timeline.truncated && <p className="note">La cascada llegó al tope de 20 etapas: el resultado puede ser mayor.</p>}
+      {edited && p.supply && <SupplyCard supply={p.supply} />}
       <button className="assumptions-row" onClick={p.openSources}>
         <Info tip="Supuestos del motor que afectan esta simulación. Ábrelos para ver cada uno." />
         <span>{assumptions} supuestos en esta simulación</span>
@@ -39,116 +48,146 @@ export function SimulationPanel(p: Props) {
 }
 
 const INDEX_TIP = "Índice de margen operativo (modelo): índice propio de Sub50, no un indicador del CEN ni de la SEC. Es el mínimo de los márgenes al límite (1 holgado, 0 en el límite): el eslabón más débil manda.";
-const COST_TIP = "Valoración regulatoria (costo de falla CNE, 8,79 US$/kWh) de la energía no servida, con 4 h de corte supuestas. No es la pérdida económica medida y no entra en el índice.";
-const COST_CAPTION = "Índice de margen operativo (modelo) y valoración regulatoria (costo de falla CNE), 4 h supuestas.";
+/** The regulatory valuation, with the hours that cost really uses (G-07: they are calibrated for a blackout, assumed otherwise). */
+const costTip = (hours: Assumed | undefined) =>
+  `Valoración regulatoria (costo de falla CNE, 8,79 US$/kWh) de la energía no servida, con ${hours ? hoursText(hours) : "una duración supuesta"} de corte. No es la pérdida económica medida y no entra en el índice.`;
 
 const isN1 = (c: EventCost | N1Cost | undefined): c is N1Cost => !!c && "n1_expected_cost_usd" in c;
 const bindingLabel = (r: HealthReport) => r.margins.find((m) => m.key === r.binding)?.label.toLowerCase() ?? r.binding ?? "";
 
-function IndexFigure({ report, tip }: { report: HealthReport; tip: string }) {
+function IndexFigure({ report, tip, label }: { report: HealthReport; tip: string; label: string }) {
   return (
     <div>
       <div className="value-row"><b>{index2(report.index)}{report.uncertain && <small> incierto</small>}</b><Info tip={`${INDEX_TIP} ${tip} Limita: ${bindingLabel(report)}.`} /></div>
-      <span>índice de margen operativo</span>
+      <span>{label}</span>
     </div>
   );
 }
 
-/** Pre-fault index and N-1 money at risk, side by side; nothing when health.json is missing. */
+/** Pre-fault index and N-1 money at risk, behind the closed "Indicadores técnicos" disclosure; nothing when health.json is missing. */
 function PrefaultHealth({ health }: { health: HealthReport }) {
   const cost = isN1(health.cost) ? health.cost : null;
-  const hours = cost ? `${cost.outage_duration_h.value} h` : "4 h";
+  const hours = cost?.outage_duration_h;
   return (
-    <>
-      <div className="mini-figures ruled">
-        <IndexFigure report={health} tip="Antes de cualquier corte; no se compara con el índice después de un corte." />
+    <details className="disclosure-block">
+      <summary><Chevron dir="right" color="currentColor" /><span>Indicadores técnicos</span></summary>
+      <div className="mini-figures">
+        <IndexFigure report={health} label="Margen de la red" tip="Antes de cualquier corte; no se compara con el índice después de un corte." />
         {cost && <>
           <div>
-            <div className="value-row"><b>{usdM(cost.n1_expected_cost_usd)}</b><Info tip={`${COST_TIP} Promedio de los ${cost.n1_cuts} cortes simples de una línea, cada uno con el mismo peso (supuesto): ${cost.n1_cuts_with_cost} tienen costo${cost.n1_cost_share.share_band ? ` y los ${cost.n1_cost_share.count} más caros suman ${cost.n1_cost_share.share_band} del total` : ""}.`} /></div>
-            <span>en riesgo N-1, esperado</span>
+            <div className="value-row"><b>{usdM(cost.n1_expected_cost_usd)}</b><Info tip={`${costTip(hours)} Promedio de los ${cost.n1_cuts} cortes simples de una línea, cada uno con el mismo peso (supuesto): ${cost.n1_cuts_with_cost} tienen costo${cost.n1_cost_share.share_band ? ` y los ${cost.n1_cost_share.count} más caros suman ${cost.n1_cost_share.share_band} del total` : ""}.`} /></div>
+            <span>Costo esperado si falla una línea cualquiera</span>
           </div>
           <div>
-            <div className="value-row"><b>{usdM(cost.n1_worst_cost_usd)}</b><Info tip={`${COST_TIP} Peor corte simple, ${hours} supuestas. Puede ser un artefacto de la red reducida: cortar una línea reducida corta todo el corredor.`} /></div>
-            <span>en riesgo N-1, peor</span>
+            <div className="value-row"><b>{usdM(cost.n1_worst_cost_usd)}</b><Info tip={`${costTip(hours)} Peor corte simple de una línea. Puede ser un artefacto de la red resumida: cortar una línea resumida corta todo el corredor.`} /></div>
+            <span>Costo si falla la peor línea</span>
           </div>
         </>}
       </div>
-      <p className="meta">{cost ? `Dinero en riesgo N-1 (modelo). ${COST_CAPTION}` : "Índice de margen operativo (modelo)."}</p>
-    </>
+      <p className="meta">{cost ? `Modelo Sub50 antes de cualquier corte, con ${hoursText(cost.outage_duration_h)} de corte.` : "Modelo Sub50 antes de cualquier corte."}</p>
+    </details>
   );
 }
 
-function EmptyCard({ health }: { health: HealthReport | null }) {
+/**
+ * Cold start (D8): what the product answers, the keyboard route to the core task (a search field that selects a line or
+ * substation and opens its card) and the 25F as the one-click example. The technical indicators stay closed.
+ */
+export function ColdStartCard({ network, health, select, open25F }: { network: Network; health: HealthReport | null; select(pick: Pick): void; open25F(): void }) {
+  const options = useMemo(() => searchOptions(network), [network]);
+  const [text, setText] = useState("");
+  const [miss, setMiss] = useState<string | null>(null);
+  const choose = (value: string, commit: boolean) => {
+    const hit = findOption(options, value);
+    if (hit && (commit || hit.value === value)) { select(hit.pick); setText(""); setMiss(null); }
+    else if (commit) setMiss(matches(options, value).length > 1 ? "Hay varias con ese nombre: elige una de la lista." : "No hay una línea ni una subestación con ese nombre.");
+  };
   return (
-    <div className="card empty">
-      <h3>Escenario nuevo</h3>
-      <p>Haz clic en una línea o una subestación del mapa para ver su detalle; un segundo clic, o el botón de su detalle, la saca de servicio. El motor calcula la cascada: líneas que se sobrecargan, islas que se separan, cortes automáticos de carga y apagones.</p>
-      <p className="meta">Sin cortes, el sistema opera normal en este punto de operación.</p>
+    <div className="card empty cold-start">
+      <h3>¿Qué pasa si se corta una línea?</h3>
+      <p>Haz clic en una línea o subestación del mapa y luego en Sacar de servicio. Sub50 simula la cascada segundo a segundo.</p>
+      <label className="search-field">
+        <span className="sr-only">Buscar una línea o subestación</span>
+        <input type="search" list="grid-search" placeholder="Buscar una línea o subestación" value={text} autoComplete="off"
+          onChange={(e) => { setText(e.target.value); setMiss(null); choose(e.target.value, false); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); choose(text, true); } }} />
+        <datalist id="grid-search">
+          {options.map((o) => <option key={`${o.pick.kind}:${o.pick.id}`} value={o.value} label={o.kind} />)}
+        </datalist>
+      </label>
+      {miss && <p className="field-error" role="alert">{miss}</p>}
+      <div className="actions">
+        <button className="primary-btn" onClick={open25F}>Ver el apagón del 25 feb 2025</button>
+      </div>
+      <p className="meta">Red resumida con datos públicos. Las cifras son estimaciones del modelo, no una predicción.</p>
       {health && <PrefaultHealth health={health} />}
     </div>
   );
 }
 
-/** After-cut index and event cost at the end of the simulation; each part hides when an old cache lacks it. */
-function EventHealth({ timeline }: { timeline: Timeline }) {
+/** After-cut index and event cost, read at the end of the simulation (D5); each part hides when an old cache lacks it. */
+function EndOfRun({ timeline }: { timeline: Timeline }) {
   const report = timeline.health;
   const fromReport = report && !isN1(report.cost) ? report.cost : undefined;
   const usd = fromReport?.cost_usd ?? timeline.summary.failure_cost_usd;
   if (!report && usd == null) return null;
   const rule = !!fromReport?.voltage_rule;
-  const hours = (fromReport?.outage_duration_h ?? timeline.summary.outage_duration_h)?.value ?? 4;
+  const hours = fromReport?.outage_duration_h ?? timeline.summary.outage_duration_h;
   const ruleTip = rule ? " Incluye las islas apagadas por la regla de colapso de tensión del 25F: está documentado, no calculado." : "";
   return (
-    <>
-      <div className="mini-figures ruled">
-        {report && <IndexFigure report={report} tip="Al final de la simulación, después del corte; no se compara con el índice antes del corte." />}
+    <div className="end-of-run">
+      <h4 className="subhead">Al final de la simulación</h4>
+      <div className="mini-figures">
+        {report && <IndexFigure report={report} label="índice de margen operativo" tip="Al final de la simulación, después del corte; no se compara con el índice antes del corte." />}
         {usd != null && (
           <div>
-            <div className="value-row"><b>{usdM(usd)}</b><Info tip={`${COST_TIP} Duración: ${hours} h supuestas. Valor al final de la simulación.${ruleTip}`} /></div>
+            <div className="value-row"><b>{usdM(usd)}</b><Info tip={`${costTip(hours)}${ruleTip}`} /></div>
             <span>{rule ? "costo estimado, colapso por regla" : "costo estimado"}</span>
           </div>
         )}
       </div>
-      <p className="meta">Al final de la simulación. {COST_CAPTION}</p>
-    </>
+      <p className="meta">Índice de margen operativo (modelo) y valoración regulatoria (costo de falla CNE){hours ? `, con ${hoursText(hours)} de corte` : ""}.</p>
+    </div>
   );
 }
 
 function ImpactCard(p: Props) {
-  const lowest = p.islands.filter((i) => i.hz != null).sort((a, b) => (a.hz ?? 50) - (b.hz ?? 50))[0];
-  const collapsed = p.islands.some((i) => i.collapsed);
-  const hzValue = collapsed ? null : lowest?.hz ?? 50;
-  const fault = collapsed || (hzValue != null && hzValue < 49);
+  const freq = systemFrequency(p.islands, p.darkCount, p.network.nodes.length);
+  const voltage = voltageCollapse(p.timeline);
   const withstands = withstandsAt(p.timeline, p.t);
+  const copy = p.shareable ? <CopyLink /> : null;
   return (
     <div className="card impact">
       {withstands ? (
         <div className="withstands">
-          <div className="card-head"><div className="title"><h3>El sistema resiste este corte</h3><Info tip="Resultado final del motor Sub50 para este corte: nadie queda sin suministro y no hay cortes automáticos de carga." /></div></div>
+          <div className="card-head"><div className="title"><h3>El sistema resiste este corte</h3><Info tip="Resultado final del motor Sub50 para este corte: nadie queda sin suministro y no hay cortes automáticos de carga." /></div>{copy}</div>
           <p>Nadie queda sin suministro y no se pierde carga.</p>
         </div>
       ) : <>
       <div className="card-head">
         <div className="title"><h3>Personas sin suministro</h3><Info tip="Personas asignadas a las subestaciones que pierden suministro, calculadas por el motor Sub50. Los cortes automáticos de carga en islas que sobreviven se reparten en el tiempo según los MW cortados; al final la cifra es la del motor." /></div>
-        <div className="title"><span className="share">{pct(p.impact.share)} del país</span><Info tip={`Sobre ${int(p.totalPeople)} personas asignadas a las subestaciones del modelo.`} /></div>
+        <div className="title"><span className="share">{pct(p.impact.share)} del país</span><Info tip={`Sobre ${int(p.totalPeople)} personas asignadas a las subestaciones del modelo.`} />{copy}</div>
       </div>
       <div className="people">{int(p.impact.people)}</div>
+      {p.disaster?.real && <div className="value-row real-row"><span>{p.disaster.real.text}</span><Info tip={p.disaster.real.tip} /></div>}
       </>}
       <div className="mini-figures ruled">
         <div><div className="value-row"><b>{int(p.impact.lostLoadMw)} <small>MW</small></b><Info tip="Demanda desconectada: islas apagadas y cortes automáticos de carga (EDAC). Flujo DC del motor Sub50." /></div><span>carga perdida</span></div>
         <div><div className="value-row"><b>{int(p.impact.lostGenMw)} <small>MW</small></b><Info tip="Generación en las subestaciones que quedaron sin tensión. El motor no modela desconexiones de centrales por frecuencia o tensión." /></div><span>generación perdida</span></div>
         <div>
           <div className="value-row">
-            {hzValue == null ? <b className="fault">apagón</b> : <b className={fault ? "fault" : ""}>{hz(hzValue)} <small>Hz</small></b>}
-            <Info tip="Frecuencia de la isla más baja, con un modelo de una masa por isla (supuestos sin calibrar). Bajo 47,5 Hz la isla se apaga." />
+            {freq.blackout ? <b className="fault">apagón</b> : <b className={freq.fault ? "fault" : ""}>{hz(freq.hz)} <small>Hz</small></b>}
+            <Info tip={freq.blackout
+              ? `Todas las subestaciones quedaron sin suministro: no hay frecuencia que medir.${voltage ? " Las islas se apagaron por la regla de colapso de tensión del modelo (la del 25F), no porque la frecuencia cayera." : ""}`
+              : "Frecuencia de la isla viva más baja, con un modelo de una masa por isla (supuestos sin calibrar). Bajo 47,5 Hz la isla se apaga."} />
           </div>
-          <span>{p.islands.length > 1 ? `frecuencia ${lowest?.name.toLowerCase() ?? "más baja"}` : "frecuencia"}</span>
+          <span>{freq.blackout ? (voltage ? "colapso por tensión (regla del modelo)" : "frecuencia") : freq.island && p.islands.length > 1 ? `frecuencia ${freq.island.name.toLowerCase()}` : "frecuencia"}</span>
         </div>
       </div>
       {p.timeline.truncated && (
         <p className="notice truncated" role="note">{`La cascada se cortó en ${p.timeline.summary.stages} etapas (límite del motor); podría seguir.`}</p>
       )}
-      <EventHealth timeline={p.timeline} />
+      <EndOfRun timeline={p.timeline} />
       <div className="cut-row">
         <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => cutName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>
         <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Volver a conectar todas" : "Volver a conectar") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Volver a encender"}</button>
@@ -157,12 +196,18 @@ function ImpactCard(p: Props) {
   );
 }
 
+/**
+ * Numbered event history. A click on a row seeks to its second and keeps that row as the current one while the time does
+ * not change, also when several events share the second (A2-05). The current row is kept in view in this card and, when
+ * the card itself runs below the panel, in the panel too (A2-04).
+ */
 function History(p: Props) {
   const events = p.timeline.events;
   const visible = events.filter((e) => e.t <= p.t + 1e-9).length;
-  const current = visible - 1;
+  const [chosen, setChosen] = useState<{ i: number; t: number } | null>(null);
+  const current = chosen && Math.abs(chosen.t - p.t) < 1e-9 && chosen.i < visible ? chosen.i : visible - 1;
   const ref = useRef<HTMLDivElement>(null);
-  // Keep the current event in view by scrolling this card only: scrollIntoView also scrolled the panel and hid the cards above.
+  // Scroll this card first: scrollIntoView also scrolled the panel and hid the cards above.
   useEffect(() => {
     const card = ref.current, row = card?.querySelector(".event.current");
     if (!card || !row) return;
@@ -170,12 +215,17 @@ function History(p: Props) {
     const head = 40; // the sticky card head covers the top of the list
     if (r.bottom > c.bottom) card.scrollTop += r.bottom - c.bottom + 8;
     else if (r.top < c.top + head) card.scrollTop -= c.top + head - r.top;
+    // The card can itself end below the panel: then move the panel just enough for the row to be whole.
+    const body = card.closest(".panel-body");
+    if (!body) return;
+    const b = body.getBoundingClientRect(), r2 = row.getBoundingClientRect();
+    if (r2.bottom > b.bottom - 12) body.scrollTop += r2.bottom - b.bottom + 12;
   }, [current]);
   return (
     <div className="card history" ref={ref}>
       <div className="card-head pad"><div className="title"><h3>Historial de eventos</h3></div><span className="unit">{visible} de {events.length}</span></div>
       {events.slice(0, visible).map((e, i) => (
-        <button key={i} className={i === current ? "event current" : "event"} onClick={() => p.seek(e.t)}>
+        <button key={i} className={i === current ? "event current" : "event"} aria-current={i === current || undefined} onClick={() => { setChosen({ i, t: e.t }); p.seek(e.t); }}>
           <span className="badge">{i + 1}</span>
           <span className="when">{secs(e.t)} s</span>
           <span className="what">{narrate(e, p.network)}</span>
@@ -205,4 +255,3 @@ function SupplyCard({ supply }: { supply: Supply }) {
     </div>
   );
 }
-

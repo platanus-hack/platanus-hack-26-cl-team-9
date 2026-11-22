@@ -141,13 +141,16 @@ export function impactAt(tl: Timeline, buses: Record<string, BusState>, t: numbe
   const sheds = tl.events.filter((e) => e.type === "load_shed");
   const shedTotal = sheds.reduce((s, e) => s + Number(e.params.mw ?? 0), 0);
   const shedNow = sheds.filter((e) => e.t <= t + 1e-9).reduce((s, e) => s + Number(e.params.mw ?? 0), 0);
+  // The engine's count can exceed the people the loaded buses hold by a few (its own rounding): the headline and its
+  // share must come from the same data, so the people are capped at the buses' total (A2-13).
+  const cap = totalPeople > 0 ? Math.min(summary.people_without_power, totalPeople) : summary.people_without_power;
   if (t + 1e-9 >= lastEventTime(tl) && tl.events.length > 0) {
-    return { people: summary.people_without_power, lostLoadMw: summary.load_shed_mw, lostGenMw: Math.round(sumGen(dark)), share: totalPeople > 0 ? summary.people_without_power / totalPeople : 0 };
+    return { people: cap, lostLoadMw: summary.load_shed_mw, lostGenMw: Math.round(sumGen(dark)), share: totalPeople > 0 ? cap / totalPeople : 0 };
   }
   const progress = shedTotal > 0 ? shedNow / shedTotal : 0;
   // Load shed before its island collapses is already lost: count it at the system's people per MW, capped by the summary.
   const peoplePerMw = summary.load_total_mw > 0 ? totalPeople / summary.load_total_mw : 0;
-  const people = Math.round(Math.min(summary.people_without_power, Math.max(sumPeople(dark) + residualPeople * progress, shedNow * peoplePerMw)));
+  const people = Math.round(Math.min(cap, Math.max(sumPeople(dark) + residualPeople * progress, shedNow * peoplePerMw)));
   const lostLoadMw = Math.round(Math.min(summary.load_shed_mw, Math.max(sumLoad(dark) + residualMw * progress, shedNow)));
   return { people, lostLoadMw, lostGenMw: Math.round(sumGen(dark)), share: totalPeople > 0 ? people / totalPeople : 0 };
 }
@@ -170,6 +173,30 @@ export function frequencyAt(tl: Timeline, t: number): IslandFrequency[] {
     return { id, name: `Isla ${i + 1}`, hz: started ? sample(curve, t) : null, minHz, started, collapsed };
   });
 }
+
+/**
+ * The frequency the impact card and the timeline readout show at second t. With every substation dark nothing is
+ * energised, so it is a blackout, never 50 Hz (D3). While islands live it is the lowest live frequency; with no island
+ * curve yet (no island formed) the connected system runs at 50 Hz. `fault` marks a value under 49 Hz.
+ */
+export type SystemFrequency = { blackout: true } | { blackout: false; hz: number; island: IslandFrequency | null; fault: boolean };
+export function systemFrequency(islands: IslandFrequency[], darkCount: number, busCount: number): SystemFrequency {
+  if (busCount > 0 && darkCount >= busCount) return { blackout: true };
+  const live = islands.filter((i) => i.started && !i.collapsed && i.hz != null).sort((a, b) => (a.hz ?? 50) - (b.hz ?? 50));
+  const lowest = live[0] ?? null;
+  const hz = lowest?.hz ?? 50;
+  return { blackout: false, hz, island: lowest, fault: hz < 49 };
+}
+
+/** True when the engine darkened an island by the voltage-collapse rule (the 25F rule, docs/engine.md 6), not by frequency. */
+export const voltageCollapse = (tl: Timeline) => tl.events.some((e) => e.type === "island_blackout" && e.params.reason === "voltage");
+
+/** Stroke patterns that tell the island curves apart (A2-08); the readout draws the same pattern next to each island. */
+export const ISLAND_DASHES = ["", "5 2", "1.5 2", "6 2 1.5 2"];
+export const islandDash = (k: number) => ISLAND_DASHES[k % ISLAND_DASHES.length];
+
+/** Timeline seconds rounded down to tenths: the clock and the position read the same value (A2-10, G-25). */
+export const floorTenths = (t: number) => Math.floor(t * 10 + 1e-6) / 10;
 
 export function sample(curve: [number, number][], t: number): number {
   if (!curve.length) return 50;

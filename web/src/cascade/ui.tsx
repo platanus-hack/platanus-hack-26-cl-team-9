@@ -42,6 +42,32 @@ export function TipLayer() {
   return <div ref={ref} className="tip" role="tooltip" style={{ left, width, top: tip.y, transform: tip.below ? undefined : "translateY(-100%)" }}>{tip.text}</div>;
 }
 
+/**
+ * "Copiar enlace" (F-20): an icon button that copies the page URL, which mirrors the view (url.ts), and confirms with
+ * "Enlace copiado" for two seconds. The shell offers it only when the URL describes what is on screen.
+ */
+export function CopyLink() {
+  const [state, setState] = useState<"idle" | "done" | "failed">("idle");
+  useEffect(() => {
+    if (state === "idle") return;
+    const id = setTimeout(() => setState("idle"), 2000);
+    return () => clearTimeout(id);
+  }, [state]);
+  const copy = () => {
+    const done = () => setState("done"), failed = () => setState("failed");
+    try { navigator.clipboard.writeText(location.href).then(done, failed); } catch { failed(); }
+  };
+  const label = state === "done" ? "Enlace copiado" : state === "failed" ? "No se pudo copiar el enlace" : "Copiar enlace";
+  return (
+    <span className="copy-link">
+      {state !== "idle" && <span className="copy-done" role="status">{label}</span>}
+      <button className="icon-btn" aria-label={label} data-tip={state === "idle" ? "Copiar enlace a esta simulación" : undefined} onClick={copy}>
+        <Icon size={14}><path d="M6.5 9.5l3-3M7 4.5l1.2-1.2a2.5 2.5 0 0 1 3.5 3.5L10.5 8M9 11.5l-1.2 1.2a2.5 2.5 0 0 1-3.5-3.5L5.5 8" /></Icon>
+      </button>
+    </span>
+  );
+}
+
 /** `color` defaults to the muted gray; pass "currentColor" to let CSS decide (the rail's disclosure chevrons). */
 export const Chevron = ({ dir = "down", color = "#A1A2A6" }: { dir?: "down" | "right"; color?: string }) => (
   <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d={dir === "down" ? "M2.5 4l2.5 2.5L7.5 4" : "M4 2.5l2.5 2.5L4 7.5"} fill="none" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Pick } from "./clicks";
-import { factorOf, type Edits, type Target } from "./edits";
+import { factorOf, MAX_FACTOR, parseFactor, type Edits, type Target } from "./edits";
 import type { Prepared, Supply } from "./gridsApi";
 import { loadColor } from "./layers";
 import { lineStateAt } from "./simulation";
@@ -24,7 +24,6 @@ interface Props {
   setFactor(target: Target, id: string, factor: number): void;
 }
 
-const MAX_FACTOR = 5; // the backend's bound (docs/stress.md)
 const PREPARED_TIP = "Valor de la red preparada con tus cambios (POST /grids/prepare), antes de cualquier falla. La demanda sube 0,389 × demanda del punto / población por persona agregada (supuesto, docs/stress.md).";
 const SUPPLY_TIP = "Personas que esta subestación debería alimentar antes de la falla y las que sigue alimentando cuando la cascada se asienta (POST /grids/simulate, reparto por flujo DC). Supuesto del modelo.";
 
@@ -42,21 +41,30 @@ function preparedValue(prepared: Prepared | null, id: string, key: "load_mw" | "
   return out;
 }
 
-/** A factor typed in place; it applies on Enter or when the field loses focus, so each keystroke does not simulate. */
-function FactorInput({ label, value, set }: { label: string; value: number; set(f: number): void }) {
+/**
+ * A factor typed in place; it applies on Enter or when the field loses focus, so each keystroke does not simulate. A blank
+ * or out-of-range value keeps the previous factor and says why next to the field (A2-02).
+ */
+function FactorInput({ label, value, target, set }: { label: string; value: number; target: Target; set(f: number): void }) {
   const [text, setText] = useState(String(value));
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => setText(String(value)), [value]);
   const commit = () => {
-    const f = Number(text.replace(",", "."));
-    if (Number.isFinite(f) && f >= 0 && f <= MAX_FACTOR) set(f);
-    else setText(String(value));
+    const r = parseFactor(text, target);
+    if ("factor" in r) { setError(null); if (r.factor !== value) set(r.factor); }
+    else { setError(r.error); setText(String(value)); }
   };
+  const id = `factor-${target}`;
   return (
-    <label className="factor-input">
-      <span>{label}</span>
-      <span className="value-row">×<input type="number" min={0} max={MAX_FACTOR} step={0.1} value={text} aria-label={`Factor de ${label.toLowerCase()}`}
-        onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} /></span>
-    </label>
+    <>
+      <label className="factor-input">
+        <span>{label}</span>
+        <span className="value-row">×<input type="number" min={target === "lines" ? 0.01 : 0} max={MAX_FACTOR} step={0.1} value={text} aria-label={`Factor de ${label.toLowerCase()}`}
+          aria-invalid={error ? true : undefined} aria-describedby={error ? id : undefined}
+          onChange={(e) => { setText(e.target.value); setError(null); }} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} /></span>
+      </label>
+      {error && <p className="field-error" id={id} role="alert">{error} Se mantiene × {String(value).replace(".", ",")}.</p>}
+    </>
   );
 }
 
@@ -119,7 +127,7 @@ function LineCard(p: Props & { line: NetLine }) {
       {p.edits && (
         <div className="edit-block">
           <div className="list-head"><span>Modificar</span><span>factor</span></div>
-          <FactorInput label="Capacidad" value={factorOf(p.edits, "lines", line.id)} set={(f) => p.setFactor("lines", line.id, f)} />
+          <FactorInput label="Capacidad" target="lines" value={factorOf(p.edits, "lines", line.id)} set={(f) => p.setFactor("lines", line.id, f)} />
           <p className="meta">Multiplica la capacidad de la línea antes de cualquier falla. 1 la deja como está.</p>
         </div>
       )}
@@ -157,9 +165,9 @@ function NodeCard(p: Props & { node: string }) {
       {p.edits && (
         <div className="edit-block">
           <div className="list-head"><span>Modificar</span><span>factor</span></div>
-          <FactorInput label="Personas" value={factorOf(p.edits, "population", n.id)} set={(f) => p.setFactor("population", n.id, f)} />
-          <FactorInput label="Demanda" value={factorOf(p.edits, "demand", n.id)} set={(f) => p.setFactor("demand", n.id, f)} />
-          <FactorInput label="Generación" value={factorOf(p.edits, "generation", n.id)} set={(f) => p.setFactor("generation", n.id, f)} />
+          <FactorInput label="Personas" target="population" value={factorOf(p.edits, "population", n.id)} set={(f) => p.setFactor("population", n.id, f)} />
+          <FactorInput label="Demanda" target="demand" value={factorOf(p.edits, "demand", n.id)} set={(f) => p.setFactor("demand", n.id, f)} />
+          <FactorInput label="Generación" target="generation" value={factorOf(p.edits, "generation", n.id)} set={(f) => p.setFactor("generation", n.id, f)} />
           <p className="meta">Más personas suben la demanda de hogares y comercio; la de minería e industria no cambia. La demanda también puede cambiar sola. La isla redespacha lo que falte. 1 deja el valor como está.</p>
         </div>
       )}

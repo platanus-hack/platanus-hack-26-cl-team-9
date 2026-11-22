@@ -86,17 +86,26 @@ describe("NetworkState", () => {
 
   it("shows the cascade outcome with the cost from the server and the lines the engine opened", async () => {
     setup({ edits: { lines: ["L1"], buses: [] }, timeline });
-    expect(screen.getByRole("heading", { name: "Resultado de la caída" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Al final de la caída" })).toBeTruthy();
     expect(screen.getByText("800")).toBeTruthy(); // people without power, same figure as the Simulación tab
     expect(screen.getByText("Calculando el costo…")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("costo de la caída")).toBeTruthy());
-    expect(screen.getByText("apagón total · 7.34 h", { exact: false })).toBeTruthy();
+    expect(screen.getByText("apagón total · 7,34 h", { exact: false })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Consecuencias en la red · 2" })).toBeTruthy();
-    expect(screen.getByText("1.5 s")).toBeTruthy();
+    expect(screen.getByText("1,5 s")).toBeTruthy();
     expect(screen.getByText("1 subestaciones, 100 MW · frecuencia bajo 47,5 Hz")).toBeTruthy();
     const [url, init] = vi.mocked(fetch).mock.calls[0];
     expect(url).toBe("/api/v1/grids/cost");
     expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ point: "nov2026-1300", open_lines: ["L1"], out_buses: [] });
+  });
+
+  it("takes the cost from the timeline summary when it has one, without asking the backend", () => {
+    const withCost = { ...timeline, summary: { ...timeline.summary, failure_cost_usd: 984_336_303, unserved_energy_mwh: 81_442.7, outage_duration_h: { value: 7.34, is_assumption: false } } } as Timeline;
+    setup({ edits: { lines: ["L1"], buses: [] }, timeline: withCost });
+    expect(screen.getByText("US$ 984,3 M")).toBeTruthy();
+    expect(screen.getByText("apagón parcial · 7,34 h calibradas")).toBeTruthy();
+    expect(screen.queryByText("Calculando el costo…")).toBeNull();
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
   it("says the cost is pending when the backend has no endpoint, and shows the error when it fails", async () => {

@@ -122,3 +122,19 @@ export function conditionName(label: string): string {
   const name = m[1].trim().replace(/^referencia del /i, "referencia ");
   return name ? name[0].toUpperCase() + name.slice(1) : label;
 }
+
+/** "7,34 h calibradas" or "1 h supuesta": the outage hours a cost uses, and whether they are calibrated or assumed (G-07). */
+export function hoursText(h: { value: number; is_assumption?: boolean }): string {
+  const n = h.value.toLocaleString("es-CL", { maximumFractionDigits: 2 });
+  const one = h.value === 1;
+  return `${n} h ${h.is_assumption === false ? (one ? "calibrada" : "calibradas") : one ? "supuesta" : "supuestas"}`;
+}
+
+export const OFFLINE = "No se pudo conectar con el servidor.";
+
+/** A failed request in Spanish: the browser's network error ("Failed to fetch", "NetworkError ...") reads as OFFLINE. */
+export function errorText(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e ?? "");
+  if (e instanceof TypeError || /failed to fetch|networkerror|load failed|network request failed/i.test(message) || !message) return OFFLINE;
+  return message;
+}

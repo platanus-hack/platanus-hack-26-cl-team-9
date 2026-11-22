@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { loadCatalog, type Catalog } from "./gridsApi";
+import { errorText } from "./text";
 import { Chevron, Icon } from "./ui";
 
 /** A ticked network: its country and the stored context document it is composed from (null for Chile). */
 export interface SourcePick { country: string; key: string | null }
 
 /**
- * "Fuentes de la grilla" in the nav rail: opens downward as a list of the networks the backend stores, each with a
+ * "Redes disponibles" in the nav rail (it was "Fuentes de la grilla"): opens downward as a list of the networks the backend stores, each with a
  * checkbox and its status (Complete: it can be simulated; Partial: it is only drawn). Tick as many as wanted: with
  * Chile ticked, Chile is the simulated network and the others are drawn around it as context; without Chile, the
  * ticked countries are shown together, view only. Each tick composes the grid at once. The hour comes from "Escenarios".
@@ -20,10 +21,14 @@ export function GridSources({ current, composed, busy, apply, reset, locked }: {
   const [checked, setChecked] = useState<Set<string>>(new Set([current]));
   useEffect(() => { if (!composed) setChecked(new Set([current])); }, [current, composed]); // back to the cache: the network on the map
 
+  /** Reads the catalog; a failed read is tried again when the list is reopened or with "Reintentar" (C-02). */
+  function load() {
+    setError(null);
+    loadCatalog().then(setCatalog).catch((e) => setError(errorText(e)));
+  }
   function toggleOpen() {
     setExpanded(!expanded);
-    if (catalog || error) return;
-    loadCatalog().then(setCatalog).catch((e) => setError(String(e.message)));
+    if (!expanded && !catalog) load();
   }
   function tick(country: string) {
     if (!catalog || busy || locked) return;
@@ -37,12 +42,12 @@ export function GridSources({ current, composed, busy, apply, reset, locked }: {
   return (
     <>
       <button className="rail-item" aria-expanded={expanded} onClick={toggleOpen}>
-        <Icon><path d="M2 3.5h5v4H2zM9 3.5h5v4H9zM5.5 9.5h5v4h-5zM4.5 7.5v1M11.5 7.5v1M8 8.5v1" /></Icon><span className="rail-label">Fuentes de la grilla</span>
+        <Icon><circle cx="8" cy="3.5" r="1.6" /><circle cx="3.5" cy="12" r="1.6" /><circle cx="12.5" cy="12" r="1.6" /><path d="M7.2 4.9L4.3 10.6M8.8 4.9l2.9 5.7M5.1 12h5.8" /></Icon><span className="rail-label">Redes disponibles</span>
         <span className="rail-chevron"><Chevron dir={expanded ? "down" : "right"} color="currentColor" /></span>
       </button>
       {expanded && (
-        <div className="scenarios sources" role="group" aria-label="Redes de la grilla">
-          {error && <p className="source-note">{error}</p>}
+        <div className="scenarios sources" role="group" aria-label="Redes disponibles">
+          {error && <p className="source-note" role="alert">{error} <button className="text-btn" onClick={load}>Reintentar</button></p>}
           {!error && !catalog && <p className="source-note">Leyendo el catálogo…</p>}
           {catalog?.grids.map((g) => (
             <label className="source-row" key={g.country} title={locked ? "En una sesión compartida la grilla está fija" : undefined}>

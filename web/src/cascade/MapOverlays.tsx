@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CITIES } from "./cities";
 import type { PlacedPoint } from "./placed";
 import { markerLabel, type Impact, type Marker } from "./simulation";
@@ -11,9 +12,12 @@ export interface LocatedMarker { marker: Marker; lon: number; lat: number; zone:
  * HTML layer over the map: event pins, the current event's callout and, on the offline map, city names. Each anchor
  * carries data-lon/data-lat; the app's animation loop moves it to the projected point every frame.
  * The callout does not follow its pin: it sits docked in the quiet corner next to the panel, so it never covers the
- * network and no line crosses it. The pin stays on the map, marked as the current one.
+ * network and no line crosses it. The pin stays on the map, marked as the current one. "Cerrar" hides the callout until
+ * another event becomes current or a pin is clicked (A2-12). Pins that would overlap are spread apart by the shell's
+ * animation loop (`_placeOverlays`), so a group never covers another pin (A2-06).
  */
 export function MapOverlays(p: { markers: LocatedMarker[]; states: Map<Marker, MarkerState>; visible: number; network: Network; impact: Impact; showCities: boolean; placed: PlacedPoint[]; select(t: number): void }) {
+  const [closed, setClosed] = useState<number | null>(null);
   const first = p.markers[0];
   const current = p.markers.find((lm) => p.states.get(lm.marker) === "current");
   // A group can reach past the current second: the callout shows its latest event that has already happened.
@@ -40,16 +44,17 @@ export function MapOverlays(p: { markers: LocatedMarker[]; states: Map<Marker, M
         const title = shortTitle(narrate(m.events[0], p.network));
         return (
           <div key={m.first} className={`anchor map-event ${state}`} data-lon={lm.lon} data-lat={lm.lat}>
-            <button className={`pin ${state}${m.first !== m.last ? " group" : ""}`} onClick={() => p.select(last.t)} aria-label={`Evento ${markerLabel(m)}: ${title}`}>{markerLabel(m)}</button>
+            <button className={`pin ${state}${m.first !== m.last ? " group" : ""}`} onClick={() => { setClosed(null); p.select(last.t); }} aria-label={`Evento ${markerLabel(m)}: ${title}`}>{markerLabel(m)}</button>
             {state === "past" && lm === first && (
               <div className="pin-label"><b>{title}</b><span>{secs(m.events[0].t)}{m.first !== m.last ? `–${secs(last.t)}` : ""} s</span></div>
             )}
           </div>
         );
       })}
-      {docked && (
+      {docked && closed !== docked.number && (
         <div className="callout docked" role="status">
-          <div className="callout-head"><span className="fault">{secs(docked.now.t)} s · evento {docked.number}</span><span>{docked.zone}</span></div>
+          <div className="callout-head"><span className="fault">{secs(docked.now.t)} s · evento {docked.number}</span><span>{docked.zone}</span>
+            <button className="text-btn callout-close" onClick={() => setClosed(docked.number)}>Cerrar</button></div>
           <h4>{shortTitle(narrate(docked.now, p.network))}</h4>
           <div className="callout-figures">
             <div><b className="cream">{formatPeople(p.impact.people)}</b><span>personas sin suministro</span></div>

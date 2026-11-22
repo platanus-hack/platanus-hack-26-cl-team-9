@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { BLACKOUT_HZ, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
+import { BLACKOUT_HZ, floorTenths, islandDash, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
 import { hz, secs } from "./text";
 import type { Timeline as TimelineData } from "./types";
 import { Chevron, Info } from "./ui";
@@ -15,13 +15,19 @@ interface Props {
   /** Non-linear track scale (simulation.ts `timeWarp`): x positions, dragging and arrow keys go through it. */
   warp: TimeWarp;
   setPlaying(b: boolean): void; togglePlay(): void; seek(t: number): void; setSpeed(s: number): void;
-  /** A cut is chosen and its timeline is still loading: the empty hint would be wrong. */
+  /** A cut is chosen and its timeline is still loading. */
   loading?: boolean;
+  /** The simulation of the changes failed (the panel says why and offers Reintentar). */
+  failed?: boolean;
+  /** Every substation is dark at `t`: the readout says "apagón", never 50 Hz (D3). */
+  blackout?: boolean;
 }
 
 /**
  * Bottom card (Design v5): clock, frequency of each island, play, and the rail with numbered event markers. The rail
- * uses the warped time (each failure gets room, the quiet tail is short); the clock and the position read simulated s.
+ * uses the warped time (each failure gets room, the quiet tail is short); the clock and the position read simulated s,
+ * both rounded down to tenths. The shell renders it only while there is a timeline to play (D9): how to start one is
+ * said by the cold start card in Simulación, not here.
  */
 export function TimelineCard(p: Props) {
   const duration = p.timeline?.duration_s ?? 0;
@@ -44,7 +50,7 @@ export function TimelineCard(p: Props) {
       <div className="timeline-head">
         <span className="clock">{p.clock}</span>
         <div className="timeline-tools">
-          <Readout islands={p.islands} />
+          {p.timeline && <Readout islands={p.islands} blackout={!!p.blackout} />}
           <label className="speed">
             <span>{p.speed}×</span><Chevron />
             <select aria-label="Velocidad" value={p.speed} onChange={(e) => p.setSpeed(Number(e.target.value))}>
@@ -54,7 +60,7 @@ export function TimelineCard(p: Props) {
         </div>
       </div>
       {!p.timeline ? (
-        <p className="timeline-empty">{p.loading ? "Cargando la simulación" : "Sin corte activo. Haz clic en una línea del mapa y clic otra vez para simular su salida de servicio segundo a segundo."}</p>
+        <p className="timeline-empty">{p.failed ? "No se pudo simular este cambio." : "Cargando la simulación"}</p>
       ) : (
       <div className="timeline-row">
         <button className="play" disabled={!hasCascade} aria-label={p.playing ? "Pausa" : atEnd ? "Repetir" : "Reproducir"}
@@ -80,21 +86,22 @@ export function TimelineCard(p: Props) {
           }}>
           <svg className="curves" width={TRACK_W} height="22" viewBox={`0 0 ${TRACK_W} 22`} aria-hidden>
             <path d={`M0 11 H${TRACK_W}`} fill="none" stroke="#FFFFFF1F" strokeDasharray="3 3" />
-            {p.timeline && Object.entries(p.timeline.frequency_hz).map(([id, c]) => {
+            {p.timeline && Object.entries(p.timeline.frequency_hz).map(([id, c], k) => {
               const shown = c.filter((pt) => pt[0] <= p.t + 1e-9);
               if (shown.length < 2) return null;
-              return <polyline key={id} fill="none" stroke={faultCurve(c) ? "#FF5A48" : "#C9CBCF"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                points={shown.map((pt) => `${x(pt[0]).toFixed(1)},${yOf(pt[1]).toFixed(1)}`).join(" ")} />;
+              // Each island keeps its stroke pattern, the same as its swatch in the readout (A2-08); red only under 49 Hz.
+              return <polyline key={id} fill="none" stroke={faultCurve(c) ? "#FF5A48" : "#C9CBCF"} strokeWidth="1.5" strokeLinecap="butt" strokeLinejoin="round"
+                strokeDasharray={islandDash(k) || undefined} points={shown.map((pt) => `${x(pt[0]).toFixed(1)},${yOf(pt[1]).toFixed(1)}`).join(" ")} />;
             })}
           </svg>
           <div className="track-rail" />
           <div className="track-rail played" style={{ width: x(p.t) }} />
-          {!hasCascade && <div className="head" style={{ left: x(p.t) }} />}
+          <div className="head" style={{ left: x(p.t) }} />
           {markers.map((m) => <TrackMarker key={m.first} m={m} state={stateOf(m, visible)} onClick={() => p.seek(m.events[m.events.length - 1].t)} />)}
         </div>
         <div className="timeline-right">
           <span className="ref">50 Hz</span>
-          <span className="pos">{`${atEnd ? Math.round(duration) : secs(p.t)} / ${Math.round(duration)} s`}</span>
+          <span className="pos">{`${atEnd ? Math.round(duration) : secs(floorTenths(p.t))} / ${Math.round(duration)} s`}</span>
         </div>
       </div>
       )}
@@ -116,18 +123,36 @@ function TrackMarker({ m, state, onClick }: { m: Marker; state: MarkerState; onC
   );
 }
 
-function Readout({ islands }: { islands: IslandFrequency[] }) {
-  const live = islands.filter((i) => i.started);
-  const tip = `Frecuencia de cada isla según el motor Sub50. Bajo ${hz(BLACKOUT_HZ)} Hz la isla se apaga.`;
+/** Swatch of an island's stroke pattern, so each curve of the rail can be told apart (A2-08). */
+const IslandSwatch = ({ k, fault }: { k: number; fault: boolean }) => (
+  <svg className="island-swatch" width="14" height="6" viewBox="0 0 14 6" aria-hidden>
+    <path d="M0 3H14" fill="none" stroke={fault ? "#FF5A48" : "#C9CBCF"} strokeWidth="1.5" strokeDasharray={islandDash(k) || undefined} />
+  </svg>
+);
+
+/**
+ * Frequency of each island with its stroke swatch. With three or more islands the readout wraps onto two short lines
+ * and names each island only by its swatch and the tip. With every substation dark it reads "apagón" (D3).
+ */
+function Readout({ islands, blackout }: { islands: IslandFrequency[]; blackout: boolean }) {
+  const tip = `Frecuencia de cada isla según el motor Sub50; cada isla tiene su trazo en la curva. Bajo ${hz(BLACKOUT_HZ)} Hz la isla se apaga.`;
+  if (blackout) return <div className="readout"><span>País <em className="fault">apagón</em></span><Info tip={tip} /></div>;
+  const live = islands.map((i, k) => ({ i, k })).filter(({ i }) => i.started);
   if (live.length === 0) return <div className="readout"><span>País <em>50,00 Hz</em></span><Info tip={tip} /></div>;
+  const many = live.length > 2;
   return (
-    <div className="readout">
-      <span>
-        {live.map((i, k) => (
-          <span key={i.id}>{k > 0 && " · "}{i.name} <em className={i.collapsed || (i.hz ?? 50) < 49 ? "fault" : ""}>{i.collapsed ? "apagón" : `${hz(i.hz ?? 50)} Hz`}</em></span>
-        ))}
+    <div className={many ? "readout many" : "readout"}>
+      <span className="readout-list">
+        {live.map(({ i, k }) => {
+          const fault = i.collapsed || (i.hz ?? 50) < 49;
+          return (
+            <span key={i.id} className="readout-item" title={i.name}>
+              <IslandSwatch k={k} fault={fault} />{!many && <>{i.name} </>}<em className={fault ? "fault" : ""}>{i.collapsed ? "apagón" : `${hz(i.hz ?? 50)} Hz`}</em>
+            </span>
+          );
+        })}
       </span>
-      <Info tip={tip} />
+      <Info tip={many ? `${live.map(({ i }) => `${i.name}: ${i.collapsed ? "apagón" : `${hz(i.hz ?? 50)} Hz`}`).join(" · ")}. ${tip}` : tip} />
     </div>
   );
 }

@@ -17,7 +17,10 @@
 .shell .cream { color: var(--place); }
 
 /* ---- Nav rail ---- */
-.shell .rail { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: var(--rail-w); padding: 16px 12px; background: var(--sidebar); display: flex; flex-direction: column; gap: 4px; border: 0; }
+/* The whole rail scrolls when the window is short, without visible chrome; nothing is pushed off (D7, G-13). */
+.shell .rail { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: var(--rail-w); padding: 16px 12px; background: var(--sidebar); display: flex; flex-direction: column; gap: 4px; border: 0; overflow-y: auto; scrollbar-width: none; }
+.shell .rail::-webkit-scrollbar { display: none; }
+.shell .rail-section { flex-shrink: 0; margin-top: 8px; padding: 4px 10px; color: var(--muted); font: 12px/16px var(--font-condensed); }
 .shell .wordmark { display: flex; align-items: flex-end; height: 28px; margin-bottom: 12px; padding-inline: 10px; color: var(--fg); flex-shrink: 0; }
 .shell .wordmark .sub { font-size: 20px; font-weight: 600; line-height: 24px; letter-spacing: -0.02em; }
 /* Sized from project-logo.png against the 10.6 px x-height of Roboto at 20 px: the "5" is 0.69 x-heights tall
@@ -32,11 +35,11 @@
 .shell .rail-item.faint { color: var(--faint); }
 .shell .rail-item.faint.on, .shell .rail-item.faint:hover { color: var(--fg); }
 .shell .rail-spacer { flex: 1; }
-/* Escenarios tree (Design v6): scenario rows with a 12 px disclosure slot, conditions hanging from a nested guide line.
-   When the rail is short the tree scrolls without visible chrome and "Ayuda" stays pinned at the bottom. */
-.shell .scenarios { display: flex; flex-direction: column; gap: 2px; flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; margin-left: 17px; padding-left: 4px; border-left: 1px solid var(--border-strong); }
-.shell .scenarios::-webkit-scrollbar { display: none; }
-.shell .scenario { display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; flex-shrink: 0; padding: 0 8px 0 0; background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; min-width: 0; }
+/* Escenarios tree (Design v6): folder rows with a 12 px disclosure slot, entries hanging from a nested guide line. The
+   tree takes its full height; when the window is short the whole rail scrolls. */
+.shell .scenarios { display: flex; flex-direction: column; gap: 2px; flex: none; margin-left: 17px; padding-left: 4px; border-left: 1px solid var(--border-strong); }
+.shell .scenario { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 28px; flex-shrink: 0; padding: 4px 8px 4px 0; background: none; border: 0; color: var(--muted); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; min-width: 0; }
+.shell .scenario-name { flex: 1 1 0; min-width: 0; }
 .shell .scenario.faint { color: var(--faint); }
 .shell .scenario.on { color: var(--fg); font-weight: 500; }
 .shell .scenario:hover { color: var(--fg); }
@@ -51,11 +54,14 @@
 .shell .condition:hover .cond-name, .shell .condition.on .cond-name { color: var(--fg); }
 .shell .condition.on .cond-name { font-weight: 500; }
 .shell .cond-date { color: var(--muted); font: 12px/16px var(--font-condensed); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shell .cond-note { color: var(--fg-3); font: 12px/16px var(--font-condensed); }
 .shell .scenario:focus-visible, .shell .condition:focus-visible { outline: 1px solid var(--fg-3); outline-offset: -1px; }
 .shell .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- Panel ---- */
 .shell .panel { position: absolute; z-index: 2; left: var(--panel-x); top: var(--gap); width: var(--panel-w); max-height: min(742px, calc(100% - var(--timeline-h) - 3 * var(--gap))); display: flex; flex-direction: column; background: var(--glass); border: 1px solid var(--border); }
+/* No timeline card (nothing to play, D9): the panel may use that height. */
+.shell.no-timeline .panel { max-height: calc(100% - 2 * var(--gap)); }
 .shell .panel-head { flex-shrink: 0; padding: 12px 12px 0; border-bottom: 1px solid var(--border); }
 .shell .crumbs { display: flex; align-items: center; gap: 8px; height: 28px; padding-left: 12px; }
 .shell .crumbs h1 { margin: 0; color: var(--fg); font-size: 16px; font-weight: 600; line-height: 20px; white-space: nowrap; }
@@ -103,6 +109,13 @@
 .shell .tip { position: fixed; z-index: 50; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border-strong); color: var(--fg-2); font-size: 12px; line-height: 16px; pointer-events: none; box-shadow: 0 6px 20px #0006; }
 .shell .text-btn { padding: 0; background: none; border: 0; color: var(--muted); font-size: 12px; line-height: 16px; cursor: pointer; }
 .shell .text-btn:hover { color: var(--fg); }
+.shell .text-btn.strong { color: var(--fg); font-weight: 500; }
+.shell .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.shell .field-error { margin: 0; color: #e8b4a6; font-size: 12px; line-height: 16px; }
+.shell .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; background: none; border: 0; color: var(--muted); cursor: pointer; }
+.shell .icon-btn:hover { color: var(--fg); }
+.shell .copy-link { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; }
+.shell .copy-done { color: var(--fg-3); font-size: 12px; line-height: 16px; white-space: nowrap; }
 
 /* Red tab */
 .shell .figures { flex-direction: row; gap: 8px; }
@@ -138,7 +151,23 @@
 .shell .mini-figures > div > span { color: var(--muted); font-size: 12px; line-height: 16px; }
 .shell .mini-figures.ruled { padding-top: 10px; border-top: 1px solid var(--border); }
 .shell .empty h3 { margin: 0; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 20px; }
-.shell .empty p:not(.meta) { margin: 0; color: var(--fg-3); font-size: 13px; line-height: 20px; }
+.shell .empty p:not(.meta):not(.field-error) { margin: 0; color: var(--fg-3); font-size: 13px; line-height: 20px; }
+/* Cold start (D8): the search field is the keyboard route to select a line or substation. */
+.shell .search-field input { width: 100%; height: 32px; padding: 0 10px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg); font: 13px/16px var(--font-sans); }
+.shell .search-field input::placeholder { color: var(--muted); }
+.shell .search-field input:focus { outline: 1px solid var(--fg-3); outline-offset: 0; }
+.shell .cold-start .actions { margin-top: 2px; }
+.shell .disclosure-block { border-top: 1px solid var(--border); padding-top: 10px; }
+.shell .disclosure-block summary { display: flex; align-items: center; gap: 6px; color: var(--fg-3); font-size: 13px; line-height: 16px; cursor: pointer; list-style: none; }
+.shell .disclosure-block summary::-webkit-details-marker { display: none; }
+.shell .disclosure-block[open] summary svg { transform: rotate(90deg); }
+.shell .disclosure-block summary:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+.shell .disclosure-block[open] > .mini-figures { margin-top: 10px; }
+.shell .disclosure-block > .meta { margin-top: 8px; }
+/* End-of-run figures under their own subhead (D5), apart from the figures read at second t. */
+.shell .end-of-run { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.shell .subhead { margin: 0; color: var(--muted); font: 500 12px/16px var(--font-condensed); }
+.shell .real-row { margin-top: -6px; color: var(--muted); font-size: 12px; line-height: 16px; }
 .shell .history { gap: 4px; padding: 14px 4px 8px; }
 .shell .card-head.pad { padding: 0 8px 6px; }
 .shell .event { display: flex; gap: 10px; width: 100%; padding: 7px 8px; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
@@ -177,6 +206,11 @@
 .shell .readout > span { overflow: hidden; text-overflow: ellipsis; }
 .shell .readout em { font-style: normal; color: #c9cbcf; }
 .shell .readout em.fault { color: var(--fault); }
+.shell .readout-list { display: flex; flex-wrap: wrap; column-gap: 10px; min-width: 0; }
+.shell .readout-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+/* Three or more islands: two short lines, each island by its stroke swatch (A2-08). */
+.shell .readout.many { font-size: 12px; line-height: 14px; }
+.shell .readout.many .readout-list { max-width: 150px; }
 .shell .speed { position: relative; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; flex-shrink: 0; background: #2e2f33; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
 .shell .speed select, .shell .legend-mode select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .shell .timeline-row { display: flex; align-items: flex-end; gap: 10px; margin: 0; }
@@ -224,6 +258,7 @@
 .shell .map-foot { position: absolute; z-index: 2; right: var(--gap); bottom: var(--gap); width: 300px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; pointer-events: none; }
 .shell .map-foot > * { pointer-events: auto; }
 .shell .scale { display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.shell .scale:not(.ready) { visibility: hidden; }
 .shell .scale-bar { display: block; height: 6px; border: 1px solid var(--fg-3); border-top: 0; }
 .shell .scale-label { color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 16px; text-shadow: 0 0 3px var(--bg), 0 0 6px var(--bg); }
 .shell .legend-card { width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--border-strong); }
@@ -241,6 +276,12 @@
 .shell .samples.just-dark .sample { width: auto; }
 .shell .impact .notice.truncated { margin: 12px 0 0; }
 .shell .legend-foot { margin: 0; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 16px; }
+/* Key of the active heat map, kept in the legend once the layers popover closes (A2-07). */
+.shell .heat-key { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border); }
+.shell .heat-name { color: var(--fg-2); font-size: 12px; line-height: 16px; }
+.shell .heat-ramp { display: block; height: 6px; border: 1px solid var(--border-strong); }
+.shell .heat-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .heat-status { color: var(--muted); font-size: 12px; line-height: 16px; }
 
 /* ---- HTML overlays on the map (moved every frame by CascadeApp) ---- */
 .shell .map-overlays { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
@@ -263,6 +304,8 @@
 /* Docked: top left of the map, under the time pill and clear of the panel, where there is only sea. */
 .shell .callout.docked { position: absolute; z-index: 4; left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); top: calc(var(--gap) + 70px); width: 260px; box-sizing: border-box; }
 .shell .callout-head { display: flex; justify-content: space-between; gap: 8px; color: var(--faint); font-size: 12px; line-height: 16px; }
+.shell .callout-head > span:nth-child(2) { margin-left: auto; }
+.shell .callout-close { margin-left: 4px; }
 .shell .callout h4 { margin: 0; color: var(--fg); font-size: 13px; font-weight: 600; line-height: 18px; }
 .shell .callout-figures { display: flex; gap: 20px; padding-top: 6px; border-top: 1px solid var(--border); }
 .shell .callout-figures > div { display: flex; flex-direction: column; gap: 1px; }
