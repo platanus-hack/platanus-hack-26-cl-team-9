@@ -427,5 +427,4 @@ def run_config(body: dict[str, Any]) -> RunConfig:
         initial_events=tuple(body.get("initial_events") or ()),
         stochastic=bool(body.get("stochastic", True)),
         llm_commander=bool(body.get("llm_commander", False)),
-        duration_h=None if body.get("duration_h") is None else float(body["duration_h"]),
     )

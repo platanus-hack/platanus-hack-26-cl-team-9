@@ -4,12 +4,6 @@
 # The adversary is off: the incident is the script. Zones and technologies only, never named plants.
 version: 1
 
-defaults:
-  value:
-    duration_h: 4
-  is_assumption: true
-  note: "Duration used to scale unserved energy and cost in the incident card; editable per run"
-
 incidents:
   source: "Public reports linked in each entry (docs/attack-sim.md section 2); effect sizes are replay assumptions"
   value:

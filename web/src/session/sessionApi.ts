@@ -77,7 +77,7 @@ export const getRunReport = (id: string, rid: string) => call<Json>("GET", `${ru
 export const getRunAfterAction = (id: string, rid: string) => call<Json>("GET", `${run(id, rid)}/after_action`);
 
 // Documented-incident scenarios (docs/attack-sim.md section 3.1): only catalog ids, no free effects.
-export interface IncidentRunBody { scenario: string; policy: "A" | "B" | "C"; seed?: number; duration_h?: number }
+export interface IncidentRunBody { scenario: string; policy: "A" | "B" | "C"; seed?: number }
 export const getIncidentCatalog = () => callAt<Json>(API, "GET", "/attacks/catalog");
 export const startIncidentRun = (id: string, body: IncidentRunBody) => call<Json>("POST", `${sid(id)}/attacks/runs`, { body });
 export type LiveMode = "sse" | "poll";

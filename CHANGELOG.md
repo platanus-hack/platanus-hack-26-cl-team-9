@@ -19,6 +19,21 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Files:** `web/src/cascade/{edits.ts,gridsApi.ts,CascadeApp.tsx,SelectionCard.tsx,NetworkState.tsx,SimulationPanel.tsx,GridSources.tsx,cascade.css,stressEdits.test.ts}`, `web/src/assistant/{useAssistant.ts,scenario.test.ts}`, `web/src/session/useSession.ts`, `backend/src/cascadasen/mcp/{tools.py,digest.py,toolbox.py}`, `backend/src/cascadasen/api/{grid_routes.py,stress_schemas.py}`, `backend/tests/unit/test_prepare_scenario_tool.py`, `docs/{stress.md,openapi/agents.openapi.json}`.
 ## 2026-11-22 · Merge origin/main into feat/incident-scenarios
 
+- **Changed:** Integrates main after #98 (the incident scenarios) was merged, with the technical-quality work (mypy gate, CI checks, architecture tests, 64 KB body limit). The only conflict was `domain/theater/cycle.py`: main added `cast(...)` to two lines that the calibrated-cost commit removes, so they stay removed.
+- **Why:** #98 went into main before the calibrated-cost commit (US$ 984 M for the 25F), which needs its own pull request.
+- **Agents:** Checked with CI's own commands: `mypy src` 0 errors, `pytest --cov-fail-under=87` gives 456 passed at 90.27 %, web `tsc`, `vitest` (155 tests) and build. The two `test_the_committed_cache_matches_the_engine_for_a_single_cut` failures are gone on main.
+- **Files:** `backend/src/cascadasen/domain/theater/cycle.py`, `CHANGELOG.md`.
+
+## 2026-11-22 · fix(incidents): cost from the calibrated cascade method, no editable duration
+
+- **Changed:** The incident card takes `unserved_energy_mwh`, `failure_cost_usd`, `cost_per_hour_usd`, `outage_duration_h` and `cost_breakdown` from the most expensive cascade of the run (`transient.summary`, `blackout_cost` of #82) and adds `cost_basis` (the calibrated terms with their source or `is_assumption`, also in the catalog). The 25F now gives US$ 984.3 M and 81,443 MWh, as "Estado de la red".
+  - Removed the editable duration: `duration_h` in `RunConfig`, the API body, the MCP tool and the web field, `default_duration_h` in the catalog and `incidents.yaml` `defaults`. The web tips say the dark load pays a 7.34 h black start (calibrated, [44]) and load shed pays 1 h (assumption).
+- **Why:** The card used the flat 4 h x 8.79 US$/kWh over the peak power (US$ 390 M for the 25F) while Estado de la red used #82's calibrated cost (US$ 984 M): two figures for the same event. Decision by Ricardo, 2026-11-22: use the calibrated one.
+- **Agents:** `POST /attacks/runs` no longer takes `duration_h` and an old recipe that has it is read without it. Shed-only incidents (Polonia: US$ 17.8 M) pay 1 h flagged `is_assumption`; an absorbed one (Huatacondo) costs 0. Only the 25F is checked against a real figure. `agents.openapi.json` regenerated.
+- **Files:** `backend/src/cascadasen/domain/theater/{incident,cycle,config,narrative}.py`, `domain/theater/params/incidents.yaml`, `api/incident_routes.py`, `mcp/{tools,digest}.py`, `application/run_experiment.py`, tests, `web/src/incidents/*`, `web/src/session/sessionApi*.ts`, `docs/{attack-sim,mapa3,mcp,sessions-api}.md`, `docs/openapi/agents.openapi.json`.
+
+## 2026-11-22 · Merge origin/main into feat/incident-scenarios
+
 - **Changed:** Integrates #92 (select on the first click, switch off on the second) and #97/#99 (prepared scenarios, `prepare_scenario`) with the incident scenarios.
   - `mcp/tools.py` `INSTRUCTIONS` keeps both paragraphs (incidents and `prepare_scenario`); `mcp/digest.py` keeps `_incident_digest` and `prepare_digest`.
   - `CascadeApp.tsx`: `edited` still counts an incident cascade (`!!incidentTl || ...`) and sits before main's `offState`; `canPower` still counts `inc.playing`, and `shutDown` uses main's `isSwitchedOff`. `inc.stop()` stays in `cutLine`, `outBus` and `powerAllOn`, which main's second-click path also goes through.

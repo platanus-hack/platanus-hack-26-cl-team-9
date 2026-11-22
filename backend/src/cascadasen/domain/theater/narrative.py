@@ -131,9 +131,9 @@ class TemplateInterpreter:
         effect = (
             f"{LEVELS_ES.get(card['consequence_level'], card['consequence_level'])}: hasta "
             f"{num(card['people_without_power'])} personas sin luz y {num(card['load_shed_mw'])} MW no servidos. "
-            f"Con una interrupción supuesta de {num(card['outage_duration_h']['value'], 1)} h "
-            f"(supuesto), {num(card['unserved_energy_mwh'])} MWh no servidos y US$ "
-            f"{num(card['failure_cost_usd'])}."
+            f"{num(card['unserved_energy_mwh'])} MWh no servidos y un costo de falla de US$ "
+            f"{num(card['failure_cost_usd'])} ({num(card['outage_duration_h']['value'], 2)} h de interrupción"
+            f"{', supuesto' if card['outage_duration_h']['is_assumption'] else ', calibrado con el 25F'})."
         )
         prevention = [render("prevention", m) for m in inc["mitigations"]]
         return {

@@ -50,7 +50,6 @@ def test_the_catalog_is_bounded_curated_and_has_sources():
         assert t.adversary["enabled"] is False  # the incident is the script
     assert cfg.incidents["reino-unido-2026"].verified is False  # press-based, flagged
     assert cfg.incidents["25f-referencia"].kind == "reference_not_cyber"
-    assert cfg.incident_duration_h == 4.0
 
 
 def test_every_scenario_effect_resolves_on_the_real_network(world):
@@ -84,12 +83,27 @@ def test_a_scripted_incident_has_no_unplanned_events_so_the_small_ones_stay_smal
             assert sim.report()["incident"]["consequence_card"]["consequence_level"] == "L0", (scenario, seed)
 
 
-def test_the_incident_card_uses_an_editable_duration_flagged_as_assumption(world):
-    short = run(world, "polonia-2025", 5, duration_h=1).report()["incident"]["consequence_card"]
-    long_ = run(world, "polonia-2025", 5, duration_h=8).report()["incident"]["consequence_card"]
-    assert short["outage_duration_h"] == {"value": 1.0, "is_assumption": True}
-    assert long_["unserved_energy_mwh"] == pytest.approx(short["unserved_energy_mwh"] * 8, rel=0.02)
-    assert long_["load_shed_mw"] > 0 and long_["people_without_power"] > 0
+def test_the_card_cost_is_the_calibrated_one_of_estado_de_la_red(world):
+    card = run(world, "25f-referencia", 1).report()["incident"]["consequence_card"]
+    # [44] ISCI for Enel Foundation: about US$ 984 M and 81,430 MWh for the 25F (docs/engine.md "Cost", #82)
+    assert card["failure_cost_usd"] == pytest.approx(984e6, rel=0.01)
+    assert card["unserved_energy_mwh"] == pytest.approx(81430, rel=0.01)
+    assert card["outage_duration_h"] == {"value": 7.34, "is_assumption": False}
+    basis = card["cost_basis"]
+    assert basis["blackout_restoration_h"]["source"] and basis["shed_restoration_h"]["is_assumption"] is True
+
+
+def test_a_shed_only_incident_pays_one_assumed_hour_and_no_total_blackout_premium(world):
+    card = run(world, "polonia-2025", 5).report()["incident"]["consequence_card"]
+    assert card["outage_duration_h"] == {"value": 1.0, "is_assumption": True}
+    assert card["cost_breakdown"]["dark_mw"] == 0 and card["cost_breakdown"]["total_blackout_factor"] == 1.0
+    assert card["failure_cost_usd"] == pytest.approx(card["cost_per_hour_usd"], rel=0.01)
+    assert card["load_shed_mw"] > 0 and card["people_without_power"] > 0
+
+
+def test_an_absorbed_incident_costs_nothing(world):
+    card = run(world, "huatacondo-2026", 1).report()["incident"]["consequence_card"]
+    assert card["failure_cost_usd"] == 0 and card["unserved_energy_mwh"] == 0
 
 
 def test_the_25f_reference_cascades_but_is_labelled_not_cyber(world):
@@ -102,7 +116,7 @@ def test_a_replay_with_the_same_seed_is_identical(world):
     a, b = run(world, "polonia-2025", 9), run(world, "polonia-2025", 9)
     assert a.report()["trace_head"] == b.report()["trace_head"]
     assert a.report()["incident"] == b.report()["incident"]
-    assert RunConfig.from_dict(json.loads(json.dumps(a.config.as_dict()))).duration_h == a.config.duration_h
+    assert RunConfig.from_dict(json.loads(json.dumps(a.config.as_dict()))) == a.config
 
 
 def test_after_action_describes_effects_and_prevention_in_spanish(world):
@@ -131,7 +145,9 @@ def test_guardrails_no_technique_no_ranking_no_named_plants():
 def test_the_api_launches_a_run_inside_a_session_and_rejects_unknown_ids():
     c = TestClient(create_app())
     cat = c.get("/api/v1/attacks/catalog").json()
-    assert [i["id"] for i in cat["incidents"]] == IDS and cat["default_duration_h"]["is_assumption"] is True
+    assert [i["id"] for i in cat["incidents"]] == IDS and cat["cost_basis"]["blackout_restoration_h"][
+        "value"
+    ] == 7.34
     sid = c.post("/api/v1/sessions", json={}).json()["session_id"]
     bad = c.post(f"/api/v1/sessions/{sid}/attacks/runs", json={"scenario": "cualquiera"})
     assert bad.status_code == 422 and bad.json()["detail"]["valid"] == IDS

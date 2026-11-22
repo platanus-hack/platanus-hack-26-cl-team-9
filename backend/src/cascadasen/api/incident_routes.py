@@ -30,7 +30,10 @@ class IncidentCatalogOut(AgentOut):
     """Documented incidents that can be replayed as simulated runs."""
 
     notices: list[str] = Field(description="Notices every result carries: hypothetical, not a prediction.")
-    default_duration_h: dict[str, Any] = Field(description="Default outage hours, with is_assumption true.")
+    cost_basis: dict[str, Any] = Field(
+        description="The calibrated cost terms (black-start hours, shed hours, total-blackout multiplier), each "
+        "with its source or is_assumption true."
+    )
     incidents: list[dict[str, Any]] = Field(
         description="id, title, date, kind (cyber_documented or reference_not_cyber), verified, sources, "
         "notes, mitigations, operating_point (the session point the incident needs) and the effects the "
@@ -44,13 +47,6 @@ class IncidentRunIn(BaseModel):
     )
     policy: str = Field("C", description="Defensive policy: A reactive, B preventive, C adaptive.")
     seed: int | None = Field(None, ge=0, description="Random seed; omitted means a fresh one.")
-    duration_h: float | None = Field(
-        None,
-        gt=0,
-        le=720,
-        description="Outage hours that scale unserved energy and cost in the incident card. Always an "
-        "assumption; omitted uses the catalog default.",
-    )
     uncertainty: float = Field(1.0, description="0 perfect information, 1 baseline, 2 degraded.")
     stochastic: bool = Field(
         False,
@@ -115,7 +111,6 @@ def start_incident_run(
         "template": body.scenario,
         "policy": body.policy,
         "seed": body.seed,
-        "duration_h": body.duration_h,
         "uncertainty": body.uncertainty,
         "stochastic": body.stochastic,
         "adversary": body.adversary.model_dump() if body.adversary else None,

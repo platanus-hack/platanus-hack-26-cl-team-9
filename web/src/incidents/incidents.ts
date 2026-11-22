@@ -13,11 +13,14 @@ export interface IncidentInfo {
   id: string; title: string; date: string; kind: "cyber_documented" | "reference_not_cyber" | string; verified: boolean;
   sources: IncidentSource[]; notes: string[]; mitigations: string[]; operating_point: string; horizon: number; effects: IncidentEffect[];
 }
-export interface IncidentCatalog { notices: string[]; default_duration_h: Assumed; incidents: IncidentInfo[] }
+/** A calibrated cost term with where it comes from (`cascade.yaml` `cost`): a source or `is_assumption`. */
+export interface CostTerm { value: number; source: string | null; is_assumption: boolean }
+export interface IncidentCatalog { notices: string[]; cost_basis: Record<string, CostTerm>; incidents: IncidentInfo[] }
 /** `report.incident.consequence_card`. */
 export interface IncidentCard {
   incident: string; consequence_level: string; people_without_power: number; load_shed_mw: number;
-  unserved_energy_mwh: number; failure_cost_usd: number; outage_duration_h: Assumed; note: string; notices: string[];
+  unserved_energy_mwh: number; failure_cost_usd: number; cost_per_hour_usd: number; outage_duration_h: Assumed;
+  cost_breakdown: Record<string, number>; cost_basis: Record<string, CostTerm>; note: string; notices: string[];
 }
 /** `after_action.incident`. */
 export interface IncidentAar {
@@ -41,8 +44,6 @@ export const NOTICES = [
 ];
 export const LEVELS: Record<string, string> = { L0: "L0 · absorbido", L1: "L1 · contenido", L2: "L2 · apagón regional", L3: "L3 · apagón nacional" };
 export const POLICIES: [Policy, string, string][] = [["A", "A", "Reactiva"], ["B", "B", "Preventiva"], ["C", "C", "Adaptativa"]];
-export const MIN_DURATION_H = 0.25;
-export const MAX_DURATION_H = 720;
 const DEFAULT_CYCLE_MIN = 5;
 // Same labels as backend/src/cascadasen/domain/theater/params/narrative_es.yaml (event_types).
 const EVENT_LABELS: Record<string, string> = {
@@ -100,16 +101,18 @@ export function cycleMinutes(snapshots: RunSnapshot[]): number {
 }
 
 export interface Figure { label: string; value: string; tip: string }
-/** Card figures as text, each with where it comes from; duration, MWh and cost are flagged as assumptions. */
+/** Card figures as text, each with where it comes from. MWh and cost are the cascade engine's own, the same as
+ * "Estado de la red": dark demand pays a black start, load shed in a surviving island pays about an hour (assumption). */
 export function cardFigures(card: IncidentCard): Figure[] {
-  const h = card.outage_duration_h.value;
-  const hours = `${h.toLocaleString("es-CL", { maximumFractionDigits: 2 })} h`;
-  const assumed = card.outage_duration_h.is_assumption ? `${hours} supuestas (editable)` : hours;
+  const h = card.outage_duration_h;
+  const hours = `${h.value.toLocaleString("es-CL", { maximumFractionDigits: 2 })} h ${h.is_assumption ? "(supuesto)" : "(calibrado con el 25F, [44])"}`;
+  const blackout = card.cost_basis?.blackout_restoration_h?.value ?? 7.34;
+  const shed = card.cost_basis?.shed_restoration_h?.value ?? 1;
   return [
     { label: "personas sin luz", value: int(card.people_without_power), tip: "Máximo de la corrida en la red reducida (report.incident.consequence_card)." },
     { label: "MW no servidos", value: int(card.load_shed_mw), tip: "Potencia no servida máxima de la corrida (report.incident.consequence_card)." },
-    { label: "MWh no servidos", value: int(card.unserved_energy_mwh), tip: `Supuesto: la potencia no servida máxima durante ${assumed}.` },
-    { label: "costo de falla", value: usdM(card.failure_cost_usd), tip: `Supuesto: ${assumed} por el costo de falla regulatorio de la CNE [19]; una valoración para planificar, no una pérdida medida.` },
+    { label: "MWh no servidos", value: int(card.unserved_energy_mwh), tip: `Del motor de cascadas, igual que Estado de la red: interrupción de ${hours}.` },
+    { label: "costo de falla", value: usdM(card.failure_cost_usd), tip: `Costo de falla de la CNE [19] como en Estado de la red: la carga apagada paga ${blackout.toLocaleString("es-CL")} h de arranque en negro [44] y un recargo por apagón total; el deslastre paga ${shed.toLocaleString("es-CL")} h (supuesto). Una valoración para planificar, no una pérdida medida.` },
   ];
 }
 
@@ -125,13 +128,6 @@ export function responseFigures(ind: Indicators, minutesPerCycle: number): Figur
   if (ind.wrong_decisions != null) out.push({ label: "decisiones innecesarias", value: int(ind.wrong_decisions), tip });
   if (ind.operational_reserve?.final != null) out.push({ label: "reserva final", value: pct(ind.operational_reserve.final), tip });
   return out;
-}
-
-/** Duration typed by the user, clamped to what the API accepts; null when it is not a number. */
-export function parseDuration(text: string): number | null {
-  const n = Number(text.replace(",", "."));
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.min(MAX_DURATION_H, Math.max(MIN_DURATION_H, n));
 }
 
 /** Spanish text of a failed call: `status` is null when the backend could not be reached at all. */
