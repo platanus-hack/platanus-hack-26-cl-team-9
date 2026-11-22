@@ -21,6 +21,7 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 import networkx as nx
 import numpy as np
@@ -161,7 +162,7 @@ class GridUnifier:
                 seen_cen.add(s.cen_id)
             levels = sorted(kv_levels.get(s.cen_id or -1, set()) | ({s.kv} if s.kv else set()), reverse=True)
             prov = [Provenance(s.source, s.record_id, "ubicación, tensión, segmento, propietario, comuna")]
-            ids = {"ide_objectid": s.record_id}
+            ids: dict[str, Any] = {"ide_objectid": s.record_id}
             if cen:
                 ids |= {"cen_id": cen.cen_id, "cen_code": cen.cen_code, "cen_name": cen.name}
                 ids |= {k: v for k, v in cen.extra.items() if k.startswith("flag_")}
@@ -864,8 +865,8 @@ class GridUnifier:
                 )
             )
         node_by_id = {n.id: n for n in nodes}
-        for c in comunas:
-            for s in c.served_by:
+        for comuna in comunas:
+            for s in comuna.served_by:
                 node_by_id[s.node].served_population += s.population
                 node_by_id[s.node].served_households += s.households
         self.stats["delivery_substations"] = len(delivery)
@@ -895,8 +896,8 @@ class GridUnifier:
             z = REGION_TO_MACRO.get(p.region_code or "")
             if z in zones and p.operating:
                 zones[z].generation_mw += p.mw
-        for z in zones.values():
-            z.generation_mw = round(z.generation_mw, 1)
+        for zone in zones.values():
+            zone.generation_mw = round(zone.generation_mw, 1)
         return list(zones.values())
 
     # ---------------------------------------------------------------- summary

@@ -39,7 +39,7 @@ def tool_specs(tools: Sub50Tools, exclude: frozenset[str] = frozenset()) -> list
             continue
         method = getattr(tools, name)
         hints = get_type_hints(method)
-        fields = {
+        fields: dict[str, Any] = {
             p.name: (hints[p.name], ... if p.default is inspect.Parameter.empty else p.default)
             for p in inspect.signature(method).parameters.values()
         }

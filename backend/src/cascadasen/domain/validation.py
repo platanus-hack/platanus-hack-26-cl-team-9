@@ -294,10 +294,10 @@ def validate_snapshot(s: GridSnapshot) -> dict[str, Any]:
     ]
     agree = 0
     for e in named:
-        a, b = nodes[e.source_node], nodes[e.target_node]
-        if a.kind == NodeKind.SUBSTATION and b.kind == NodeKind.SUBSTATION:
+        src, dst = nodes[e.source_node], nodes[e.target_node]
+        if src.kind == NodeKind.SUBSTATION and dst.kind == NodeKind.SUBSTATION:
             toks = line_ends(e.name)
-            agree += name_score(a.name, toks) >= 0.82 and name_score(b.name, toks) >= 0.82
+            agree += name_score(src.name, toks) >= 0.82 and name_score(dst.name, toks) >= 0.82
     both = sum(
         1
         for e in named

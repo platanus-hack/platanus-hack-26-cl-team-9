@@ -430,8 +430,10 @@ def run_transient(
     if behavior == "as_happened" and scenario == "25F":
         trips, _ = documented_trips_25f()
         ramps = [Ramp(d["start_s"], d["end_s"], d["mw"], d["label_key"]) for d in trips]
-        for r in ramps:
-            events.append(_event(r.start, "documented_event", [], r.label_key, mw=r.mw, until_s=r.end))
+        for ramp in ramps:
+            events.append(
+                _event(ramp.start, "documented_event", [], ramp.label_key, mw=ramp.mw, until_s=ramp.end)
+            )
 
     pdce = _pdce_corridors(network, defenses)
     lost_pdce = pdce & (set(opened) | {c for c, _ in weak})

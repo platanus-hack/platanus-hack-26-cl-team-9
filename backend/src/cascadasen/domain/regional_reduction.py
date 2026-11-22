@@ -14,6 +14,7 @@ from typing import Any
 
 import networkx as nx
 import numpy as np
+from numpy.typing import ArrayLike
 
 from cascadasen.domain.regional import RegionalBundle, RegionalSource
 
@@ -103,7 +104,7 @@ class _Union:
         self.parent[self.find(i)] = self.find(j)
 
 
-def km_xy(lon: np.ndarray, lat: np.ndarray, lat0: float) -> np.ndarray:
+def km_xy(lon: ArrayLike, lat: ArrayLike, lat0: float) -> np.ndarray:
     return np.c_[np.asarray(lon) * 111.32 * math.cos(math.radians(lat0)), np.asarray(lat) * 110.57]
 
 

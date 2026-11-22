@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(types): fix plain mypy annotation errors
+- **Changed:** `uv run mypy src` goes from 153 to 52 errors (179 before the config). Only annotations, `cast`, two `assert x is not None` that cannot fail (`execution.py` C3, `cycle.py` LLM answer) and renames of shadowed loop variables (`r` to `ramp`, `p` to `prob`, `k` to `nearest`, `c` to `comuna`, `z` to `zone`, `a, b` to `src, dst`). No runtime behaviour changed. `backend/README.md` gets a `Type checking` section.
+- **Why:** Review R-03/B-10.
+- **Agents:** Left on purpose (need a behaviour or model change): `float | None` coordinates guarded by `located`, and `TheaterWorld | None` passed where it is required. mypy is still not a CI gate.
+- **Files:** `backend/src/cascadasen/{api,application,domain,infrastructure,mcp}/*` (21 files), `backend/README.md`.
 ## 2026-11-22 · chore(types): add a mypy baseline configuration
 - **Changed:** `backend/pyproject.toml` gets `[tool.mypy]` (`python_version = "3.12"`, `files = ["src"]`, `ignore_missing_imports = true`, `plugins = ["pydantic.mypy"]`). `uv run mypy src` goes from 179 to 153 errors.
 - **Why:** Review R-03/B-10. Without a config, mypy reported 16 errors for libraries without stubs (networkx, yaml, boto3, openpyxl, anthropic, mcp) and did not understand pydantic models.

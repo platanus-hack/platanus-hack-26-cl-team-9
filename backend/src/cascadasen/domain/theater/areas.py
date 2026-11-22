@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import cached_property
+from typing import cast
 
 import numpy as np
 
@@ -171,7 +172,7 @@ def build_theater_network(
         if a == b:
             line_area[ln.id] = a
         else:
-            pair = tuple(sorted((a, b), key=order.__getitem__))
+            pair = cast(tuple[str, str], tuple(sorted((a, b), key=order.__getitem__)))
             crossing[pair].append(ln.id)
     corridors = {
         f"{a}-{b}": Corridor(f"{a}-{b}", a, b, tuple(sorted(ids))) for (a, b), ids in sorted(crossing.items())

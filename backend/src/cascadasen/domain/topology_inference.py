@@ -156,8 +156,8 @@ def infer_line_topology(
     for ie in still:
         d = np.hypot(*(resolved_xy - end_xy[ie]).T) if len(resolved_xy) else np.array([])
         if len(d) and d.min() <= cfg.junction_m:
-            k = resolved[int(np.argmin(d))]
-            ends[ie] = {"node": ends[k]["node"], "method": "join_end", "dist_m": round(float(d.min()))}
+            nearest = resolved[int(np.argmin(d))]
+            ends[ie] = {"node": ends[nearest]["node"], "method": "join_end", "dist_m": round(float(d.min()))}
         else:
             pending.append(ie)
     clusters: list[list] = []

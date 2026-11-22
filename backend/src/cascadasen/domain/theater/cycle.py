@@ -15,7 +15,7 @@ Everything is appended to a hash-chained audit log. A run is reproducible from i
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any
+from typing import Any, cast
 
 from cascadasen.domain.agents.adversary import AdversaryAgent
 from cascadasen.domain.agents.auditor import AuditorAgent, CycleRecord
@@ -162,7 +162,9 @@ class Simulation:
         self.ledger = Ledger({**cfg.resources, **dict(conf.capabilities)})
         self.defense_areas = net.defense_areas()
         self.chance = (
-            Chance.for_run(conf.seed, cfg.stochastic) if conf.stochastic and cfg.stochastic else None
+            Chance.for_run(cast(int, conf.seed), cfg.stochastic)
+            if conf.stochastic and cfg.stochastic
+            else None
         )
         self.executor = Executor(net, cfg, self.defense_areas, self.chance)
         self.ex = ExecutionState()
@@ -201,13 +203,13 @@ class Simulation:
                 budget=adv.budget,
                 adaptive=adv.adaptive,
                 plan=list(self.template.adversary.get("plan") or []),
-                rng=rng_for(conf.seed, "adversary"),
+                rng=rng_for(cast(int, conf.seed), "adversary"),
                 catalog=cfg.adversary,
             )
         self.evaluator = Evaluator(
             self.mission.priority_areas, cfg.clock["cycle_minutes"] / 60.0, self.physics.voll_usd_per_kwh
         )
-        self.rng_digital = rng_for(conf.seed, "digital")
+        self.rng_digital = rng_for(cast(int, conf.seed), "digital")
         self.history_real = [self._real_snapshot()]
         self.observations: list[ObservedState] = []
         self.snapshots: list[dict[str, Any]] = []
@@ -441,7 +443,9 @@ class Simulation:
                     "bus": bus_id(anchor) if anchor is not None else None,
                     "lon": buses.lon[anchor] if anchor is not None else None,
                     "lat": buses.lat[anchor] if anchor is not None else None,
-                    "target_bus": bus_id(self.network.areas[target].anchor_bus) if target else None,
+                    "target_bus": bus_id(cast(int, self.network.areas[target].anchor_bus))
+                    if target
+                    else None,
                 }
             )
         return out
@@ -832,6 +836,7 @@ class Simulation:
                 return None
             keys = tuple(str(x) for x in chosen if str(x) in {o["id"] for o in options})[:capacity]
             self.llm_record[k] = keys
+            assert answer is not None  # `chosen` came from it
             explanation = str(answer.get("explanation", ""))[:2000]
             self.log.append(
                 k, "decide", "c2", "llm_choice", {"chosen": list(keys), "explanation": explanation}

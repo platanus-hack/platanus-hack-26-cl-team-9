@@ -215,7 +215,7 @@ class GridQueryService:
             for c, sh in self.served_by_node.get(n.id, [])
         ]
         served.sort(key=lambda x: -x["population"])
-        tech = defaultdict(float)
+        tech: defaultdict[str, float] = defaultdict(float)
         for p in plants:
             if p["operating"]:
                 tech[p["tech"]] += p["mw"]
@@ -444,7 +444,7 @@ class GridQueryService:
                 g.remove_node(x)
         comps = [c for c in nx.connected_components(g) if c & self.main_component]
         comps.sort(key=len, reverse=True)
-        islands = []
+        islands: list[dict[str, Any]] = []
         for k, c in enumerate(comps):
             ns = [self.nodes[i] for i in c]
             gen = sum(n.generation_mw for n in ns)

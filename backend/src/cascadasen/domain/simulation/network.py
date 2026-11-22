@@ -296,7 +296,7 @@ def _assign_areas(snapshot: GridSnapshot, spec: NetworkSpec, nodes: dict[str, No
 def _main_node(ns: list[Node], corridors: dict[str, Corridor], snapshot_edges: dict[str, Edge]) -> str | None:
     """Backbone substation of an area: highest voltage, then most corridor lines."""
     ids = {n.id for n in ns}
-    lines = Counter()
+    lines: Counter[str] = Counter()
     for c in corridors.values():
         for m in c.members:
             e = snapshot_edges[m]

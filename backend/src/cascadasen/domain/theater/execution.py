@@ -19,7 +19,7 @@ they have a duration. Clearing rules:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from cascadasen.domain.theater.areas import TheaterNetwork, UnknownTargetError, bus_id
 from cascadasen.domain.theater.catalog import EVENTS
@@ -149,7 +149,7 @@ class Executor:
                 return r.area, r.area
             raise EventError(f"{req.target}: objetivo no válido para {req.type}")
         if kind == "node" and spec.family != "physical":
-            return r.area, r.area  # digital effects act on the operating area
+            return cast(str, r.area), r.area  # digital effects act on the operating area
         return r.id, r.area
 
     # ---------------------------------------------------------------- events
@@ -200,7 +200,7 @@ class Executor:
         return out
 
     def _digital(self, real: RealState, eff: Effect) -> None:
-        d = real.digital[eff.area]
+        d = real.digital[cast(str, eff.area)]
         p = eff.params
         if eff.event == "D1_telemetry_loss":
             d.telemetry = max(0.0, 1.0 - float(p.get("share", 1.0)))
@@ -226,25 +226,26 @@ class Executor:
             if r and r.kind == "bus":  # a substation: its own online generation by default
                 b = int(r.id[1:])
                 mw = p.get("mw") or float(real.grid.sync[b] + real.grid.renew[b])
-                return [Change("trip_gen", r.area, mw=mw, tech=p.get("tech"))]
+                return [Change("trip_gen", cast(str, r.area), mw=mw, tech=p.get("tech"))]
             return [Change("trip_gen", t, mw=p.get("mw"), share=p.get("share"), tech=p.get("tech"))]
         if eff.event in ("C2_common_mode_loss", "E2_renewable_drop"):
             kind = "group_out" if eff.event == "C2_common_mode_loss" else "renewable_drop"
             return [Change(kind, t, share=float(p.get("share", 0.4)), tech=p.get("tech", "solar"))]
         if eff.event == "C3_transmission_opening":
+            assert r is not None  # r is None only for C4_defense_not_acting
             if r.kind == "corridor":
                 return [Change("open_corridor", r.id)]
             if r.kind == "line":
                 return [Change("lines_out", r.id, lines=(r.id,))]
-            bus = r.id if r.kind == "bus" else bus_id(self.net.areas[r.area].anchor_bus)
+            bus = r.id if r.kind == "bus" else bus_id(cast(int, self.net.areas[cast(str, r.area)].anchor_bus))
             return [Change("node_out", bus)]
         if eff.event == "C4_defense_not_acting":
             return [Change("disable_defense", t)]
         if eff.event == "C5_remote_dispatch_loss":
-            real.digital[eff.area].remote_control = False
-            return [Change("no_reserve", eff.area)]
+            real.digital[cast(str, eff.area)].remote_control = False
+            return [Change("no_reserve", cast(str, eff.area))]
         if eff.event == "E1_demand_surge":
-            target = r.area if r and r.kind == "bus" else t
+            target = cast(str, r.area) if r and r.kind == "bus" else t
             return [Change("load_step", target, mw=p.get("mw"), share=p.get("share"))]
         return []
 
@@ -451,7 +452,7 @@ class Executor:
                 and e.active(cyc)
                 and cyc - e.start >= int(e.params.get("lag", 2))
             ):
-                refresh_comms(real.digital[e.area], primary_ok=False)
+                refresh_comms(real.digital[cast(str, e.area)], primary_ok=False)
         clears_after = int(self.cfg.actions.get("digital_segmentation", {}).get("clears_after", 2))
         for a, since in list(ex.segmented_since.items()):
             if cyc - since >= clears_after:
@@ -529,7 +530,7 @@ class Executor:
             return list(self.net.corridors[r.id].lines)
         if r.kind == "line":
             return [r.id]
-        bus = int(r.id[1:]) if r.kind == "bus" else self.net.areas[r.area].anchor_bus
+        bus = int(r.id[1:]) if r.kind == "bus" else cast(int, self.net.areas[cast(str, r.area)].anchor_bus)
         return self.net.bus_lines(bus)
 
     def _auto_release(self, real: RealState, ex: ExecutionState) -> None:
