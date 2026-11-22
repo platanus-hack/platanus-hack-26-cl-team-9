@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(network): add country to the reduced network and exports
+
+- **Changed:** `Line` and `ReducedNetwork` (`domain/cascade/network.py`) get `country: str = "CHL"` (ISO3). `cache_builder._network_json` and `theater_network_view` (the session and `/sim/network` view) write `country` on every node and line. `GridQueryService.geojson` adds `country: "CHL"` to every feature of every layer (`geo/*.geojson`), and `data/scripts/build_node_index.py` copies it into `node_index.json`.
+- **Why:** Issue #49 part A: every substation, line and plant says which country it belongs to, with the same field the regional layer (`data/processed/latam/`) already has.
+- **Agents:** `country` is the network-level ISO3 of a `ReducedNetwork`; a reduced network never spans two countries. New constructors may omit it (default `CHL`). Tests: `test_network_json_carries_country_on_every_node_and_line`, plus asserts in `test_geojson_layers` and `test_theater_network_is_the_mapa3_network`.
+- **Files:** `backend/src/cascadasen/domain/cascade/network.py`, `backend/src/cascadasen/application/{cache_builder,simulation_service,grid_queries}.py`, `data/scripts/build_node_index.py`, `backend/tests/`.
+
 ## 2026-11-22 · feat(infra): ECS task of 4 vCPU and 8 GB
 - **Changed:** `aws_ecs_task_definition.app` goes from 2 vCPU / 4 GB to 4 vCPU / 8 GB (`cpu = 4096`, `memory = 8192`, a valid Fargate pair). `docs/infrastructure.md` says so.
 - **Why:** The user asked for a bigger task. The Fargate On-Demand vCPU quota is 30, so two 4 vCPU tasks fit during a blue/green rollout.

@@ -13,6 +13,8 @@ import networkx as nx
 from cascadasen.domain.model import Edge, EdgeKind, GridSnapshot, Node, NodeKind
 from cascadasen.domain.naming import norm
 
+COUNTRY = "CHL"  # ISO3 of every element of the snapshot (Chile's SEN)
+
 
 class NotFoundError(KeyError):
     pass
@@ -555,6 +557,9 @@ class GridQueryService:
                 )
         else:
             raise NotFoundError(layer)
+        # Same provenance field as data/processed/latam (docs/regional.md section 2): the snapshot is Chile's SEN.
+        for f in feats:
+            f["properties"]["country"] = COUNTRY
         return {"type": "FeatureCollection", "features": feats}
 
 

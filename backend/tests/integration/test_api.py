@@ -46,6 +46,7 @@ def test_geojson_layers(client):
     for layer in ("substations", "lines", "plants", "comunas", "taps", "storage"):
         fc = client.get(f"/api/v1/geo/{layer}.geojson").json()
         assert fc["type"] == "FeatureCollection"
+        assert all(f["properties"]["country"] == "CHL" for f in fc["features"])
     assert client.get("/api/v1/geo/nope.geojson").status_code == 404
 
 

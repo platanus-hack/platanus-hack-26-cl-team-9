@@ -78,6 +78,7 @@ def _network_json(net: ReducedNetwork) -> dict:
                 "kv": net.kv[i],
                 "zone": net.zone(i),
                 "map_nodes": net.map_nodes[i],
+                "country": net.country,
             }
             for i in range(net.size)
         ],
@@ -91,6 +92,7 @@ def _network_json(net: ReducedNetwork) -> dict:
                 "x_pu": ln.x_pu,
                 "map_edges": list(ln.map_edges),
                 "branches": list(ln.branches),
+                "country": ln.country,
             }
             for ln in net.lines
         ],
