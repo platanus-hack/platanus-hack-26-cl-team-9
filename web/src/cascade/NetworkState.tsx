@@ -12,6 +12,9 @@ import { Info } from "./ui";
  * never replaces them. Each one can be put back alone, or all at once.
  */
 export function NetworkState({ network, buses, point, edits, result, timeline, restoreLine, restoreBus, restoreAll, prepared, dropChange }: {
+  /** network and buses: the grid on the map. point: operating point id. edits: every change the user made. result: the last
+   *  server simulation of those changes (null for one cached cut). timeline: the cascade on screen. restoreLine, restoreBus
+   *  and restoreAll put changes back. */
   network: Network; buses: Record<string, BusState>; point: string; edits: Edits; result: SimulationResult | null; timeline: Timeline | null;
   restoreLine(id: string): void; restoreBus(id: string): void; restoreAll(): void;
   /** The prepared grid of the scenario's changes, and how to drop one change. */

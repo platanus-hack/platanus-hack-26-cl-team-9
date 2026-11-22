@@ -77,6 +77,9 @@ class RunFinishedError(RuntimeError):
 
 @dataclass(frozen=True)
 class AdversaryConfig:
+    """Seeded abstract adversary of a run: effects from the catalog only, a budget, optionally adaptive
+    (docs/strategy.md 5.1; it never picks a technique, `cyber.md` section 8)."""
+
     enabled: bool = False
     objective: str = "reduce_observability"
     budget: float = 8.0
@@ -85,6 +88,9 @@ class AdversaryConfig:
 
 @dataclass(frozen=True)
 class RunConfig:
+    """Inputs that, with the injected events, decide a run. Frozen so `Simulation.recipe()` can store it and a
+    replay can override one field at a time."""
+
     template: str = "open_field"
     policy: str = "C"
     seed: int | None = None  # None: a fresh random seed, recorded in the recipe
@@ -126,6 +132,10 @@ class RunConfig:
 
 @dataclass
 class Simulation:
+    """One run of the cyber-physical theatre, advanced one cycle at a time (docs/strategy.md section 7).
+    Why: a run is fully determined by `config` (seed included) plus the events and actions injected, so
+    `recipe()` is enough to rebuild it or replay it with another policy."""
+
     world: TheaterWorld
     config: RunConfig
     physics: Physics = field(default_factory=Physics.load)
@@ -372,6 +382,7 @@ class Simulation:
         }
 
     def step(self, n: int = 1) -> list[dict[str, Any]]:
+        """Run up to `n` cycles and stop at the horizon; returns what each cycle produced (its snapshot)."""
         out = []
         for _ in range(n):
             if self.finished:
@@ -380,6 +391,7 @@ class Simulation:
         return out
 
     def run_to_end(self) -> None:
+        """Run every remaining cycle: campaigns and `auto_run` read the report afterwards, not each cycle."""
         while not self.finished:
             self._cycle()
 
@@ -749,6 +761,9 @@ class Simulation:
         findings: list,
         metrics: dict[str, Any],
     ) -> dict[str, Any]:
+        """The record of cycle `k`: real state per area, what supervision showed, the agents' proposals and
+        decisions, what was executed, resources and metrics. Why: the API serves it per cycle
+        (`snapshots`), so a client reads the run from these dicts and never touches the live state."""
         real, net = self.real, self.network
         g = real.grid
         areas = {}
@@ -883,6 +898,8 @@ class Simulation:
         return pick
 
     def recipe(self) -> dict[str, Any]:
+        """Everything that decides the run: config and seed, injected events, recorded LLM picks, external
+        actions and the cycle reached. Why: `RunManager` rebuilds an evicted run and replays from this."""
         return {
             "config": self.config.as_dict(),
             "injected": list(self.injected),
@@ -892,6 +909,8 @@ class Simulation:
         }
 
     def trace(self) -> dict[str, Any]:
+        """The hash-chained audit log with its head, whether the chain verifies, and the recipe. Why: a
+        reader can check that nothing was altered and that a replay reaches the same head."""
         return {
             "head": self.log.head,
             "verified": self.log.verify(),
@@ -900,6 +919,9 @@ class Simulation:
         }
 
     def report(self) -> dict[str, Any]:
+        """Indicators, consequence card, coordination findings, adversary summary and after-action moments
+        of the run so far (and the `incident` block when the template is a documented incident). Read only
+        and valid on a running run. Why: the API and the MCP `run_report` read this one dict."""
         ind = self.evaluator.report(
             self.mission.continuity_threshold, self.mission.observability_threshold, self.real.worst_level
         )

@@ -6,6 +6,10 @@ import type { EventCost, HealthReport, N1Cost, Network, Timeline } from "./types
 import { Chevron, Info } from "./ui";
 
 interface Props {
+  /** network and timeline: what is on the map and its cascade. cuts and outBuses: the lines and substations switched off.
+   *  t: playhead in simulated seconds. impact: people and MW out at `t`. islands: frequency per island at `t`.
+   *  totalPeople: people the network assigns to buses. Callbacks: seek the playhead, open the assumptions view, restore
+   *  every change. source: the base-map or outline note added to the "Fuente" line. */
   network: Network; timeline: Timeline; cuts: string[]; outBuses: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
   seek(t: number): void; openSources(): void; restore(): void; source: string;
   /** Pre-fault health of the point (`<point>/health.json`); null in an old cache or in a session. */

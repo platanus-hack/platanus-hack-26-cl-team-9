@@ -115,6 +115,10 @@ def refresh_comms(d: AreaDigital, primary_ok: bool | None = None, backup: bool |
 
 
 class Executor:
+    """Applies abstract events and approved actions to the real state (`TheaterGrid`) and runs the cascade
+    engine on the result. Why: it is the only writer of the real state, so the validator and the agents
+    cannot change the physics directly."""
+
     def __init__(
         self,
         network: TheaterNetwork,
