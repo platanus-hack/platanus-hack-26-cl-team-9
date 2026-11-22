@@ -1,6 +1,21 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(incidents): documented-incident scenarios as agentic runs
+
+- **Changed:**
+  - New catalog `domain/theater/params/incidents.yaml` (`huatacondo-2026`, `polonia-2025`, `reino-unido-2026`, `25f-referencia`): each is a theatre template (events C1/C2/C3/C5/D4, adversary off) plus sources, `verified`, notes and mitigations. `theater_config().incidents` has the metadata and `.templates` also contains them.
+  - Runs from an incident add `incident` to `report()`: public metadata and a `consequence_card` (level, people, MW shed, MWh and cost over `duration_h`, an assumption, default 4 h). `RunConfig.duration_h` is new and travels in the recipe. The after-action adds an `incident` section (effect and prevention, Spanish).
+  - API: `GET /api/v1/attacks/catalog` and `POST /api/v1/sessions/{sid}/attacks/runs` (`start_incident_run`). Step, report, after_action and replay use the existing routes. `agents.openapi.json` regenerated.
+- **Why:** Issue #74: launch a documented incident and see the defensive agents respond, as a thin layer over the theatre, not a second engine.
+- **Agents:**
+  - V10 holds: Huatacondo gives L0 in the seeds tried. Polonia gives L1-L2, UK L0, 25F L3 (`tests/unit/test_incidents.py`, uses real data, skipped without `data/processed`).
+  - Guardrails are tests: no technique words, no named plants (areas and zones only), file order not damage order, adversary off, both notices on every card.
+  - Effect sizes for Polonia and UK are replay assumptions. Huatacondo uses the dataset's 88.1 MW and no battery (not in `storage.geojson`).
+  - Not built from the first proposal: `plant_out`/`fleet_out`, free `effects` in a request, `/attacks/simulate`.
+  - The MCP extra is needed to run its tests: `uv sync --all-extras`.
+- **Files:** `backend/src/cascadasen/domain/theater/{incident,config,cycle,narrative}.py`, `domain/theater/params/{incidents,narrative_es}.yaml`, `api/{incident_routes,app,simulation_schemas}.py`, `application/run_experiment.py`, `backend/tests/unit/test_incidents.py`, `backend/tests/integration/test_sessions_api.py`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-22 · Merge origin/main into feat/network-selector
 
 - **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.

@@ -4199,6 +4199,134 @@
         },
         "x-sub50-agent": true
       }
+    },
+    "/api/v1/attacks/catalog": {
+      "get": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "List the documented incidents that can be replayed",
+        "description": "Returns the bounded, curated catalog: each entry is a public incident with its linked sources, whether it is verified, and the effects (event type, area or zone, cycle) the scenario applies. Only effects are modelled, never techniques, and nobody is attributed. The list is not ranked. Read only.",
+        "operationId": "get_attack_catalog",
+        "responses": {
+          "200": {
+            "description": "Documented incidents that can be replayed as simulated runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentCatalogOut"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/attacks/runs": {
+      "post": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "Start a run from a documented incident",
+        "description": "Creates a strategic run in the session from one catalog incident, with the defensive agents and the chosen policy. The adversary is off unless asked. Step it with `step_run`, read `get_run_report` (its `incident` block has the consequence card and mitigations) and `get_run_after_action`. Only catalog ids are accepted (422 otherwise). Scenario: the effect is modelled, not the attack; the consequence is simulated on a reduced network, not a prediction.",
+        "operationId": "start_incident_run",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncidentRunIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Run summary of a session run, with the session revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRunOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
     }
   },
   "components": {
@@ -5135,6 +5263,115 @@
         "type": "object",
         "title": "GeneratorPatch"
       },
+      "IncidentCatalogOut": {
+        "properties": {
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "description": "Notices every result carries: hypothetical, not a prediction."
+          },
+          "default_duration_h": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Default Duration H",
+            "description": "Default outage hours, with is_assumption true."
+          },
+          "incidents": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Incidents",
+            "description": "id, title, date, kind (cyber_documented or reference_not_cyber), verified, sources, notes, mitigations and the effects the scenario applies (cycle, event type, target, params)."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "notices",
+          "default_duration_h",
+          "incidents"
+        ],
+        "title": "IncidentCatalogOut",
+        "description": "Documented incidents that can be replayed as simulated runs."
+      },
+      "IncidentRunIn": {
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "title": "Scenario",
+            "description": "Incident id from `GET /api/v1/attacks/catalog`.",
+            "examples": [
+              "huatacondo-2026"
+            ]
+          },
+          "policy": {
+            "type": "string",
+            "title": "Policy",
+            "description": "Defensive policy: A reactive, B preventive, C adaptive.",
+            "default": "C"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "Random seed; omitted means a fresh one."
+          },
+          "duration_h": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 720.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration H",
+            "description": "Outage hours that scale unserved energy and cost in the incident card. Always an assumption; omitted uses the catalog default."
+          },
+          "uncertainty": {
+            "type": "number",
+            "title": "Uncertainty",
+            "description": "0 perfect information, 1 baseline, 2 degraded.",
+            "default": 1.0
+          },
+          "stochastic": {
+            "type": "boolean",
+            "title": "Stochastic",
+            "description": "False turns off the theatre's chance (catalog sizes).",
+            "default": true
+          },
+          "adversary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdversaryIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional seeded abstract adversary. Off by default: the incident is the script."
+          }
+        },
+        "type": "object",
+        "required": [
+          "scenario"
+        ],
+        "title": "IncidentRunIn"
+      },
       "LineIn": {
         "properties": {
           "a": {
@@ -5887,6 +6124,19 @@
             "type": "array",
             "title": "After Action",
             "description": "Key moments by cycle."
+          },
+          "incident": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident",
+            "description": "Only for runs started from a documented incident: sources, notes, mitigations and the consequence card (level, people, MW shed, MWh and cost over an assumed duration)."
           },
           "trace_head": {
             "type": "string",
