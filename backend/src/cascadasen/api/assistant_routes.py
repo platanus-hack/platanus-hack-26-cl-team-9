@@ -11,9 +11,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Path, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from cascadasen.api.limits import client_ip
+from cascadasen.api.stress_schemas import StressChange
 from cascadasen.application.assistant import (
     Assistant,
     AssistantInputError,
@@ -50,8 +51,9 @@ TOOL_GUIDE = (
     "servida y líneas abiertas en cascada: úsalo para medir el efecto antes y después de un refuerzo.\n"
     "- Reforzar la red: lee la salud con describe_network, ubica dónde falta generación o sobran "
     "sobrecargas, y aplica el refuerzo con prepare_scenario (`add` de generación o batería en ese lugar), "
-    "repitiendo los cambios anteriores. Compara con el resultado anterior y dilo. Refuerzas lo que el "
-    "usuario evalúa; no buscas el peor caso.\n"
+    "repitiendo los cambios anteriores. Una subestación nueva con sus líneas es un cambio con target "
+    "`substation` (lugar, nombre, y generator_mw con tech o load_mw): también va en prepare_scenario, que es "
+    "tu único punto de entrada para modificar la grilla. Compara con el resultado anterior y dilo.\n"
     "- Ver cómo evoluciona un evento en el tiempo y probar respuestas defensivas: start_run, inject_event, "
     "step, submit_action, run_status, run_report, after_action y replay. Incidentes documentados: "
     "list_incident_scenarios y start_incident_run. Ids válidos de eventos y acciones: list_options.\n"
@@ -93,6 +95,25 @@ SYSTEM = (
 )
 
 
+class GridIn(BaseModel):
+    """The scenario on the user's map: what `prepare_scenario` returns as `scenario`, plus nothing else."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    point: str = Field(max_length=40)
+    changes: list[StressChange] = Field(default=[], max_length=20)
+    open_lines: list[str] = Field(default=[], max_length=40)
+    out_buses: list[str] = Field(default=[], max_length=40)
+
+    def context(self) -> dict[str, Any]:
+        return {
+            "point": self.point,
+            "changes": [c.model_dump(exclude_none=True, exclude_defaults=True) for c in self.changes],
+            "open_lines": self.open_lines,
+            "out_buses": self.out_buses,
+        }
+
+
 class ChatIn(BaseModel):
     message: str = Field(
         min_length=1, max_length=2000, description="What the user asks, in natural language."
@@ -104,6 +125,9 @@ class ChatIn(BaseModel):
         None,
         pattern=r"^[A-Za-z0-9_-]{22}$",
         description="Session to work on; omit to keep the conversation's.",
+    )
+    grid: GridIn | None = Field(
+        None, description="The scenario on the user's map; the assistant starts from it (docs/assistant.md)."
     )
 
 
@@ -158,7 +182,11 @@ def chat(request: Request, body: ChatIn) -> dict[str, Any]:
     assistant, ip = admit(request)
     try:
         return assistant.chat(
-            body.message, body.conversation_id, body.session_id, toolbox_factory(request.app, ip)
+            body.message,
+            body.conversation_id,
+            body.session_id,
+            toolbox_factory(request.app, ip),
+            grid=body.grid.context() if body.grid else None,
         )
     except (ConversationNotFoundError, ConversationConflictError, AssistantInputError) as exc:
         raise conversation_error(exc) from exc
@@ -235,6 +263,7 @@ async def chat_stream(request: Request, body: ChatIn) -> StreamingResponse:
                 toolbox_factory(request.app, ip),
                 on_event=emit,
                 deadline_s=settings.assistant_stream_deadline_s,
+                grid=body.grid.context() if body.grid else None,
             )
             emit("done", {k: out[k] for k in DONE_KEYS})
         except (ConversationNotFoundError, ConversationConflictError, AssistantInputError) as exc:

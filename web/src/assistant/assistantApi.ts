@@ -6,7 +6,11 @@ import { createSseParser, type SseEvent } from "./sse";
 export const ASSISTANT_BASE = "/api/v1/assistant";
 export const MAX_MESSAGE = 2000;
 
-export interface ChatBody { message: string; conversation_id?: string; session_id?: string }
+import type { StressChange } from "../cascade/edits";
+
+/** The scenario on the map: the assistant starts from it (docs/assistant.md section 2d). */
+export interface ChatGrid { point: string; changes: StressChange[]; open_lines: string[]; out_buses: string[] }
+export interface ChatBody { message: string; conversation_id?: string; session_id?: string; grid?: ChatGrid }
 export interface ConversationView {
   conversation_id: string; session_id: string | null; run_id: string | null;
   turns: { role: string; text: string }[];

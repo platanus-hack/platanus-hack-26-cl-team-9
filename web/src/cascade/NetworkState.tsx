@@ -165,7 +165,7 @@ function useOutageCost(point: string, edits: Edits): CostState {
   return cost;
 }
 
-const TARGET_NAME: Record<StressChange["target"], string> = { population: "Personas", demand: "Demanda", generation: "Generación", lines: "Capacidad" };
+const TARGET_NAME: Record<StressChange["target"], string> = { population: "Personas", demand: "Demanda", generation: "Generación", lines: "Capacidad", substation: "Subestación nueva" };
 const TECH_NAME: Record<string, string> = {
   hidro: "hidro", solar: "solar", eolica: "eólica", carbon: "carbón", gas: "gas", diesel: "diésel", bioenergia: "bioenergía",
   geotermica: "geotérmica", termica: "térmica", bateria: "batería",
@@ -178,7 +178,8 @@ export function describeChange(c: StressChange, nodeName: (id: string) => string
     ...(c.zones ?? []).map((z) => `zona ${z}`), ...(c.areas ?? []).map((a) => `área ${a}`),
     ...(c.tech ?? []).map((t) => TECH_NAME[t] ?? t), ...(c.kv ?? []).map((k) => `${k} kV`),
   ];
-  const how = c.factor !== undefined ? `× ${c.factor}` : c.add !== undefined ? `${c.add >= 0 ? "+" : ""}${int(c.add)}${c.target === "population" ? " personas" : " MW"}` : "";
+  const mw = c.generator_mw ?? c.load_mw;
+  const how = c.target === "substation" ? (mw ? `+${int(mw)} MW` : "") : c.factor !== undefined ? `× ${c.factor}` : c.add !== undefined ? `${c.add >= 0 ? "+" : ""}${int(c.add)}${c.target === "population" ? " personas" : " MW"}` : "";
   const x = c.x_factor !== undefined ? `, reactancia × ${c.x_factor}` : "";
   return `${TARGET_NAME[c.target]} ${how}${x} · ${where.length ? where.join(", ") : "todo el país"}`;
 }

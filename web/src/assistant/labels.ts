@@ -33,7 +33,7 @@ const TOOL_NAMES: Record<string, string> = {
   start_incident_run: "Iniciar un incidente",
   prepare_scenario: "Preparar el mapa",
 };
-const TARGETS: Record<string, string> = { demand: "demanda", generation: "generación", population: "personas", lines: "capacidad de líneas" };
+const TARGETS: Record<string, string> = { demand: "demanda", generation: "generación", population: "personas", lines: "capacidad de líneas", substation: "subestación nueva" };
 const TECHS: Record<string, string> = {
   eolica: "eólica", bateria: "batería", termica: "térmica", carbon: "carbón", diesel: "diésel", bioenergia: "bioenergía", geotermica: "geotérmica",
 };
@@ -66,7 +66,8 @@ export function argsText(name: string, args: unknown): string {
 function scenarioArgs(args: Json): string {
   const changes = Array.isArray(args.changes) ? args.changes.filter(isObj) : [];
   const words = changes.map((c) => {
-    const how = typeof c.add === "number" ? `${c.add >= 0 ? "+" : ""}${num(c.add)}${c.target === "population" ? "" : " MW"}` : typeof c.factor === "number" ? `× ${num(c.factor)}` : "";
+    const own = typeof c.generator_mw === "number" ? c.generator_mw : typeof c.load_mw === "number" ? c.load_mw : null;
+    const how = own !== null ? `+${num(own)} MW` : typeof c.add === "number" ? `${c.add >= 0 ? "+" : ""}${num(c.add)}${c.target === "population" ? "" : " MW"}` : typeof c.factor === "number" ? `× ${num(c.factor)}` : "";
     const what = Array.isArray(c.tech) && c.tech.length ? c.tech.map((t) => TECHS[String(t)] ?? String(t)).join(", ") : TARGETS[String(c.target)] ?? String(c.target);
     const where = ["places", "comunas", "buses", "areas", "zones", "lines"].flatMap((k) => (Array.isArray(c[k]) ? (c[k] as unknown[]).map(String) : []));
     return [how, what, where.length ? `en ${where.join(", ")}` : ""].filter(Boolean).join(" ");

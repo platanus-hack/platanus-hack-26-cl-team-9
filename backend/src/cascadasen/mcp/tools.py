@@ -485,7 +485,11 @@ class Sub50Tools:
         bioenergia, geotermica, termica, bateria), lines R###, kv. Put a point: a datacenter of 120 MW in
         Antofagasta is {"target": "demand", "places": ["Antofagasta"], "add": 120}; a solar plant of 80 MW
         in Iquique is {"target": "generation", "places": ["Iquique"], "tech": ["solar"], "add": 80} (a
-        battery is tech bateria; nuclear is modelled as termica). Each change's `places` says which
+        battery is tech bateria; nuclear is modelled as termica). A new substation with its own lines (new
+        capacity or a new path in the grid) is {"target": "substation", "places": ["Vallenar"], "name": "S/E Solar
+        Vallenar", "generator_mw": 120, "tech": ["solar"]} (or `load_mw`): it is built next to the substation that
+        serves the place, at its voltage, linked to it and to the nearest one of that voltage; the result says its
+        id (`created`). At most 5 per scenario. Each change's `places` says which
         substation the place became: tell the user. Failures: `open_lines` (R###) and `out_buses` (B###).
         With failures it also simulates the cascade: people without power against the same failures
         without the changes, and per zone the people the generators should feed against the people they

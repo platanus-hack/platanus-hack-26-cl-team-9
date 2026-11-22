@@ -22,6 +22,7 @@ EXCLUDED = frozenset(
         "join_session",
         "add_datacenter",
         "add_generator",
+        "add_substation",
         "add_line",
         "add_bus",
         "edit_element",

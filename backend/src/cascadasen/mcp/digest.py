@@ -335,6 +335,11 @@ def prepare_digest(out: dict[str, Any]) -> dict[str, Any]:
         elements = c.get("elements") or []
         if 0 < len(elements) <= 5 and not row.get("places"):
             row["at"] = [f"{e.get('id')} {e.get('name')}" for e in elements]
+        if c.get("new_substation"):
+            new = elements[0]
+            row["created"] = (
+                f"{new.get('id')} {new.get('name')} ({new.get('kv'):g} kV), conectada a {', '.join(c['connects_to'])}"
+            )
         if not c.get("matched"):
             row["warning"] = (
                 "Este cambio no tocó ninguna subestación: no digas que se aplicó. Revisa el lugar o la tecnología."
