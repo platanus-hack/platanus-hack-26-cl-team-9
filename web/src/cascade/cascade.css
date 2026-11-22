@@ -338,5 +338,11 @@
 .shell .state-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; color: var(--fg-2); font-size: 13px; line-height: 16px; }
 .shell .state-row .ellipsis { flex: 1 1 0; min-width: 0; }
 .shell .state-list .list-head { margin-top: 8px; }
+/* Comunas sin suministro (Simulación) */
+.shell .affected .check { margin-top: 8px; }
+.shell .affected .rows { max-height: 240px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
+.shell .affected .load-bar { width: 72px; margin-top: 0; flex-shrink: 0; }
+.shell .affected small { color: var(--muted); font-size: 12px; }
+.shell .affected .source { margin-top: 8px; padding: 0; }
 
 .shell .heat-hint { margin: 0; max-width: 220px; color: var(--muted); font-size: 12px; line-height: 16px; }
