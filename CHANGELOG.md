@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): hide the Validación rail item until it is built
+
+- **Changed:** Removed the disabled "Validación" item from the nav rail and its `SOON` tooltip constant.
+- **Why:** It looked broken (always `aria-disabled`, tooltip only on hover) and was mistaken for `/api/v1/validation`, which is a data-quality check, not the model-vs-real-events view the item stands for.
+- **Agents:** "Validación" and "Qué lo habría evitado" are both hidden until the engine computes them; `docs/design.md` and `docs/mapa3.md` say so. `/api/v1/validation` is unchanged.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `docs/design.md`, `docs/mapa3.md`.
+
 ## 2026-11-22 · fix(web): a Benchmark condition clears a disaster's changes
 
 - **Changed:** Choosing a Benchmark condition while a disaster is active now clears the disaster's changes; it still keeps the user's own failures. New pure function `editsAfter` in `Scenarios.tsx`, used by `openScenario`.
