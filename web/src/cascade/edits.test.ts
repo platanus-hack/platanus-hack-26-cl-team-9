@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addBus, addLine, countEdits, dropBus, dropLine, editKey, fromCache, NO_EDITS } from "./edits";
+import { addBus, addLine, countEdits, dropBus, dropLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits } from "./edits";
 
 describe("edits", () => {
   it("keeps every change, not only the last one", () => {
@@ -29,5 +29,26 @@ describe("edits", () => {
   it("gives the same key whatever the order of the changes", () => {
     expect(editKey("p", { lines: ["R2", "R1"], buses: [] })).toBe(editKey("p", { lines: ["R1", "R2"], buses: [] }));
     expect(editKey("p", NO_EDITS)).not.toBe(editKey("q", NO_EDITS));
+  });
+});
+
+describe("saved changes", () => {
+  const memory = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k), m }; };
+
+  it("keeps the changes across a reload and forgets them when they are all put back", () => {
+    const store = memory();
+    saveEdits({ lines: ["R239"], buses: ["B020"] }, store);
+    expect(loadEdits(store)).toEqual({ lines: ["R239"], buses: ["B020"] });
+    saveEdits(NO_EDITS, store);
+    expect(store.m.size).toBe(0);
+    expect(loadEdits(store)).toEqual(NO_EDITS);
+  });
+
+  it("ignores what it cannot read", () => {
+    const store = memory();
+    store.setItem("sub50.edits.v1", "{not json");
+    expect(loadEdits(store)).toEqual(NO_EDITS);
+    store.setItem("sub50.edits.v1", JSON.stringify({ lines: ["R1", 3], buses: "x" }));
+    expect(loadEdits(store)).toEqual({ lines: ["R1"], buses: [] });
   });
 });

@@ -13,3 +13,24 @@ export const dropBus = (e: Edits, id: string): Edits => ({ ...e, buses: e.buses.
 
 /** Identifies one simulation, so a timeline that arrives late is never shown under newer changes. */
 export const editKey = (point: string, e: Edits) => `edit:${point}:${[...e.lines].sort()}|${[...e.buses].sort()}`;
+
+const STORAGE_KEY = "sub50.edits.v1";
+type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+/** Why: a refresh or a closed tab must not lose the changes; they live in this browser only (localStorage). */
+export function saveEdits(e: Edits, store: Store | undefined = globalThis.localStorage): void {
+  if (!store) return;
+  if (e.lines.length + e.buses.length === 0) store.removeItem(STORAGE_KEY);
+  else store.setItem(STORAGE_KEY, JSON.stringify(e));
+}
+
+/** The saved changes, or none when nothing valid is stored. */
+export function loadEdits(store: Store | undefined = globalThis.localStorage): Edits {
+  try {
+    const raw = JSON.parse(store?.getItem(STORAGE_KEY) ?? "null");
+    const ids = (x: unknown) => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : []);
+    return raw ? { lines: ids(raw.lines), buses: ids(raw.buses) } : NO_EDITS;
+  } catch {
+    return NO_EDITS;
+  }
+}

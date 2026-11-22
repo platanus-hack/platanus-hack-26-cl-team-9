@@ -20,30 +20,41 @@ class GridSimulator:
         self.world = world
 
     def simulate_workflow(self, point: str, open_lines: list[str], out_buses: list[str]) -> dict:
-        _check_size(open_lines, out_buses)
-        net, op = self._load(point)
-        _check_known(net.buses, open_lines, out_buses)
-        edited = _apply(net.buses, op, out_buses)
-        live = {ln.id for ln in edited.net.lines}
-        kept = sorted(set(open_lines) & live)
+        op, edited, kept, dropped = prepare_edits(self.world, point, open_lines, out_buses)
         timeline = run_cascade_workflow(edited.net, edited.point, kept)
         direct = _direct_loss(op, out_buses)
         return {
             "point": point,
             "open_lines": kept,
             "out_buses": sorted(set(out_buses)),
-            # lines that went with their substation: they are out already, not cut twice
-            "dropped_lines": sorted(set(open_lines) - live),
+            "dropped_lines": dropped,  # lines that went with their substation: they are out already, not cut twice
             "direct": direct,
             "warnings": edited.warnings,
             "timeline": _mark_out_of_service(timeline, out_buses, direct),
         }
 
-    def _load(self, point: str):
-        try:
-            return self.world.load(point)
-        except KeyError as exc:
-            raise GridError("not_found", f"No existe el punto de operación: {point}") from exc
+
+def prepare_edits(
+    world: TheaterWorld, point: str, open_lines: list[str], out_buses: list[str], allow_empty: bool = False
+):
+    """The base point, the network with the substations out of service, the lines to open on it and the lines that went
+    with their substation. Shared by every use case that works on the user's changes (simulate, dependency)."""
+    if not allow_empty:
+        _check_size(open_lines, out_buses)
+    elif len(set(open_lines)) + len(set(out_buses)) > MAX_EDITS:
+        raise GridError("invalid", f"Máximo {MAX_EDITS} cambios por simulación")
+    net, op = _load(world, point)
+    _check_known(net.buses, open_lines, out_buses)
+    edited = _apply(net.buses, op, out_buses)
+    live = {ln.id for ln in edited.net.lines}
+    return op, edited, sorted(set(open_lines) & live), sorted(set(open_lines) - live)
+
+
+def _load(world: TheaterWorld, point: str):
+    try:
+        return world.load(point)
+    except KeyError as exc:
+        raise GridError("not_found", f"No existe el punto de operación: {point}") from exc
 
 
 def _check_size(open_lines: list[str], out_buses: list[str]) -> None:
