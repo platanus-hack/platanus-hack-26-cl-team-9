@@ -82,6 +82,24 @@ Pushing `.github/workflows/*` needs a GitHub token with the `workflow` scope (`g
 ## Mapbox token
 The web image needs `VITE_MAPBOX_TOKEN` at build time (Vite inlines it). `deploy.sh` passes it as a build argument. The value is a public `pk.*` token with a default in `deploy.sh`; export `VITE_MAPBOX_TOKEN` to override it.
 
+## Assistant (Bedrock) in production
+
+The in-app assistant (`docs/assistant.md`) answers 503 unless the backend container has the LLM settings and the task role can call Bedrock. Applied by hand on 2026-11-22 because Terraform had drifted. `infrastructure/iam.tf` already holds the IAM part (`task_bedrock`), but `ecs.tf` does not hold the variables yet.
+
+| Piece | Value | Where |
+|---|---|---|
+| Account, region, cluster, service | `402909940511`, `us-east-1`, `cascadasen`, `cascadasen` | live |
+| Backend env (task definition `cascadasen:48`) | `CASCADASEN_LLM_ENABLED=true`, `CASCADASEN_LLM_PROVIDER=bedrock-converse`, `CASCADASEN_LLM_MODEL=deepseek.v3.2` | live only, not in `ecs.tf` |
+| Task role inline policy `cascadasen-task-bedrock` | Allow `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on all foundation models and inference profiles; explicit Deny on `anthropic.*` and `*anthropic*` profiles | live and in `iam.tf` |
+| Task role inline policy `cascadasen-task-sessions` | Adds `assistant/*` to Get, Put and Delete: the assistant saves each conversation in `assistant/<cid>.json`; without it a chat answers 500 (AccessDenied on PutObject) | live and in `iam.tf` |
+
+- **Model:** Anthropic is denied by the task role. The default of `CASCADASEN_LLM_MODEL` (`claude-opus-5-5`) is Anthropic, so the variable must always be set. The web does not send a model; the backend reads one model from the environment. The chosen model is DeepSeek V3.2 (`deepseek.v3.2`, on demand): it answered a tool call in about 2 s and a real chat on 2026-11-22 (`describe_network`, 3 steps). DeepSeek R1 (`us.deepseek.r1-v1:0`) does not support tool use. `us.amazon.nova-pro-v1:0` and `us.meta.llama3-3-70b-instruct-v1:0` answered a Converse call with tool use (`stopReason=tool_use`). `us.amazon.nova-premier-v1:0` is end of life.
+- **Change the model:** register a new task definition revision with a new `CASCADASEN_LLM_MODEL` and update the service (blue/green, about 2 minutes of bake).
+- **CI keeps the variables:** the deploy workflow copies the current task definition and only swaps the image, so the variables survive later deploys. A `terraform apply` does not touch the service task definition (`ignore_changes`), so it does not remove them either.
+- **To close the drift:** copy the three variables into the backend `environment` of `ecs.tf` and run `terraform plan`. Expect no change in `task_bedrock` once the state imports the live policy (`terraform import aws_iam_role_policy.task_bedrock cascadasen-task:cascadasen-task-bedrock`).
+- **Code default:** `settings.py` keeps `llm_model = "claude-opus-5-5"` because the C2 commander shares it and its tests assert it. Production sets the model with the environment variable.
+- **Not covered:** Bedrock model access in the console per model, and `aws-marketplace:Subscribe` for Marketplace models.
+
 ## Backlog
 No issue numbers yet: `scripts/issue.sh` does not exist in the repo and the fork has issues disabled. Create these in the team tracker:
 - HTTPS between CloudFront and the ALB: an `alb.sub50.cl` record pointing to the ALB, CloudFront origin set to that name, and `origin_https = true`.

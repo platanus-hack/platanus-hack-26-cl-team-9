@@ -15,7 +15,7 @@ CASCADASEN_LLM_MODEL=<Bedrock model or inference-profile id>
 CASCADASEN_AWS_REGION=us-east-1
 ```
 
-Without them the other routes work as before and the assistant answers 503. Settings: `assistant_max_steps` (8 tool rounds per message), `assistant_deadline_s` (25 s, because CloudFront cuts a request at 30 s), `assistant_call_timeout_s` (20 s per Bedrock call), `assistant_history_messages` (30), `rate_assistant_per_minute` (10 per client IP). `CASCADASEN_LLM_MODEL` is shared with the C2 commander.
+In production these are set by hand in the ECS task definition, and Anthropic models are denied by the task role (`docs/infrastructure.md`, section "Assistant (Bedrock) in production"). Without them the other routes work as before and the assistant answers 503. Settings: `assistant_max_steps` (8 tool rounds per message), `assistant_deadline_s` (25 s, because CloudFront cuts a request at 30 s), `assistant_call_timeout_s` (20 s per Bedrock call), `assistant_history_messages` (30), `rate_assistant_per_minute` (10 per client IP). `CASCADASEN_LLM_MODEL` is shared with the C2 commander.
 
 ## 2. Routes (`/api/v1/assistant`)
 

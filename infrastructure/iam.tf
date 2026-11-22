@@ -49,6 +49,8 @@ data "aws_iam_policy_document" "task_sessions" {
     resources = [
       "${aws_s3_bucket.sessions.arn}/sessions/*",
       "${aws_s3_bucket.sessions.arn}/runs/*",
+      # Assistant conversations (application/assistant.py).
+      "${aws_s3_bucket.sessions.arn}/assistant/*",
     ]
   }
   # No prefix condition: without ListBucket on the bucket, S3 answers 403 instead of 404 for a missing key.
@@ -61,4 +63,30 @@ resource "aws_iam_role_policy" "task_sessions" {
   name   = "cascadasen-task-sessions"
   role   = aws_iam_role.task.id
   policy = data.aws_iam_policy_document.task_sessions.json
+}
+
+# In-app assistant (docs/assistant.md): the backend calls Bedrock Converse. Any model is allowed except
+# Anthropic; the web picks the model. The Deny wins over the Allow. A cross-region profile also needs
+# the foundation-model ARN of every region it routes to, hence the wildcard region.
+data "aws_iam_policy_document" "task_bedrock" {
+  statement {
+    actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/*",
+      "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+    ]
+  }
+  statement {
+    effect    = "Deny"
+    actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/anthropic.*",
+      "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*anthropic*",
+    ]
+  }
+}
+resource "aws_iam_role_policy" "task_bedrock" {
+  name   = "cascadasen-task-bedrock"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.task_bedrock.json
 }

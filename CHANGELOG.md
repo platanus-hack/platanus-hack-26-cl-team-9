@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · ops(infra): enable the assistant in production with a non-Anthropic Bedrock model (#101)
+
+- **Changed:** task role `cascadasen-task` got the inline policy `cascadasen-task-bedrock` (Allow InvokeModel and InvokeModelWithResponseStream on any model, explicit Deny on Anthropic). Backend container got `CASCADASEN_LLM_ENABLED=true`, `CASCADASEN_LLM_PROVIDER=bedrock-converse`, `CASCADASEN_LLM_MODEL=deepseek.v3.2` (DeepSeek V3.2, tool use) in task definition `cascadasen:48`. `cascadasen-task-sessions` got `assistant/*`, where the assistant saves its conversations. `infrastructure/iam.tf` has the policy as `task_bedrock`.
+- **Why:** the web showed "El asistente no está habilitado en este servidor." The logs showed `POST /api/v1/assistant/chat/stream` answering 503 because `llm_enabled` defaults to false and the task had no LLM variables or Bedrock permissions.
+- **Agents:** the variables and the policy were applied by hand with the AWS CLI because Terraform had drifted. `ecs.tf` does not have the variables yet. The model default in `settings.py` is Anthropic and is denied, so `CASCADASEN_LLM_MODEL` must stay set. Verified: `POST https://sub50.cl/api/v1/assistant/chat` answered "Hay 188 subestaciones en la red." with `start_session` and `describe_network`. Not verified: the stream route from the web UI.
+- **Files:** `infrastructure/iam.tf`, `docs/infrastructure.md`, `docs/assistant.md`.
+
 ## 2026-11-22 · docs(stress): guide to the batch endpoints for MCP clients (#101)
 
 - **Changed:** `docs/stress.md` is now the guide for the batch endpoints: flow (prepare never simulates), endpoints and agent operations, every field of a change with its rules, the vocabulary (zones, areas A01-A13, technologies, kV), what each target does, recipes with real outputs, responses, the `prepare_scenario` tool with example calls, errors and guardrails. `docs/mcp.md` and `docs/assistant.md` list the tool and link to it.
