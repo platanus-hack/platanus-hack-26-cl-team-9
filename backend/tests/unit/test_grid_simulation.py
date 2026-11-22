@@ -9,7 +9,7 @@ from cascadasen.api.app import create_app
 from cascadasen.application.grid_simulation import GridSimulator
 from cascadasen.application.grids import GridError
 from cascadasen.application.theater_world import default_world
-from cascadasen.domain.cascade.engine import run_cascade_workflow
+from cascadasen.domain.cascade.engine import failure_cost, run_cascade_workflow
 from cascadasen.domain.cascade.health import with_event_health
 from cascadasen.infrastructure.settings import REPO_ROOT, Settings
 
@@ -43,9 +43,13 @@ def test_a_substation_out_is_dark_in_every_frame_and_counted_as_direct_loss(sim)
     )  # no cascade: only the outage
     assert out["timeline"]["summary"]["load_total_mw"] == pytest.approx(float(op.load.sum()), abs=0.2)
     summary = out["timeline"]["summary"]
-    assert summary["failure_cost_usd"] == round(
-        summary["load_shed_mw"] * 4.0 * 1000 * 8.79
-    )  # direct loss included
+    assert summary["dark_load_mw"] >= out["direct"]["load_mw"]  # a substation out of service is dark demand
+    assert (
+        summary["failure_cost_usd"]
+        == failure_cost(summary["load_shed_mw"], summary["dark_load_mw"], summary["load_total_mw"])[
+            "failure_cost_usd"
+        ]
+    )
     assert out["timeline"]["health"]["cost"]["cost_usd"] == summary["failure_cost_usd"]
 
 
@@ -89,3 +93,16 @@ def test_the_committed_cache_matches_the_engine_for_a_single_cut(sim, point, lin
 
     cached = json.loads((REPO_ROOT / f"web/public/cache/{point}/{line}.json").read_text())
     assert sim.simulate_workflow(point, [line], [])["timeline"] == cached
+
+
+def test_cost_endpoint_gives_the_25f_of_the_isci_study_and_a_cost_per_hour():
+    """[44] ISCI for Enel Foundation: 81,430 MWh not served and about US$ 984 M for the 25F."""
+    client = TestClient(create_app(settings=Settings(data_dir=REPO_ROOT / "data")))
+    out = client.post("/api/v1/grids/cost", json={"point": POINT, "open_lines": ["R239"]}).json()
+    assert out["cost_usd"] == pytest.approx(984e6, rel=0.01)
+    assert out["energy_not_served_mwh"] == pytest.approx(81430, rel=0.01)
+    assert out["cost_per_hour_usd"] == pytest.approx(out["cost_usd"] / 7.34, rel=0.01)
+    night = client.post("/api/v1/grids/cost", json={"point": "feb2025-0300", "open_lines": ["R239"]}).json()
+    assert night["breakdown"]["dark_mw"] == 0 and night["outage_hours"]["value"] == 1.0  # load shedding only
+    assert client.post("/api/v1/grids/cost", json={"point": POINT}).json()["cost_usd"] == 0
+    assert client.post("/api/v1/grids/cost", json={"point": "x"}).status_code == 404
