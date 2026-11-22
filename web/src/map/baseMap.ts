@@ -71,7 +71,10 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
    */
   const setTarget = (next: CameraTarget, duration = FLY_MS) => {
     target = next;
-    if (!LIMITED) return void fit(duration);
+    if (!LIMITED) {
+      fit(duration);
+      return;
+    }
     flying = true;
     map.setMaxBounds(null as unknown as mapboxgl.LngLatBoundsLike); // null removes the limit (Map#setMaxBounds docs); the public type omits it
     const minZoom = Math.max(0, (map.cameraForBounds(next.frame, { padding })?.zoom ?? 3) - ZOOM_OUT_LEVELS);
@@ -86,7 +89,9 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
       overLand.lastGood = map.getCenter();
     };
     map.once("moveend", land);
-    setTimeout(land, duration + 500); // in case the camera was already there and no moveend comes
+    // In case the camera was already there and no moveend comes. On a slow machine the flight outlasts `duration`:
+    // then moveend lands it, and limits set mid-flight would bend the path.
+    setTimeout(() => { if (!map.isMoving()) land(); }, duration + 500);
     fit(duration);
   };
   map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");

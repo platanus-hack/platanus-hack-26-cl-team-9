@@ -1,6 +1,18 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(map): never set the new country's limits mid-flight
+
+- **Changed:** In `baseMap.ts` the Mapbox `setTarget` fallback timer now lands the camera only when `!map.isMoving()`. `moveend` lands it otherwise. Also replaced a `return void fit()` flagged by the IDE linter.
+- **Why:** Found testing the Mapbox basemap in a browser. On a slow machine the 1.2 s flight lasted about 3.6 s, so the timer (1.7 s) could set the new `maxBounds` and min zoom while the camera was still flying and bend its path.
+- **Agents:** Mapbox is now tested in a browser (Chrome, real token), with the camera read from the map instance:
+  - all five countries and an upload in Germany land with their own frame, min zoom and `maxBounds`;
+  - 2D/3D is kept, `?pais=BRA` works, and the 25F case plays;
+  - dragging out to sea snaps back to the last valid coastal point.
+
+  Test-script pitfall: returning the Map instance from `page.evaluate` (for example `() => map.jumpTo(...)`) fails with "Execution context was destroyed". That is not an app error.
+- **Files:** `web/src/map/baseMap.ts`.
+
 ## 2026-11-22 · docs(regional): document one network at a time, per-country camera and uploads
 
 - **Changed:**
