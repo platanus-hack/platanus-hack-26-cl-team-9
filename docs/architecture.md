@@ -1,6 +1,7 @@
 # Architecture
 
 How Sub50 is built today (2026-11-21): the pieces, how they depend on each other, and where each responsibility lives. Product and scope are in `idea.md`, the simulation model in `stack.md` section 4, data contracts and API in `stack.md` sections 6-7. When code and this document disagree, the code wins; fix this document in the same change.
+Why it is built this way (two engines, the 188-bus network, DC flow, sessions on S3, the layering rule): [`adr/`](adr/README.md).
 
 ## 1. System overview
 

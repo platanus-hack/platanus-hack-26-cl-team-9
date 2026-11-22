@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(adr): add architecture decision records
+- **Changed:** New `docs/adr/` with `README.md` (index and format) and five records: 0001 two engines, 0002 reduced 188-bus network, 0003 DC power flow with the voltage rule, 0004 sessions on S3 with the session id as capability, 0005 hexagonal layering and its test. `docs/architecture.md` links the folder.
+- **Why:** Review R-18. The reasons behind these decisions were spread over `plan.md` section 9, `engine.md` and `sessions-api.md`. Each record cites its source doc and holds no new facts.
+- **Agents:** Add a record when a decision is expensive to reverse. Keep records under 40 lines, number them in order and mark replaced ones `superseded by NNNN`. The root README is owned by the docs commit, so it does not link the folder yet.
+- **Files:** `docs/adr/*`, `docs/architecture.md`.
 ## 2026-11-22 · docs(backend): explain the why of the 14 largest undocumented functions
 - **Changed:** Docstrings only, no code line changed. Functions: `validate_snapshot`, `_cycle` and `__post_init__` (theatre `Simulation`), `infer_line_topology`, `GridUnifier.unify`, `_reconcile_cen_sections`, `_plants`, `_electrical`, `run_transient`, `simulate_island` (simulation), `ISRAgent.step`, `IdeEnergiaSource.contribute`, `create_app`, `PhysicsSimulator.simulate`.
 - **Why:** Review R-16. These were the largest functions without a docstring (40 to 325 lines). Each docstring gives the order of the steps and why, thresholds and what a caller may assume, checked against the code.
