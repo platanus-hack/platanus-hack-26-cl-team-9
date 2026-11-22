@@ -13,9 +13,9 @@ from cascadasen.api.simulation_schemas import TheaterNetworkOut
 Tech = Literal["hidro", "termica", "bioenergia", "geotermica", "solar", "eolica"]
 LoadKind = Literal["datacenter", "consumo"]
 
-_MW = {"gt": 0, "le": 3000}
-_LAT = {"ge": -56, "le": -17}
-_LON = {"ge": -76, "le": -66}
+_MW: dict[str, Any] = {"gt": 0, "le": 3000}
+_LAT: dict[str, Any] = {"ge": -56, "le": -17}
+_LON: dict[str, Any] = {"ge": -76, "le": -66}
 _BUS_MW_MAX = 20000  # coarse schema guard; the overlay checks base value + MAX_ELEMENT_MW
 
 

@@ -8,6 +8,7 @@ instance can continue one. The loop is capped by steps and by a deadline shorter
 from __future__ import annotations
 
 import json
+import logging
 import re
 import secrets
 import time
@@ -17,6 +18,8 @@ from typing import Any
 
 from cascadasen.application.sessions import SESSION_ID
 from cascadasen.domain.ports import ConflictError, DocumentStore, ToolBox, ToolChatError, ToolChatModel
+
+log = logging.getLogger(__name__)
 
 MAX_RESULT_CHARS = 8000
 FAILED_TURN = "(No pude responder a este mensaje por un error del modelo.)"
@@ -64,6 +67,7 @@ class Emitter:
         try:
             self.callback(kind, data)
         except Exception:
+            log.debug("stream callback dropped", exc_info=True)
             self.callback = None
 
 
@@ -224,7 +228,8 @@ class Assistant:
         deadline_s: float | None = None,
     ) -> tuple[str, str | None, int]:
         emit, deadline_s = emit or Emitter(None), deadline_s or self.deadline_s
-        started, specs, nudged, durations = self.clock(), toolbox.specs(), False, []
+        started, specs, nudged = self.clock(), toolbox.specs(), False
+        durations: list[float] = []
         for step in range(1, self.max_steps + 1):
             # do not start a model call that would likely end past the deadline (mean of this turn's calls;
             # the slowest one alone is too pessimistic after a single outlier)

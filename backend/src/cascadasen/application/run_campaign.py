@@ -20,6 +20,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections import OrderedDict
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from statistics import mean
 from typing import Any
@@ -82,7 +83,7 @@ class Cell:
     area_continuity: list[dict[str, float]] = field(default_factory=list)
 
 
-def _avg(values: list[float | None]) -> float | None:
+def _avg(values: Sequence[float | None]) -> float | None:
     vals = [v for v in values if v is not None]
     return round(mean(vals), 4) if vals else None
 
@@ -132,7 +133,7 @@ def _row(c: Cell) -> dict[str, Any]:
 class CampaignRunner:
     def __init__(self, world: TheaterWorld, physics: Physics) -> None:
         self.world, self.physics = world, physics
-        self.network = None  # network of the last campaign's runs (for the per-area table)
+        self.network: Any = None  # network of the last campaign's runs (for the per-area table)
         self.campaigns: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
     def get(self, campaign_id: str) -> dict[str, Any]:
@@ -227,7 +228,7 @@ class CampaignRunner:
                                 self.network = sim.network
                                 cell.reports.append(sim.report())
                                 cell.area_continuity.append(self._area_continuity(sim))
-        result = {
+        result: dict[str, Any] = {
             "mode": spec.mode,
             "spec": spec.as_dict(),
             "runs": sum(len(c.reports) for c in cells.values()),

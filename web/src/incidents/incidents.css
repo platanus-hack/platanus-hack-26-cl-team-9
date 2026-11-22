@@ -1,0 +1,25 @@
+/* Incidentes view of mapa 3 (docs/mapa3.md section 4.2) in the Design v5 shell: radius 0, only the cascade.css tokens
+   (docs/design.md section 2). Red is never used to rank incidents; the selected card is marked with a neutral rule. */
+.shell .incidents { display: flex; flex-direction: column; gap: 10px; }
+.shell .inc-list { display: flex; flex-direction: column; gap: 6px; }
+.shell .inc-card { gap: 6px; padding: 10px 12px; border-left: 2px solid transparent; }
+.shell .inc-card.on { border-left-color: var(--fg-2); background: var(--selected); }
+.shell .inc-pick { display: flex; flex-direction: column; gap: 2px; padding: 0; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
+.shell .inc-title { color: var(--fg); font-size: 13px; font-weight: 600; line-height: 18px; }
+.shell .inc-pick:hover .inc-title { text-decoration: underline; text-underline-offset: 2px; }
+.shell .inc-tag { color: var(--fg-3); font-style: normal; border: 1px solid var(--border-strong); padding: 0 4px; }
+.shell .inc-effects, .shell .inc-list-text, .shell .inc-cycles ul { margin: 0; padding-left: 16px; color: var(--fg-3); font-size: 12px; line-height: 17px; }
+.shell .inc-sources a { color: var(--fg-3); }
+.shell .inc-sources a:hover { color: var(--fg); }
+.shell .inc-hours { display: flex; align-items: center; gap: 8px; }
+.shell .inc-hours input { width: 72px; padding: 4px 6px; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font: 13px/16px var(--font-sans); }
+.shell .inc-go { align-self: flex-start; }
+.shell .inc-text { margin: 0; color: var(--fg-2); font-size: 13px; line-height: 19px; }
+/* two per row: four nowrap figures do not fit the 440 px panel side by side */
+.shell .mini-figures.inc-figures { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.shell .inc-cycles { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.shell .inc-cycles > li { display: flex; flex-direction: column; gap: 4px; padding: 7px 0; border-top: 1px solid var(--border); }
+.shell .inc-cycles > li.on { border-left: 2px solid var(--fg-2); padding-left: 8px; }
+.shell .inc-cycle-head { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; line-height: 16px; }
+.shell .inc-cycle-head .btn, .shell .inc-cycle-head .text-btn { margin-left: auto; }
+.shell .inc-notices span { display: block; }

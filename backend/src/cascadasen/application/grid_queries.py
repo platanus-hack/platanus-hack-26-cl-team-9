@@ -6,7 +6,7 @@ import dataclasses
 import itertools
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 
@@ -215,7 +215,7 @@ class GridQueryService:
             for c, sh in self.served_by_node.get(n.id, [])
         ]
         served.sort(key=lambda x: -x["population"])
-        tech = defaultdict(float)
+        tech: defaultdict[str, float] = defaultdict(float)
         for p in plants:
             if p["operating"]:
                 tech[p["tech"]] += p["mw"]
@@ -444,7 +444,7 @@ class GridQueryService:
                 g.remove_node(x)
         comps = [c for c in nx.connected_components(g) if c & self.main_component]
         comps.sort(key=len, reverse=True)
-        islands = []
+        islands: list[dict[str, Any]] = []
         for k, c in enumerate(comps):
             ns = [self.nodes[i] for i in c]
             gen = sum(n.generation_mw for n in ns)
@@ -499,7 +499,7 @@ class GridQueryService:
                     continue
                 if kv_min is not None and (n.kv or 0) < kv_min:
                     continue
-                feats.append(_point(n.lon, n.lat, self.node_summary(n)))
+                feats.append(_point(cast(float, n.lon), cast(float, n.lat), self.node_summary(n)))
         elif layer == "lines":
             for e in self.s.edges:
                 if not e.coords or (kv_min is not None and (e.kv or 0) < kv_min):
@@ -530,7 +530,7 @@ class GridQueryService:
                     feats.append(
                         _point(
                             st.lon,
-                            st.lat,
+                            cast(float, st.lat),
                             {k: v for k, v in self.storage_dict(st).items() if k != "provenance"},
                         )
                     )

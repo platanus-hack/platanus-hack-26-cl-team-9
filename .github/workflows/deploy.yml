@@ -20,7 +20,10 @@ env:
   SERVICE: cascadasen
   DOMAIN: sub50.cl
 jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
   deploy:
+    needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

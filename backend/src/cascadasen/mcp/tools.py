@@ -33,6 +33,8 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "cut_lines": ("cut_lines",),
     "repair_lines": ("repair_lines",),
     "get_grid_state": ("get_cut_state",),
+    "list_incident_scenarios": ("get_attack_catalog",),
+    "start_incident_run": ("start_incident_run",),
     "start_run": ("create_run",),
     "inject_event": ("inject_run_event",),
     "step": ("step_run",),
@@ -50,6 +52,8 @@ Sub50 simulates the consequences of events on the Chilean national grid (188 bus
 Work in this order: start_session (or join_session), describe_network to learn areas and ids, edit the
 network (add_datacenter, add_generator, add_line, edit_element) and/or open lines with cut_lines, then
 read the result. For strategic experiments use start_run, inject_event, step, run_report and after_action.
+To replay a documented incident (Huatacondo, Poland, UK, 25F) use list_incident_scenarios and
+start_incident_run, then step, run_report and after_action; say each result is a simulated scenario.
 Use list_options for valid event, action, policy and template ids. The web map shows the grid that prepare_scenario sets: use it to
 change what the user sees (changes by filters such as "halve every hydro plant" or "Puente Alto with twice the
 people", plus the failures: lines out and substations off). Each call sets the whole final grid, replacing what
@@ -273,6 +277,40 @@ class Sub50Tools:
 
     # -- strategic runs ----------------------------------------------------------------------
 
+    def list_incident_scenarios(self) -> dict[str, Any]:
+        """List the documented incidents that can be replayed as a simulated run: id, title, date, whether
+        it is verified, sources and the effects the scenario applies. A short curated list, not ranked:
+        do not compare them to find the worst one."""
+        return digest.incident_catalog_digest(self.client.get("/attacks/catalog"))
+
+    def start_incident_run(
+        self,
+        scenario: str,
+        policy: Literal["A", "B", "C"] = "C",
+        seed: int | None = None,
+        duration_h: float | None = None,
+    ) -> dict[str, Any]:
+        """Start a strategic run from a documented incident (ids from list_incident_scenarios) in the
+        active session and make it the active run. The defensive agents respond with the chosen policy;
+        the adversary is off. Then call step (about 24 cycles), run_report (its `incident` has the
+        consequence card and mitigations) and after_action. `duration_h` is the outage length used for
+        MWh and cost: an assumption, say so. Describe effects and prevention only; never attribute.
+        Each incident runs at its own operating_point (see list_incident_scenarios): the session must
+        use it, e.g. 25f-referencia needs start_session(point="feb2025-1500"); otherwise a 422 lists
+        the valid point."""
+        body: dict[str, Any] = {"scenario": scenario, "policy": policy}
+        if seed is not None:
+            body["seed"] = seed
+        if duration_h is not None:
+            body["duration_h"] = duration_h
+        run = self.client.post(f"{self._base()}/attacks/runs", body)
+        self.state.run_id = run["run_id"]
+        return {
+            **digest.run_digest(run),
+            "notice": digest.NOTICE,
+            "scenario_notices": digest.INCIDENT_NOTICES,
+        }
+
     def start_run(
         self,
         template: str = "open_field",
@@ -364,7 +402,7 @@ class Sub50Tools:
         """The after-action review of the active run in Spanish: summary lines and key moments. Show the
         summary lines as they are (a list); do not add causes or lessons that are not written in them."""
         resp = self.client.get(f"{self._run()}/after_action")
-        return {k: resp.get(k) for k in ("summary", "moments", "narrative", "policy", "notice")}
+        return {k: resp.get(k) for k in ("summary", "moments", "narrative", "policy", "notice", "incident")}
 
     def replay(self, policy: Literal["A", "B", "C"] | None = None) -> dict[str, Any]:
         """Re-run the active run with the same seed and events under another policy, to compare policies.

@@ -1,6 +1,6 @@
 # Cyberattack simulation extension
 
-Status: proposed extension, written 2026-11-21. Not implemented. Needs a team decision (section 9). Read `idea.md` and `stack.md` first.
+Status: **implemented 2026-11-22 (issue #74)** as a thin layer over the strategic theatre; the team decision of section 9 is still pending. Sections 1, 2, 4 and 6-8 stay valid. Sections 3 and 5 describe the first proposal (`plant_out`, `fleet_out`, `/attacks/simulate` with free effects), which was **not** built: see section 3.1 for what exists. Read `idea.md` and `stack.md` first.
 
 > **Overlap with what exists (added 2026-11-21, branch `feat/strategic-sim-api`).** The strategic theatre (`strategy.md`, `mapa3.md` section 10) already runs on the mapa 3 network (188 buses, not 10-14 nodes) and its cascade engine. Through `POST /api/v1/sim/runs/{id}/events` a user or a script can already trigger effect-level events on that network: `C1_generation_loss` on a bus `B###` (its generation, close to E1 `plant_out` at substation level), `C2_common_mode_loss` by zone and technology (close to E2 `fleet_out`), and `C3_transmission_opening` on a line `R###` or corridor (E3 `line_open`). It has no plant-level ids and no storage outage, and it keeps the same guardrails (no ranking, no worst-case search, the adversary acts by area only). If the team approves this extension, build the catalog and `/attacks/*` as a thin layer over those events rather than a second engine path.
 
@@ -61,6 +61,29 @@ Rules for the API:
 - Each request is logged with the agent name and a seed, so a run can be reproduced.
 
 An external agent can still loop over targets by itself. The API cannot prevent that, and the layers it reads are already public. The mitigation is scope: a bounded catalog, small requests, local binding and no aggregate "most dangerous" output.
+
+### 3.1 What is implemented (2026-11-22)
+
+Catalog: `backend/src/cascadasen/domain/theater/params/incidents.yaml`. Each incident is a theatre template (same shape as `templates.yaml`: scenario events with cycle, adversary off, horizon 24, a policy A/B/C chosen at launch) plus public metadata: title, date, `kind` (`cyber_documented` or `reference_not_cyber`), `verified`, linked sources, notes and the mitigations that would have helped (defensive action ids). `theater_config().incidents` holds the metadata and `.templates` also holds every incident, so `POST /sim/runs` with `template: huatacondo-2026` works too.
+
+| Scenario id | Events (all abstract, zone or area level) | Result at `nov2026-1300` (policy C) |
+|---|---|---|
+| `huatacondo-2026` | cycle 2: `C1_generation_loss` A01 with `mw: 88.1` (dataset value; the press says 103 MW), `C5_remote_dispatch_loss` A08. The battery is not modelled (not in `storage.geojson`) | L0 in seeds 1-8, scripted (V10, `cyber.md` section 7) |
+| `polonia-2025` | cycle 2: `C2_common_mode_loss` in zone NC for solar and for wind (share 0.5 each), `D4_comms_loss` A06 | L1 to L2, millions of people at the peak |
+| `reino-unido-2026` | cycle 2: `C1_generation_loss` A09, 40 MW. **Unverified** (press only) | L0, the counter-example |
+| `25f-referencia` | cycle 2: `C3_transmission_opening` corridor A06-A07 at `feb2025-1500`. Labelled "not a cyber case" | L3 |
+
+The sizes of Polonia and Reino Unido are replay assumptions (`is_assumption`), not reconstructions.
+
+API (agent routes, in `docs/openapi/agents.openapi.json`):
+- `GET /api/v1/attacks/catalog` (`get_attack_catalog`): the list, in file order, with sources, effects and notices. Not ranked.
+- `POST /api/v1/sessions/{sid}/attacks/runs` (`start_incident_run`): `{scenario, policy="C", seed?, duration_h?, uncertainty?, stochastic=false, adversary?}`. `stochastic` is **off by default**: the incident is the script, so the card is the incident's own; with the theatre's chance on, unplanned external events also count (seed 6 turned the 40 MW UK counter-example into L2). It builds a normal session run from the template (same limits: 20 runs per session, write rate limit) and returns the run summary. Unknown scenario gives 422 with `valid`. The session's point must equal the incident's `operating_point` (in the catalog): otherwise 422 `{field: "scenario", valid: [<point>]}`, so `25f-referencia` needs a session created with `point: feb2025-1500`. There is no endpoint that accepts free effects, loops over targets or returns a worst case.
+- `step_run`, `get_run_report`, `get_run_after_action`, `replay_run` are the existing routes. The report has an `incident` block: public metadata, mitigations, and a `consequence_card` (level, `people_without_power`, `load_shed_mw`, `unserved_energy_mwh`, `failure_cost_usd`, `outage_duration_h` with `is_assumption: true`). MWh and cost extrapolate the **peak** unserved power over `duration_h` (default 4 h from `incidents.yaml` `defaults`, editable per run via `duration_h`), because the theatre horizon is about two hours. The standard indicators (TTU, mission continuity, wrong decisions, reserve) stay in `indicators`.
+- The after-action (`TemplateInterpreter`) adds an `incident` section: summary, effect, prevention lines (from `narrative_es.yaml` `prevention`), notes, sources. `ClaudeInterpreter` may still rewrite the narrative; it only explains.
+- Web: the **Incidentes** view of mapa 3 consumes this API. It creates a session at the incident's hour when needed and plays the cycles' `transient` on the map (`mapa3.md` section 4.2).
+- MCP and assistant tools: `list_incident_scenarios` and `start_incident_run(scenario, policy, seed, duration_h)` (`docs/mcp.md`).
+
+Every result carries "Escenario hipotético: se modela el efecto, no el ataque." and "Consecuencia simulada en una red reducida, no una predicción." Tests: `backend/tests/unit/test_incidents.py`.
 
 ## 4. Demo
 

@@ -71,7 +71,3 @@ class LogisticsAgent:
             c = self.net.corridors[target]
             return [c.a, c.b]
         return self.sites.get(target, [])
-
-    def freedom(self, view: AgentView) -> int:
-        """How many resource pools still allow at least one more action."""
-        return sum(1 for _, v in view.resources if v >= 1)

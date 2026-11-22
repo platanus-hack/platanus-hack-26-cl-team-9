@@ -56,7 +56,8 @@ class SessionLimitError(ValueError):
 
 class _Lru:
     def __init__(self, size: int) -> None:
-        self.size, self._items, self._lock = size, OrderedDict(), threading.Lock()
+        self.size, self._lock = size, threading.Lock()
+        self._items: OrderedDict[Any, Any] = OrderedDict()
 
     def get(self, key: Any) -> Any:
         with self._lock:
@@ -142,7 +143,7 @@ class SessionService:
         if point not in points:
             raise RunInputError("point", "punto de operación desconocido", sorted(points))
         sid, now = secrets.token_urlsafe(16), self._now()
-        doc = {
+        doc: dict[str, Any] = {
             "session_id": sid,
             "label": label,
             "point": point,

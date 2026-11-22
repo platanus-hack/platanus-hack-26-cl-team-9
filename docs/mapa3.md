@@ -127,7 +127,7 @@ With `VITE_MAPBOX_TOKEN` in `web/.env.local` (git-ignored) the basemap is Mapbox
 
 ## 3. 2D and 3D views
 
-The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The map controls also have **Ver toda la red**, which returns the camera to the frame of the network on the map. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`).
+The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The map controls also have **Ver toda la red**, which returns the camera to the frame of the network on the map. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D.
 
 ## 4. How to use it
 
@@ -195,6 +195,26 @@ Issue #49. The map draws **one network at a time**. The panel header names it ("
 - **Safety:** the file is read with `JSON.parse` only. Values are copied field by field into new objects. Text is cut to 120 characters, without control characters. Names reach the screen only as React text and through the deck.gl tooltip's `text` (never `html`). `upload.test.ts` covers the refusals, the country mismatch and a name with `<img onerror>` / `<script>`.
 - **Storage:** IndexedDB in this browser only (`web/src/map/uploadStore.ts`, database `sub50`, store `uploaded-networks`); nothing is sent to a server. If the browser refuses to store it, the network still shows and a note says it will be lost on reload. Sharing it is for #34 / #44.
 - An upload is never simulated (phase 2 would need the inputs of `docs/minimum-dataset.md`).
+
+### 4.2 Documented incidents (Incidentes)
+
+Continuation of issue #74 (`attack-sim.md` section 3.1). The **Incidentes** rail item (below Asistente) replays a public incident as a simulated scenario on Chile's network. It needs the backend.
+- **Catalog:** one card per incident from `GET /api/v1/attacks/catalog`, in the order of the file, never sorted by damage. Each card shows title, date, the hour it runs at, the effects in text, the sources as links, and a tag `no verificado` (press only) or `referencia, no es ciber` (25F).
+- **Options:** defence policy A/B/C, outage hours (0.25-720, labelled "supuesto": it only scales MWh and cost) and **Simular incidente**.
+- **Own session:** an incident runs at its own hour (`operating_point`), and the API answers 422 when the session's hour differs. Without a session, or in one at another hour, the web creates a session at the incident's hour, labelled "Incidente: <título>", and enters it (asking first when it leaves another session). In a session at the same hour the run is added to it.
+- **Flow:** `POST /{sid}/attacks/runs`, then `step` to the horizon (the snapshots), then the report and the after-action.
+- **Result:**
+  1. Consequence card: level, people, MW, and MWh and cost with a tip "N h supuestas (editable)".
+  2. Agentic response from `report.indicators`, labelled "indicador experimental": time to understanding in cycles and minutes, mission continuity, unnecessary decisions, final reserve.
+  3. "Qué lo habría evitado".
+  4. The cycles (`after_action.timeline`).
+  5. Notes and sources.
+  6. Both notices: "Escenario hipotético: se modela el efecto, no el ataque." and "Consecuencia simulada en una red reducida, no una predicción."
+- **Cascade on the map:** a cycle whose snapshot `transient` sheds load, darkens buses or opens lines has **Ver cascada en el mapa**. The `transient` is a Timeline (same shape as a cut), so the timeline card, pins, callout and Carga colours play it like a cut. It takes priority over the session's own timeline. A double click cut, **Prender todo** (enabled while it plays), **Cerrar incidente** or leaving the session remove it.
+- **Not built:** a cycle-by-cycle viewer of `snapshot.grid`, the areas and the crews (section 10), injecting events from the web, comparing policies with replay.
+- **Language:** "incidente simulado" and "escenario", never "atacar" or "hackear".
+
+Code: `web/src/incidents/` (`incidents.ts` pure helpers, `useIncident.ts` state owned by `CascadeApp`, `IncidentPanel.tsx`).
 
 ## 5. Legend (what the map draws)
 
@@ -276,9 +296,20 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/src/cascade/layers.ts` | deck.gl layers and colour constants |
 | `web/src/cascade/NetworkPanel.tsx`, `SimulationPanel.tsx` | Tabs Red and Simulación |
 | `web/src/cascade/Timeline.tsx`, `MapLegend.tsx`, `MapOverlays.tsx` | Timeline card, map legend, event pins and callout |
+| `web/src/cascade/api.ts`, `types.ts` | Loads the cache files (`/cache/...`, memoised) and the types of their JSON |
+| `web/src/cascade/gridsApi.ts` | Client of the backend grid documents (catalogue, compose, simulate, dependency, outage cost; `docs/grids.md`) |
+| `web/src/cascade/GridSources.tsx` | "Fuentes de la grilla" in the rail: choose which stored network is on the map |
+| `web/src/cascade/NetworkState.tsx` | Tab "Estado de la red": every change made to the grid, restorable one by one or all at once |
+| `web/src/cascade/edits.ts` | Pure list of the user's edits (lines cut, substations out) and the rule for when the cache can answer |
+| `web/src/cascade/heat.ts` | Heat map layers (population, dependency, criticality) |
+| `web/src/cascade/networkSummary.ts` | Figures of the Red tab by voltage band, from the network on the map |
+| `web/src/cascade/url.ts` | Reads and writes the deep link (`point`, `cut`, `vista`, `sesion`, `pais`) |
+| `web/src/cascade/ui.tsx` | Shared pieces: info tooltip and icons |
+| `web/src/cascade/cities.ts` | Reference city list (metadata, not drawn) |
 | `web/src/cascade/Legend.tsx` | "Ayuda" and "Fuentes y supuestos" views |
 | `web/src/cascade/text.ts` | Spanish narration of events, place names, number and clock formats |
 | `web/src/cascade/cascade.css` | Styles of the shell (Design v5 tokens) |
+| `web/src/incidents/` | **Incidentes** rail item: catalog, launch in a session at the incident's hour, consequence card, agentic response, prevention, cycles and their cascade on the map (section 4.2) |
 | `web/src/assistant/` | **Asistente** rail item: chat with the in-app assistant, its steps live, the map following its session (`docs/assistant.md` section 2c) |
 | `web/src/map/shapes.ts` | Outline of the rectangular bars |
 | `web/src/map/country.ts`, `countryBounds.ts` | Network catalog, `countryOf`, `?pais=`; camera frame, limits and land from the data (section 4.1) |
@@ -288,7 +319,7 @@ web/src/cascade/*  reads cache/*.json and draws it
 
 The frontend only reads files. All physics is in `backend/src/cascadasen/domain/cascade/`.
 
-Regenerate data, in order (needs `openpyxl` and `scipy`, not in the repo dependencies; `build_operating_points.py` downloads PyPSA-CL files into git-ignored `data/raw/pypsa_cl/`):
+Regenerate data, in order (needs `scipy`: `cd backend && uv sync --group data`, and run the scripts with `uv run`; `build_operating_points.py` downloads PyPSA-CL files into git-ignored `data/raw/pypsa_cl/`):
 
 ```bash
 python data/scripts/build_node_index.py
@@ -306,27 +337,15 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 | Blank map, console shows `deck: ... Assertion failed` | A `ColumnLayer` with custom `vertices` needs `diskResolution` equal to the vertex count (4). Fixed in `layers.ts`. |
 | Click does nothing | You clicked off a line (the cursor turns into a pointer over anything clickable). Zoom in. Lines are thin. The first click only selects: the card opens at the top of the panel. To cut, click the selected line again (slowly: a fast double click does nothing) or use "Sacar de servicio" in its card. A substation works the same way ("Apagar subestación"). After a cut, the event pin can cover a short cut line so it cannot be clicked; reconnect it with **Volver a conectar** in the impact card. |
 | Double click does not cut | By design: a double click never switches anything off (a double click on empty map zooms on Mapbox with a mouse). Click once to select, then click again. |
-| Never commit | `web/public/cache`, `.env*`, `data/raw` |
-
-## 10. Glossary
-
-- **SEN**: Sistema Eléctrico Nacional, Chile's main grid.
-- **CEN**: Coordinador Eléctrico Nacional, the system operator.
-- **EDAC**: Esquema de Desconexión Automática de Carga, automatic load shedding by frequency steps.
-- **N-1**: the grid survives the loss of any single element. Not imposed here.
-- **Island**: part of the grid that is electrically separated and has its own frequency.
-- **Inertia**: energy in rotating machines (MW·s). More inertia, slower frequency change.
-- **Primary reserve**: capacity that synchronous machines add automatically when frequency falls.
-- **Ride-through**: ability of a plant to stay connected during a short disturbance. Not modelled.
-- **25F**: the 25 February 2025 national blackout.
+| Never commit | `web/public/cache/theater/` (generated, git-ignored), `.env*`, `data/raw` |
 
 ## 10. Operation mode: the strategic theatre on this map (backend contract)
 
-The strategic theatre (`docs/strategy.md`) now runs on the same network and engine as this map. A run lasts 24-36 cycles of 5 minutes. In each cycle, digital degradation (telemetry loss, delayed or unreliable data, communications loss, false alarms), an adaptive adversary acting by area, unplanned external events, and the defenders' decisions and field crews play out. A physical event runs the same cascade engine as a line cut here. This section is the contract for the frontend. **Backend only for now:** the API, the snapshots and the offline cache are done; the visual layer of mapa 3 is not part of this PR and is left to the frontend work. A user flow that fits it: pick hour, scenario, defence policy and adversary; play 5-minute cycles drawing `grid`, areas and crews; replay `transient` in seconds; click a line or substation to inject an event (`POST /events`, applied next cycle); end with the report, the after-action and a replay with another policy (`/replay` + `GET /snapshots`).
+The strategic theatre (`docs/strategy.md`) now runs on the same network and engine as this map. A run lasts 24-36 cycles of 5 minutes. In each cycle, digital degradation (telemetry loss, delayed or unreliable data, communications loss, false alarms), an adaptive adversary acting by area, unplanned external events, and the defenders' decisions and field crews play out. A physical event runs the same cascade engine as a line cut here. This section is the contract for the frontend. **Backend only for now:** the API, the snapshots and the offline cache are done; the visual layer of mapa 3 is not part of this PR and is left to the frontend work. The only part the web uses today is the Incidentes view (section 4.2), which plays a cycle's `transient` on the map. A user flow that fits it: pick hour, scenario, defence policy and adversary; play 5-minute cycles drawing `grid`, areas and crews; replay `transient` in seconds; click a line or substation to inject an event (`POST /events`, applied next cycle); end with the report, the after-action and a replay with another policy (`/replay` + `GET /snapshots`).
 
 **Sources.**
 - Live: the API under `/api/v1/sim/*` (`docs/stack.md` 7.1). Every run without `seed` is a different random run.
-- Offline fallback: `web/public/cache/theater/`, written by `uv run cascadasen-sim-fixtures` (git-ignored, like the cut cache).
+- Offline fallback: `web/public/cache/theater/`, written by `uv run cascadasen-sim-fixtures` (git-ignored; the cut cache in `web/public/cache/<point>/` is committed).
 
 **Areas.** The 13 operating areas `A01`-`A13` are groups of the 188 buses by latitude band. Corridors (`A06-A07`) are the `R###` lines that cross between two areas. Defence functions are `edac:norte_grande` and `edac:centro_sur`. The adversary acts only on areas, zones or defence functions, never on a single bus or line (`cyber.md` 8.7).
 
@@ -384,3 +403,14 @@ Without a session, mapa 3 reads only the static cache (`web/public/cache/`) and 
 - Edits send `If-Match` with the `dataset_revision` on screen. If another client changed the dataset first (412), the page reloads and asks you to retry. Run activity by other clients does not cause a 412. Every session request that gets the busy 409 (`sessions-api.md` section 7) waits `Retry-After` and is retried up to 2 times. Once the write is accepted the edit counts as done (the form closes) even if the reload after it still fails; the page then shows that reload error and keeps the network on screen until the next revision event reloads it. A busy 409 on the first load keeps the session and retries the load every 3 s; network errors and 5xx fall back to the base case. Overlay warnings in **Datos** use a neutral note, because red is reserved for faults.
 
 **Files.** `web/src/session/sessionApi.ts` (typed calls for every session route, `ApiError`, `sessionIdFrom`, `subscribe`), `useSession.ts` (state and refetch), `loader.ts` (which refetch result is applied), `SessionBar.tsx` (the view card and the compact strip), `SessionCut.tsx` (open lines in Simulación), `DataPanel.tsx`, `geo.ts`, and `session.css` (session styles under `.shell`: radius 0, cascade.css tokens, `.tag` for labels because `.shell .badge` is the event marker). `CascadeApp.tsx` wires them into the shell.
+## 12. Glossary
+
+- **SEN**: Sistema Eléctrico Nacional, Chile's main grid.
+- **CEN**: Coordinador Eléctrico Nacional, the system operator.
+- **EDAC**: Esquema de Desconexión Automática de Carga, automatic load shedding by frequency steps.
+- **N-1**: the grid survives the loss of any single element. Not imposed here.
+- **Island**: part of the grid that is electrically separated and has its own frequency.
+- **Inertia**: energy in rotating machines (MW·s). More inertia, slower frequency change.
+- **Primary reserve**: capacity that synchronous machines add automatically when frequency falls.
+- **Ride-through**: ability of a plant to stay connected during a short disturbance. Not modelled.
+- **25F**: the 25 February 2025 national blackout.

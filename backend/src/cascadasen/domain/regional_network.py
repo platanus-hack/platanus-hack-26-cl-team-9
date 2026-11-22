@@ -21,7 +21,7 @@ import re
 import statistics
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -377,10 +377,10 @@ def _fold_parallel_lines(circuits: Iterable[Circuit], prefix: str) -> list[FlowL
         group = sorted(group, key=lambda c: c.record)
         dc = all(c.x_pu == 0 for c in group)
         x = 0.0 if dc else max(1.0 / sum(1.0 / c.x_pu for c in group), X_MIN_PU)
-        rs = [c.r_pu for c in group]
+        rs = [c.r_pu for c in group if c.r_pu is not None]
         r = None
-        if all(v is not None for v in rs):
-            r = 0.0 if any(v <= 0 for v in rs) else 1.0 / sum(1.0 / v for v in rs)  # type: ignore[operator]
+        if len(rs) == len(group):
+            r = 0.0 if any(v <= 0 for v in rs) else 1.0 / sum(1.0 / v for v in rs)
         bs = [c.b_pu for c in group if c.b_pu is not None]
         out.append(
             FlowLine(
@@ -437,7 +437,7 @@ def _match_coordinates(
         if b.substation in coords:
             continue
         target = _normalise_substation_name(b.name)
-        same_kv = [s for s in epe if b.kv in (s.kv_levels or [s.kv])]
+        same_kv = [s for s in epe if b.kv in (s.kv_levels or [cast(float, s.kv)])]
         hit = next((s for s in same_kv if _normalise_substation_name(s.name) == target), None)
         if hit is not None:
             coords[b.substation] = (hit.lon, hit.lat, "epe_exact")

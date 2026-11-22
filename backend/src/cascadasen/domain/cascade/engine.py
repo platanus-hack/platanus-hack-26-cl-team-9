@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass, field
+from typing import cast
 
 import numpy as np
 
@@ -179,7 +180,7 @@ def _end_buses(net: ReducedNetwork) -> tuple[int, int] | None:
         next((i for k, i in by_name.items() if k.endswith(_plain(VOLTAGE_LIMIT[side]))), None)
         for side in ("north", "south")
     ]
-    return (found[0], found[1]) if None not in found else None
+    return cast(tuple[int, int], (found[0], found[1])) if None not in found else None
 
 
 def _start(net, point, params, cut_ids, already_open: set[str] | None = None) -> _State:

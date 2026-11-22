@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -242,7 +242,9 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         if "in_service" in rec:
             in_service[i] = _flag(rec["in_service"], f"{where}.in_service")
 
-    for values in (names, lat, lon, kv):  # slots of the added buses, filled below
+    for values in cast(
+        "tuple[list[Any], ...]", (names, lat, lon, kv)
+    ):  # slots of the added buses, filled below
         values.extend([""] * len(added) if values is names else [0.0] * len(added))
     for k, rec in enumerate(added):
         i = n + k

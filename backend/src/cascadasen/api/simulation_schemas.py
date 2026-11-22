@@ -328,6 +328,11 @@ class RunReportOut(AgentOut):
         description="Adversary objective, budget and spend; null if none."
     )
     after_action: list[dict[str, Any]] = Field(description="Key moments by cycle.")
+    incident: dict[str, Any] | None = Field(
+        None,
+        description="Only for runs started from a documented incident: sources, notes, mitigations and "
+        "the consequence card (level, people, MW shed, MWh and cost over an assumed duration).",
+    )
     trace_head: str = Field(description="Hash of the last audit log entry.")
 
 
