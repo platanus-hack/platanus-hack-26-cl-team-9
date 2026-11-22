@@ -162,13 +162,12 @@ class Assistant:
         message: str,
         conversation_id: str | None,
         session_id: str | None,
-        toolbox_for: Callable[[str | None, str | None, str], ToolBox],
+        toolbox_for: Callable[[str | None, str | None], ToolBox],
         on_event: Callable[[str, dict[str, Any]], None] | None = None,
         deadline_s: float | None = None,
     ) -> dict[str, Any]:
-        """Run one user message. `toolbox_for(session_id, run_id, said)` builds the tools of this request;
-        `said` is everything the user wrote in the conversation, so tools can check that values such as
-        megawatts come from the user and not from the model. `on_event(kind, data)` receives the steps
+        """Run one user message. `toolbox_for(session_id, run_id)` builds the tools of this request;
+        `on_event(kind, data)` receives the steps
         as they happen (`start`, `assistant_text`, `tool_call`, `tool_result`) for streaming clients;
         `deadline_s` overrides the default deadline (a stream keeps the connection alive longer)."""
         if session_id is not None and not SESSION_ID.match(session_id):
@@ -187,10 +186,7 @@ class Assistant:
             doc, etag = self.load(cid)
         if session_id and session_id != doc.get("session_id"):
             doc["session_id"], doc["run_id"] = session_id, None
-        said = "\n".join(
-            [m["text"] for m in doc["messages"] if m["role"] == "user" and not m.get("hidden")] + [message]
-        )
-        toolbox = toolbox_for(doc.get("session_id"), doc.get("run_id"), said)
+        toolbox = toolbox_for(doc.get("session_id"), doc.get("run_id"))
         messages = trim_history(doc["messages"], self.history)
         messages.append({"role": "user", "text": message})
         start = len(messages) - 1  # this turn's messages, for the trace

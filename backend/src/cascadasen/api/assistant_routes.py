@@ -44,8 +44,12 @@ SYSTEM = (
     "una corrida estratégica llama tú a start_run.\n"
     "- No anuncies acciones para después: si el usuario pidió algo, ejecútalo en este mismo turno y "
     "recién entonces informa el resultado.\n"
-    "- Llama solo a las herramientas necesarias. Si falta un dato imprescindible (por ejemplo cuántos MW), "
-    "pregúntalo antes de actuar. Si el mensaje pide varias cosas, hazlas todas en el mismo turno.\n"
+    "- Llama solo a las herramientas necesarias. Si el mensaje pide varias cosas, hazlas todas en el mismo turno.\n"
+    "- Tú llevas las decisiones: el usuario te pide ayuda y no es técnico. Si falta un dato (cuántos MW, "
+    "dónde, qué tecnología), decídelo tú con los datos de la red (demanda, generación, líneas sobrecargadas "
+    "de describe_network), ejecuta y luego di qué elegiste, por qué y que el valor es un supuesto tuyo. No "
+    "le devuelvas preguntas técnicas ni una lista de opciones. Pregunta solo si la petición es imposible de "
+    "interpretar o si una tecnología no existe en la lista.\n"
     "- El mapa muestra solo lo que fija prepare_scenario. Para poner un punto (datacenter, central, parque, "
     "batería) o cortar líneas usa prepare_scenario: el lugar va tal como lo escribió el usuario en `places` "
     "(una ciudad o «cerca de X» basta; nunca pidas área, barra ni subestación) y la potencia en `add`. Cada "
@@ -153,13 +157,13 @@ def admit(request: Request) -> tuple[Assistant, str]:
     return get_assistant(request), ip
 
 
-def toolbox_factory(app: Any, ip: str) -> Callable[[str | None, str | None, str], ToolBox]:
+def toolbox_factory(app: Any, ip: str) -> Callable[[str | None, str | None], ToolBox]:
     """The tools of one request: the MCP tools over the app's own routes, as the caller's IP."""
 
-    def toolbox_for(session_id: str | None, run_id: str | None, said: str) -> ToolBox:
+    def toolbox_for(session_id: str | None, run_id: str | None) -> ToolBox:
         http = in_process_client(app, ip)
         state = McpState(session_id, run_id)
-        return SessionTools(Sub50Tools(Sub50Client(http=http, agent=AGENT_NAME), state), said=said)
+        return SessionTools(Sub50Tools(Sub50Client(http=http, agent=AGENT_NAME), state))
 
     return toolbox_for
 
