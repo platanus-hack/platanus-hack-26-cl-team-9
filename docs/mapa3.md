@@ -285,6 +285,7 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/public/cache/network-<year>.json` | The 188 substations and 273 lines |
 | `web/public/cache/<point>/buses.json` | Generation, demand, people per substation |
 | `web/public/cache/<point>/baseline.json` and `<line id>.json` | One timeline per cut: events, frames, frequency curves, summary |
+| `web/public/cache/comunas-<year>.json` | People per substation and comuna (INE Censo 2024; the comuna-to-substation split is an assumption), for the Comunas sin suministro card |
 | `web/public/cache/<point>/health.json` | Pre-fault health index and N-1 money at risk (`health.md` "Cost"); cut timelines also carry `health` and the cost in `summary` |
 | `web/src/cascade/Scenarios.tsx` | Escenarios in the rail: Desastres (cuts) and Benchmark (operating conditions without a cut) |
 | `web/src/cascade/CascadeApp.tsx` | Design v5 shell: state (selection, cut, point), animation loop (clock, layers, HTML overlays), keyboard, rail, panel, controls |

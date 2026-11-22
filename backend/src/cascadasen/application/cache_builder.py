@@ -9,24 +9,27 @@ Layout under the output folder:
   <point>/health.json             pre-fault health index and N-1 money at risk (docs/health.md), from the line cuts below
   <point>/<line id>.json          the cascade for cutting that line, with `health` (after-cut index and cost)
   <point>/sub-<bus id>.json       the cascade for shutting down that substation: every line of the bus opens at t = 0
+  comunas-<year>.json             people per bus and comuna (INE Censo 2024), for the web's affected-population view
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
 from cascadasen.domain.cascade.engine import ASSUMPTIONS, run_cascade_workflow
 from cascadasen.domain.cascade.health import prefault_health, with_event_health
-from cascadasen.domain.cascade.network import ReducedNetwork
-from cascadasen.domain.cascade.scenario import load_network_and_point
+from cascadasen.domain.cascade.network import ReducedNetwork, reduce_network
+from cascadasen.domain.cascade.scenario import load_network_and_point, people_by_comuna
 
 
 def build_cache_workflow(processed: Path, out: Path, point_ids: list[str] | None = None) -> dict:
     points = _points(processed, point_ids)
     out.mkdir(parents=True, exist_ok=True)
     counts = {p["id"]: _build_point(processed, out, p) for p in points}
+    write_comunas(processed, out, [p["year"] for p in points])
     _write(out / "index.json", {"points": points, "assumptions": ASSUMPTIONS})
     return counts
 
@@ -104,6 +107,33 @@ def network_json(net: ReducedNetwork) -> dict:
             for ln in net.lines
         ],
     }
+
+
+def comunas_json(net: ReducedNetwork, snapshot: dict) -> dict:
+    """People per bus split by comuna: the breakdown behind buses.json `people`. The split is an assumption."""
+    names = {c["cut"]: c["name"] for c in snapshot["comunas"]}
+    buses: dict[str, list[tuple[str, int]]] = {}
+    used: set[str] = set()
+    for i, rows in enumerate(people_by_comuna(net, snapshot)):
+        kept = [
+            (cut, round(p)) for cut, p in sorted(rows.items(), key=lambda r: (-r[1], r[0])) if round(p) > 0
+        ]
+        used.update(cut for cut, _ in kept)
+        buses[f"B{i:03d}"] = kept
+    return {
+        "source": "INE Censo 2024 population per comuna, split over substations in data/processed/grid_snapshot.json"
+        " (comunas[].served_by)",
+        "is_assumption": True,
+        "comunas": {cut: names[cut] for cut in sorted(used)},
+        "buses": buses,
+    }
+
+
+def write_comunas(processed: Path, out: Path, years: Iterable[int]) -> None:
+    """Write comunas-<year>.json for each distinct year, from one read of grid_snapshot.json."""
+    snapshot = json.loads((processed / "grid_snapshot.json").read_text(encoding="utf-8"))
+    for year in sorted(set(years)):
+        _write(out / f"comunas-{year}.json", comunas_json(reduce_network(snapshot, year), snapshot))
 
 
 def _write(path: Path, data: dict) -> None:

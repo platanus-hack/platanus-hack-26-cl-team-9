@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cache): people per substation and comuna for the affected-population view
+
+- **Changed:** New `people_by_comuna(net, snapshot)` in `domain/cascade/scenario.py` keeps the comuna of each share that `_people` sums per bus. `cache_builder.comunas_json` / `write_comunas` write `web/public/cache/comunas-<year>.json` (`source`, `is_assumption: true`, `comunas` cut -> name, `buses` B### -> `[[cut, people], ...]`, rounded, sorted by people). Both files (2025, 2026) are committed; they are identical because both networks have the same 188 buses.
+- **Why:** The web "Comunas sin suministro" card groups the people of the dark buses by comuna. The cache had people per bus only; the comuna split lives in `grid_snapshot.json` `comunas[].served_by`.
+- **Agents:** Regenerate the files without rerunning every cut: `cd backend && uv run python -c "from pathlib import Path; from cascadasen.application.cache_builder import write_comunas; write_comunas(Path('../data/processed'), Path('../web/public/cache'), [2025, 2026])"`. `cascadasen-cache` also writes them (from `build_cache_workflow`, not `_build_point`). `_people` was not refactored, so `buses.json` does not move. `test_comunas_file_matches_bus_people_and_the_committed_cache` checks the committed file for drift. No API route changed.
+- **Files:** `backend/src/cascadasen/domain/cascade/scenario.py`, `backend/src/cascadasen/application/cache_builder.py`, `backend/tests/unit/test_cascade.py`, `web/public/cache/comunas-{2025,2026}.json`, `docs/mapa3.md`.
+
 ## 2026-11-22 · chore(index): regenerate after merging main into the event pins fix
 
 - **Changed:** `docs/index/repo-index.json` regenerated on `fix/event-pins-above-grid` after merging `origin/main` again (PR #61).
