@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(cascade): wait for island settling before the next stage
+
+- **Changed:** `_cascade` (`domain/cascade/engine.py`) carries `t` as state. After settling the islands of stage k, stage k+1 opens at `max(t, last load_shed or island_blackout of stage k) + stage_spacing_s`, not at `(k+1) x stage_spacing_s`. `island_stable` (the 20 s horizon) does not hold it back.
+- **Changed:** `island_formed`, `load_shed`, `island_blackout` and `island_stable` carry `params.stage`, the stage that formed the island. The `ASSUMPTIONS` text and the `stage_spacing_s` note in `cascade.yaml` say the next stage waits.
+- **Why:** Issue #90. The flow of stage k+1 is computed with the gen and load left after stage k's islands shed or went dark, but those events were stamped later than the stage k+1 opening in 9 cached cuts (for example `nov2026-1300/R026`: blackout at 6.59 s, openings at 3.0 and 4.0 s, now at 7.59 and 8.59 s).
+- **Agents:** Frame and opening times are no longer integers. Causality now holds: every load_shed or island_blackout of stage k comes before the stage k+1 `line_overload_open`. The committed cache is stale until the cache commit later in this branch. `docs/engine.md` item 4 and `stack.md` 4.3 item 5 describe the rule.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine.py,params/cascade.yaml}`, `docs/{engine,stack}.md`.
+
 ## 2026-11-22 · Merge origin/main into feat/network-selector
 
 - **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.

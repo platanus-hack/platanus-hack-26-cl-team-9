@@ -81,7 +81,12 @@ edac:
 cascade:
   overload_factor: {value: 1.2, source: "stack.md 4.3 (120 % of capacity, parameter)"}
   max_stages: {value: 20, source: "stack.md 4.3"}
-  stage_spacing_s: {value: 1.0, is_assumption: true, note: "Illustrative time between cascade stages"}
+  stage_spacing_s:
+    value: 1.0
+    is_assumption: true
+    note: >-
+      Illustrative time between cascade stages. The next stage also waits until the islands of the previous
+      stage finish their EDAC steps or go dark: it opens at max(t, last load_shed or island_blackout) + this value.
   local_cut_mw: {value: 200.0, source: "stack.md 4.5 (islands without synchronous generation, parameter)"}
 
 voltage_limit:

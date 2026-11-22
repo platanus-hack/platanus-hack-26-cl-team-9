@@ -93,7 +93,7 @@ DC power flow (flow proportional to angle difference over reactance), solved per
 2. Detect islands (connected components, networkx).
 3. Compute each island's initial imbalance: generation minus load, plus the flow that crossed the boundary.
 4. Run the island frequency model (4.4). An island that collapses loses all its load.
-5. DC flow on surviving islands. Per iteration open only the corridor with the highest relative loading above 120% of capacity (parameter); ties open together.
+5. DC flow on surviving islands. Per iteration open only the corridor with the highest relative loading above 120% of capacity (parameter); ties open together. The other lines above 120% are not lost: the next iteration re-evaluates them with the new flows. The next iteration starts only after the islands of this one finished their EDAC steps or went dark (188-bus engine: `max(t, last load_shed or island_blackout) + stage_spacing_s`, `docs/engine.md`).
 6. Distribute remaining imbalance among synchronous generators in proportion to available reserve.
 7. Automatic under-frequency load shedding (EDAC) applies per zone with the amounts of each zone, proportional across buses with positive load. Exclude buses with net negative load (distributed generation larger than demand).
 8. Overloads in the first ~2 s are labelled "separation through a weak link" (the 25F mechanism [4]). Later overloads are labelled "thermal overload, needs operator action" and do not trip anything in the default mode.

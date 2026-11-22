@@ -17,7 +17,14 @@ from cascadasen.domain.simulation.consequence import outage_cost
 from cascadasen.domain.simulation.params import load_params, value
 
 from .flow import dc_flow, find_islands
-from .frequency import IslandInput, IslandResult, Params, cascade_params, edac_tables, simulate_island
+from .frequency import (
+    IslandInput,
+    IslandResult,
+    Params,
+    cascade_params,
+    edac_tables,
+    simulate_island,
+)
 from .network import ReducedNetwork
 from .scenario import OperatingPoint
 
@@ -25,7 +32,7 @@ ASSUMPTIONS = [
     "Red reducida: una barra por subestación y solo líneas; los transformadores se pliegan en su nodo (no se modelan sus sobrecargas).",
     "Flujo DC: sin pérdidas, sin tensión ni potencia reactiva. La tensión no se calcula: si el corredor del 25F se separa con un flujo previo fuera del rango de validez del esquema de defensa (1.600 MW N→S, 1.000 MW S→N), las islas de ambos extremos colapsan por tensión. Es una regla, no un cálculo, y es el único corredor con límites publicados.",
     "Una línea se abre cuando supera 120% de su capacidad (supuesto de docs/stack.md 4.3). Las protecciones reales dependen de relés y tiempos que no están en los datos.",
-    "Cada etapa de la cascada se separa 1,0 s de la anterior. Es un tiempo ilustrativo, no calculado.",
+    "Cada etapa de la cascada se separa 1,0 s de la anterior (tiempo ilustrativo, no calculado). La etapa siguiente espera a que las islas de la anterior terminen sus EDAC o se apaguen, y empieza 1,0 s después del último de esos eventos.",
     "Reserva primaria 4% de la potencia sincrónica en línea con estatismo 5%, constante de tiempo 3 s y amortiguamiento de carga 1,5 %/Hz: supuestos sin calibrar.",
     "La inercia de cada isla es la de las unidades sincrónicas en línea; solar y eólica no aportan. Una unidad que sale antes del transitorio ya no cuenta.",
     "EDAC con los escalones del informe del CEN sobre el 25F (centro-sur y Norte Grande); los MW de cada escalón se interpolan entre demanda baja y alta. El EDAC por contingencia extrema no se modela.",
@@ -67,6 +74,7 @@ class _State:
     battery: np.ndarray | None = None
     prefault_boundary_mw: float = 0.0  # pre-fault flow across the 25F boundary, positive north to south
     voltage_ends: tuple[int, int] | None = None  # 25F corridor ends whose separation collapses both islands
+    stage: int = 0  # cascade stage being settled (tags the island events)
 
 
 @dataclass
@@ -209,20 +217,28 @@ def _start(net, point, params, cut_ids, already_open: set[str] | None = None) ->
     return state
 
 
+_SETTLING = ("load_shed", "island_blackout")
+
+
 def _cascade(s: _State) -> bool:
+    """Causal stages: the flow of stage k+1 uses the gen and load left after the islands of stage k shed
+    or went dark, so its opening waits until the last of those events, plus `stage_spacing_s`."""
+    t = 0.0
     for stage in range(s.params.max_stages + 1):
-        t = stage * s.params.stage_spacing_s
         islands = find_islands(s.net, s.open_lines)
-        _settle_islands(s, islands, t)
+        mark = len(s.events)
+        _settle_islands(s, islands, t, stage)
         flows = dc_flow(s.net, s.open_lines, s.gen - s.load, islands)
         s.frames.append(_frame(s, islands, flows, t))
         over = _most_overloaded(s, flows)
         if not over:
             return False
+        settled_until = max((e["t"] for e in s.events[mark:] if e["type"] in _SETTLING), default=t)
+        t = round(max(t, settled_until) + s.params.stage_spacing_s, 2)
         s.open_lines.update(over)
         s.events.append(
             {
-                "t": round(t + s.params.stage_spacing_s, 2),
+                "t": t,
                 "type": "line_overload_open",
                 "ids": sorted(over),
                 "text_key": "line_overload_open",
@@ -244,7 +260,8 @@ def _most_overloaded(s: _State, flows: np.ndarray) -> list[str]:
     return [lid for r, lid in ratios if r >= worst - 1e-6]
 
 
-def _settle_islands(s: _State, islands: list[list[int]], t: float) -> None:
+def _settle_islands(s: _State, islands: list[list[int]], t: float, stage: int = 0) -> None:
+    s.stage = stage
     for island in islands:
         key = frozenset(island)
         gen, load = float(s.gen[island].sum()), float(s.load[island].sum())
@@ -256,7 +273,12 @@ def _settle_islands(s: _State, islands: list[list[int]], t: float) -> None:
                 "type": "island_formed",
                 "ids": [],
                 "text_key": "island_formed",
-                "params": {"buses": len(island), "gen_mw": round(gen), "load_mw": round(load)},
+                "params": {
+                    "buses": len(island),
+                    "gen_mw": round(gen),
+                    "load_mw": round(load),
+                    "stage": stage,
+                },
             }
         )
         s.results[key] = _settle_island(s, island, gen, load, t)
@@ -337,7 +359,7 @@ def zone_load(net: ReducedNetwork, load: np.ndarray, buses: list[int]) -> dict[s
 def _apply_result(s: _State, island: list[int], sim: IslandResult, t: float) -> dict:
     s.curves[f"I{len(s.curves) + 1}"] = [[round(t + p[0], 2), p[1]] for p in sim.curve]
     for step in sim.steps:
-        params = {"zone": step["zone"], "step": step["step"], "mw": step["mw"]}
+        params = {"zone": step["zone"], "step": step["step"], "mw": step["mw"], "stage": s.stage}
         s.events.append(
             {
                 "t": round(t + step["t"], 2),
@@ -362,7 +384,12 @@ def _apply_result(s: _State, island: list[int], sim: IslandResult, t: float) -> 
             "type": "island_stable",
             "ids": [],
             "text_key": "island_stable",
-            "params": {"min_hz": sim.min_hz, "final_hz": sim.final_hz, "rocof_hz_s": sim.rocof_hz_s},
+            "params": {
+                "min_hz": sim.min_hz,
+                "final_hz": sim.final_hz,
+                "rocof_hz_s": sim.rocof_hz_s,
+                "stage": s.stage,
+            },
         }
     )
     return _info("maintains", sim.min_hz, sim.inertia_mws, sim.final_hz, sim.rocof_hz_s, shed, sim.battery_mw)
@@ -383,7 +410,13 @@ def _lose_island(
             "type": "island_blackout",
             "ids": [],
             "text_key": "island_blackout",
-            "params": {"buses": len(island), "load_mw": round(lost), "reason": reason, "min_hz": min_hz},
+            "params": {
+                "buses": len(island),
+                "load_mw": round(lost),
+                "reason": reason,
+                "min_hz": min_hz,
+                "stage": s.stage,
+            },
         }
     )
     return {**_info(result, min_hz, inertia), "reason": reason}
