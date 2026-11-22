@@ -25,6 +25,7 @@ from cascadasen.domain.agents.isr import ISRAgent
 from cascadasen.domain.agents.logistics import LogisticsAgent
 from cascadasen.domain.agents.operations import OperationsAgent
 from cascadasen.domain.agents.stabilization import StabilizationAgent
+from cascadasen.domain.errors import InputError
 from cascadasen.domain.ports import CommanderAdvisor
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
@@ -54,20 +55,8 @@ from cascadasen.domain.theater.world import DEFENSES_ID, TheaterWorld
 UNCERTAINTY_RANGE = (0.0, 2.0)
 
 
-class RunInputError(ValueError):
+class RunInputError(InputError):
     """Invalid run input: HTTP 422, or 404 when it names something that does not exist."""
-
-    def __init__(
-        self, field: str, message: str, valid: list[str] | None = None, not_found: bool = False
-    ) -> None:
-        super().__init__(message)
-        self.field, self.message, self.valid, self.not_found = field, message, valid or [], not_found
-
-    def detail(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"field": self.field, "message": self.message}
-        if self.valid:
-            out["valid"] = self.valid
-        return out
 
 
 class RunFinishedError(RuntimeError):

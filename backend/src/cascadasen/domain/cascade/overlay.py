@@ -16,6 +16,7 @@ from typing import Any
 
 import numpy as np
 
+from cascadasen.domain.errors import InputError
 from cascadasen.domain.geo import haversine_km
 from cascadasen.domain.theater.areas import bus_id
 from cascadasen.domain.validation import X_PER_KM
@@ -60,27 +61,9 @@ _PATCH_FIELDS = {
 }
 
 
-class OverlayError(ValueError):
+class OverlayError(InputError):
     """Invalid overlay edit: HTTP 422, 404 when it names something that does not exist, 409 on a
     conflict (removing a base element or a bus that is still referenced)."""
-
-    def __init__(
-        self,
-        field: str,
-        message: str,
-        valid: list[str] | None = None,
-        not_found: bool = False,
-        conflict: bool = False,
-    ) -> None:
-        super().__init__(message)
-        self.field, self.message, self.valid = field, message, valid or []
-        self.not_found, self.conflict = not_found, conflict
-
-    def detail(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"field": self.field, "message": self.message}
-        if self.valid:
-            out["valid"] = self.valid
-        return out
 
 
 @dataclass

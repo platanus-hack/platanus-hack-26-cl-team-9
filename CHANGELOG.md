@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(domain): one InputError base for the three input-error classes
+- **Changed:** New `backend/src/cascadasen/domain/errors.py` with `InputError(ValueError)`: fields `field`, `message`, `valid`, `not_found`, `conflict` and `detail()`.
+- **Changed:** `SimulationInputError` (application/simulate.py), `RunInputError` (domain/theater/cycle.py) and `OverlayError` (domain/cascade/overlay.py) keep their names and become empty subclasses, so imports and `except` clauses are unchanged. Constructor argument order is unchanged (`field, message, valid, not_found, conflict`).
+- **Why:** F1 of the duplication report: the same `__init__` and `detail()` were written three times.
+- **Agents:** Raise or catch the existing class names as before; add new input errors by subclassing `InputError`. The optional shared status mapping (404/409/422) was not added: `run_call` and `session_call` stay as they are. `docs/openapi/agents.openapi.json` is unchanged. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 245 passed 2 skipped (baseline 245/2), openapi file hash unchanged; scripts/lint.sh --check clean.
+- **Files:** `backend/src/cascadasen/domain/errors.py`, `backend/src/cascadasen/application/simulate.py`, `backend/src/cascadasen/domain/theater/cycle.py`, `backend/src/cascadasen/domain/cascade/overlay.py`.
 ## 2026-11-22 · refactor(tests): share the physics and sim_client fixtures in conftest
 - **Changed:** `tests/conftest.py` gains a session-scoped `physics` fixture and a `sim_client` fixture (TestClient over the toy grid and toy world). The module-scoped `physics` copies in `unit/test_sessions.py`, `unit/test_run_persistence.py`, `integration/test_sessions_api.py` and the three identical `client` fixtures in `test_campaigns_api.py`, `test_simulate_api.py`, `test_runs_api.py` are deleted (those tests now take `sim_client`).
 - **Why:** F12 of the duplication report: the same fixtures were copied across test files.
