@@ -53,7 +53,7 @@ Backend paths are under `backend/src/cascadasen/`, tests under `backend/tests/`,
 
 | X | Code | Doc | Tests |
 |---|---|---|---|
-| Cascade engine (188 buses, the map and the theatre) | `run_cascade_workflow` (`domain/cascade/engine.py:106`), `_cascade` (`domain/cascade/engine.py:238`) | [`engine.md`](engine.md) | `unit/test_cascade.py`, `validation/test_results_so_far.py` |
+| Cascade engine (188 buses, the map and the theatre) | `run_cascade_workflow` (`domain/cascade/engine.py:106`), `_cascade` (`domain/cascade/engine.py:250`) | [`engine.md`](engine.md) | `unit/test_cascade.py`, `validation/test_results_so_far.py` |
 | 13-area engine (`POST /api/v1/simulate`) | `run_transient` (`domain/simulation/engine.py:398`), `PhysicsSimulator.simulate` (`application/simulate.py:128`) | [`stack.md`](stack.md) section 4 | `unit/test_sim_engine.py`, `validation/test_engine_cases.py` |
 | Validation cases V1-V10 | `validation/test_engine_cases.py` (V1 at `test_v1_25f_flow_split` (`validation/test_engine_cases.py:55`), V10 at `test_v10_huatacondo_103_mw_midday` (`validation/test_engine_cases.py:128`)) | [`plan.md`](plan.md) section 5, table in [`../backend/README.md`](../backend/README.md) | the same file; V6 and V9 skip |
 | Frequency model | 188 buses: `simulate_island` (`domain/cascade/frequency.py:126`) (EDAC tables: `edac_tables` (`domain/cascade/frequency.py:98`)). 13 areas: `simulate_island` (`domain/simulation/frequency.py:102`) | [`engine.md`](engine.md) item 5, [`stack.md`](stack.md) 4.4 | `unit/test_cascade.py`, `unit/test_sim_engine.py` |

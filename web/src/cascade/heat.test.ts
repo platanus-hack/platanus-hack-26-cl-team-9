@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { heatPoints, needsDependency } from "./heat";
+import { heatPoints, heatRequestKey, needsDependency } from "./heat";
 import type { DependencyNode, Network } from "./types";
 
 const net = { nodes: [{ id: "B000", lon: -70, lat: -33 }, { id: "B001", lon: -71, lat: -34 }], lines: [] } as unknown as Network;
@@ -18,6 +18,12 @@ describe("heat maps", () => {
     expect(heatPoints("criticality", net, buses, dep)).toEqual([{ lon: -71, lat: -34, weight: 500000 }]);
   });
 
+  it("dependency and criticality have their own key, so Dependencia never waits for or reuses the criticality answer", () => {
+    const changes = "feb2025-1500|R239||[]";
+    expect(heatRequestKey("dependency", changes)).not.toBe(heatRequestKey("criticality", changes));
+    expect(heatRequestKey("dependency", changes)).toBe(heatRequestKey("dependency", changes));
+    expect(heatRequestKey("dependency", changes)).not.toBe(heatRequestKey("dependency", "feb2025-1500|||[]"));
+  });
   it("affected weighs only the people of the buses without supply", () => {
     expect(needsDependency("affected")).toBe(false);
     expect(heatPoints("affected", net, buses, null, new Set(["B000"]))).toEqual([{ lon: -70, lat: -33, weight: 500 }]);
