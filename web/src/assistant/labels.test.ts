@@ -21,6 +21,7 @@ describe("labels", () => {
 
   it("summarises results from the fields the tool returned", () => {
     expect(resultText("add_datacenter", true, { id: "D001", warnings: [] })).toBe("id D001");
+    expect(resultText("add_datacenter", true, { id: "D001", bus_name: "S/E ESCONDIDA" })).toBe("id D001 · en S/E ESCONDIDA");
     expect(resultText("cut_lines", true, { open_lines: ["R014"], load_shed_mw: 120.5, dark_buses: 3 })).toBe("líneas abiertas: R014 · 120,5 MW sin servir · 3 barras sin suministro");
     expect(resultText("step", true, { run: { cycle: 3 }, cycles: [{}, {}, {}] })).toBe("3 ciclos simulados · ciclo 3");
     expect(resultText("cut_lines", false, { error: "Línea desconocida" })).toBe("Línea desconocida");

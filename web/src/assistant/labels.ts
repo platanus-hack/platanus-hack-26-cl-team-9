@@ -67,6 +67,7 @@ export function resultText(name: string, ok: boolean, result: unknown): string {
   if (!isObj(result)) return typeof result === "string" ? result.slice(0, 140) : "";
   const parts: string[] = [];
   if (typeof result.id === "string") parts.push(`id ${result.id}`);
+  if (typeof result.bus_name === "string") parts.push(`en ${result.bus_name}`);
   if (Array.isArray(result.open_lines)) parts.push(result.open_lines.length ? `líneas abiertas: ${list(result.open_lines)}` : "ninguna línea abierta");
   if (typeof result.load_shed_mw === "number") parts.push(`${num(result.load_shed_mw)} MW sin servir`);
   if (typeof result.dark_buses === "number") parts.push(`${result.dark_buses} barras sin suministro`);

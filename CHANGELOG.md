@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): assistant chat panel in mapa 3
+
+- **Changed:** New rail item **Asistente** (below Sesión compartida) opens the view `"assistant"` with `AssistantPanel`: history with the user bubble, the text the model writes before acting, tool cards (Spanish name, readable arguments, spinner "ejecutando…" → ✓ listo / ✗ falló, short summary, "Ver resultado" with the JSON), the final reply with the scenario `notice`, a truncation notice with **Continuar** (sends "continúa"), errors per status, and a message box (1-2000 characters with counter, Enter sends, Shift+Enter new line) plus **Nueva conversación**.
+- **Changed:** `CascadeApp.tsx` calls `useAssistant(s)` once, so the chat survives view changes; the map stays beside the panel and follows the session the assistant edits. `labels.resultText` adds the bus name of an edit (`en S/E ESCONDIDA`).
+- **Why:** Issue #73: the user sees the assistant's steps live while it builds the simulation.
+- **Agents:** Styles in `web/src/assistant/assistant.css` (cascade.css tokens, radius 0, red only for a failed tool). Checked with a local backend whose model was a scripted stand-in (not Bedrock) and headless Chromium: the first message joins the new session (`?sesion=`), the datacenter shows in Datos and the cascade plays; a second message stays on the same session; reload restores the chat; Nueva conversación clears it and the stored id. Not checked against Bedrock.
+- **Files:** `web/src/assistant/{AssistantPanel.tsx,assistant.css,labels.ts,labels.test.ts}`, `web/src/cascade/CascadeApp.tsx`.
+
 ## 2026-11-21 · feat(web): assistant API client and hook
 
 - **Changed:** New `web/src/assistant/assistantApi.ts`: `streamChat(body, onEvent, signal)` reads `POST /api/v1/assistant/chat/stream` with `fetch` and the SSE parser and resolves whether the stream ended with `done`/`error`; `getConversation`, `deleteConversation`; `AssistantError(status, retryAfter, detail)` (status 0 = network) whose message is the Spanish text.
