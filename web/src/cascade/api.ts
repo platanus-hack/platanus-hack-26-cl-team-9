@@ -1,4 +1,4 @@
-import type { BusState, Index, Network, Timeline } from "./types";
+import type { BusState, ComunaPeople, HealthReport, Index, Network, Timeline } from "./types";
 
 const cache = new Map<string, Promise<unknown>>();
 
@@ -19,3 +19,6 @@ export const loadIndex = () => load<Index>("index.json");
 export const loadNetwork = (year: number) => load<Network>(`network-${year}.json`);
 export const loadBuses = (point: string) => load<Record<string, BusState>>(`${point}/buses.json`);
 export const loadTimeline = (point: string, cut: string | "baseline") => load<Timeline>(`${point}/${cut}.json`);
+/** Pre-fault health index and N-1 money at risk; null when the cache predates it (an old cache must not break the page). */
+export const loadHealth = (point: string) => load<HealthReport>(`${point}/health.json`).catch(() => null);
+export const loadComunas = (year: number) => load<ComunaPeople>(`comunas-${year}.json`).catch(() => null);

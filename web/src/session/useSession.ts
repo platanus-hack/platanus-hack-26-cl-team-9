@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionNetwork } from "../cascade/types";
+import { createLoader } from "./loader";
 import { ApiError, createSession, getNetwork, getSession, getState, sessionIdFrom, subscribe, type CutState, type LiveMode, type SessionDoc } from "./sessionApi";
 
-const KEY = "sub50_session";
+const BUSY_RELOAD_MS = 3000;
 export type Edit = (fn: (sid: string, revision: number) => Promise<unknown>) => Promise<boolean>;
 export interface Session {
   sid: string | null; session: SessionDoc | null; network: SessionNetwork | null; state: CutState | null;
   live: LiveMode | null; error: string | null;
-  create(): Promise<void>; join(text: string): void; leave(): void; refresh(): Promise<void>; edit: Edit; clearError(): void;
+  create(opts?: { point?: string; label?: string }): Promise<void>; join(text: string): void; leave(): void; refresh(): Promise<void>; edit: Edit; clearError(): void;
 }
 
 /**
- * Shared session of mapa 3: id from ?sesion= or localStorage, data from the API. A revision event that changed the
+ * Shared session of mapa 3: id from ?sesion= only (a bare URL never calls /api), data from the API. A revision event that changed the
  * dataset (dataset_revision) refetches session, network and state; run activity refetches only the session document.
+ * `createLoader` (loader.ts) decides which of overlapping refetches reaches the screen.
  */
 export function useSession(): Session {
-  const [sid, setSid] = useState(() => sessionIdFrom(location.search, localStorage.getItem(KEY)));
+  // shortcut: shared sessions are hidden from the web for now (issue #101), so ?sesion= is ignored and none starts
+  const [sid, setSid] = useState<string | null>(null);
   const [session, setSession] = useState<SessionDoc | null>(null);
   const [network, setNetwork] = useState<SessionNetwork | null>(null);
   const [state, setState] = useState<CutState | null>(null);
@@ -23,38 +26,33 @@ export function useSession(): Session {
   const [error, setError] = useState<string | null>(null);
   const loaded = useRef(-1);  // revision of the session on screen
   const data = useRef(-1);    // dataset_revision of the network on screen
-  const seq = useRef(0);      // only the newest full refresh is applied
-  const docSeq = useRef(0);   // only the newest document read is applied
-  const load = useCallback(async (id: string) => {
-    const mine = ++seq.current, mineDoc = ++docSeq.current;
-    const [doc, net, st] = await Promise.all([getSession(id), getNetwork(id), getState(id)]);
-    if (mine !== seq.current || mineDoc !== docSeq.current) return;
-    loaded.current = doc.revision; data.current = net.dataset_revision;
-    setSession(doc); setNetwork(net); setState(st);
-  }, []);
-  const loadDoc = useCallback(async (id: string) => {
-    const mine = ++docSeq.current;
-    const doc = await getSession(id);
-    if (mine !== docSeq.current) return;
-    loaded.current = doc.revision;
-    setSession(doc);
-  }, []);
+  const loader = useRef<ReturnType<typeof createLoader> | null>(null);
+  loader.current ??= createLoader({ getSession, getNetwork, getState }, {
+    doc: (doc) => { loaded.current = doc.revision; setSession(doc); },
+    data: (net, st) => { data.current = net.dataset_revision; setNetwork(net); setState(st); },
+  });
+  const load = useCallback((id: string) => loader.current!.load(id), []);
+  const loadDoc = useCallback((id: string) => loader.current!.loadDoc(id), []);
   const leave = useCallback(() => {
-    localStorage.removeItem(KEY);
     _setUrl(null);
-    seq.current++; docSeq.current++; loaded.current = -1; data.current = -1;
+    loader.current!.cancel(); loaded.current = -1; data.current = -1;
     setSid(null); setSession(null); setNetwork(null); setState(null); setLive(null);
   }, []);
   useEffect(() => {
     if (!sid) return;
-    let alive = true;
-    localStorage.setItem(KEY, sid);
+    let alive = true, busy = false, retry: ReturnType<typeof setTimeout> | undefined;
     _setUrl(sid);
-    load(sid).catch((e) => {
+    // A busy session (409, still busy after call()'s own retries) keeps the session and tries again; other failures
+    // (network, 5xx) fall back to the base case.
+    const first = () => load(sid).then(() => { if (alive && busy) setError(null); }, (e) => {
       if (!alive) return;
       if (e instanceof ApiError && e.status === 404) { leave(); setError("La sesión no existe o expiró (24 h sin cambios). Se volvió al caso base."); }
-      else { setSid(null); setError(`No se pudo conectar con el servidor de sesiones: ${e.message}. Se muestra el caso base.`); }
+      else if (e instanceof ApiError && e.status === 409) {
+        busy = true; setError("La sesión está ocupada con otra solicitud. Se reintenta la carga en unos segundos.");
+        retry = setTimeout(first, BUSY_RELOAD_MS);
+      } else { setSid(null); setError(`No se pudo conectar con el servidor de sesiones: ${e.message}. Se muestra el caso base.`); }
     });
+    first();
     const sub = subscribe(sid, (e) => {
       if (!alive || e.revision === loaded.current) return;
       (e.dataset_revision === data.current ? loadDoc(sid) : load(sid)).catch((err) => setError(err.message));
@@ -62,30 +60,32 @@ export function useSession(): Session {
       onMode: (m) => alive && setLive(m),
       onGone: () => { if (alive) { leave(); setError("La sesión fue borrada o expiró."); } },
     });
-    return () => { alive = false; sub.close(); };
+    return () => { alive = false; clearTimeout(retry); sub.close(); };
   }, [sid, load, loadDoc, leave]);
   const edit: Edit = useCallback(async (fn) => {
     if (!sid || !network) return false;
     try {
       await fn(sid, network.dataset_revision);
-      setError(null);
-      await load(sid);
-      return true;
     } catch (e) {
       if (e instanceof ApiError && e.status === 412) {
         setError("Otro cliente cambió la sesión antes que tú. Se recargó: revisa y vuelve a intentarlo.");
-        await load(sid).catch(() => undefined);
+        await load(sid).catch((e) => { console.warn("session reload after a 412 failed", e); });
       } else setError((e as Error).message);
       return false;
     }
+    // The write landed: report success even if the reload fails (after call()'s busy retries), so a form is not
+    // resubmitted; the network on screen stays until the next revision event reloads it.
+    setError(null);
+    await load(sid).catch((e) => setError(`El cambio se guardó, pero no se pudo recargar la sesión: ${(e as Error).message}`));
+    return true;
   }, [sid, network, load]);
   return {
     sid, session, network, state, live, error,
-    create: async () => {
-      try { const doc = await createSession(); setError(null); setSid(doc.session_id); } catch (e) { setError((e as Error).message); }
+    create: async (opts = {}) => {
+      try { const doc = await createSession(opts); setError(null); setSid(doc.session_id); } catch (e) { setError((e as Error).message); }
     },
     join: (text) => {
-      const id = sessionIdFrom(`?sesion=${encodeURIComponent(text.match(/sesion=([^&\s]+)/)?.[1] ?? text.trim())}`, null);
+      const id = sessionIdFrom(`?sesion=${encodeURIComponent(text.match(/sesion=([^&\s]+)/)?.[1] ?? text.trim())}`);
       if (id) { setError(null); setSid(id); } else setError("Ese no es un id de sesión (22 caracteres) ni un enlace con ?sesion=.");
     },
     leave,

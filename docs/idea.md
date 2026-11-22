@@ -63,7 +63,7 @@ Priorities are defined in `plan.md`. Short version:
 
 ### Out of scope (decided)
 
-Telecommunications, full dynamic simulation like PowerFactory, live monitoring, predicting the human error that started 25F, public ranking of "most dangerous lines" (dual-use risk), full AC voltage model, restoration of service (unless time remains), international interconnections, modelling how a cyberattack is carried out (intrusion, malware, vulnerabilities, vendors; see `cyber.md` section 8). Voltage is handled by a simplified indicator or flagged "uncertain" (section 5).
+Telecommunications, full dynamic simulation like PowerFactory, live monitoring, predicting the human error that started 25F, public ranking of "most dangerous lines" (dual-use risk), full AC voltage model, restoration of service (unless time remains), international interconnections (other countries' grids are only drawn as a context layer, `regional.md`), modelling how a cyberattack is carried out (intrusion, malware, vulnerabilities, vendors; see `cyber.md` section 8). Voltage is handled by a simplified indicator or flagged "uncertain" (section 5).
 
 ## 5. Honest limits (must stay visible in the product)
 

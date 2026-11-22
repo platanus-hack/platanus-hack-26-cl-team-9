@@ -24,7 +24,7 @@ from scipy.sparse import coo_matrix, vstack
 SCRIPTS = Path(__file__).resolve().parent
 DATA = SCRIPTS.parent
 sys.path.insert(0, str(DATA.parent / "backend" / "src"))
-from cascadasen.domain.cascade.network import reduce_network
+from cascadasen.domain.cascade.network import reduce_network  # noqa: E402 (needs the sys.path insert above)
 
 BASE_MVA = 100.0
 SHED_COST = 5000.0  # USD/MWh, far above any generator: load is shed only if the case is infeasible
@@ -33,26 +33,18 @@ NON_SYNCHRONOUS = {"solar PV", "onshore wind", "CSP"}
 
 
 def build_baseline_workflow() -> dict:
-    ops = json.loads(
-        (DATA / "processed" / "operating_points.json").read_text(encoding="utf-8")
-    )
-    snapshot = json.loads(
-        (DATA / "processed" / "grid_snapshot.json").read_text(encoding="utf-8")
-    )
+    ops = json.loads((DATA / "processed" / "operating_points.json").read_text(encoding="utf-8"))
+    snapshot = json.loads((DATA / "processed" / "grid_snapshot.json").read_text(encoding="utf-8"))
     builder = _load_builder()
     generation = builder._read_generation()
     buses = {b["name"]: b for b in snapshot["model_buses"]}
-    nets = {
-        y: reduce_network(snapshot, y)
-        for y in {int(p["snapshot"][:4]) for p in ops["points"]}
-    }
+    nets = {y: reduce_network(snapshot, y) for y in {int(p["snapshot"][:4]) for p in ops["points"]}}
     return {
         "version": 3,
         "network": "reduced (one bus per substation), links built after the point's year left out",
         "capacity_factor": CAPACITY_FACTOR,
         "points": [
-            _solve_point(p, nets[int(p["snapshot"][:4])], buses, generation, builder)
-            for p in ops["points"]
+            _solve_point(p, nets[int(p["snapshot"][:4])], buses, generation, builder) for p in ops["points"]
         ],
     }
 
@@ -69,9 +61,7 @@ def _load_builder():
 def _solve_point(point: dict, net, buses: dict, generation: dict, builder) -> dict:
     when = point["snapshot"]
     units = [
-        c
-        for g in generation["generators"]
-        if (c := builder._candidate(g, generation, buses, when, when[:4]))
+        c for g in generation["generators"] if (c := builder._candidate(g, generation, buses, when, when[:4]))
     ]
     for u in units:
         u["rbus"] = net.bus_of_model_bus[u["bus"]]
@@ -128,9 +118,7 @@ def _build_lp(point: dict, net, units: list, committed: set) -> dict:
     for i, u in enumerate(units):
         c[g0 + i] = u["cost"]
         floor = (
-            min(u["pmin"], u["avail"], 0.5 * (load[u["rbus"]] + room[u["rbus"]]))
-            if i in committed
-            else 0.0
+            min(u["pmin"], u["avail"], 0.5 * (load[u["rbus"]] + room[u["rbus"]])) if i in committed else 0.0
         )
         bounds.append((floor, u["avail"]))
     bounds += [(-np.pi, np.pi)] * nb + [
@@ -184,7 +172,7 @@ def _summarize(point: dict, result, lp: dict, net, units: list) -> dict:
             sync[name] += mw
             inertia[name] += u["inertia"]
     flows = lp["flow"] @ x
-    loading = [abs(f) / ln.capacity_mw for f, ln in zip(flows, net.lines)]
+    loading = [abs(f) / ln.capacity_mw for f, ln in zip(flows, net.lines, strict=False)]
     return {
         "id": point["id"],
         "total_cost_usd_h": round(result.fun),
@@ -193,9 +181,7 @@ def _summarize(point: dict, result, lp: dict, net, units: list) -> dict:
         "sync_mw_by_bus": {b: round(v, 2) for b, v in sync.items()},
         "inertia_by_bus_mws": {b: round(v) for b, v in inertia.items()},
         "gen_by_carrier_mw": {
-            k: round(v)
-            for k, v in sorted(carrier.items(), key=lambda kv: -kv[1])
-            if v > 0.5
+            k: round(v) for k, v in sorted(carrier.items(), key=lambda kv: -kv[1]) if v > 0.5
         },
         "flow_mw": [round(float(f), 1) for f in flows],
         "max_loading": round(max(loading), 3),

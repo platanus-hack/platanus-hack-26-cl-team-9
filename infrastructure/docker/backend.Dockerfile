@@ -11,6 +11,6 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY backend/src ./src
 RUN uv sync --locked --no-dev
 # Data tier: committed build output baked into the image
-COPY data/processed /data
+COPY data/processed /data/processed
 EXPOSE 8000
 CMD ["cascadasen-api"]

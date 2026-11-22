@@ -1,32 +1,38 @@
 """Golden bytes of the mapa 3 network JSON: `web/public/cache/network-<year>.json` and `<point>/buses.json`
-(cache_builder) and `GET /sim/network` (theater_network_view) share one builder."""
+(cache_builder) and `GET /sim/network` (theater_network_view) share one builder. The hashes were taken from
+upstream/main before the refactor (nodes and lines carry `country` there)."""
 
 import hashlib
 
 from cascadasen.application.simulation_service import theater_network_view
-from cascadasen.domain.cascade.network_json import mapa3_network
+from cascadasen.domain.cascade.network_json import buses_json, network_json
 from cascadasen.domain.serialization import dumps_compact
 
-NETWORK_SHA = "9be01eec31f8a1886a3adfd8725505717865094bfeffdd9e301628b9f78ca259"
+NETWORK_SHA = "f2074dbf27332733b67eb998a70f2226fe3c739c960c551e16ff779dcf7626d3"
 BUSES_SHA = "2607abe134a00b91bf8d2582e1ab152ba15d03a779601def9ff16c22411bd933"
-VIEW_SHA = "528d5c9b7cc582acbcda2566e0d1a110e536f874076f0c6ddfa83cd091aea43e"
+VIEW_SHA = "683b46254992112ccc70424f142e11262736f008d1a15f98467f241581358030"
 
 
 def sha(obj):
     return hashlib.sha256(dumps_compact(obj).encode()).hexdigest()
 
 
-def cache_files(net, op):
-    base = mapa3_network(net.buses, op)
-    return {k: base[k] for k in ("nodes", "lines")}, base["buses"]
-
-
 def test_cache_network_and_buses_keep_their_bytes(toy_world):
     net, op = toy_world.load("nov2026-1300")
-    network, buses = cache_files(net, op)
+    network, buses = network_json(net.buses), buses_json(net.buses, op)
     assert list(network) == ["nodes", "lines"]
-    assert list(network["nodes"][0]) == ["id", "name", "lon", "lat", "kv", "zone", "map_nodes"]
-    assert list(network["lines"][0]) == ["id", "a", "b", "kv", "capacity_mw", "x_pu", "map_edges", "branches"]
+    assert list(network["nodes"][0]) == ["id", "name", "lon", "lat", "kv", "zone", "map_nodes", "country"]
+    assert list(network["lines"][0]) == [
+        "id",
+        "a",
+        "b",
+        "kv",
+        "capacity_mw",
+        "x_pu",
+        "map_edges",
+        "branches",
+        "country",
+    ]
     assert sha(network) == NETWORK_SHA
     assert sha(buses) == BUSES_SHA
 

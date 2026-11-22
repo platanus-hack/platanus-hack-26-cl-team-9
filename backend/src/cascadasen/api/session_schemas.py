@@ -1,4 +1,4 @@
-"""Request models of the sessions API (docs/sessions-api.md). Bounds mirror the overlay validation
+"""Request and response models of the sessions API (docs/sessions-api.md). Bounds mirror the overlay validation
 in domain/cascade/overlay.py; the overlay re-checks everything that depends on the network."""
 
 from __future__ import annotations
@@ -7,15 +7,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from cascadasen.api.agent_openapi import AgentOut
+from cascadasen.api.simulation_schemas import TheaterNetworkOut
 from cascadasen.domain.cascade import overlay as ov
 
 Tech = Literal["hidro", "termica", "bioenergia", "geotermica", "solar", "eolica"]
 LoadKind = Literal["datacenter", "consumo"]
 
-_MW = {"gt": 0, "le": int(ov.MAX_ELEMENT_MW)}
-_LAT = {"ge": int(ov.LAT[0]), "le": int(ov.LAT[1])}
-_LON = {"ge": int(ov.LON[0]), "le": int(ov.LON[1])}
-_BUS_MW_MAX = 20000  # coarse schema guard; the overlay checks base value + MAX_ELEMENT_MW
+_MW: dict[str, Any] = {"gt": 0, "le": int(ov.MAX_ELEMENT_MW)}
+_LAT: dict[str, Any] = {"ge": int(ov.LAT[0]), "le": int(ov.LAT[1])}
+_LON: dict[str, Any] = {"ge": int(ov.LON[0]), "le": int(ov.LON[1])}
+_BUS_MW_MAX = 40000  # coarse schema guard; the overlay checks base value + MAX_ELEMENT_MW
 
 
 class _Body(BaseModel):
@@ -61,14 +63,14 @@ class BusPatch(_Body):
         None,
         ge=0,
         le=_BUS_MW_MAX,
-        description="Bus demand in MW (replaces the base value; at most the base value + 3000 MW).",
+        description="Bus demand in MW (replaces the base value; at most the base value + 20000 MW).",
         examples=[150],
     )
     gen_mw: float | None = Field(
         None,
         ge=0,
         le=_BUS_MW_MAX,
-        description="Bus generation in MW (replaces the base value; at most the base value + 3000 MW). "
+        description="Bus generation in MW (replaces the base value; at most the base value + 20000 MW). "
         "The bus keeps this value: it takes no share of the redispatch.",
         examples=[300],
     )
@@ -124,7 +126,7 @@ class LinePatch(_Body):
 
 class LoadIn(_Body):
     bus: str = Field(description="Bus id (B###) the load connects to.", examples=["B010"])
-    mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 3000).", examples=[120])
+    mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 20000).", examples=[120])
     kind: LoadKind = Field(description="datacenter or consumo (other consumption).", examples=["datacenter"])
     name: str = Field(
         max_length=ov.MAX_NAME_LEN, description="Display name.", examples=["Datacenter Quilicura"]
@@ -142,7 +144,7 @@ class LoadPatch(_Body):
 
 class GeneratorIn(_Body):
     bus: str = Field(description="Bus id (B###) the generator connects to.", examples=["B020"])
-    mw: float = Field(**_MW, description="Dispatched generation in MW (0 < mw ≤ 3000).", examples=[250])
+    mw: float = Field(**_MW, description="Dispatched generation in MW (0 < mw ≤ 20000).", examples=[250])
     tech: Tech = Field(
         description="Technology; hidro, termica, bioenergia and geotermica are synchronous.",
         examples=["solar"],
@@ -210,4 +212,164 @@ class ActionIn(_Body):
         max_length=64,
         description="Name of the external agent, recorded in the audit log.",
         examples=["bot-1"],
+    )
+
+
+# ------------------------------------------------------------------ responses (documentation only)
+class SessionDocOut(AgentOut):
+    """Session document."""
+
+    session_id: str = Field(description="Session id; goes in the path of every session call.")
+    label: str | None = Field(description="Optional label given on creation.")
+    point: str = Field(description="Operating point the session is pinned to.")
+    revision: int = Field(description="Bumped by every change, run activity included.")
+    dataset_revision: int = Field(
+        description="Bumped only by edits, reset, cut and repair; use it for If-Match."
+    )
+    overlay: dict[str, Any] = Field(description="The session's edits over the base dataset.")
+    open_lines: list[str] = Field(description="Lines open in the sandbox cut.")
+    runs: dict[str, dict[str, Any]] = Field(
+        description="Run id -> created_at, dataset_revision, cycle, status."
+    )
+    created_at: str = Field(description="ISO 8601 creation time.")
+    updated_at: str = Field(description="ISO 8601 time of the last change.")
+    last_op: dict[str, Any] = Field(description="Last change: op, ids, by, revision, dataset_revision.")
+    share_path: str = Field(description="Browser link path, /?sesion=<sid>.")
+    expires_at: str = Field(description="ISO 8601 expiry, 24 h after the last change.")
+
+
+class SessionWarningOut(AgentOut):
+    """A warning about the edited network."""
+
+    code: str = Field(description="isolated_bus, unbalanced_island or no_sync_to_redispatch.")
+    ids: list[str] = Field(description="Buses the warning is about.")
+    message: str = Field(description="Spanish message.")
+
+
+class SubstationLoad(_Body):
+    mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 20000).", examples=[80])
+    kind: LoadKind = Field(description="datacenter or consumo.", examples=["datacenter"])
+
+
+class SubstationGenerator(_Body):
+    mw: float = Field(**_MW, description="Generation in MW (0 < mw ≤ 20000).", examples=[150])
+    tech: Tech = Field(
+        description="Technology; hidro, termica, bioenergia, geotermica are synchronous.", examples=["solar"]
+    )
+    synchronous: bool | None = Field(None, description="Synchronous override.", examples=[False])
+    inertia_h: float | None = Field(None, gt=0, le=10, description="Inertia constant H in s.", examples=[4.0])
+
+
+class SubstationConnection(_Body):
+    to: str = Field(
+        description="Existing bus id (B###) of the same voltage as the substation.", examples=["B010"]
+    )
+    capacity_mw: float | None = Field(
+        None,
+        gt=0,
+        le=5000,
+        description="Line capacity in MW. Default: median of the lines at that bus.",
+        examples=[300],
+    )
+    x_pu: float | None = Field(
+        None, gt=0, le=1.0, description="Reactance in p.u. Default from length and kv.", examples=[0.02]
+    )
+
+
+class SubstationIn(_Body):
+    name: str = Field(
+        max_length=80, description="Display name of the substation.", examples=["SE Norte Nueva"]
+    )
+    lat: float = Field(**_LAT, description="Latitude in degrees (continental Chile).", examples=[-23.7])
+    lon: float = Field(**_LON, description="Longitude in degrees (continental Chile).", examples=[-70.35])
+    kv: float = Field(
+        gt=0,
+        description="Voltage in kV, a base voltage. Every connection must be to a bus of this voltage.",
+        examples=[220],
+    )
+    connections: list[SubstationConnection] = Field(
+        min_length=1, max_length=6, description="1 to 6 lines from the new bus to existing buses."
+    )
+    load: SubstationLoad | None = Field(None, description="Optional demand on the new bus.")
+    generator: SubstationGenerator | None = Field(None, description="Optional generator on the new bus.")
+
+
+class CoherenceNote(AgentOut):
+    """A plausibility note about a substation (not an error)."""
+
+    code: str = Field(
+        description="capacity_out_of_range, long_connection, load_over_connections or generation_over_connections."
+    )
+    message: str = Field(description="Spanish message.")
+    line: str | None = Field(None, description="The line or connection the note is about.")
+
+
+class ScenarioIn(_Body):
+    point: str | None = Field(
+        None, description="Must be the session's point, if sent.", examples=["nov2026-1300"]
+    )
+    changes: list[dict[str, Any]] = Field(
+        default_factory=list, max_length=20, description="Changes of prepare_scenario (docs/stress.md)."
+    )
+    open_lines: list[str] = Field(
+        default_factory=list, max_length=60, description="Base lines (R###) left open.", examples=[["R239"]]
+    )
+    out_buses: list[str] = Field(
+        default_factory=list,
+        max_length=60,
+        description="Base buses (B###) out of service.",
+        examples=[["B062"]],
+    )
+
+
+class ResetIn(_Body):
+    scenario: ScenarioIn | None = Field(
+        None, description="Grid configuration to load. Without it the network returns to the base dataset."
+    )
+
+
+class EditOut(AgentOut):
+    """Result of an edit: element id, revisions, warnings and redispatch."""
+
+    id: str | None = Field(None, description="Id of the element added, changed or deleted; absent on reset.")
+    revision: int = Field(description="Session revision after the edit.")
+    dataset_revision: int = Field(description="Dataset revision after the edit (also the ETag).")
+    warnings: list[SessionWarningOut] = Field(description="Warnings about the edited network.")
+    balance: list[dict[str, Any]] = Field(description="Redispatch per island (an assumption).")
+
+
+class SessionNetworkOut(TheaterNetworkOut):
+    """The session's edited 188-bus network."""
+
+    session_id: str = Field(description="Session id.")
+    revision: int = Field(description="Session revision.")
+    dataset_revision: int = Field(description="Dataset revision (also the ETag); send it as If-Match.")
+    out_of_service: dict[str, list[str]] = Field(description="Buses and lines out of service.")
+    loads: list[dict[str, Any]] = Field(description="Loads and datacenters added by the session.")
+    generators: list[dict[str, Any]] = Field(description="Generators added by the session.")
+    warnings: list[SessionWarningOut] = Field(description="Warnings about the edited network.")
+    balance: list[dict[str, Any]] = Field(description="Redispatch per island (an assumption).")
+    baseline: dict[str, Any] = Field(description="Loading, overloads, islands and load shed with no cut.")
+
+
+class CutStateOut(AgentOut):
+    """Sandbox state: open lines and the cascade timeline."""
+
+    revision: int = Field(description="Session revision.")
+    dataset_revision: int = Field(description="Dataset revision (also the ETag).")
+    open_lines: list[str] = Field(description="Lines open in the sandbox.")
+    timeline: dict[str, Any] = Field(
+        description="Cascade timeline with the open lines (the baseline when none)."
+    )
+    notice: str = Field(description="Every scenario is hypothetical and simulated.")
+
+
+class SubstationOut(EditOut):
+    """Result of add_substation: every id created and the coherence notes."""
+
+    line_ids: list[str] = Field(description="Ids of the lines created, in the order of `connections`.")
+    load_id: str | None = Field(None, description="Id of the load created, if any.")
+    generator_id: str | None = Field(None, description="Id of the generator created, if any.")
+    coherence: list[CoherenceNote] = Field(
+        description="Plausibility notes; empty when everything looks coherent."
     )

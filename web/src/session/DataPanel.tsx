@@ -23,17 +23,17 @@ export function DataPanel(p: { network: SessionNetwork; edit: Edit; pick: Pick; 
   return (
     <section className="data-panel">
       <div className="card">
-        <div className="card-head"><h3>Caso base de la sesión</h3><button className="link" onClick={reset}>Restablecer</button></div>
-        <div className="stats">
-          <div><b>{Math.round(n.baseline.max_loading * 100)}%</b><span>carga máxima de una línea</span></div>
-          <div><b>{n.baseline.overloaded.length}</b><span>líneas sobrecargadas</span></div>
-          <div><b>{fmt(n.baseline.load_shed_mw)} MW</b><span>desconectados sin corte</span></div>
+        <div className="card-head"><h3>Caso base de la sesión</h3><button className="text-btn" onClick={reset}>Restablecer</button></div>
+        <div className="figures">
+          <div className="figure"><b>{Math.round(n.baseline.max_loading * 100)}%</b><span>carga máxima de una línea</span></div>
+          <div className="figure"><b>{n.baseline.overloaded.length}</b><span>líneas sobrecargadas</span></div>
+          <div className="figure"><b>{fmt(n.baseline.load_shed_mw)} MW</b><span>desconectados sin corte</span></div>
         </div>
-        {n.balance.map((b, i) => <p key={i} className="muted"><span className="badge assumption">supuesto (sesión)</span> Redespacho de {fmt(b.redispatch_mw)} MW en {Object.keys(b.buses).length} barras. {b.rule}</p>)}
+        {n.balance.map((b, i) => <p key={i} className="meta"><span className="tag assumption">supuesto (sesión)</span> Redespacho de {fmt(b.redispatch_mw)} MW en {Object.keys(b.buses).length} barras. {b.rule}</p>)}
         {n.warnings.map((w, i) => <p key={i} className="note warn">{w.message}</p>)}
       </div>
-      {p.picking && <p className="note">Haz clic en el mapa para elegir la ubicación.</p>}
-      <div className="subtabs" role="tablist">
+      {p.picking && <p className="meta">Haz clic en el mapa para elegir la ubicación.</p>}
+      <div className="seg" role="tablist">
         {SUBS.map(([k, label]) => <button key={k} role="tab" aria-selected={sub === k} className={sub === k ? "on" : ""} onClick={() => setSub(k)}>{label}</button>)}
       </div>
       {sub === "buses" && <Buses {...p} kvs={kvs} />}
@@ -53,9 +53,9 @@ function Buses(p: Props) {
     <h4>Agregar barra (subestación nueva)</h4>
     <Form specs={[{ key: "name", label: "Nombre" }, { key: "kv", label: "kV", type: "kv" }, { key: "lat", label: "Latitud", type: "number" }, { key: "lon", label: "Longitud", type: "number" }]} kvs={p.kvs} f={add} submit="Agregar barra"
       onSubmit={(v) => p.edit((sid, rev) => addElement(sid, "buses", v, rev))}>
-      <button type="button" onClick={() => p.pick((lon, lat) => add.merge({ lon: lon.toFixed(4), lat: lat.toFixed(4) }))}>Elegir en el mapa</button>
+      <button type="button" className="btn" onClick={() => p.pick((lon, lat) => add.merge({ lon: lon.toFixed(4), lat: lat.toFixed(4) }))}>Elegir en el mapa</button>
     </Form>
-    <p className="muted">Una barra nueva queda aislada hasta que le agregues una línea (pestaña Líneas).</p>
+    <p className="meta">Una barra nueva queda aislada hasta que le agregues una línea (pestaña Líneas).</p>
     <Filter value={filter} set={setFilter} count={rows.length} />
     {rows.slice(0, LIMIT).map((x) => {
       const b = p.network.buses[x.id];
@@ -76,10 +76,10 @@ function Lines(p: Props) {
     <h4>Agregar línea</h4>
     <Form specs={[{ key: "a", label: "Barra A (B###)" }, { key: "b", label: "Barra B (B###)" }, { key: "kv", label: "kV", type: "kv" }, { key: "capacity_mw", label: "Capacidad MW", type: "number" }, { key: "name", label: "Nombre (opcional)" }]}
       kvs={p.kvs} f={add} submit="Agregar línea" onSubmit={(v) => p.edit((sid, rev) => addElement(sid, "lines", v, rev))} />
-    <p className="muted">La reactancia se estima con el largo y la tensión de la línea (supuesto).</p>
+    <p className="meta">La reactancia se estima con el largo y la tensión de la línea (supuesto).</p>
     {net.out_of_service.lines.length > 0 && <>
       <h4>Fuera de servicio · {net.out_of_service.lines.length}</h4>
-      {net.out_of_service.lines.map((id) => <div className="data-line" key={id}><span>{id}</span><button className="link" onClick={() => p.edit((sid, rev) => updateElement(sid, "lines", id, { in_service: true }, rev))}>Poner en servicio</button></div>)}
+      {net.out_of_service.lines.map((id) => <div className="data-line" key={id}><span>{id}</span><button className="text-btn" onClick={() => p.edit((sid, rev) => updateElement(sid, "lines", id, { in_service: true }, rev))}>Poner en servicio</button></div>)}
     </>}
     <Filter value={filter} set={setFilter} count={rows.length} />
     {rows.slice(0, LIMIT).map((l) => <Row key={l.id} id={l.id} kind="lines" edit={p.edit} origin={l.origin} assumption={l.is_assumption} inService
@@ -106,14 +106,14 @@ function Elements(p: Props & { kind: "loads" | "generators" }) {
     <h4>{loads ? "Agregar carga o datacenter" : "Agregar generador"}</h4>
     <Form specs={specs} f={add} submit="Agregar" onSubmit={(v) => { delete v.lat; delete v.lon; return p.edit((sid, rev) => addElement(sid, p.kind, v, rev)); }}>
       {loads && <>
-        <button type="button" onClick={() => p.pick((lon, lat) => add.merge({ lon: lon.toFixed(4), lat: lat.toFixed(4) }))}>Elegir en el mapa</button>
-        <button type="button" disabled={!add.values.lat || !add.values.lon} onClick={connect}>Conectar a la subestación ≥220 kV más cercana</button>
+        <button type="button" className="btn" onClick={() => p.pick((lon, lat) => add.merge({ lon: lon.toFixed(4), lat: lat.toFixed(4) }))}>Elegir en el mapa</button>
+        <button type="button" className="btn" disabled={!add.values.lat || !add.values.lon} onClick={connect}>Conectar a la subestación ≥220 kV más cercana</button>
       </>}
     </Form>
-    {near && <p className="muted">{near}</p>}
-    <p className="muted">{loads ? "La carga se conecta a una barra existente; la ubicación solo sirve para elegirla." : "Hidro, térmica, bioenergía y geotérmica son sincrónicas y aportan inercia (H = 4 s, supuesto)."} El desbalance se redespacha en la isla (supuesto).</p>
+    {near && <p className="meta">{near}</p>}
+    <p className="meta">{loads ? "La carga se conecta a una barra existente; la ubicación solo sirve para elegirla." : "Hidro, térmica, bioenergía y geotérmica son sincrónicas y aportan inercia (H = 4 s, supuesto)."} El desbalance se redespacha en la isla (supuesto).</p>
     <h4>{loads ? "Cargas de la sesión" : "Generadores de la sesión"} · {rows.length}</h4>
-    {rows.length === 0 && <p className="muted">Ninguno todavía.</p>}
+    {rows.length === 0 && <p className="meta">Ninguno todavía.</p>}
     {rows.map((x) => <Row key={x.id} id={x.id} kind={p.kind} edit={p.edit} origin="session" assumption inService={x.in_service !== false}
       title={`${x.id} · ${x.name ?? (loads ? x.kind : x.tech)}`} detail={`${fmt(x.mw)} MW · ${loads ? (x.kind === "datacenter" ? "datacenter" : "consumo") : x.tech} · barra ${x.bus}`}
       specs={loads ? [{ key: "mw", label: "MW", type: "number" }, { key: "name", label: "Nombre" }, { key: "kind", label: "Tipo", type: "kind" }] : [{ key: "mw", label: "MW", type: "number" }, { key: "name", label: "Nombre" }, { key: "tech", label: "Tecnología", type: "tech" }]}
@@ -121,7 +121,7 @@ function Elements(p: Props & { kind: "loads" | "generators" }) {
   </>;
 }
 
-/** One element: summary line, origin badge and, when opened, a patch form plus service and delete buttons. */
+/** One element: summary line, origin tag and, when opened, a patch form plus service and delete buttons. */
 function Row(p: { id: string; kind: Kind; edit: Edit; origin?: string; assumption?: boolean; inService: boolean; title: string; detail: string; specs: Spec[]; init: Values; kvs?: number[] }) {
   const [open, setOpen] = useState(false);
   const f = useForm(p.init);
@@ -129,11 +129,11 @@ function Row(p: { id: string; kind: Kind; edit: Edit; origin?: string; assumptio
   return (
     <div className={`data-row${p.inService ? "" : " off"}`}>
       <button className="row-btn" onClick={() => { f.reset(); setOpen(!open); }}>
-        <span>{p.title}<br /><span className="muted">{p.detail}</span></span>
-        <span className="badges">
-          <span className={`badge ${session ? "session" : ""}`}>{session ? "sesión" : "base"}</span>
-          {p.assumption && <span className="badge assumption">supuesto (sesión)</span>}
-          {!p.inService && <span className="badge off">fuera de servicio</span>}
+        <span>{p.title}<br /><span className="meta">{p.detail}</span></span>
+        <span className="tags">
+          <span className={session ? "tag session" : "tag"}>{session ? "sesión" : "base"}</span>
+          {p.assumption && <span className="tag assumption">supuesto (sesión)</span>}
+          {!p.inService && <span className="tag off">fuera de servicio</span>}
         </span>
       </button>
       {open && <Form specs={p.specs} kvs={p.kvs} f={f} submit="Guardar" onSubmit={(v) => {
@@ -141,8 +141,8 @@ function Row(p: { id: string; kind: Kind; edit: Edit; origin?: string; assumptio
         if (!Object.keys(changed).length) return Promise.resolve(false);
         return p.edit((sid, rev) => updateElement(sid, p.kind, p.id, changed, rev)).then((ok) => (ok && setOpen(false), ok));
       }}>
-        <button type="button" onClick={() => p.edit((sid, rev) => updateElement(sid, p.kind, p.id, { in_service: !p.inService }, rev))}>{p.inService ? "Fuera de servicio" : "Poner en servicio"}</button>
-        {session && <button type="button" onClick={() => p.edit((sid, rev) => deleteElement(sid, p.kind, p.id, rev))}>Borrar</button>}
+        <button type="button" className="btn" onClick={() => p.edit((sid, rev) => updateElement(sid, p.kind, p.id, { in_service: !p.inService }, rev))}>{p.inService ? "Fuera de servicio" : "Poner en servicio"}</button>
+        {session && <button type="button" className="btn" onClick={() => p.edit((sid, rev) => deleteElement(sid, p.kind, p.id, rev))}>Borrar</button>}
       </Form>}
     </div>
   );
@@ -174,14 +174,14 @@ function Form(p: { specs: Spec[]; f: FormState; submit: string; kvs?: number[]; 
           : s.type === "kind" ? <select value={p.f.values[s.key]} onChange={set(s.key)}><option value="datacenter">datacenter</option><option value="consumo">consumo</option></select>
           : <input value={p.f.values[s.key] ?? ""} inputMode={s.type === "number" ? "decimal" : undefined} onChange={set(s.key)} />}
       </label>)}
-      <div className="data-actions"><button type="submit">{p.submit}</button>{p.children}</div>
+      <div className="data-actions"><button type="submit" className="btn">{p.submit}</button>{p.children}</div>
     </form>
   );
 }
 
 function Filter(p: { value: string; set(v: string): void; count: number }) {
   return <label className="data-filter"><input placeholder="Filtrar por id o nombre" aria-label="Filtrar" value={p.value} onChange={(e) => p.set(e.target.value)} />
-    <span className="muted">{p.count > LIMIT ? `${LIMIT} de ${p.count}` : p.count}</span></label>;
+    <span className="meta">{p.count > LIMIT ? `${LIMIT} de ${p.count}` : p.count}</span></label>;
 }
 
 function _filter<T>(rows: T[], text: string, key: (x: T) => string): T[] {

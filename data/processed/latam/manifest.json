@@ -1,0 +1,455 @@
+{
+ "version": 1,
+ "countries": {
+  "ARG": {
+   "country": "ARG",
+   "name": "Argentina",
+   "counts": {
+    "lines": 390,
+    "substations": 300,
+    "plants": 81
+   },
+   "raw_counts": {
+    "lines": 3056,
+    "substations": 308,
+    "plants": 208
+   },
+   "plant_count": 138,
+   "line_km_by_kv": {
+    "500": 10934.9,
+    "330": 555.9,
+    "220": 1899.4,
+    "132": 12731.3,
+    "66": 25.2
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 55.0,
+    "eolica": 1114.5,
+    "hidro": 9720.0,
+    "nuclear": 1700.0,
+    "solar": 592.9,
+    "termica": 20905.9
+   },
+   "bbox": [
+    -72.2326925,
+    -51.6559008,
+    -54.4609604,
+    -23.9181649
+   ],
+   "sources": [
+    {
+     "id": "osm_power",
+     "name": "OpenStreetMap, etiquetas power=*",
+     "publisher": "Colaboradores de OpenStreetMap",
+     "url": "https://www.openstreetmap.org/",
+     "license": "ODbL 1.0",
+     "attribution": "© OpenStreetMap contributors",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:55:16+00:00"
+    }
+   ],
+   "warnings": [
+    "223 líneas de menos de 66 kV descartadas",
+    "1377 subestaciones sin tensión o bajo 66 kV descartadas",
+    "1567 líneas con los dos extremos en la misma subestación descartadas",
+    "4 buses en piezas de menos de 3 descartados",
+    "21 subestaciones sin ninguna línea resuelta descartadas",
+    "70 centrales (5,475 MW) a más de 40 km de una subestación descartadas"
+   ]
+  },
+  "BOL": {
+   "country": "BOL",
+   "name": "Bolivia",
+   "counts": {
+    "lines": 58,
+    "substations": 54,
+    "plants": 15
+   },
+   "raw_counts": {
+    "lines": 244,
+    "substations": 71,
+    "plants": 31
+   },
+   "plant_count": 22,
+   "line_km_by_kv": {
+    "500": 225.0,
+    "230": 2254.0,
+    "115": 1199.1,
+    "69": 103.3
+   },
+   "plant_mw_by_tech": {
+    "eolica": 135.9,
+    "hidro": 1348.5,
+    "solar": 160.3,
+    "termica": 888.8
+   },
+   "bbox": [
+    -68.3601468,
+    -22.7076244,
+    -62.5194746,
+    -14.8357465
+   ],
+   "sources": [
+    {
+     "id": "osm_power",
+     "name": "OpenStreetMap, etiquetas power=*",
+     "publisher": "Colaboradores de OpenStreetMap",
+     "url": "https://www.openstreetmap.org/",
+     "license": "ODbL 1.0",
+     "attribution": "© OpenStreetMap contributors",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:55:15+00:00"
+    }
+   ],
+   "warnings": [
+    "1 líneas de menos de 66 kV descartadas",
+    "193 subestaciones sin tensión o bajo 66 kV descartadas",
+    "85 líneas con los dos extremos en la misma subestación descartadas",
+    "2 buses en piezas de menos de 3 descartados",
+    "7 subestaciones sin ninguna línea resuelta descartadas",
+    "9 centrales (655 MW) a más de 40 km de una subestación descartadas"
+   ]
+  },
+  "BRA": {
+   "country": "BRA",
+   "name": "Brasil",
+   "counts": {
+    "lines": 1286,
+    "substations": 839,
+    "plants": 519
+   },
+   "raw_counts": {
+    "lines": 2264,
+    "substations": 927,
+    "plants": 2953
+   },
+   "plant_count": 2422,
+   "line_km_by_kv": {
+    "800": 4617.9,
+    "765": 915.5,
+    "600": 3199.8,
+    "525": 7487.5,
+    "500": 48711.2,
+    "440": 5853.0,
+    "345": 8865.8,
+    "230": 53273.6
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 9672.5,
+    "eolica": 32256.8,
+    "hidro": 105528.8,
+    "nuclear": 1990.0,
+    "solar": 14379.2,
+    "termica": 24437.1
+   },
+   "bbox": [
+    -72.63880086699999,
+    -33.47438860313146,
+    -34.89127585699998,
+    2.9630301689024887
+   ],
+   "sources": [
+    {
+     "id": "epe_webmap",
+     "name": "EPE WebMap, sistema eléctrico existente",
+     "publisher": "Empresa de Pesquisa Energética (EPE), Brasil",
+     "url": "https://gisepeprd2.epe.gov.br/arcgis/rest/services/WMS_Webmap_EPE_Data/MapServer",
+     "license": "No declarada; datos públicos del gobierno de Brasil",
+     "attribution": "EPE WebMap",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-22T00:44:21+00:00"
+    }
+   ],
+   "warnings": [
+    "5 líneas sin tensión descartadas",
+    "433 líneas con los dos extremos en la misma subestación descartadas",
+    "1 subestaciones sin ninguna línea resuelta descartadas",
+    "531 centrales (15,581 MW) a más de 40 km de una subestación descartadas"
+   ],
+   "flow": {
+    "file": "BRA/network.json",
+    "built_at": "2026-11-22T00:44:22+00:00",
+    "as_of": "2026-11-22",
+    "level": "L1+",
+    "counts": {
+     "buses": 853,
+     "lines": 1305,
+     "circuits": 1842,
+     "dc_links": 4,
+     "dc_records": 12,
+     "plants": 495
+    },
+    "circuit_km_by_kv": {
+     "765": 2706.0,
+     "525": 12241.0,
+     "500": 70502.5,
+     "440": 7071.5,
+     "345": 11201.8,
+     "230": 70704.6
+    },
+    "length_check": {
+     "circuit_km_ac": 174427.5,
+     "corridor_km_ac": 124665.9,
+     "dc_km": 22028.0,
+     "official_km": 189308,
+     "official_source": "MapYourGrid transmission length index, 220 kV and up (CC BY 4.0, not opened)",
+     "ac_vs_official": -0.079,
+     "ac_dc_vs_official": 0.038
+    },
+    "assumed": {
+     "capacity_mw": 215,
+     "x_pu": 0,
+     "length_km": 11
+    },
+    "excluded": {
+     "deactivated": 473,
+     "future": 0,
+     "ramal": 5,
+     "foreign_end": 18,
+     "no_coordinates": 2
+    },
+    "coordinates": {
+     "substations_needed": 855,
+     "from_ons": 853,
+     "from_epe_exact_name": 0,
+     "from_epe_fuzzy_name": 0,
+     "missing": 2,
+     "match_rate": 0.9977,
+     "fuzzy_min": 0.85
+    },
+    "typical_capacity_mw": {
+     "230": 324.3,
+     "345": 854.5,
+     "440": 1524.2,
+     "500": 2502.8,
+     "525": 2464.3,
+     "765": 4132.7
+    },
+    "units": {
+     "kv": "kV",
+     "length_km": "km",
+     "r_pu": "pu on base_mva (ONS val_resistencia is percent on 100 MVA)",
+     "x_pu": "pu on base_mva (ONS val_reatancia is percent on 100 MVA)",
+     "b_pu": "pu on base_mva (ONS val_shunt is Mvar at nominal voltage)",
+     "r_ohm": "ohm",
+     "x_ohm": "ohm",
+     "capacity_a": "A per circuit, long duration with limiting factor (val_capacoperlongacomlimit)",
+     "capacity_mw": "MW (sqrt(3) * kV * A; treated as MW like Chile's s_nom_mva)",
+     "mw": "MW installed"
+    },
+    "sources": [
+     {
+      "id": "ons_linha_transmissao",
+      "name": "ONS, linhas de transmissão da rede de operação",
+      "publisher": "Operador Nacional do Sistema Elétrico (ONS), Brasil",
+      "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv",
+      "license": "CC BY (Creative Commons Atribuição), ONS Dados Abertos",
+      "attribution": "ONS Dados Abertos",
+      "provides": [
+       "lines"
+      ],
+      "fetched_at": "2026-11-22T00:44:24+00:00"
+     },
+     {
+      "id": "ons_subestacao",
+      "name": "ONS, subestações da rede de operação",
+      "publisher": "Operador Nacional do Sistema Elétrico (ONS), Brasil",
+      "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/subestacao/SUBESTACAO.csv",
+      "license": "CC BY (Creative Commons Atribuição), ONS Dados Abertos",
+      "attribution": "ONS Dados Abertos",
+      "provides": [
+       "substations"
+      ],
+      "fetched_at": "2026-11-22T00:44:24+00:00"
+     }
+    ],
+    "warnings": [
+     "5 ramales de línea sin extremo 'para' descartados (CANOAS 1, OLINDINA, PITUACU, SCHINCARIOL, TIMOTEO 1)",
+     "subestación sin coordenadas: USIBA 230 kV (barra 8046)",
+     "subestación sin coordenadas: COL BOA SORTE 2 500 kV (barra 45751)",
+     "18 líneas con un extremo fuera del registro de subestaciones del ONS (interconexiones u otro país) descartadas: ITAIPU 50 HZ 500 kV (4); MARGEM DIREIT 500 kV (8); MELO 525 kV (1); R.D.MANGANES 230 kV (1); RINCON S. M. 500 kV (2); RIVERA 230 kV (1); SANTA ELENA 230 kV (1)",
+     "2 líneas con un extremo sin coordenadas descartadas",
+     "566 centrales (13,107 MW) a más de 40 km de una barra del flujo descartadas",
+     "215 circuitos sin capacidad en amperes usan la mediana del ONS para su tensión (supuesto)"
+    ],
+    "deduction_error": {
+     "x": {
+      "230": {
+       "n": 958,
+       "median_abs": 0.167,
+       "p90_abs": 0.334,
+       "median_bias": -0.115
+      },
+      "345": {
+       "n": 162,
+       "median_abs": 0.034,
+       "p90_abs": 0.378,
+       "median_bias": 0.015
+      },
+      "440": {
+       "n": 63,
+       "median_abs": 0.053,
+       "p90_abs": 0.183,
+       "median_bias": 0.05
+      },
+      "500": {
+       "n": 408,
+       "median_abs": 0.181,
+       "p90_abs": 0.722,
+       "median_bias": 0.174
+      },
+      "525": {
+       "n": 87,
+       "median_abs": 0.048,
+       "p90_abs": 0.178,
+       "median_bias": 0.04
+      },
+      "765": {
+       "n": 9,
+       "median_abs": 0.032,
+       "p90_abs": 0.039,
+       "median_bias": -0.032
+      },
+      "all": {
+       "n": 1687,
+       "median_abs": 0.153,
+       "p90_abs": 0.388,
+       "median_bias": 0.014
+      }
+     },
+     "capacity": {
+      "230": {
+       "n": 939,
+       "median_abs": 0.342,
+       "p90_abs": 0.725,
+       "median_bias": 0.234
+      },
+      "345": {
+       "n": 169,
+       "median_abs": 0.16,
+       "p90_abs": 0.555,
+       "median_bias": 0.053
+      },
+      "440": {
+       "n": 66,
+       "median_abs": 0.115,
+       "p90_abs": 0.163,
+       "median_bias": 0.115
+      },
+      "500": {
+       "n": 364,
+       "median_abs": 0.321,
+       "p90_abs": 0.418,
+       "median_bias": -0.321
+      },
+      "525": {
+       "n": 83,
+       "median_abs": 0.31,
+       "p90_abs": 0.486,
+       "median_bias": -0.31
+      },
+      "765": {
+       "n": 6,
+       "median_abs": 0.589,
+       "p90_abs": 0.589,
+       "median_bias": -0.589
+      },
+      "all": {
+       "n": 1627,
+       "median_abs": 0.313,
+       "p90_abs": 0.619,
+       "median_bias": -0.013
+      }
+     },
+     "topology": {
+      "drawn_buses_snapped": 728,
+      "drawn_links_compared": 1160,
+      "drawn_links_unmapped": 122,
+      "real_links_compared": 1049,
+      "true_links": 1036,
+      "precision": 0.893,
+      "recall": 0.988
+     },
+     "method": {
+      "x": "midpoint of X_PER_KM (domain/validation.py, nearest class) * length_km",
+      "capacity": "typical_capacity_mva (domain/simulation/params/network.yaml, nearest class)",
+      "topology": "drawn-layer buses snapped to the nearest flow bus within 3 km"
+     }
+    }
+   }
+  },
+  "PER": {
+   "country": "PER",
+   "name": "Perú",
+   "counts": {
+    "lines": 246,
+    "substations": 198,
+    "plants": 102
+   },
+   "raw_counts": {
+    "lines": 575,
+    "substations": 269,
+    "plants": 246
+   },
+   "plant_count": 195,
+   "line_km_by_kv": {
+    "500": 2889.0,
+    "220": 7816.3,
+    "145": 69.4,
+    "138": 4640.1,
+    "69": 37.8,
+    "66": 189.8
+   },
+   "plant_mw_by_tech": {
+    "bioenergia": 148.5,
+    "eolica": 1021.4,
+    "hidro": 3869.4,
+    "solar": 1134.0,
+    "termica": 5796.6
+   },
+   "bbox": [
+    -81.27597943,
+    -18.08208018800002,
+    -69.22217124600002,
+    -3.5450846300000194
+   ],
+   "sources": [
+    {
+     "id": "osinergmin_gisem",
+     "name": "Osinergmin GISEM, mapa del SEIN en operación",
+     "publisher": "Osinergmin, Perú",
+     "url": "https://gisem.osinergmin.gob.pe/serverosih/rest/services/Electricidad/MapaSEIN_Operacion/MapServer",
+     "license": "No declarada; datos públicos del gobierno de Perú",
+     "attribution": "Osinergmin GISEM",
+     "provides": [
+      "lines",
+      "substations",
+      "plants"
+     ],
+     "fetched_at": "2026-11-21T21:55:14+00:00"
+    }
+   ],
+   "warnings": [
+    "642 líneas de menos de 66 kV descartadas",
+    "456 subestaciones sin tensión o bajo 66 kV descartadas",
+    "198 líneas con los dos extremos en la misma subestación descartadas",
+    "2 buses en piezas de menos de 3 descartados",
+    "11 subestaciones sin ninguna línea resuelta descartadas",
+    "51 centrales (878 MW) a más de 40 km de una subestación descartadas"
+   ]
+  }
+ },
+ "built_at": "2026-11-22T00:44:24+00:00"
+}

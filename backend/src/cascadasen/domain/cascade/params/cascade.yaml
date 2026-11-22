@@ -77,15 +77,16 @@ edac:
   norte_grande:
     value: [[48.9, 52.0], [48.8, 102.9], [48.7, 90.9], [48.6, 104.8], [48.5, 117.9], [48.4, 119.7], [48.3, 119.2]]
     source: "[4] Table 3-9 (step 1 at 49.0 Hz is disabled)"
-  extreme:
-    value: {zone: centro_sur, threshold_hz: 49.5, gradients_hz_s: [-0.9, -1.2, -1.9], mw: 671.55}
-    source: "[4] Tables 3-10 and 3-11 (stack.md 4.4)"
-    note: "Split in three equal tranches, one per gradient stage (assumption)"
 
 cascade:
   overload_factor: {value: 1.2, source: "stack.md 4.3 (120 % of capacity, parameter)"}
   max_stages: {value: 20, source: "stack.md 4.3"}
-  stage_spacing_s: {value: 1.0, is_assumption: true, note: "Illustrative time between cascade stages"}
+  stage_spacing_s:
+    value: 1.0
+    is_assumption: true
+    note: >-
+      Illustrative time between cascade stages. The next stage also waits until the islands of the previous
+      stage finish their EDAC steps or go dark: it opens at max(t, last load_shed or island_blackout) + this value.
   local_cut_mw: {value: 200.0, source: "stack.md 4.5 (islands without synchronous generation, parameter)"}
 
 voltage_limit:
@@ -94,3 +95,33 @@ voltage_limit:
   note: >-
     Pre-fault flow across the 25F boundary above these limits gives 'voltage_limited (uncertain)'
     instead of a frequency verdict. The DC model has no voltage; this is the only corridor with published limits.
+
+# Failure cost of a cascade (docs/engine.md, "Cost"). The CNE failure cost per kWh is in simulation/params/physics.yaml.
+# [44] ISCI for Enel Foundation, "Estimación de Impactos de Blackouts en Chile" (R. Moreno, 2025): 81,430 MWh not
+# served and about US$ 984 M of economic loss for the 25F, by sector and with the interdependencies of the economy.
+cost:
+  blackout_restoration_h:
+    value: 7.34
+    source: "[44] 81,430 MWh not served in the 25F over its 11,096 MW of demand (feb2025-1500): hours at full outage"
+    note: >-
+      Cross-check: the restoration reports (58 % of clients back at 00:00 per Gobierno, 220,000 without power at 08:15)
+      give 8.2 h; the CEN's 90 % at 00:00 gives 5.4 h
+  shed_restoration_h:
+    value: 1.0
+    is_assumption: true
+    note: "Load shed by EDAC in an island that survives is reconnected once its frequency recovers: no black start"
+  total_blackout_multiplier:
+    value: 1.375
+    source: "[44] US$ 984 M / 81,430 MWh = 12.08 US$/kWh, over the CNE failure cost of 8.79 US$/kWh [19]"
+    note: >-
+      A total blackout costs more per kWh than lost energy alone: it stops transport, water, telecom and industry
+      together (the study's interdependencies). It grows linearly with the share of the demand that went dark
+      (assumption), so load shedding in a surviving grid pays none of it
+
+stress:
+  regulated_share:
+    value: 0.389
+    source: "Coordinador Eléctrico Nacional 2024: clientes libres 61,1 % del consumo del SEN (79.689,5 GWh), per Enel X"
+    note: >-
+      Share of each point's demand that grows with population (regulated clients: homes, commerce, small firms).
+      Free clients (mining, industry) do not; the per-capita value is the same everywhere (assumption)

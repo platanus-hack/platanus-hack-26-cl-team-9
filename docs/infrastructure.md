@@ -8,7 +8,7 @@ Both images are built from the repo root with their own Dockerfile and per-Docke
 
 | Image | Dockerfile | Stack | Port | Health path |
 |---|---|---|---|---|
-| backend | `infrastructure/docker/backend.Dockerfile` | Python 3.12 + uv, `cascadasen-api`, `data/processed` baked in at `/data` (`CASCADASEN_DATA_DIR=/data`) | 8000 | `/api/v1/health` |
+| backend | `infrastructure/docker/backend.Dockerfile` | Python 3.12 + uv, `cascadasen-api`, `data/processed` baked in at `/data/processed` (`CASCADASEN_DATA_DIR=/data`) | 8000 | `/api/v1/health` |
 | web | `infrastructure/docker/web.Dockerfile` | `npm run build` (node 22; reads `data/processed` at build time), served by nginx with SPA fallback (`infrastructure/docker/nginx.conf`) | 80 | `/healthz` |
 
 ```bash
@@ -26,12 +26,12 @@ viewer --HTTPS--> CloudFront (no cache) --HTTP :80--> ALB (public subnets) --> F
 ```
 - Region `us-east-1`, account `402909940511` (enforced by `allowed_account_ids` and by `deploy.sh`).
 - VPC `10.0.0.0/16`, two public subnets in two AZs (the ALB needs two), internet gateway, no NAT. The task has a public IP to pull images from ECR.
-- One ECS service, one task, 2 vCPU / 4 GB (X86_64) shared by both containers, no per-container limits. No high availability.
+- One ECS service, one task, 4 vCPU / 8 GB (X86_64) shared by both containers, no per-container limits. No high availability.
 - ALB routing: `/api/*`, `/docs`, `/redoc`, `/openapi.json`, `/map` go to the backend. Everything else goes to web. Health checks: `/api/v1/health` (backend), `/healthz` (web).
 - Security groups: the ALB accepts traffic only from the CloudFront managed prefix list (`com.amazonaws.global.cloudfront.origin-facing`). The task accepts :80 and :8000 only from the ALB. The test listener :8080 has no ingress rule.
 - CloudFront: `redirect-to-https`, cache policy `Managed-CachingDisabled`, origin request policy `Managed-AllViewer`, all methods allowed. It is only a proxy for TLS and, later, the domain.
 - An ALB cannot have an Elastic IP. CloudFront points to the stable ALB DNS name (output `alb_dns_name`).
-- Data is baked into the backend image (`data/processed` at `/data`). There is no database. Shared sessions and persisted runs live in the S3 bucket `cascadasen-sessions-402909940511` (section "Sessions bucket").
+- Data is baked into the backend image (`data/processed` at `/data/processed`). There is no database. Shared sessions and persisted runs live in the S3 bucket `cascadasen-sessions-402909940511` (section "Sessions bucket").
 - Logs go to CloudWatch group `/ecs/cascadasen`, 7 days. Terraform state lives in S3 bucket `cascadasen-tfstate-402909940511` (versioned, encrypted, `use_lockfile = true`).
 
 ## Sessions bucket
@@ -71,7 +71,7 @@ NS delegation is a manual step. Read `terraform -chdir=infrastructure output rou
 Optional, in `infrastructure/terraform.tfvars` (git-ignored, example in `terraform.tfvars.example`): `origin_https = true` and `alb_certificate_arn` make the ALB production listener HTTPS :443 and CloudFront use `https-only`. That needs a certificate whose name matches the origin host, so it also needs a record such as `alb.sub50.cl` pointing to the ALB; it is not set up.
 
 ## Automatic deploy from GitHub
-`.github/workflows/deploy.yml` runs on every push to `main` (and by hand with "Run workflow") and uses only the AWS CLI, no Terraform. Steps: assume the role `arn:aws:iam::402909940511:role/IAM-Role-ECS-Deploy` through GitHub OIDC; build and push the `backend` and `web` images to ECR tagged with the short commit; register a new revision of the `cascadasen` task definition with those images; `aws ecs update-service` and wait for the blue/green deploy to be stable; invalidate CloudFront (`/*`, distribution found by the alias `sub50.cl`). Runs are serialized (`concurrency: deploy`).
+`.github/workflows/deploy.yml` runs on every push to `main` (and by hand with "Run workflow") and uses only the AWS CLI, no Terraform. Steps: assume the role `arn:aws:iam::402909940511:role/IAM-Role-ECS-Deploy` through GitHub OIDC; build and push the `backend` and `web` images to ECR tagged with the short commit; register a new revision of the `cascadasen` task definition with those images; `aws ecs update-service` and wait for the blue/green deploy to be stable; invalidate CloudFront (`/*`, distribution found by the alias `sub50.cl`). Runs are serialized (`concurrency: deploy`). The `deploy` job has `needs: checks`: the `checks` job calls `.github/workflows/checks.yml` (pytest with a coverage floor, `mypy src`, web `tsc`, `vitest` and `build`), so a failing check blocks the deploy.
 The role ARN, registry, cluster, service, and domain are hardcoded in the workflow: the repository variables cannot be edited, and none of them is a secret. The public Mapbox token is read from the default in `deploy.sh` (GitHub push protection rejects the token when it is written in the workflow file).
 Infrastructure changes (new resources, sizing, the ECR repositories) are not deployed by the workflow. Apply them by hand with `infrastructure/deploy.sh`. The ECS service has `ignore_changes = [task_definition]`, so a manual `terraform apply` does not roll the service back to an older revision.
 Setup in AWS (account 402909940511), done once by hand (already done):
@@ -81,6 +81,10 @@ Setup in AWS (account 402909940511), done once by hand (already done):
 Pushing `.github/workflows/*` needs a GitHub token with the `workflow` scope (`gh auth refresh -h github.com -s workflow`).
 ## Mapbox token
 The web image needs `VITE_MAPBOX_TOKEN` at build time (Vite inlines it). `deploy.sh` passes it as a build argument. The value is a public `pk.*` token with a default in `deploy.sh`; export `VITE_MAPBOX_TOKEN` to override it.
+
+## www subdomain
+
+`www.sub50.cl` serves the same site as the apex. Applied by hand on 2026-11-22: CloudFront `E1OAZRNNNTLPXE` got the alias `www.sub50.cl`, and the zone got `www` A and AAAA aliases to `d2bc0ohphbh56u.cloudfront.net`. The ACM certificate already covers `*.sub50.cl`. `cloudfront.tf` and `route53.tf` (`aws_route53_record.www`) hold the same change. Before the next `terraform apply`, import the records: `terraform import 'aws_route53_record.www["A"]' Z06674952Y03E6KTIVEQ3_www.sub50.cl_A` (same for `AAAA`). There is no redirect from www to the apex; both answer 200.
 
 ## Backlog
 No issue numbers yet: `scripts/issue.sh` does not exist in the repo and the fork has issues disabled. Create these in the team tracker:

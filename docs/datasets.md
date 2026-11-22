@@ -20,6 +20,8 @@ Last updated: 2026-11-21. Status labels: **verified** (opened or downloaded and 
 | Comuna -> substation (service areas) | People affected per node | Own rule on INE census zones | **Done**, flagged as assumption |
 | Public cyber incidents on the SEN | Cyber scenarios, case V10 (`cyber.md`) | pv magazine articles citing CEN daily reports [34][35] | **Read** (secondary source) |
 | Critical loads (hospitals, water, Metro) with location | Question Q4 in `cyber.md` | None found | **Missing** |
+| Other countries' grids (Argentina, Bolivia, Brazil, Peru), context layer | Drawn under Chile's, never simulated (`regional.md`) | EPE WebMap (Brazil), Osinergmin GISEM (Peru), OpenStreetMap (Bolivia), Secretaría de Energía (Argentina) | **Built** for Brazil, Peru, Bolivia and (from OSM) Argentina; Argentina's official source was unreachable on 2026-11-21 |
+| Brazil flow network: declared line ends, r, x, shunt, ampacity, substation coordinates | Ready for a DC flow, not wired to the engine (`regional.md` section 6, `network-format.md`) | ONS Dados Abertos [42], [43] | **Built** 2026-11-21 (`BRA/network.json`). Units of r, x and shunt inferred from magnitudes (ONS does not state them) |
 | Basemap (streets, water, buildings, place names) | Zoom-level designs (`design.md` section 4), `?mapa=2` in `web/` | Mapbox [40] | **Used** by `web/` `?mapa=2` and the Paper mockups; needs a token and internet |
 | Towers, poles, transformers, MT lines | Closest zoom levels (`design.md` section 4) | OpenStreetMap [41] | **Mockups only** (Calama, Nueva Pan de Azucar); not in the pipeline |
 
@@ -42,7 +44,7 @@ Validation (18 checks, all passing on the current build; `GET /api/v1/validation
 - 25F: removing Nueva Maitencillo - Nueva Pan de Azucar 500 kV alone does not split the grid. The north separates only when both 220 kV circuits around Punta Colorada and the coastal 110 kV path (Maitencillo - Algarrobo - Incahuasi - Las Companias) also open. This is a test in `backend/tests/validation/`.
 
 Built on top of `data/processed/` by standalone scripts in `data/scripts/` (merged in #10, not part of `cascadasen-build`):
-- `build_operating_points.py` -> `operating_points.json`: demand per electrical bus from PyPSA-CL `Loads.xlsx` (259 loads, 252 mapped to model buses) and merit-order dispatch from PyPSA-CL generators (2,056 with bus, cost and inertia), solar and wind profiles and fuel prices. Synchronous units stay online until 31,000 MWs of inertia. Four points: Feb 2025 15:00 (25F reference) and 03:00, Nov 2026 13:00 and 20:00. PyPSA-CL has one representative day per month, so these are modelled, not measured. Downloads the four files into the git-ignored `data/raw/pypsa_cl/`. Needs openpyxl.
+- `build_operating_points.py` -> `operating_points.json`: demand per electrical bus from PyPSA-CL `Loads.xlsx` (259 loads, 252 mapped to model buses) and merit-order dispatch from PyPSA-CL generators (2,056 with bus, cost and inertia), solar and wind profiles and fuel prices. Synchronous units stay online until 31,000 MWs of inertia. Four points: Feb 2025 15:00 (25F reference) and 03:00, Nov 2026 13:00 and 20:00. PyPSA-CL has one representative day per month, so these are modelled, not measured. Downloads the four files into the git-ignored `data/raw/pypsa_cl/`. Needs openpyxl (a main dependency). Skips the SharePoint request when the four files are already there, and writes each download to `.part` first.
 - `build_baseline_opf.py` -> `baseline_opf.json`: DC optimal power flow per point so no branch exceeds s_nom (NTSyCS art. 5-27), with the same inertia floor. All four points solve without load shedding. N-1 is not enforced. Needs numpy and scipy. Run after the previous script.
 - `build_node_index.py` -> `node_index.json` (1.4 MB): one record per substation or tap for the web map popup (ficha, lines, plants, storage, served comunas, PyPSA-CL model, demand and dispatch). PyPSA-CL storage named `<TYPE>_<node>_<h>h` is shown as model candidates, not real batteries.
 
@@ -97,11 +99,11 @@ Largest plants: Atacama (thermal, 716 MW), Guacolda (703 MW), Ralco (hydro, 685 
 
 ### 2.3 Unified file and where it lives
 
-A previous session wrote these under `/Users/alonsoutreras/Desktop/Hackathon/cascadasen/datos/` on Alonso's machine (outside this repo):
+A previous session wrote these under `~/Desktop/Hackathon/cascadasen/datos/` on Alonso's machine (outside this repo):
 - `raw/centrales_{bioenergia,eolicas,geotermicas,hidroelectricas,solares,termoelectricas}.geojson`
 - `centrales_sen.geojson`: 1,193 operating SEN plants with fields `nombre, tecnologia, mw, combustible, propietario, region_cod, region, comuna_cod, fuente`.
 
-To get them in the repo, copy those files into `data/` or regenerate with Appendix A and B. Raw files are about 800 KB; the unified file is about 430 KB, small enough to commit. Licence and terms of use of the IDE Energia data were not checked.
+To get them in the repo, copy those files into `data/` or regenerate with Appendix A and B (the scripts were not committed, see the appendices). Raw files are about 800 KB; the unified file is about 430 KB, small enough to commit. Licence and terms of use of the IDE Energia data were not checked.
 
 ### 2.4 Data quirks (read before filtering)
 
@@ -132,11 +134,12 @@ INE Census 2024 by region/commune (https://censo2024.ine.gob.cl/resultados/). Th
 
 ### 4.4 Other
 - Chile outline: continental only (drop Easter Island and Antarctic territory). Simplify with mapshaper. Not downloaded.
+- Economic loss of the 25F: US$ 984 million and 81,430 MWh not served, ISCI study for Enel Foundation ("Estimación de Impactos de Blackouts en Chile", R. Moreno) [44]. The cascade cost uses it for two parameters (`cascade.yaml` `cost`): 7.34 h of black start and a total-blackout premium of 1.375 over the CNE failure cost [19] (docs/engine.md "Cost").
 - Line capacity for corridors other than the 25F one: the CEN transmission-restrictions study may have it; current version not verified.
 
 ## 5. Plant -> node assignment (task)
 
-The engine has about 10-14 nodes. Every plant in `centrales_sen.geojson` must be assigned to a node by the nearest substation or by zone polygon, and node generation per scenario is built from the assigned plants. Document the rule. This step has not been done.
+The reduced network has 188 buses (`plan.md` section 9, decision 4). Every plant in `centrales_sen.geojson` must be assigned to a node by the nearest substation or by zone polygon, and node generation per scenario is built from the assigned plants. Document the rule. This step has not been done.
 
 ## 6. Provenance rule
 
@@ -172,6 +175,9 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 | 39 | MITRE ATT&CK, 2016 Ukraine Electric Power Attack (campaign C0025) | https://attack.mitre.org/campaigns/C0025/ | Found via search. The 2015 and 2016 Ukraine figures in `cyber.md` come from secondary sources and are not verified |
 | 40 | Mapbox (Streets v8 vector tiles, Standard style) | https://www.mapbox.com/ | Used: `web/` `?mapa=2` and design mockups. Requires a public token (`web/.env.local`, git-ignored) |
 | 41 | OpenStreetMap power data (towers, poles, transformers, lines) | https://www.openstreetmap.org/ | Used in design mockups only (2026-11-21); ODbL licence requires attribution if shipped |
+| 42 | ONS Dados Abertos, `linha-transmissao` (CC BY, updated daily): lines from 230 kV with bus numbers, r, x, shunt, ampacity | https://dados.ons.org.br/dataset/linha-transmissao (file `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv`) | Verified, downloaded 2026-11-21, in pipeline (`ons_brasil.py`). Dictionary states no unit for r, x, shunt: percent on 100 MVA and Mvar inferred (`regional.md` section 6) |
+| 43 | ONS Dados Abertos, `subestacao` (CC BY): busbars from 69 kV with substation code and coordinates | https://dados.ons.org.br/dataset/subestacao (file `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/subestacao/SUBESTACAO.csv`) | Verified, downloaded 2026-11-21, in pipeline |
+| 44 | Revista Electricidad, "Estudio estima las pérdidas económicas generadas por el blackout del 25 de febrero": ISCI for Enel Foundation, US$ 984 million and 81,430 MWh not served for the 25F, by sector with interdependencies; cited in `pitch_idea.md` [1] | https://www.revistaei.cl/estudio-estima-las-perdidas-economicas-generadas-por-el-blackout-del-25-de-febrero/ | Press estimate, not verified: the study behind it was not opened and its method is unknown. Used only in `tests/validation/test_health_25f.py` and `docs/health.md` to order magnitudes, never shown in the UI |
 | - | Article by CEN engineers on the 25F protection sequence | https://www.pacw.org/chilean-grid-blackout-of-february-2025 | Read by the evaluator |
 | - | Andes (similar hackathon project, click-to-fail) | https://github.com/aleetreny/Encode | Verified |
 | - | COSMIC (MATLAB dynamic cascade simulator) | https://github.com/ecotillasanchez/cosmic | Verified |
@@ -180,6 +186,7 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 Numbering follows the team's earlier research notes; gaps are sources not needed here.
 
 ## Appendix A: download script (`data/scripts/descargar_centrales.py`)
+Not in the repo: the script was not committed, so the file named here does not exist.
 
 ```python
 """Download IDE Energia plant layers as GeoJSON into ../raw/."""
@@ -214,6 +221,7 @@ for capa, nombre in CAPAS.items():
 ```
 
 ## Appendix B: unify script (`data/scripts/unificar_centrales.py`)
+Not in the repo: the script was not committed, so the file named here does not exist.
 
 ```python
 """Unify plant layers into centrales_sen.geojson (operating SEN plants only)."""

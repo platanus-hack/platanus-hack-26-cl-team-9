@@ -39,6 +39,7 @@ class Line:
     kv: float
     branches: tuple[str, ...]  # PyPSA-CL branches folded into this line
     map_edges: tuple[str, ...]  # map line ids (lines.geojson) behind it
+    country: str = "CHL"  # ISO 3166-1 alpha-3, as in data/processed/latam (docs/regional.md)
 
 
 @dataclass
@@ -52,6 +53,7 @@ class ReducedNetwork:
     lines: list[Line]
     index: dict[str, int]
     bus_of_model_bus: dict[str, int]
+    country: str = "CHL"  # ISO3 of every bus; a reduced network never spans two countries
 
     @property
     def size(self) -> int:

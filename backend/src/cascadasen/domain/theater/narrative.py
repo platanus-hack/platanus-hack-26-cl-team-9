@@ -79,8 +79,9 @@ class TemplateInterpreter:
             f"Peor nivel de consecuencia: {LEVELS_ES.get(con.get('worst_level', 'L0'), con.get('worst_level'))}.",
             f"Energía no servida: {num(con.get('unserved_energy_mwh', 0))} MWh; costo regulatorio "
             f"US$ {num(con.get('failure_cost_usd', 0))} (8,79 US$/kWh).",
-            f"Decisiones innecesarias: {ind['wrong_decisions']}. "
-            f"Reserva operacional final: {pct(ind['operational_reserve']['final'], 0)}.",
+            # a semicolon, not "1. Reserva": a reader (or an LLM) took "1." for list numbering
+            f"Decisiones innecesarias: {ind['wrong_decisions']}; "
+            f"reserva operacional final: {pct(ind['operational_reserve']['final'], 0)}.",
             f"Coordinación: {coord['conflicts']} conflictos, {coord['contradictions']} contradicciones, "
             f"{coord['blocked_at_execution']} acciones detenidas por el validador.",
         ]
@@ -118,4 +119,32 @@ class TemplateInterpreter:
             "adversary": adversary,
             "timeline": timeline,
             "experimental": True,
+            **self._incident_section(report),
+        }
+
+    @staticmethod
+    def _incident_section(report: dict[str, Any]) -> dict[str, Any]:
+        inc = report.get("incident")
+        if not inc:
+            return {}
+        card = inc["consequence_card"]
+        effect = (
+            f"{LEVELS_ES.get(card['consequence_level'], card['consequence_level'])}: hasta "
+            f"{num(card['people_without_power'])} personas sin luz y {num(card['load_shed_mw'])} MW no servidos. "
+            f"{num(card['unserved_energy_mwh'])} MWh no servidos y un costo de falla de US$ "
+            f"{num(card['failure_cost_usd'])} ({num(card['outage_duration_h']['value'], 2)} h de interrupción"
+            f"{', supuesto' if card['outage_duration_h']['is_assumption'] else ', calibrado con el 25F'})."
+        )
+        prevention = [render("prevention", m) for m in inc["mitigations"]]
+        return {
+            "incident": {
+                "title": inc["title"],
+                "summary": render("labels", inc["summary_key"]),
+                "effect": effect,
+                "prevention": prevention,
+                "notes": inc["notes"],
+                "sources": inc["sources"],
+                "verified": inc["verified"],
+                "notices": inc["notices"],
+            }
         }

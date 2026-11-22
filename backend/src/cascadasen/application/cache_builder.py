@@ -1,4 +1,4 @@
-"""cascadasen-cache: precompute every single-line cut for each operating point, as static JSON for the web app.
+"""cascadasen-cache: precompute every single-line cut and every substation shutdown for each operating point, as static JSON for the web app.
 
 Why: docs/stack.md answers a click from precomputed files, so the demo works without a server.
 Layout under the output folder:
@@ -6,55 +6,104 @@ Layout under the output folder:
   network-<year>.json             reduced network: nodes and lines with ids, coordinates and the map ids behind them
   <point>/buses.json              generation, load and people per bus before the cut
   <point>/baseline.json           the secure base case (no cut)
-  <point>/<line id>.json          the cascade for cutting that line
+  <point>/health.json             pre-fault health index and N-1 money at risk (docs/health.md), from the line cuts below
+  <point>/<line id>.json          the cascade for cutting that line, with `health` (after-cut index and cost)
+  <point>/sub-<bus id>.json       the cascade for shutting down that substation: every line of the bus opens at t = 0
+  comunas-<year>.json             people per bus and comuna (INE Censo 2024), for the web's affected-population view
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
-from cascadasen.application.theater_world import ProcessedWorld
 from cascadasen.domain.cascade.engine import ASSUMPTIONS, run_cascade_workflow
-from cascadasen.domain.cascade.network_json import mapa3_network
-from cascadasen.infrastructure.files import write_json
+from cascadasen.domain.cascade.health import prefault_health, with_event_health
+from cascadasen.domain.cascade.network import ReducedNetwork, bus_id, reduce_network
+from cascadasen.domain.cascade.network_json import buses_json, network_json
+from cascadasen.domain.cascade.scenario import load_network_and_point, people_by_comuna
+from cascadasen.domain.serialization import dumps_compact
 
 
 def build_cache_workflow(processed: Path, out: Path, point_ids: list[str] | None = None) -> dict:
-    world = ProcessedWorld(processed)
-    points = _points(world, point_ids)
+    points = _points(processed, point_ids)
     out.mkdir(parents=True, exist_ok=True)
-    counts = {p["id"]: _build_point(world, out, p) for p in points}
-    write_json(out / "index.json", {"points": points, "assumptions": ASSUMPTIONS})
+    counts = {p["id"]: _build_point(processed, out, p) for p in points}
+    write_comunas(processed, out, [p["year"] for p in points])
+    _write(out / "index.json", {"points": points, "assumptions": ASSUMPTIONS})
     return counts
 
 
-def _points(world: ProcessedWorld, wanted: list[str] | None) -> list[dict]:
+def _points(processed: Path, wanted: list[str] | None) -> list[dict]:
+    ops = json.loads((processed / "operating_points.json").read_text(encoding="utf-8"))["points"]
     return [
         {"id": p["id"], "label": p["label"], "year": int(p["snapshot"][:4]), "snapshot": p["snapshot"]}
-        for p in world.records()
+        for p in ops
         if not wanted or p["id"] in wanted
     ]
 
 
-def _build_point(world: ProcessedWorld, out: Path, point: dict) -> int:
-    theater, op = world.load(point["id"])
-    net = theater.buses
-    mapa3 = mapa3_network(net, op)
-    write_json(out / f"network-{point['year']}.json", {k: mapa3[k] for k in ("nodes", "lines")})
+def _build_point(processed: Path, out: Path, point: dict) -> dict:
+    net, op = load_network_and_point(processed, point["id"])
+    _write(out / f"network-{point['year']}.json", network_json(net))
     folder = out / point["id"]
     folder.mkdir(exist_ok=True)
-    write_json(folder / "buses.json", mapa3["buses"])
-    write_json(folder / "baseline.json", run_cascade_workflow(net, op, []))
+    _write(folder / "buses.json", buses_json(net, op))
+    _write(folder / "baseline.json", run_cascade_workflow(net, op, []))
+    n1: list[tuple[str, float]] = []
     for line in net.lines:
-        write_json(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
-    return len(net.lines)
+        timeline = run_cascade_workflow(net, op, [line.id])
+        n1.append((line.id, float(timeline["summary"]["load_shed_mw"])))
+        _write(folder / f"{line.id}.json", with_event_health(timeline))
+    # the single-line runs above feed the N-1 margins and cost: no cut runs twice
+    _write(folder / "health.json", prefault_health(net, op, n1_results=n1).as_dict())
+    substations = 0
+    for i in range(net.size):
+        ids = [ln.id for ln in net.lines if i in (ln.a, ln.b)]
+        if ids:
+            _write(folder / f"sub-{bus_id(i)}.json", with_event_health(run_cascade_workflow(net, op, ids)))
+            substations += 1
+    return {"lines": len(net.lines), "substations": substations}
+
+
+def comunas_json(net: ReducedNetwork, snapshot: dict) -> dict:
+    """People per bus split by comuna: the breakdown behind buses.json `people`. The split is an assumption."""
+    names = {c["cut"]: c["name"] for c in snapshot["comunas"]}
+    buses: dict[str, list[tuple[str, int]]] = {}
+    used: set[str] = set()
+    for i, rows in enumerate(people_by_comuna(net, snapshot)):
+        kept = [
+            (cut, round(p)) for cut, p in sorted(rows.items(), key=lambda r: (-r[1], r[0])) if round(p) > 0
+        ]
+        used.update(cut for cut, _ in kept)
+        buses[bus_id(i)] = kept
+    return {
+        "source": "INE Censo 2024 population per comuna, split over substations in data/processed/grid_snapshot.json"
+        " (comunas[].served_by)",
+        "is_assumption": True,
+        "comunas": {cut: names[cut] for cut in sorted(used)},
+        "buses": buses,
+    }
+
+
+def write_comunas(processed: Path, out: Path, years: Iterable[int]) -> None:
+    """Write comunas-<year>.json for each distinct year, from one read of grid_snapshot.json."""
+    snapshot = json.loads((processed / "grid_snapshot.json").read_text(encoding="utf-8"))
+    for year in sorted(set(years)):
+        _write(out / f"comunas-{year}.json", comunas_json(reduce_network(snapshot, year), snapshot))
+
+
+def _write(path: Path, data: dict) -> None:
+    path.write_text(dumps_compact(data), encoding="utf-8")
 
 
 def main() -> int:
     root = Path(__file__).resolve().parents[4]
-    parser = argparse.ArgumentParser(description="Precalcula todos los cortes simples para la app web.")
+    parser = argparse.ArgumentParser(
+        description="Precalcula los cortes de una línea y el apagado de cada subestación para la app web."
+    )
     parser.add_argument("--processed", type=Path, default=root / "data" / "processed")
     parser.add_argument("--out", type=Path, default=root / "web" / "public" / "cache")
     parser.add_argument("--point", action="append", help="id de un punto de operación (repetible)")

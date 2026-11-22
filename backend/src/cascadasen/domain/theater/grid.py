@@ -18,7 +18,13 @@ from typing import Any
 
 import numpy as np
 
-from cascadasen.domain.cascade.engine import CascadeParams, frame_edges, island_summary, run_cascade_state
+from cascadasen.domain.cascade.engine import (
+    CascadeParams,
+    frame_edges,
+    island_summary,
+    people_out_by_bus,
+    run_cascade_state,
+)
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
 from cascadasen.domain.cascade.frequency import F0
 from cascadasen.domain.cascade.frequency import Params as FrequencyParams
@@ -187,8 +193,18 @@ class TheaterGrid:
         return [area]
 
     def people_without_power(self) -> float:
-        served = np.divide(self.load, self.plan_load, out=np.ones_like(self.load), where=self.plan_load > 0)
-        return float((self.people * (1.0 - np.clip(served, 0.0, 1.0))).sum())
+        """Dark buses count all their people, whatever their net load; live buses the share of load shed."""
+        return float(people_out_by_bus(self.people, self.plan_load, self.load, self.dark).sum())
+
+    def people_out_by_area(self) -> dict[str, float]:
+        """`people_without_power` split by operating area (the Ciberataque monitor lists it per area)."""
+        idx, names = self.net.area_index
+        per = np.bincount(
+            idx,
+            weights=people_out_by_bus(self.people, self.plan_load, self.load, self.dark),
+            minlength=len(names),
+        )
+        return {a: float(per[i]) for i, a in enumerate(names)}
 
     # ------------------------------------------------------- engine view
 

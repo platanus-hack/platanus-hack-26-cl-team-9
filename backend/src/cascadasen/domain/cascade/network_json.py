@@ -1,5 +1,6 @@
 """The mapa 3 network as JSON: nodes, lines and per-bus operating point. `web/public/cache` files
-(`cascadasen-cache`) and `GET /sim/network` (`theater_network_view`) are both built from it."""
+(`cascadasen-cache`, `cascadasen-grids`) and `GET /sim/network` (`theater_network_view`) are all built
+from these."""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from .network import ReducedNetwork, bus_id
 from .scenario import OperatingPoint
 
 
-def mapa3_network(net: ReducedNetwork, op: OperatingPoint) -> dict[str, Any]:
+def network_json(net: ReducedNetwork) -> dict[str, Any]:
     ids = [bus_id(i) for i in range(net.size)]
     return {
         "nodes": [
@@ -21,6 +22,7 @@ def mapa3_network(net: ReducedNetwork, op: OperatingPoint) -> dict[str, Any]:
                 "kv": net.kv[i],
                 "zone": net.zone(i),
                 "map_nodes": net.map_nodes[i],
+                "country": net.country,
             }
             for i in range(net.size)
         ],
@@ -34,15 +36,19 @@ def mapa3_network(net: ReducedNetwork, op: OperatingPoint) -> dict[str, Any]:
                 "x_pu": ln.x_pu,
                 "map_edges": list(ln.map_edges),
                 "branches": list(ln.branches),
+                "country": ln.country,
             }
             for ln in net.lines
         ],
-        "buses": {
-            ids[i]: {
-                "gen_mw": round(float(op.gen[i]), 1),
-                "load_mw": round(float(op.load[i]), 1),
-                "people": round(float(op.people[i])),
-            }
-            for i in range(net.size)
-        },
+    }
+
+
+def buses_json(net: ReducedNetwork, op: OperatingPoint) -> dict[str, Any]:
+    return {
+        bus_id(i): {
+            "gen_mw": round(float(op.gen[i]), 1),
+            "load_mw": round(float(op.load[i]), 1),
+            "people": round(float(op.people[i])),
+        }
+        for i in range(net.size)
     }

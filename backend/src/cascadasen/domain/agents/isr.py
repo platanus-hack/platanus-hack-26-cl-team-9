@@ -67,6 +67,22 @@ class ISRAgent:
         return True
 
     def step(self, view: AgentView) -> tuple[ISRReport, list[COA]]:
+        """Update the ISR picture from this cycle's observation. Returns the report and the field-verification
+        requests of `_requests`.
+
+        1. Evidence per area. Each alarm adds the weight of its kind. A physical alarm counts in full only when
+           `_corroborated` by the observed values (energized, served MW, open breakers), otherwise it adds 0.1.
+           Stale data adds 0.1. A field report with an issue adds 0.8 and confirms the area. A clean field report
+           resets the area's suspicion, evidence and confirmation.
+        2. Suspicion = `decay` * previous suspicion + evidence, capped at 1.
+        3. Cause belief, as log-odds of "intentional". Likelihood ratios from the config apply for digital alarms
+           in two or more areas, a data-anomaly alarm, a field report that confirms a digital issue, physical
+           alarms without digital ones, and a digital streak that reaches `corroboration_cycles`. With no alarms
+           it drifts back to the prior. It is clamped to +-6.
+        4. Report. An area is affected when its suspicion reaches `affected_threshold` or it is in outage. The
+           leading cause is `none`, `intentional` (p >= 0.5) or `failure`. `verify` lists the unconfirmed areas
+           with suspicion of at least 0.25 that are not in outage, most suspicious first. `data_trust` is 1 minus
+           suspicion, and 0 where the served power is not observed."""
         cfg = self.cfg
         evidence = dict.fromkeys(self.net.order, 0.0)
         digital_areas, physical_areas, integrity = set(), set(), False

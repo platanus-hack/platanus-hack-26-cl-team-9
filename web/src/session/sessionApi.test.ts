@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { addElement, ApiError, cutLines, deleteElement, getNetwork, sessionIdFrom, subscribe, updateElement } from "./sessionApi";
+import { addElement, ApiError, cutLines, deleteElement, getIncidentCatalog, getNetwork, sessionIdFrom, startIncidentRun, subscribe, updateElement } from "./sessionApi";
 
 const SID = "abcdefghijklmnopqrstuv";
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -10,12 +10,11 @@ describe("sessionApi", () => {
   beforeEach(() => { fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock); });
   afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
-  it("takes ?sesion= over the stored id and ignores malformed ids", () => {
-    const other = "zyxwvutsrqponmlkjihgf_";
-    expect(sessionIdFrom(`?sesion=${SID}`, other)).toBe(SID);
-    expect(sessionIdFrom("", other)).toBe(other);
-    expect(sessionIdFrom("?sesion=../x", null)).toBeNull();
-    expect(sessionIdFrom("?point=nov2026-1300", null)).toBeNull();
+  it("takes the session only from ?sesion= and ignores malformed ids", () => {
+    expect(sessionIdFrom(`?sesion=${SID}&point=nov2026-1300`)).toBe(SID);
+    expect(sessionIdFrom("")).toBeNull();
+    expect(sessionIdFrom("?sesion=../x")).toBeNull();
+    expect(sessionIdFrom("?point=nov2026-1300")).toBeNull();
   });
 
   it("sends method, path, body, If-Match and X-Sub50-Agent", async () => {
@@ -42,6 +41,16 @@ describe("sessionApi", () => {
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ lines: ["R014"] });
   });
 
+  it("reads the incident catalog outside /sessions and launches an incident inside the session", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(200, {})));
+    await getIncidentCatalog();
+    await startIncidentRun(SID, { scenario: "huatacondo-2026", policy: "C", seed: 6 });
+    const calls = fetchMock.mock.calls.map(([url, init]) => `${init.method} ${url}`);
+    expect(calls).toEqual(["GET /api/v1/attacks/catalog", `POST /api/v1/sessions/${SID}/attacks/runs`]);
+    expect(fetchMock.mock.calls[0][1].headers["X-Sub50-Agent"]).toBe("web");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ scenario: "huatacondo-2026", policy: "C", seed: 6 });
+  });
+
   it("raises ApiError with the status and the Spanish message", async () => {
     fetchMock.mockResolvedValue(json(422, { detail: { field: "U001.b", message: "Una línea necesita dos barras distintas." } }));
     const err = await addElement(SID, "lines", { a: "B010", b: "B010", kv: 220, capacity_mw: 100 }).catch((e) => e);
@@ -50,6 +59,36 @@ describe("sessionApi", () => {
     expect(err.message).toBe("Una línea necesita dos barras distintas.");
   });
 
+  it("retries a busy 409 after Retry-After, up to 2 times, with the same request", async () => {
+    vi.useFakeTimers();
+    const busy = () => json(409, { detail: "La sesión está ocupada con otra solicitud; reintenta." }, { "Retry-After": "1" });
+    fetchMock.mockResolvedValueOnce(busy()).mockResolvedValueOnce(busy()).mockResolvedValueOnce(json(200, { revision: 5, open_lines: ["R014"] }));
+    const out = cutLines(SID, ["R014"], 3);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1001);
+    expect((await out).revision).toBe(5);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(`${init.method} ${url}`).toBe(`POST /api/v1/sessions/${SID}/cut`);
+      expect(init.headers["If-Match"]).toBe('"3"');
+      expect(JSON.parse(init.body)).toEqual({ lines: ["R014"] });
+    }
+  });
+  it("gives up on a session still busy after 2 retries and does not retry a 409 without Retry-After", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(() => Promise.resolve(json(409, { detail: "La sesión está ocupada con otra solicitud; reintenta." }, { "Retry-After": "1" })));
+    const busy = getNetwork(SID).catch((e) => e);
+    await vi.advanceTimersByTimeAsync(5000);
+    const err = await busy;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(409);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(json(409, { detail: "La sesión cambió en otra instancia; reintenta" }));
+    expect((await deleteElement(SID, "loads", "D001", 2).catch((e) => e)).status).toBe(409);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it("polls GET /{sid} with If-None-Match when EventSource is undefined", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("EventSource", undefined);

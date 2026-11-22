@@ -2,10 +2,195 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Sub50 agent API",
-    "description": "Endpoints an external agent needs to run strategic experiments on Sub50, a simulator of\nblackouts in the Chilean national grid (SEN). Public base URL: `https://sub50.cl`.\n\n**Ids.** The network has buses `B###` and lines `R###` (`GET /api/v1/sim/network`). Event targets\nalso accept an area (`A06`), a zone (`NG`), a corridor (`A06-A07/500`), a defence function\n(`pdce_zn`) or a real substation id (`SE...`). Event types, policies, objectives and templates come\nfrom `GET /api/v1/sim/catalog`. A run is identified by the `run_id` returned on creation.\n\n**Runs.** Runs in `global-runs` work on the default dataset. Every run is persisted for 24 hours\nafter its last command and rebuilt from its recipe when the server no longer holds it. Session\nendpoints (tags `sessions`, `session-network`, `session-sandbox`, `session-runs`) carry the\nsession id in the path and work on that session's private copy of the dataset; create a session\nfirst and pass its id to every session call.\n\n**Notice.** Every scenario is hypothetical and simulated: Sub50 models the consequence of an\nevent on the grid, never the attack technique. The catalog and every run summary carry a\n`notice` field saying so.\n\nErrors return `{\"detail\": ...}`; messages inside `detail` are in Spanish.\n",
+    "description": "Endpoints an external agent needs to run strategic experiments on Sub50, a simulator of\nblackouts in the Chilean national grid (SEN). Public base URL: `https://sub50.cl`.\n\n**Ids.** The network has buses `B###` and lines `R###` (`GET /api/v1/sim/network`). Event targets\nalso accept an area (`A06`), a zone (`NG`), a corridor (`A06-A07/500`), a defence function\n(`pdce_zn`) or a real substation id (`SE...`). Event types, policies, objectives and templates come\nfrom `GET /api/v1/sim/catalog`. A run is identified by the `run_id` returned on creation.\n\n**Runs.** Runs in `global-runs` work on the default dataset. Every run is persisted for 24 hours\nafter its last command and rebuilt from its recipe when the server no longer holds it. Session\nendpoints (tags `sessions`, `session-network`, `session-sandbox`, `session-runs`) carry the\nsession id in the path and work on that session's private copy of the dataset; create a session\nfirst and pass its id to every session call.\n\n**One request at a time.** A session serves one request at a time in a backend process (the SSE\nstream excepted); a request waits up to 10 s for the one before it and then gets 409 with\n`Retry-After: 1`; retry it. When 10 requests already wait on the session, the 409 comes at once.\n\n**Notice.** Every scenario is hypothetical and simulated: Sub50 models the consequence of an\nevent on the grid, never the attack technique. The catalog and every run summary carry a\n`notice` field saying so.\n\nErrors return `{\"detail\": ...}`; messages inside `detail` are in Spanish.\n",
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/grids/simulate": {
+      "post": {
+        "tags": [
+          "grids",
+          "grid-stress"
+        ],
+        "summary": "Simulate failures on the default grid, optionally prepared",
+        "description": "Runs the cascade of the failures (at least one line or substation out) on the grid prepared with `changes`. Returns the timeline, the direct loss and `supply`: per generating substation (by id) and per zone, the people it should feed before the failure against the people it still feeds.",
+        "operationId": "simulate_grid",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The cascade of the failures on the prepared grid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulateOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown point, bus, line, comuna or zone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid change or over the overlay limits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/grids/prepare": {
+      "post": {
+        "tags": [
+          "grids",
+          "grid-stress"
+        ],
+        "summary": "Prepare a scenario: population, demand, generation and lines by filters",
+        "description": "Resolves the filters and returns the prepared grid with no failure: what each change touches, lines already over their limit, and the people each generator should feed. It does not simulate. Send the same `changes` with /grids/simulate, /grids/dependency or /grids/cost to run a failure on it.",
+        "operationId": "prepare_scenario",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The prepared grid with no failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepareOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown point, bus, line, comuna or zone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid change or over the overlay limits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/grids/places": {
+      "get": {
+        "tags": [
+          "grids",
+          "grid-stress"
+        ],
+        "summary": "Find the substation a place resolves to",
+        "description": "Resolves a place as a person names it (a substation, a comuna, a province or region, an area, or an id B###/A##) to one substation of the 188-bus network, with how it was resolved: a comuna goes to the substation that serves most of its people. The same rule as `places` in a change of /grids/prepare. Call it before adding a load or a generator to a session, so the element lands where the person meant.",
+        "operationId": "resolve_place",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "description": "The place.",
+              "examples": [
+                "Iquique"
+              ],
+              "title": "Q"
+            },
+            "description": "The place."
+          },
+          {
+            "name": "point",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Operating point id (the network is the same at every point).",
+              "examples": [
+                "nov2026-1300"
+              ],
+              "default": "nov2026-1300",
+              "title": "Point"
+            },
+            "description": "Operating point id (the network is the same at every point)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The one substation a place resolves to (the same rule as `places` in a change).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown place, or a comuna outside the SEN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Empty place.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
     "/api/v1/sim/network": {
       "get": {
         "tags": [
@@ -39,13 +224,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The 188-bus network: buses, lines, areas and corridors.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Global Get Network"
+                  "$ref": "#/components/schemas/TheaterNetworkOut"
                 }
               }
             }
@@ -84,13 +267,11 @@
         "operationId": "get_catalog",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "What an agent can choose from when creating and playing a run.",
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Get Catalog"
+                  "$ref": "#/components/schemas/CatalogOut"
                 }
               }
             }
@@ -188,13 +369,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Run summary, latest snapshot, resources and metric series.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Global Get Run"
+                  "$ref": "#/components/schemas/RunStateOut"
                 }
               }
             }
@@ -259,13 +438,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The queued event: resolved target, area and the run summary.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Global Inject Run Event"
+                  "$ref": "#/components/schemas/RunEventOut"
                 }
               }
             }
@@ -350,13 +527,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The snapshots of the cycles played and the run summary.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Global Step Run"
+                  "$ref": "#/components/schemas/RunStepOut"
                 }
               }
             }
@@ -515,13 +690,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The snapshots already computed from a cycle, and the run summary.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Global Get Run Snapshots"
+                  "$ref": "#/components/schemas/RunSnapshotsOut"
                 }
               }
             }
@@ -576,13 +749,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Hash-chained audit log of a run and the recipe that rebuilds it.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Global Get Run Trace"
+                  "$ref": "#/components/schemas/RunTraceOut"
                 }
               }
             }
@@ -637,13 +808,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Indicators, coordination and physical consequence of a run so far.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Global Get Run Report"
+                  "$ref": "#/components/schemas/RunReportOut"
                 }
               }
             }
@@ -698,13 +867,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Deterministic after-action report in Spanish.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Global Get Run After Action"
+                  "$ref": "#/components/schemas/AfterActionOut"
                 }
               }
             }
@@ -778,13 +945,11 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Session document.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create Session"
+                  "$ref": "#/components/schemas/SessionDocOut"
                 }
               }
             }
@@ -860,11 +1025,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Session document.",
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Get Session"
+                  "$ref": "#/components/schemas/SessionDocOut"
                 }
               }
             }
@@ -874,6 +1039,16 @@
           },
           "404": {
             "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -932,6 +1107,16 @@
               }
             }
           },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Invalid input: detail names the field and, when useful, the valid values.",
             "content": {
@@ -962,7 +1147,7 @@
           "sessions"
         ],
         "summary": "Drop every network edit of a session",
-        "description": "Replaces the overlay with an empty one, so the network is the base dataset again. Runs keep the dataset they were created with; the sandbox cut keeps the lines that still exist. Bumps revision and dataset_revision; the ETag is the dataset_revision.",
+        "description": "Replaces the overlay with an empty one, so the network is the base dataset again. With a body {scenario: {point?, changes, open_lines, out_buses}} the network becomes that grid configuration instead (changes as overrides, failed buses out of service, open lines cut); a scenario of another point is 422. Runs keep the dataset they were created with; without a scenario the sandbox cut keeps the lines that still exist. Bumps revision and dataset_revision; the ETag is the dataset_revision.",
         "operationId": "reset_session",
         "parameters": [
           {
@@ -1017,15 +1202,30 @@
             "description": "Who makes the change (agent or user name); recorded in the session's last_op."
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ResetIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Reset Session"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -1041,7 +1241,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1110,19 +1310,27 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The session's edited 188-bus network.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Session Network"
+                  "$ref": "#/components/schemas/SessionNetworkOut"
                 }
               }
             }
           },
           "404": {
             "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1218,13 +1426,11 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Add Bus"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -1240,7 +1446,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1370,13 +1576,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Update Bus"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -1392,7 +1596,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1510,13 +1714,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Delete Bus"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -1532,7 +1734,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1648,13 +1850,11 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Add Line"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -1670,7 +1870,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1800,13 +2000,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Update Line"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -1822,7 +2020,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1940,13 +2138,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Delete Line"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -1962,7 +2158,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2078,13 +2274,11 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Add Load"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -2100,7 +2294,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2230,13 +2424,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Update Load"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -2252,7 +2444,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2370,13 +2562,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Delete Load"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -2392,7 +2582,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2508,13 +2698,11 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Add Generator"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -2530,7 +2718,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2660,13 +2848,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Update Generator"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -2682,7 +2868,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2800,13 +2986,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Result of an edit: element id, revisions, warnings and redispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Delete Generator"
+                  "$ref": "#/components/schemas/EditOut"
                 }
               }
             }
@@ -2822,7 +3006,143 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match does not match the current dataset_revision; re-read the network and retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/substations": {
+      "post": {
+        "tags": [
+          "session-network"
+        ],
+        "summary": "Add a substation with its lines, all or nothing",
+        "description": "Adds a bus (B###), 1 to 6 lines (U###) from it to existing buses of the same voltage, and optionally a load (D###) and a generator (G###) on it, in one write. If any part is invalid nothing is saved. capacity_mw defaults to the median of the lines at the other end. Returns the ids, the usual warnings and balance, and `coherence`: plausibility notes (capacity far from the neighbours, a line over 300 km, load or generation above the capacity of the lines). Counts 1 + lines + load + generator against the 80 added elements of the session. Bumps revision and dataset_revision (the ETag).",
+        "operationId": "add_substation",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it.",
+              "examples": [
+                "\"3\""
+              ],
+              "title": "If-Match"
+            },
+            "description": "Optional dataset_revision the edit is based on, as returned in the ETag of GET /network, /state or an edit (\"3\"). A different current dataset_revision gives 412; run activity does not change it."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubstationIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Result of add_substation: every id created and the coherence notes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubstationOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2938,13 +3258,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Sandbox state: open lines and the cascade timeline.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Cut Lines"
+                  "$ref": "#/components/schemas/CutStateOut"
                 }
               }
             }
@@ -2960,7 +3278,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3076,13 +3394,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Sandbox state: open lines and the cascade timeline.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Repair Lines"
+                  "$ref": "#/components/schemas/CutStateOut"
                 }
               }
             }
@@ -3098,7 +3414,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3167,19 +3483,27 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Sandbox state: open lines and the cascade timeline.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Cut State"
+                  "$ref": "#/components/schemas/CutStateOut"
                 }
               }
             }
           },
           "404": {
             "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3254,13 +3578,11 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Run summary of a session run, with the session revision.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create Run"
+                  "$ref": "#/components/schemas/SessionRunOut"
                 }
               }
             }
@@ -3276,7 +3598,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3349,19 +3671,27 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Run summary, latest snapshot, resources and metric series.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Run"
+                  "$ref": "#/components/schemas/RunStateOut"
                 }
               }
             }
           },
           "404": {
             "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3450,13 +3780,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The queued event: resolved target, area and the run summary.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Inject Run Event"
+                  "$ref": "#/components/schemas/RunEventOut"
                 }
               }
             }
@@ -3472,7 +3800,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3571,13 +3899,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The snapshots of the cycles played and the run summary.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Step Run"
+                  "$ref": "#/components/schemas/RunStepOut"
                 }
               }
             }
@@ -3593,7 +3919,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3692,13 +4018,11 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The queued external action and the run summary.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Submit Run Action"
+                  "$ref": "#/components/schemas/RunActionOut"
                 }
               }
             }
@@ -3714,7 +4038,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3813,13 +4137,11 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Run summary of a session run, with the session revision.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Replay Run"
+                  "$ref": "#/components/schemas/SessionRunOut"
                 }
               }
             }
@@ -3835,7 +4157,7 @@
             }
           },
           "409": {
-            "description": "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3924,19 +4246,27 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The snapshots already computed from a cycle, and the run summary.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Run Snapshots"
+                  "$ref": "#/components/schemas/RunSnapshotsOut"
                 }
               }
             }
           },
           "404": {
             "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3999,19 +4329,27 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Hash-chained audit log of a run and the recipe that rebuilds it.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Run Trace"
+                  "$ref": "#/components/schemas/RunTraceOut"
                 }
               }
             }
           },
           "404": {
             "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4074,19 +4412,27 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Indicators, coordination and physical consequence of a run so far.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Run Report"
+                  "$ref": "#/components/schemas/RunReportOut"
                 }
               }
             }
           },
           "404": {
             "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4149,13 +4495,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Deterministic after-action report in Spanish.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Run After Action"
+                  "$ref": "#/components/schemas/AfterActionOut"
                 }
               }
             }
@@ -4170,8 +4514,146 @@
               }
             }
           },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/attacks/catalog": {
+      "get": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "List the documented incidents that can be replayed",
+        "description": "Returns the bounded, curated catalog: each entry is a public incident with its linked sources, whether it is verified, and the effects (event type, area or zone, cycle) the scenario applies. Only effects are modelled, never techniques, and nobody is attributed. The list is not ranked. Read only.",
+        "operationId": "get_attack_catalog",
+        "responses": {
+          "200": {
+            "description": "Documented incidents that can be replayed as simulated runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentCatalogOut"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/attacks/runs": {
+      "post": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "Start a run from a documented incident",
+        "description": "Creates a strategic run in the session from one catalog incident, with the defensive agents and the chosen policy. The adversary is off unless asked. Step it with `step_run`, read `get_run_report` (its `incident` block has the consequence card and mitigations) and `get_run_after_action`. Only catalog ids are accepted (422 otherwise). The incident runs at its own `operating_point` (see the catalog): the session must have been created at that point, or the call answers 422 with the point in `valid`. Scenario: the effect is modelled, not the attack; the consequence is simulated on a reduced network, not a prediction.",
+        "operationId": "start_incident_run",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncidentRunIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Run summary of a session run, with the session revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRunOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4285,10 +4767,112 @@
             "examples": [
               true
             ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "exp3",
+              "propagation"
+            ],
+            "title": "Mode",
+            "description": "exp3: the adaptive adversary. propagation: the Ciberataque scenario, an intrusion that spreads between neighbouring operating areas (docs/attack-sim.md 3.2)",
+            "default": "exp3",
+            "examples": [
+              "propagation"
+            ]
+          },
+          "propagation": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Propagation",
+            "description": "Overrides of the propagation parameters (mode propagation); names and bounds in `GET /api/v1/sim/catalog` → `cyber_attack`",
+            "examples": [
+              {
+                "eradicate_p": 0.5,
+                "spread_p": 0.6
+              }
+            ]
           }
         },
         "type": "object",
         "title": "AdversaryIn"
+      },
+      "AfterActionOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Run id."
+          },
+          "question": {
+            "type": "string",
+            "title": "Question",
+            "description": "Question the template asks."
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice",
+            "description": "Every scenario is hypothetical and simulated."
+          },
+          "policy": {
+            "type": "string",
+            "title": "Policy",
+            "description": "Policy played."
+          },
+          "summary": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Summary",
+            "description": "Summary sentences."
+          },
+          "moments": {
+            "items": {},
+            "type": "array",
+            "title": "Moments",
+            "description": "Key moments."
+          },
+          "adversary": {
+            "title": "Adversary",
+            "description": "What the adversary did; null if none."
+          },
+          "timeline": {
+            "items": {},
+            "type": "array",
+            "title": "Timeline",
+            "description": "Timeline of the run."
+          },
+          "experimental": {
+            "type": "boolean",
+            "title": "Experimental",
+            "description": "Always true: the indicators are experimental."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "run_id",
+          "question",
+          "notice",
+          "policy",
+          "summary",
+          "moments",
+          "adversary",
+          "timeline",
+          "experimental"
+        ],
+        "title": "AfterActionOut",
+        "description": "Deterministic after-action report in Spanish."
       },
       "BusIn": {
         "properties": {
@@ -4413,7 +4997,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -4421,7 +5005,7 @@
               }
             ],
             "title": "Load Mw",
-            "description": "Bus demand in MW (replaces the base value; at most the base value + 3000 MW).",
+            "description": "Bus demand in MW (replaces the base value; at most the base value + 20000 MW).",
             "examples": [
               150
             ]
@@ -4430,7 +5014,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -4438,7 +5022,7 @@
               }
             ],
             "title": "Gen Mw",
-            "description": "Bus generation in MW (replaces the base value; at most the base value + 3000 MW). The bus keeps this value: it takes no share of the redispatch.",
+            "description": "Bus generation in MW (replaces the base value; at most the base value + 20000 MW). The bus keeps this value: it takes no share of the redispatch.",
             "examples": [
               300
             ]
@@ -4447,7 +5031,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -4464,7 +5048,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 200000.0,
+                "maximum": 400000.0,
                 "minimum": 0.0
               },
               {
@@ -4497,6 +5081,176 @@
         "type": "object",
         "title": "BusPatch"
       },
+      "CatalogOut": {
+        "properties": {
+          "notice": {
+            "type": "string",
+            "title": "Notice",
+            "description": "Every scenario is hypothetical and simulated."
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "Event types with family, defaults and targets."
+          },
+          "actions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Actions",
+            "description": "Courses of action with proposers, target and costs."
+          },
+          "policies": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Policies",
+            "description": "Defensive policies A, B and C."
+          },
+          "objectives": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Objectives",
+            "description": "Adversary objectives."
+          },
+          "missions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Missions",
+            "description": "Missions with their continuity threshold."
+          },
+          "templates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Templates",
+            "description": "Experiment templates."
+          },
+          "operating_points": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Operating Points",
+            "description": "Operating points a run can use."
+          },
+          "defense_sets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Defense Sets",
+            "description": "Defence sets."
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zones",
+            "description": "Macrozones."
+          },
+          "resources": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Resources",
+            "description": "Defensive resources and their default capacity."
+          },
+          "uncertainty_levels": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Uncertainty Levels",
+            "description": "Uncertainty levels 0, 1 and 2."
+          },
+          "cycle_minutes": {
+            "type": "integer",
+            "title": "Cycle Minutes",
+            "description": "Minutes per cycle."
+          },
+          "llm": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Llm",
+            "description": "Whether the server's LLM commander is available, and its model."
+          },
+          "cyber_attack": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cyber Attack",
+            "description": "Ciberataque scenario (template `ciberataque`, adversary mode `propagation`): parameter defaults, their [min, max] bounds, the outcomes and the area adjacency the intrusion follows."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "notice",
+          "events",
+          "actions",
+          "policies",
+          "objectives",
+          "missions",
+          "templates",
+          "operating_points",
+          "defense_sets",
+          "zones",
+          "resources",
+          "uncertainty_levels",
+          "cycle_minutes",
+          "llm",
+          "cyber_attack"
+        ],
+        "title": "CatalogOut",
+        "description": "What an agent can choose from when creating and playing a run."
+      },
+      "CoherenceNote": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "capacity_out_of_range, long_connection, load_over_connections or generation_over_connections."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Spanish message."
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line",
+            "description": "The line or connection the note is about."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "CoherenceNote",
+        "description": "A plausibility note about a substation (not an error)."
+      },
       "CutIn": {
         "properties": {
           "lines": {
@@ -4521,6 +5275,103 @@
           "lines"
         ],
         "title": "CutIn"
+      },
+      "CutStateOut": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "description": "Session revision."
+          },
+          "dataset_revision": {
+            "type": "integer",
+            "title": "Dataset Revision",
+            "description": "Dataset revision (also the ETag)."
+          },
+          "open_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Open Lines",
+            "description": "Lines open in the sandbox."
+          },
+          "timeline": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Timeline",
+            "description": "Cascade timeline with the open lines (the baseline when none)."
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice",
+            "description": "Every scenario is hypothetical and simulated."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "revision",
+          "dataset_revision",
+          "open_lines",
+          "timeline",
+          "notice"
+        ],
+        "title": "CutStateOut",
+        "description": "Sandbox state: open lines and the cascade timeline."
+      },
+      "EditOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id",
+            "description": "Id of the element added, changed or deleted; absent on reset."
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "description": "Session revision after the edit."
+          },
+          "dataset_revision": {
+            "type": "integer",
+            "title": "Dataset Revision",
+            "description": "Dataset revision after the edit (also the ETag)."
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SessionWarningOut"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Warnings about the edited network."
+          },
+          "balance": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Balance",
+            "description": "Redispatch per island (an assumption)."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "revision",
+          "dataset_revision",
+          "warnings",
+          "balance"
+        ],
+        "title": "EditOut",
+        "description": "Result of an edit: element id, revisions, warnings and redispatch."
       },
       "ErrorResponse": {
         "properties": {
@@ -4633,10 +5484,10 @@
           },
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Dispatched generation in MW (0 < mw ≤ 3000).",
+            "description": "Dispatched generation in MW (0 < mw ≤ 20000).",
             "examples": [
               250
             ]
@@ -4721,7 +5572,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 3000.0,
+                "maximum": 20000.0,
                 "exclusiveMinimum": 0.0
               },
               {
@@ -4824,6 +5675,101 @@
         "additionalProperties": false,
         "type": "object",
         "title": "GeneratorPatch"
+      },
+      "IncidentCatalogOut": {
+        "properties": {
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "description": "Notices every result carries: hypothetical, not a prediction."
+          },
+          "cost_basis": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cost Basis",
+            "description": "The calibrated cost terms (black-start hours, shed hours, total-blackout multiplier), each with its source or is_assumption true."
+          },
+          "incidents": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Incidents",
+            "description": "id, title, date, kind (cyber_documented or reference_not_cyber), verified, sources, notes, mitigations, operating_point (the session point the incident needs) and the effects the scenario applies (cycle, event type, target, params)."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "notices",
+          "cost_basis",
+          "incidents"
+        ],
+        "title": "IncidentCatalogOut",
+        "description": "Documented incidents that can be replayed as simulated runs."
+      },
+      "IncidentRunIn": {
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "title": "Scenario",
+            "description": "Incident id from `GET /api/v1/attacks/catalog`.",
+            "examples": [
+              "huatacondo-2026"
+            ]
+          },
+          "policy": {
+            "type": "string",
+            "title": "Policy",
+            "description": "Defensive policy: A reactive, B preventive, C adaptive.",
+            "default": "C"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "Random seed; omitted means a fresh one."
+          },
+          "uncertainty": {
+            "type": "number",
+            "title": "Uncertainty",
+            "description": "0 perfect information, 1 baseline, 2 degraded.",
+            "default": 1.0
+          },
+          "stochastic": {
+            "type": "boolean",
+            "title": "Stochastic",
+            "description": "False (default): the incident is the script, with its catalog sizes and no unplanned events, so the consequence card is the incident's own. True adds the theatre's chance (unplanned external events, defences that may not act), which then also counts in the card.",
+            "default": false
+          },
+          "adversary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdversaryIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional seeded abstract adversary. Off by default: the incident is the script."
+          }
+        },
+        "type": "object",
+        "required": [
+          "scenario"
+        ],
+        "title": "IncidentRunIn"
       },
       "LineIn": {
         "properties": {
@@ -4974,10 +5920,10 @@
           },
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Demand in MW (0 < mw ≤ 3000).",
+            "description": "Demand in MW (0 < mw ≤ 20000).",
             "examples": [
               120
             ]
@@ -5020,7 +5966,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 3000.0,
+                "maximum": 20000.0,
                 "exclusiveMinimum": 0.0
               },
               {
@@ -5087,6 +6033,184 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LoadPatch"
+      },
+      "PlaceOut": {
+        "properties": {
+          "place": {
+            "type": "string",
+            "title": "Place",
+            "description": "The place as it was asked."
+          },
+          "bus": {
+            "type": "string",
+            "title": "Bus",
+            "description": "Substation id B### of the 188-bus network."
+          },
+          "bus_name": {
+            "type": "string",
+            "title": "Bus Name",
+            "description": "Substation name."
+          },
+          "area": {
+            "type": "string",
+            "title": "Area",
+            "description": "Operating area A01-A13 of the substation."
+          },
+          "area_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Name",
+            "description": "Name of that area."
+          },
+          "how": {
+            "type": "string",
+            "title": "How",
+            "description": "How the place was resolved, in Spanish (say it to the person)."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "place",
+          "bus",
+          "bus_name",
+          "area",
+          "area_name",
+          "how"
+        ],
+        "title": "PlaceOut",
+        "description": "The one substation a place resolves to (the same rule as `places` in a change)."
+      },
+      "PrepareIn": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/StressChange"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Changes",
+            "description": "Changes, applied in order."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "point",
+          "changes"
+        ],
+        "title": "PrepareIn",
+        "description": "Changes that prepare a scenario. Nothing runs and nothing is stored: send the same `changes` with\n/grids/simulate, /grids/dependency or /grids/cost to run a failure on the prepared grid."
+      },
+      "PrepareOut": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Changes",
+            "description": "Per change: matched count, deltas and the elements."
+          },
+          "per_capita_w": {
+            "type": "number",
+            "title": "Per Capita W",
+            "description": "Demand per added person at this point, W (assumption)."
+          },
+          "totals": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Totals",
+            "description": "People, demand and generation of the prepared grid."
+          },
+          "overloaded_lines": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Overloaded Lines",
+            "description": "Lines over the cascade's limit with no failure, by id: a simulation starts with them."
+          },
+          "should_feed": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Should Feed",
+            "description": "Per generating substation (by id) and per zone: the people it should feed."
+          },
+          "redispatch": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Redispatch",
+            "description": "Generation the island's synchronous units moved."
+          },
+          "health": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health",
+            "description": "Health index of the prepared grid before any failure (docs/health.md, no N-1)."
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Overlay warnings (isolated buses, no synchronous units)."
+          },
+          "assumptions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Assumptions",
+            "description": "Assumptions behind the numbers."
+          }
+        },
+        "type": "object",
+        "required": [
+          "point",
+          "changes",
+          "per_capita_w",
+          "totals",
+          "overloaded_lines",
+          "should_feed",
+          "redispatch",
+          "warnings",
+          "assumptions"
+        ],
+        "title": "PrepareOut",
+        "description": "The prepared grid with no failure."
       },
       "RepairIn": {
         "properties": {
@@ -5216,6 +6340,87 @@
         },
         "type": "object",
         "title": "ReplayIn"
+      },
+      "ResetIn": {
+        "properties": {
+          "scenario": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScenarioIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Grid configuration to load. Without it the network returns to the base dataset."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ResetIn"
+      },
+      "RunActionOut": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/RunSummary",
+            "description": "Run summary after the command."
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted",
+            "description": "Whether the action was queued."
+          },
+          "applies_at_cycle": {
+            "type": "integer",
+            "title": "Applies At Cycle",
+            "description": "Cycle at which the action applies."
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Action id from the catalog."
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "Target area or corridor."
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Role that proposes the action."
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice",
+            "description": "Every scenario is hypothetical and simulated."
+          },
+          "session_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Revision",
+            "description": "Session revision after the command; only on session runs."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "run",
+          "accepted",
+          "applies_at_cycle",
+          "action",
+          "target",
+          "role",
+          "notice"
+        ],
+        "title": "RunActionOut",
+        "description": "The queued external action and the run summary."
       },
       "RunCreate": {
         "properties": {
@@ -5367,6 +6572,15 @@
               false
             ]
           },
+          "manual_defense": {
+            "type": "boolean",
+            "title": "Manual Defense",
+            "description": "The defensive staff proposes nothing: only actions sent to POST .../actions run, validated and paid for as usual (a user defends by hand, e.g. in the Ciberataque monitor)",
+            "default": false,
+            "examples": [
+              false
+            ]
+          },
           "stochastic": {
             "type": "boolean",
             "title": "Stochastic",
@@ -5379,6 +6593,298 @@
         },
         "type": "object",
         "title": "RunCreate"
+      },
+      "RunEventOut": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/RunSummary",
+            "description": "Run summary after the command."
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted",
+            "description": "Whether the event was queued."
+          },
+          "applies_at_cycle": {
+            "type": "integer",
+            "title": "Applies At Cycle",
+            "description": "Cycle at which the event applies."
+          },
+          "resolved_target": {
+            "type": "string",
+            "title": "Resolved Target",
+            "description": "Target after resolving areas, buses or substation ids."
+          },
+          "area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area",
+            "description": "Area of the target, when it has one."
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice",
+            "description": "Notice for intentional events; null for plain failures."
+          },
+          "session_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Revision",
+            "description": "Session revision after the command; only on session runs."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "run",
+          "accepted",
+          "applies_at_cycle",
+          "resolved_target",
+          "area",
+          "notice"
+        ],
+        "title": "RunEventOut",
+        "description": "The queued event: resolved target, area and the run summary."
+      },
+      "RunReportOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Run id."
+          },
+          "run": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Run",
+            "description": "Template, policy, seed, uncertainty, horizon, cycles_run, finished, operating point."
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice",
+            "description": "Every scenario is hypothetical and simulated."
+          },
+          "mission": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Mission",
+            "description": "Mission of the template and its continuity threshold."
+          },
+          "indicators": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Indicators",
+            "description": "Experimental indicators and indices."
+          },
+          "coordination": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Coordination",
+            "description": "Conflicts, contradictions and decision delays."
+          },
+          "consequence": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Consequence",
+            "description": "Unserved energy, people without power, worst level."
+          },
+          "adversary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adversary",
+            "description": "Adversary objective, budget and spend; null if none."
+          },
+          "after_action": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "After Action",
+            "description": "Key moments by cycle."
+          },
+          "incident": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident",
+            "description": "Only for runs started from a documented incident: sources, notes, mitigations and the consequence card (level, people, MW shed, MWh and cost over an assumed duration)."
+          },
+          "cyber_attack": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cyber Attack",
+            "description": "Only for propagation runs (Ciberataque): outcome (attack, defense, undecided, or null while running), start area, parameters, peak of active areas, areas ever compromised and the propagation events by cycle. Every snapshot of such a run also carries `cyber`: the state per area."
+          },
+          "trace_head": {
+            "type": "string",
+            "title": "Trace Head",
+            "description": "Hash of the last audit log entry."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "run_id",
+          "run",
+          "notice",
+          "mission",
+          "indicators",
+          "coordination",
+          "consequence",
+          "adversary",
+          "after_action",
+          "trace_head"
+        ],
+        "title": "RunReportOut",
+        "description": "Indicators, coordination and physical consequence of a run so far."
+      },
+      "RunSnapshotsOut": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/RunSummary",
+            "description": "Run summary."
+          },
+          "snapshots": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Snapshots",
+            "description": "Snapshots from cycle `start`."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "run",
+          "snapshots"
+        ],
+        "title": "RunSnapshotsOut",
+        "description": "The snapshots already computed from a cycle, and the run summary."
+      },
+      "RunStateOut": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/RunSummary",
+            "description": "Run summary."
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest",
+            "description": "Latest snapshot; null before the first step."
+          },
+          "resources": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Resources",
+            "description": "Defensive resources left."
+          },
+          "series": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Series",
+            "description": "Metrics of every cycle played."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "run",
+          "latest",
+          "resources",
+          "series"
+        ],
+        "title": "RunStateOut",
+        "description": "Run summary, latest snapshot, resources and metric series."
+      },
+      "RunStepOut": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/RunSummary",
+            "description": "Run summary after the command."
+          },
+          "snapshots": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Snapshots",
+            "description": "One snapshot per cycle played."
+          },
+          "session_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Revision",
+            "description": "Session revision after the command; only on session runs."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "run",
+          "snapshots"
+        ],
+        "title": "RunStepOut",
+        "description": "The snapshots of the cycles played and the run summary."
       },
       "RunSummary": {
         "properties": {
@@ -5495,6 +7001,105 @@
         ],
         "title": "RunSummary"
       },
+      "RunTraceOut": {
+        "properties": {
+          "head": {
+            "type": "string",
+            "title": "Head",
+            "description": "Hash of the last log entry."
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified",
+            "description": "Whether the hash chain verifies."
+          },
+          "entries": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Entries",
+            "description": "Log entries in order."
+          },
+          "recipe": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Recipe",
+            "description": "Config, injected events and actions that rebuild the run."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "head",
+          "verified",
+          "entries",
+          "recipe"
+        ],
+        "title": "RunTraceOut",
+        "description": "Hash-chained audit log of a run and the recipe that rebuilds it."
+      },
+      "ScenarioIn": {
+        "properties": {
+          "point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point",
+            "description": "Must be the session's point, if sent.",
+            "examples": [
+              "nov2026-1300"
+            ]
+          },
+          "changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Changes",
+            "description": "Changes of prepare_scenario (docs/stress.md)."
+          },
+          "open_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 60,
+            "title": "Open Lines",
+            "description": "Base lines (R###) left open.",
+            "examples": [
+              [
+                "R239"
+              ]
+            ]
+          },
+          "out_buses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 60,
+            "title": "Out Buses",
+            "description": "Base buses (B###) out of service.",
+            "examples": [
+              [
+                "B062"
+              ]
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ScenarioIn"
+      },
       "SessionCreate": {
         "properties": {
           "point": {
@@ -5533,6 +7138,547 @@
         "type": "object",
         "title": "SessionCreate"
       },
+      "SessionDocOut": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id",
+            "description": "Session id; goes in the path of every session call."
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Optional label given on creation."
+          },
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point the session is pinned to."
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "description": "Bumped by every change, run activity included."
+          },
+          "dataset_revision": {
+            "type": "integer",
+            "title": "Dataset Revision",
+            "description": "Bumped only by edits, reset, cut and repair; use it for If-Match."
+          },
+          "overlay": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Overlay",
+            "description": "The session's edits over the base dataset."
+          },
+          "open_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Open Lines",
+            "description": "Lines open in the sandbox cut."
+          },
+          "runs": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Runs",
+            "description": "Run id -> created_at, dataset_revision, cycle, status."
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO 8601 creation time."
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO 8601 time of the last change."
+          },
+          "last_op": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Last Op",
+            "description": "Last change: op, ids, by, revision, dataset_revision."
+          },
+          "share_path": {
+            "type": "string",
+            "title": "Share Path",
+            "description": "Browser link path, /?sesion=<sid>."
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At",
+            "description": "ISO 8601 expiry, 24 h after the last change."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "session_id",
+          "label",
+          "point",
+          "revision",
+          "dataset_revision",
+          "overlay",
+          "open_lines",
+          "runs",
+          "created_at",
+          "updated_at",
+          "last_op",
+          "share_path",
+          "expires_at"
+        ],
+        "title": "SessionDocOut",
+        "description": "Session document."
+      },
+      "SessionNetworkOut": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point of the network, e.g. nov2026-1300."
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Points",
+            "description": "Operating points available."
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Nodes",
+            "description": "Buses B### with id, name, kv, lat, lon, area, zone."
+          },
+          "lines": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Lines",
+            "description": "Lines R### with id, a, b, kv, capacity_mw, x_pu, corridor."
+          },
+          "buses": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Buses",
+            "description": "Load and generation per bus id at the point."
+          },
+          "areas": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Areas",
+            "description": "Operating areas with their buses and population."
+          },
+          "corridors": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Corridors",
+            "description": "Corridors between areas with their lines."
+          },
+          "defenses": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Defenses",
+            "description": "Defence functions (EDAC, PDCE) by id."
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zones",
+            "description": "Macrozones, e.g. NG, NC, CE, CS, SU."
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id",
+            "description": "Session id."
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "description": "Session revision."
+          },
+          "dataset_revision": {
+            "type": "integer",
+            "title": "Dataset Revision",
+            "description": "Dataset revision (also the ETag); send it as If-Match."
+          },
+          "out_of_service": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Out Of Service",
+            "description": "Buses and lines out of service."
+          },
+          "loads": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Loads",
+            "description": "Loads and datacenters added by the session."
+          },
+          "generators": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Generators",
+            "description": "Generators added by the session."
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SessionWarningOut"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Warnings about the edited network."
+          },
+          "balance": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Balance",
+            "description": "Redispatch per island (an assumption)."
+          },
+          "baseline": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Baseline",
+            "description": "Loading, overloads, islands and load shed with no cut."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "point",
+          "points",
+          "nodes",
+          "lines",
+          "buses",
+          "areas",
+          "corridors",
+          "defenses",
+          "zones",
+          "session_id",
+          "revision",
+          "dataset_revision",
+          "out_of_service",
+          "loads",
+          "generators",
+          "warnings",
+          "balance",
+          "baseline"
+        ],
+        "title": "SessionNetworkOut",
+        "description": "The session's edited 188-bus network."
+      },
+      "SessionRunOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "cycle": {
+            "type": "integer",
+            "title": "Cycle"
+          },
+          "horizon": {
+            "type": "integer",
+            "title": "Horizon"
+          },
+          "t_min": {
+            "type": "integer",
+            "title": "T Min"
+          },
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "policy": {
+            "type": "string",
+            "title": "Policy"
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "uncertainty": {
+            "type": "number",
+            "title": "Uncertainty"
+          },
+          "operating_point": {
+            "type": "string",
+            "title": "Operating Point"
+          },
+          "defenses": {
+            "type": "string",
+            "title": "Defenses"
+          },
+          "adversary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Adversary"
+          },
+          "rebuilt": {
+            "type": "boolean",
+            "title": "Rebuilt",
+            "description": "La corrida se reconstruyó desde su registro persistido",
+            "default": false
+          },
+          "trace_matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Matches",
+            "description": "Tras reconstruirla, si el hash del log coincide con el registrado"
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice"
+          },
+          "replay_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Of"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
+          "session_revision": {
+            "type": "integer",
+            "title": "Session Revision",
+            "description": "Session revision after the command (also the ETag)."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "cycle",
+          "horizon",
+          "t_min",
+          "template",
+          "policy",
+          "seed",
+          "uncertainty",
+          "operating_point",
+          "defenses",
+          "adversary",
+          "notice",
+          "session_revision"
+        ],
+        "title": "SessionRunOut",
+        "description": "Run summary of a session run, with the session revision."
+      },
+      "SessionWarningOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "isolated_bus, unbalanced_island or no_sync_to_redispatch."
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ids",
+            "description": "Buses the warning is about."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Spanish message."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "code",
+          "ids",
+          "message"
+        ],
+        "title": "SessionWarningOut",
+        "description": "A warning about the edited network."
+      },
+      "SimulateOut": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "open_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Open Lines",
+            "description": "Cuts that applied."
+          },
+          "out_buses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Out Buses",
+            "description": "Substations out of service."
+          },
+          "dropped_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dropped Lines",
+            "description": "Lines that went with their substation."
+          },
+          "direct": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Direct",
+            "description": "Load, generation and people the outages take away before the cascade."
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Overlay warnings."
+          },
+          "timeline": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Timeline",
+            "description": "Cascade timeline: events, frames, frequency and summary."
+          },
+          "supply": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Supply",
+            "description": "Per generating substation (by id) and per zone: should_feed, feeds, pct_fed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "point",
+          "open_lines",
+          "out_buses",
+          "dropped_lines",
+          "direct",
+          "warnings",
+          "timeline",
+          "supply"
+        ],
+        "title": "SimulateOut",
+        "description": "The cascade of the failures on the prepared grid."
+      },
+      "SimulateRequest": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "open_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Open Lines",
+            "description": "Lines out of service (R###).",
+            "default": []
+          },
+          "out_buses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Out Buses",
+            "description": "Substations out of service (B###).",
+            "default": []
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/StressChange"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Changes",
+            "description": "A scenario from /grids/prepare, applied before the failures.",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "point"
+        ],
+        "title": "SimulateRequest",
+        "description": "Failures to simulate on the default grid, optionally prepared with `changes`."
+      },
       "StepIn": {
         "properties": {
           "cycles": {
@@ -5549,6 +7695,634 @@
         },
         "type": "object",
         "title": "StepIn"
+      },
+      "StressChange": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "population",
+              "demand",
+              "generation",
+              "lines",
+              "substation"
+            ],
+            "title": "Target",
+            "description": "population (people; demand follows), demand (MW alone), generation (MW), lines (capacity), substation (a new substation next to the one that serves `places[0]`, with its own lines)."
+          },
+          "buses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Buses",
+            "description": "Substation ids B###.",
+            "default": []
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zones",
+            "description": "Zones NG, NC, CE, CS, SU.",
+            "default": []
+          },
+          "areas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Areas",
+            "description": "Operating areas A01-A13.",
+            "default": []
+          },
+          "comunas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Comunas",
+            "description": "Comunas by CUT code or name (population and demand only).",
+            "default": []
+          },
+          "places": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Places",
+            "description": "Places as a person names them, each resolved to ONE substation: a substation name (S/E ANTOFAGASTA), a comuna (the substation that serves most of its people), a province or region (its most populous comuna) or an area name. Use it to put a new load or plant at a point (`add`); the report says which substation each place became. For a whole comuna's population use `comunas`.",
+            "default": [],
+            "examples": [
+              [
+                "Iquique"
+              ]
+            ]
+          },
+          "tech": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tech",
+            "description": "Generation only: hidro, solar, eolica, carbon, gas, diesel, bioenergia, geotermica, termica (carbon + gas + diesel), bateria (new capacity only). With `add` where the chosen substations have none of these technologies, a new plant of that technology is built there.",
+            "default": []
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lines",
+            "description": "Lines only: line ids R###.",
+            "default": []
+          },
+          "kv": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Kv",
+            "description": "Lines only: voltage levels (66, 110, 154, 220, 500).",
+            "default": []
+          },
+          "factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factor",
+            "description": "Multiplies the value (lines: capacity)."
+          },
+          "add": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Add",
+            "description": "Adds this total (people for population, MW otherwise); negative lowers it."
+          },
+          "x_factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Factor",
+            "description": "Lines only: multiplies the reactance x_pu."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Substation only: its name."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat",
+            "description": "Substation only: latitude (default: next to `places[0]`)."
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon",
+            "description": "Substation only: longitude (default: next to `places[0]`)."
+          },
+          "load_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Mw",
+            "description": "Substation only: demand it serves, MW."
+          },
+          "generator_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Mw",
+            "description": "Substation only: generation it injects, MW; `tech` has its technology."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "title": "StressChange",
+        "description": "One change, applied to every element the filters pick. Filters combine (all must hold); none: the whole\ncountry. `factor` multiplies each element; `add` is one total for the filter, split by the current value."
+      },
+      "SubstationConnection": {
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "To",
+            "description": "Existing bus id (B###) of the same voltage as the substation.",
+            "examples": [
+              "B010"
+            ]
+          },
+          "capacity_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Mw",
+            "description": "Line capacity in MW. Default: median of the lines at that bus.",
+            "examples": [
+              300
+            ]
+          },
+          "x_pu": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Pu",
+            "description": "Reactance in p.u. Default from length and kv.",
+            "examples": [
+              0.02
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "to"
+        ],
+        "title": "SubstationConnection"
+      },
+      "SubstationGenerator": {
+        "properties": {
+          "mw": {
+            "type": "number",
+            "maximum": 20000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Mw",
+            "description": "Generation in MW (0 < mw ≤ 20000).",
+            "examples": [
+              150
+            ]
+          },
+          "tech": {
+            "type": "string",
+            "enum": [
+              "hidro",
+              "termica",
+              "bioenergia",
+              "geotermica",
+              "solar",
+              "eolica"
+            ],
+            "title": "Tech",
+            "description": "Technology; hidro, termica, bioenergia, geotermica are synchronous.",
+            "examples": [
+              "solar"
+            ]
+          },
+          "synchronous": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synchronous",
+            "description": "Synchronous override.",
+            "examples": [
+              false
+            ]
+          },
+          "inertia_h": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inertia H",
+            "description": "Inertia constant H in s.",
+            "examples": [
+              4.0
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mw",
+          "tech"
+        ],
+        "title": "SubstationGenerator"
+      },
+      "SubstationIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Name",
+            "description": "Display name of the substation.",
+            "examples": [
+              "SE Norte Nueva"
+            ]
+          },
+          "lat": {
+            "type": "number",
+            "maximum": -17.0,
+            "minimum": -56.0,
+            "title": "Lat",
+            "description": "Latitude in degrees (continental Chile).",
+            "examples": [
+              -23.7
+            ]
+          },
+          "lon": {
+            "type": "number",
+            "maximum": -66.0,
+            "minimum": -76.0,
+            "title": "Lon",
+            "description": "Longitude in degrees (continental Chile).",
+            "examples": [
+              -70.35
+            ]
+          },
+          "kv": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Kv",
+            "description": "Voltage in kV, a base voltage. Every connection must be to a bus of this voltage.",
+            "examples": [
+              220
+            ]
+          },
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/SubstationConnection"
+            },
+            "type": "array",
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Connections",
+            "description": "1 to 6 lines from the new bus to existing buses."
+          },
+          "load": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubstationLoad"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional demand on the new bus."
+          },
+          "generator": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubstationGenerator"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional generator on the new bus."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "lat",
+          "lon",
+          "kv",
+          "connections"
+        ],
+        "title": "SubstationIn"
+      },
+      "SubstationLoad": {
+        "properties": {
+          "mw": {
+            "type": "number",
+            "maximum": 20000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Mw",
+            "description": "Demand in MW (0 < mw ≤ 20000).",
+            "examples": [
+              80
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "datacenter",
+              "consumo"
+            ],
+            "title": "Kind",
+            "description": "datacenter or consumo.",
+            "examples": [
+              "datacenter"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mw",
+          "kind"
+        ],
+        "title": "SubstationLoad"
+      },
+      "SubstationOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id",
+            "description": "Id of the element added, changed or deleted; absent on reset."
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "description": "Session revision after the edit."
+          },
+          "dataset_revision": {
+            "type": "integer",
+            "title": "Dataset Revision",
+            "description": "Dataset revision after the edit (also the ETag)."
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SessionWarningOut"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Warnings about the edited network."
+          },
+          "balance": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Balance",
+            "description": "Redispatch per island (an assumption)."
+          },
+          "line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Line Ids",
+            "description": "Ids of the lines created, in the order of `connections`."
+          },
+          "load_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Id",
+            "description": "Id of the load created, if any."
+          },
+          "generator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Id",
+            "description": "Id of the generator created, if any."
+          },
+          "coherence": {
+            "items": {
+              "$ref": "#/components/schemas/CoherenceNote"
+            },
+            "type": "array",
+            "title": "Coherence",
+            "description": "Plausibility notes; empty when everything looks coherent."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "revision",
+          "dataset_revision",
+          "warnings",
+          "balance",
+          "line_ids",
+          "coherence"
+        ],
+        "title": "SubstationOut",
+        "description": "Result of add_substation: every id created and the coherence notes."
+      },
+      "TheaterNetworkOut": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point of the network, e.g. nov2026-1300."
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Points",
+            "description": "Operating points available."
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Nodes",
+            "description": "Buses B### with id, name, kv, lat, lon, area, zone."
+          },
+          "lines": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Lines",
+            "description": "Lines R### with id, a, b, kv, capacity_mw, x_pu, corridor."
+          },
+          "buses": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Buses",
+            "description": "Load and generation per bus id at the point."
+          },
+          "areas": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Areas",
+            "description": "Operating areas with their buses and population."
+          },
+          "corridors": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Corridors",
+            "description": "Corridors between areas with their lines."
+          },
+          "defenses": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Defenses",
+            "description": "Defence functions (EDAC, PDCE) by id."
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zones",
+            "description": "Macrozones, e.g. NG, NC, CE, CS, SU."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "point",
+          "points",
+          "nodes",
+          "lines",
+          "buses",
+          "areas",
+          "corridors",
+          "defenses",
+          "zones"
+        ],
+        "title": "TheaterNetworkOut",
+        "description": "The 188-bus network: buses, lines, areas and corridors."
       }
     }
   },
@@ -5576,6 +8350,10 @@
     {
       "name": "global-runs",
       "description": "Strategic runs over the default dataset, and its network."
+    },
+    {
+      "name": "grid-stress",
+      "description": "Stress the default grid per request: population, demand, generation and lines by filters."
     }
   ]
 }

@@ -40,9 +40,19 @@ def load_network_and_point(processed: Path, point_id: str) -> tuple[ReducedNetwo
 def load_operating_point(
     net: ReducedNetwork, processed: Path, point_id: str, snapshot: dict | None = None
 ) -> OperatingPoint:
-    ops = _read(processed / "operating_points.json")
-    base = _read(processed / "baseline_opf.json")
-    snapshot = snapshot or _read(processed / "grid_snapshot.json")
+    return operating_point_from_docs(
+        net,
+        _read(processed / "operating_points.json"),
+        _read(processed / "baseline_opf.json"),
+        snapshot or _read(processed / "grid_snapshot.json"),
+        point_id,
+    )
+
+
+def operating_point_from_docs(
+    net: ReducedNetwork, ops: dict, base: dict, snapshot: dict, point_id: str
+) -> OperatingPoint:
+    """The same point from documents already in memory (the grid store hands over documents, not paths)."""
     demand = next(p for p in ops["points"] if p["id"] == point_id)
     secure = next(p for p in base["points"] if p["id"] == point_id)
     return OperatingPoint(
@@ -82,6 +92,18 @@ def _people(net: ReducedNetwork, snapshot: dict) -> np.ndarray:
         for s in comuna["served_by"]:
             if s["node"] in node_bus:
                 out[node_bus[s["node"]]] += s["population"]
+    return out
+
+
+def people_by_comuna(net: ReducedNetwork, snapshot: dict) -> list[dict[str, float]]:
+    """The same assignment as _people, kept per comuna: entry i maps a comuna cut code to the people bus i serves there."""
+    node_bus = _nearest_bus_per_node(net, snapshot)
+    out: list[dict[str, float]] = [{} for _ in range(net.size)]
+    for comuna in snapshot["comunas"]:
+        for s in comuna["served_by"]:
+            if s["node"] in node_bus:
+                rows = out[node_bus[s["node"]]]
+                rows[comuna["cut"]] = rows.get(comuna["cut"], 0.0) + s["population"]
     return out
 
 

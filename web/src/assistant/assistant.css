@@ -1,0 +1,44 @@
+/* Asistente view of mapa 3 (docs/assistant.md section 2c) in the Design v5 shell: radius 0, only the cascade.css
+   tokens (docs/design.md section 2). Red only marks a failed tool; a finished tool stays neutral (no green). */
+.shell .assistant { display: flex; flex-direction: column; gap: 10px; }
+.shell .chat-user { align-self: flex-end; max-width: 85%; margin: 0; padding: 8px 10px; background: var(--selected); color: var(--fg); font-size: 13px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.shell .chat-turn { display: flex; flex-direction: column; gap: 8px; }
+.shell .chat-steps { display: flex; flex-direction: column; gap: 6px; }
+.shell .chat-thought { margin: 0; padding-left: 10px; border-left: 1px solid var(--border-strong); color: var(--muted); font-size: 12px; line-height: 16px; white-space: pre-wrap; }
+.shell .chat-reply { margin: 0; color: var(--fg-2); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+/* markdown.tsx: paragraphs, lists and headings of a reply or a step text */
+.shell .chat-reply > *, .shell .chat-thought > * { margin: 0; }
+.shell .chat-reply > * + * { margin-top: 8px; }
+.shell .chat-thought > * + * { margin-top: 4px; }
+.shell .chat-reply ul, .shell .chat-reply ol, .shell .chat-thought ul, .shell .chat-thought ol { padding-left: 18px; }
+.shell .chat-reply b, .shell .md-h { color: var(--fg); font-weight: 600; }
+.shell .chat-reply code, .shell .chat-thought code { font-family: var(--font-mono); font-size: 12px; }
+.shell .chat-wait { display: flex; align-items: center; gap: 8px; }
+.shell .chat-restored summary, .shell .tool-detail summary { color: var(--muted); font-size: 12px; line-height: 16px; cursor: pointer; }
+.shell .chat-restored summary:hover, .shell .tool-detail summary:hover { color: var(--fg); }
+.shell .chat-restored .chat-steps { margin-top: 6px; }
+
+/* ---- Tool cards ---- */
+.shell .tool-card { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: var(--card); border-left: 2px solid var(--border-strong); }
+.shell .tool-card.running { border-left-color: var(--fg-3); }
+.shell .tool-card.failed { border-left-color: var(--fault); }
+.shell .tool-head { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; line-height: 16px; }
+.shell .tool-head b { font-weight: 600; }
+.shell .tool-mark { display: inline-flex; justify-content: center; width: 14px; color: var(--fg-2); }
+.shell .tool-card.failed .tool-mark { color: var(--fault); }
+.shell .tool-state { margin-left: auto; }
+.shell .tool-args { overflow-wrap: anywhere; }
+.shell .tool-summary { margin: 0; color: var(--fg-3); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+.shell .tool-detail pre { max-height: 220px; margin: 6px 0 0; padding: 6px 8px; overflow: auto; background: var(--surface); color: var(--fg-3); font: 11px/15px var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.shell .spinner { display: inline-block; width: 10px; height: 10px; border: 1.5px solid var(--border-strong); border-top-color: var(--fg-2); border-radius: 50%; animation: chat-spin 0.8s linear infinite; }
+@keyframes chat-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .shell .spinner { animation-duration: 2.4s; } }
+
+/* ---- Message box ---- */
+.shell .chat-form { position: sticky; bottom: -12px; display: flex; flex-direction: column; gap: 6px; margin: 0 -12px -12px; padding: 10px 12px 12px; background: var(--surface); border-top: 1px solid var(--border); }
+.shell .chat-form textarea { width: 100%; min-height: 52px; max-height: 160px; padding: 6px 8px; resize: vertical; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font: 13px/18px var(--font-sans); }
+.shell .chat-form textarea:focus { outline: 1px solid var(--muted); outline-offset: -1px; }
+.shell .chat-form textarea:disabled { color: var(--faint); }
+.shell .chat-form-foot { display: flex; align-items: center; gap: 10px; }
+.shell .chat-form-foot .btn { margin-left: auto; }
+.shell .chat-form .meta.fault { color: var(--fault); }

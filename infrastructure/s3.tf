@@ -43,3 +43,44 @@ resource "aws_s3_bucket_lifecycle_configuration" "sessions" {
     }
   }
 }
+# Any principal of this account may read and write session and run objects (the task role, CI, admins).
+# The aws:PrincipalAccount condition keeps the policy private: it does not make the bucket public.
+data "aws_caller_identity" "current" {}
+data "aws_iam_policy_document" "sessions_bucket" {
+  statement {
+    sid       = "AccountReadWrite"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.sessions.arn}/sessions/*", "${aws_s3_bucket.sessions.arn}/runs/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+  statement {
+    sid       = "AccountList"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.sessions.arn]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+resource "aws_s3_bucket_policy" "sessions" {
+  bucket = aws_s3_bucket.sessions.id
+  policy = data.aws_iam_policy_document.sessions_bucket.json
+  # The public access block must exist first, otherwise S3 evaluates the policy without it.
+  depends_on = [aws_s3_bucket_public_access_block.sessions]
+}

@@ -139,15 +139,6 @@ class GridState:
             return None
         return c.effective(self.out_lines)
 
-    def totals(self) -> dict[str, float]:
-        load = sum(self.load_mw.values())
-        served = sum(self.served_mw.values())
-        return {
-            "load_mw": round(load, 1),
-            "served_mw": round(served, 1),
-            "gen_mw": round(sum(map(self.gen, self.gen_mw)), 1),
-        }
-
 
 def operating_points() -> dict[str, dict[str, Any]]:
     return load_params("operating_points")["operating_points"]

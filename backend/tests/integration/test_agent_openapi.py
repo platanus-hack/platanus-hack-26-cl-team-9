@@ -80,6 +80,18 @@ def test_request_bodies_describe_every_field(app):
     assert {"RunCreate", "EventIn", "AdversaryIn"} <= seen
 
 
+def test_every_success_response_names_its_model(app):
+    spec = agent_openapi(app)
+    schemas = spec["components"]["schemas"]
+    for method, path, op in operations(spec):
+        for code, resp in op["responses"].items():
+            if code[0] != "2" or code in {"204", "304"}:
+                continue
+            schema = resp["content"]["application/json"]["schema"]
+            assert set(schema) == {"$ref"}, (method, path, code)
+            assert schemas[schema["$ref"].rsplit("/", 1)[-1]].get("properties"), (method, path, code)
+
+
 def test_committed_spec_matches_the_app(app):
     committed = json.loads(SPEC_FILE.read_text(encoding="utf-8"))
     assert committed == agent_openapi(app), f"docs/openapi/agents.openapi.json is stale; run `{REGEN}`"

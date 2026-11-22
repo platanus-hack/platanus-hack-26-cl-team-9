@@ -3,6 +3,8 @@ back to the rules on any failure, and a replay reuses its recorded picks without
 
 from types import SimpleNamespace
 
+import pytest
+
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunConfig, Simulation
 from cascadasen.infrastructure.llm import ClaudeCommander, ClaudeInterpreter
 from cascadasen.infrastructure.settings import Settings
@@ -127,7 +129,7 @@ def test_settings_read_the_provider_and_aws_profile_from_env_file(tmp_path, monk
 
 
 def test_bedrock_adapters_use_the_aws_profile(monkeypatch):
-    import anthropic
+    anthropic = pytest.importorskip("anthropic")
 
     from cascadasen.infrastructure.llm import llm_adapters
 

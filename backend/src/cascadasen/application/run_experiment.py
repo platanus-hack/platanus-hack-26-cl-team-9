@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from cascadasen.application.cache import BoundedMap
+from cascadasen.domain.agents.propagation import BOUNDS as PROPAGATION_BOUNDS
 from cascadasen.domain.ports import CommanderAdvisor, ConflictError, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
@@ -404,6 +405,45 @@ def catalog(world: TheaterWorld) -> dict[str, Any]:
         "resources": cfg.resources,
         "uncertainty_levels": {"0": "información perfecta", "1": "línea base", "2": "entorno degradado"},
         "cycle_minutes": cfg.clock["cycle_minutes"],
+        "cyber_attack": _cyber_catalog(cfg, world),
+    }
+
+
+def _cyber_catalog(cfg, world: TheaterWorld) -> dict[str, Any]:
+    """What the Ciberataque form needs: defaults and bounds of each parameter, the outcomes, and the
+    public area adjacency (operating areas that share a corridor) the intrusion follows."""
+    net = world.load(world.points()[0])[0] if world.points() else None
+    return {
+        "template": "ciberataque",
+        "defaults": cfg.cyber_attack,
+        "presets": [{"id": k, **v} for k, v in cfg.cyber_attack_presets.items()],
+        "bounds": {k: list(v) for k, v in PROPAGATION_BOUNDS.items()},
+        "outcomes": ["attack", "defense", "undecided"],
+        "crews_default": cfg.resources.get("field_crews"),
+        "adjacency": {a: sorted({c.b if c.a == a else c.a for c in net.incident(a)}) for a in net.order}
+        if net
+        else {},
+        "areas": [_area_entry(net, a) for a in net.order] if net else [],
+        "defense_actions": [  # what a user defending by hand may queue (POST .../actions, role operations)
+            {"action": "digital_segmentation", "label": "Segmentar", "role": "operations"},
+            {"action": "restore_element", "label": "Reparar", "role": "operations"},
+            {"action": "manual_operation", "label": "Operación local", "role": "operations"},
+            {"action": "backup_comms", "label": "Comunicaciones de respaldo", "role": "operations"},
+        ],
+        "is_assumption": True,
+    }
+
+
+def _area_entry(net, a: str) -> dict[str, Any]:
+    area = net.areas[a]
+    anchor = area.anchor_bus
+    return {
+        "id": a,
+        "name": area.name,
+        "zone": area.zone,
+        "population": round(area.population),
+        "lon": net.buses.lon[anchor] if anchor is not None else area.lon,
+        "lat": net.buses.lat[anchor] if anchor is not None else area.lat,
     }
 
 
@@ -422,4 +462,5 @@ def run_config(body: dict[str, Any]) -> RunConfig:
         initial_events=tuple(body.get("initial_events") or ()),
         stochastic=bool(body.get("stochastic", True)),
         llm_commander=bool(body.get("llm_commander", False)),
+        manual_defense=bool(body.get("manual_defense", False)),
     )

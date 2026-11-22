@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
+from cascadasen.api.agent_openapi import AgentOut
 from cascadasen.domain.theater.cycle import AdversaryConfig
 
 
@@ -87,6 +88,18 @@ class AdversaryIn(BaseModel):
         description="True: it learns during the run (EXP3); False: it plays the template's plan",
         examples=[True],
     )
+    mode: Literal["exp3", "propagation"] = Field(
+        "exp3",
+        description="exp3: the adaptive adversary. propagation: the Ciberataque scenario, an intrusion that "
+        "spreads between neighbouring operating areas (docs/attack-sim.md 3.2)",
+        examples=["propagation"],
+    )
+    propagation: dict[str, float] | None = Field(
+        None,
+        description="Overrides of the propagation parameters (mode propagation); names and bounds in "
+        "`GET /api/v1/sim/catalog` → `cyber_attack`",
+        examples=[{"spread_p": 0.6, "eradicate_p": 0.5}],
+    )
 
 
 class EventIn(BaseModel):
@@ -160,6 +173,12 @@ class RunCreate(BaseModel):
         description="C2 picks among validated actions with the server's LLM (rules if none is configured)",
         examples=[False],
     )
+    manual_defense: bool = Field(
+        False,
+        description="The defensive staff proposes nothing: only actions sent to POST .../actions run, validated and "
+        "paid for as usual (a user defends by hand, e.g. in the Ciberataque monitor)",
+        examples=[False],
+    )
     stochastic: bool = Field(
         True,
         description="Chance in the world: event sizes, unplanned events, action and defence failures",
@@ -222,6 +241,160 @@ class RunSummary(BaseModel):
     notice: str
     replay_of: str | None = None
     overrides: dict[str, Any] | None = None
+
+
+class SessionRunOut(RunSummary):
+    """Run summary of a session run, with the session revision."""
+
+    model_config = ConfigDict(extra="allow")
+    session_revision: int = Field(description="Session revision after the command (also the ETag).")
+
+
+class TheaterNetworkOut(AgentOut):
+    """The 188-bus network: buses, lines, areas and corridors."""
+
+    point: str = Field(description="Operating point of the network, e.g. nov2026-1300.")
+    points: list[str] = Field(description="Operating points available.")
+    nodes: list[dict[str, Any]] = Field(description="Buses B### with id, name, kv, lat, lon, area, zone.")
+    lines: list[dict[str, Any]] = Field(
+        description="Lines R### with id, a, b, kv, capacity_mw, x_pu, corridor."
+    )
+    buses: dict[str, dict[str, Any]] = Field(description="Load and generation per bus id at the point.")
+    areas: list[dict[str, Any]] = Field(description="Operating areas with their buses and population.")
+    corridors: list[dict[str, Any]] = Field(description="Corridors between areas with their lines.")
+    defenses: dict[str, Any] = Field(description="Defence functions (EDAC, PDCE) by id.")
+    zones: list[str] = Field(description="Macrozones, e.g. NG, NC, CE, CS, SU.")
+
+
+class CatalogOut(AgentOut):
+    """What an agent can choose from when creating and playing a run."""
+
+    notice: str = Field(description="Every scenario is hypothetical and simulated.")
+    events: list[dict[str, Any]] = Field(description="Event types with family, defaults and targets.")
+    actions: list[dict[str, Any]] = Field(description="Courses of action with proposers, target and costs.")
+    policies: list[dict[str, Any]] = Field(description="Defensive policies A, B and C.")
+    objectives: list[str] = Field(description="Adversary objectives.")
+    missions: list[dict[str, Any]] = Field(description="Missions with their continuity threshold.")
+    templates: list[dict[str, Any]] = Field(description="Experiment templates.")
+    operating_points: list[str] = Field(description="Operating points a run can use.")
+    defense_sets: list[str] = Field(description="Defence sets.")
+    zones: list[str] = Field(description="Macrozones.")
+    resources: dict[str, Any] = Field(description="Defensive resources and their default capacity.")
+    uncertainty_levels: dict[str, Any] = Field(description="Uncertainty levels 0, 1 and 2.")
+    cycle_minutes: int = Field(description="Minutes per cycle.")
+    llm: dict[str, Any] = Field(description="Whether the server's LLM commander is available, and its model.")
+    cyber_attack: dict[str, Any] = Field(
+        description="Ciberataque scenario (template `ciberataque`, adversary mode `propagation`): parameter "
+        "defaults, their [min, max] bounds, the outcomes and the area adjacency the intrusion follows."
+    )
+
+
+class RunStateOut(AgentOut):
+    """Run summary, latest snapshot, resources and metric series."""
+
+    run: RunSummary = Field(description="Run summary.")
+    latest: dict[str, Any] | None = Field(description="Latest snapshot; null before the first step.")
+    resources: dict[str, Any] = Field(description="Defensive resources left.")
+    series: list[dict[str, Any]] = Field(description="Metrics of every cycle played.")
+
+
+class RunEventOut(AgentOut):
+    """The queued event: resolved target, area and the run summary."""
+
+    run: RunSummary = Field(description="Run summary after the command.")
+    accepted: bool = Field(description="Whether the event was queued.")
+    applies_at_cycle: int = Field(description="Cycle at which the event applies.")
+    resolved_target: str = Field(description="Target after resolving areas, buses or substation ids.")
+    area: str | None = Field(description="Area of the target, when it has one.")
+    notice: str | None = Field(description="Notice for intentional events; null for plain failures.")
+    session_revision: int | None = Field(
+        None, description="Session revision after the command; only on session runs."
+    )
+
+
+class RunStepOut(AgentOut):
+    """The snapshots of the cycles played and the run summary."""
+
+    run: RunSummary = Field(description="Run summary after the command.")
+    snapshots: list[dict[str, Any]] = Field(description="One snapshot per cycle played.")
+    session_revision: int | None = Field(
+        None, description="Session revision after the command; only on session runs."
+    )
+
+
+class RunActionOut(AgentOut):
+    """The queued external action and the run summary."""
+
+    run: RunSummary = Field(description="Run summary after the command.")
+    accepted: bool = Field(description="Whether the action was queued.")
+    applies_at_cycle: int = Field(description="Cycle at which the action applies.")
+    action: str = Field(description="Action id from the catalog.")
+    target: str = Field(description="Target area or corridor.")
+    role: str = Field(description="Role that proposes the action.")
+    notice: str = Field(description="Every scenario is hypothetical and simulated.")
+    session_revision: int | None = Field(
+        None, description="Session revision after the command; only on session runs."
+    )
+
+
+class RunSnapshotsOut(AgentOut):
+    """The snapshots already computed from a cycle, and the run summary."""
+
+    run: RunSummary = Field(description="Run summary.")
+    snapshots: list[dict[str, Any]] = Field(description="Snapshots from cycle `start`.")
+
+
+class RunTraceOut(AgentOut):
+    """Hash-chained audit log of a run and the recipe that rebuilds it."""
+
+    head: str = Field(description="Hash of the last log entry.")
+    verified: bool = Field(description="Whether the hash chain verifies.")
+    entries: list[dict[str, Any]] = Field(description="Log entries in order.")
+    recipe: dict[str, Any] = Field(description="Config, injected events and actions that rebuild the run.")
+
+
+class RunReportOut(AgentOut):
+    """Indicators, coordination and physical consequence of a run so far."""
+
+    run_id: str = Field(description="Run id.")
+    run: dict[str, Any] = Field(
+        description="Template, policy, seed, uncertainty, horizon, cycles_run, finished, operating point."
+    )
+    notice: str = Field(description="Every scenario is hypothetical and simulated.")
+    mission: dict[str, Any] = Field(description="Mission of the template and its continuity threshold.")
+    indicators: dict[str, Any] = Field(description="Experimental indicators and indices.")
+    coordination: dict[str, Any] = Field(description="Conflicts, contradictions and decision delays.")
+    consequence: dict[str, Any] = Field(description="Unserved energy, people without power, worst level.")
+    adversary: dict[str, Any] | None = Field(
+        description="Adversary objective, budget and spend; null if none."
+    )
+    after_action: list[dict[str, Any]] = Field(description="Key moments by cycle.")
+    incident: dict[str, Any] | None = Field(
+        None,
+        description="Only for runs started from a documented incident: sources, notes, mitigations and "
+        "the consequence card (level, people, MW shed, MWh and cost over an assumed duration).",
+    )
+    cyber_attack: dict[str, Any] | None = Field(
+        None,
+        description="Only for propagation runs (Ciberataque): outcome (attack, defense, undecided, or null "
+        "while running), start area, parameters, peak of active areas, areas ever compromised and the "
+        "propagation events by cycle. Every snapshot of such a run also carries `cyber`: the state per area.",
+    )
+    trace_head: str = Field(description="Hash of the last audit log entry.")
+
+
+class AfterActionOut(AgentOut):
+    """Deterministic after-action report in Spanish."""
+
+    run_id: str = Field(description="Run id.")
+    question: str = Field(description="Question the template asks.")
+    notice: str = Field(description="Every scenario is hypothetical and simulated.")
+    policy: str = Field(description="Policy played.")
+    summary: list[str] = Field(description="Summary sentences.")
+    moments: list[Any] = Field(description="Key moments.")
+    adversary: Any = Field(description="What the adversary did; null if none.")
+    timeline: list[Any] = Field(description="Timeline of the run.")
+    experimental: bool = Field(description="Always true: the indicators are experimental.")
 
 
 class CapabilityVariant(BaseModel):

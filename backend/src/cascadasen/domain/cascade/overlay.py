@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -24,12 +24,17 @@ from .flow import BASE_MVA, find_islands
 from .network import X_MIN_PU, Line, ReducedNetwork, bus_id
 from .scenario import OperatingPoint
 
-MAX_ADDED = 50  # buses + lines + loads + generators added by one session
-MAX_ELEMENT_MW = 3000.0  # one added load or generator
-MAX_ADDED_MW = 5000.0  # sum of added load and generation, plus the MW changed by bus overrides
+MAX_ADDED = 80  # buses + lines + loads + generators added by one session
+MAX_ELEMENT_MW = (
+    20000.0  # one added load or generator (above the whole national demand: the user may stress freely)
+)
 MAX_CAPACITY_MW = 5000.0
 MAX_NAME_LEN = 80  # characters of a display name
 MAX_CUT_LINES = 3  # lines one sandbox cut may open
+MAX_CONNECTIONS = 6  # lines of one add_substation
+FAR_KM = 300.0  # a connection longer than this gets a coherence warning
+RATIO_WARN = 3.0  # capacity versus the median line at the other end
+DEFAULT_CAPACITY_MW = 300.0  # when the other end has no line and its voltage has none either
 LAT = (-56.0, -17.0)
 LON = (-76.0, -66.0)
 X_MAX_PU = 1.0
@@ -69,6 +74,9 @@ class OverlayError(InputError):
 
 @dataclass
 class Applied:
+    """The 188-bus network and operating point after an overlay, with the warnings and the per-island
+    redispatch (`balance`) that `apply_overlay` produced. Why: the session shows them as assumptions."""
+
     net: ReducedNetwork
     point: OperatingPoint
     warnings: list[dict[str, Any]] = field(default_factory=list)
@@ -76,6 +84,7 @@ class Applied:
 
 
 def empty_overlay() -> dict[str, Any]:
+    """A session starts with this overlay: no edit, so the network equals the base case."""
     return {
         "buses": [],
         "lines": [],
@@ -88,6 +97,7 @@ def empty_overlay() -> dict[str, Any]:
 
 
 def is_empty(overlay: dict[str, Any]) -> bool:
+    """True when the overlay holds no edit (the sequence counters do not count)."""
     keys = ("buses", "lines", "loads", "generators", "bus_overrides", "line_overrides")
     return not any(overlay.get(k) for k in keys)
 
@@ -114,6 +124,102 @@ def add(
     out[_LIST[kind]].append({"id": new_id, **rec})
     apply_overlay(net, point, out)
     return out, new_id
+
+
+def add_substation(
+    overlay: dict[str, Any], spec: dict[str, Any], net: ReducedNetwork, point: OperatingPoint
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A copy of `overlay` with a bus, 1 to 6 lines to existing buses and an optional load and generator,
+    all or nothing. Why: the agent builds a substation in one step, so a failed third line cannot leave
+    an orphan bus. Returns the overlay and `{id, line_ids, load_id, generator_id, coherence}`."""
+    conns = spec.get("connections") or []
+    if not 1 <= len(conns) <= MAX_CONNECTIONS:
+        raise OverlayError("connections", f"Indica entre 1 y {MAX_CONNECTIONS} conexiones.")
+    targets = [c.get("to") for c in conns]
+    if len(set(targets)) != len(targets):
+        raise OverlayError("connections", "Dos conexiones van a la misma barra.")
+    kv = spec["kv"]
+    coherence: list[dict[str, Any]] = []
+    out, bus = add(
+        overlay, "bus", {k: spec[k] for k in ("name", "lat", "lon", "kv") if k in spec}, net, point
+    )
+    line_ids, total_mw = [], 0.0
+    for i, conn in enumerate(conns):
+        where = f"connections[{i}]"
+        idx = _bus_ref(conn.get("to"), net.size + len(out["buses"]) - 1)
+        if idx is None:
+            raise OverlayError(f"{where}.to", f"Barra desconocida: {conn.get('to')}.", not_found=True)
+        end_kv = _bus_kv(out, net, idx)
+        if abs(end_kv - kv) > 1e-6:
+            raise OverlayError(
+                f"{where}.to",
+                f"{conn['to']} es de {end_kv:g} kV y la subestación de {kv:g} kV.",
+                [f"{end_kv:g}"],
+            )
+        typical = _typical_capacity(net, idx, kv)
+        cap = conn.get("capacity_mw")
+        if cap is None:
+            cap = typical
+        elif cap > typical * RATIO_WARN or cap < typical / RATIO_WARN:
+            coherence.append(
+                {
+                    "code": "capacity_out_of_range",
+                    "line": where,
+                    "message": f"{cap:g} MW frente a ~{typical:g} MW de las líneas vecinas de {conn['to']}.",
+                }
+            )
+        line = {
+            "a": bus,
+            "b": conn["to"],
+            "kv": kv,
+            "capacity_mw": cap,
+            **{k: conn[k] for k in ("x_pu",) if conn.get(k) is not None},
+        }
+        out, lid = add(out, "line", line, net, point)
+        line_ids.append(lid)
+        total_mw += cap
+        km = _km(out, net, bus, idx)
+        if km > FAR_KM:
+            coherence.append(
+                {
+                    "code": "long_connection",
+                    "line": lid,
+                    "message": f"{lid} mide {km:.0f} km (más de {FAR_KM:.0f}).",
+                }
+            )
+    ids: dict[str, Any] = {"id": bus, "line_ids": line_ids, "load_id": None, "generator_id": None}
+    if spec.get("load"):
+        out, ids["load_id"] = add(out, "load", {"bus": bus, "name": spec["name"], **spec["load"]}, net, point)
+        if spec["load"]["mw"] > total_mw:
+            coherence.append(
+                {
+                    "code": "load_over_connections",
+                    "message": f"La carga ({spec['load']['mw']:g} MW) supera la capacidad de sus cables ({total_mw:g} MW).",
+                }
+            )
+    if spec.get("generator"):
+        out, ids["generator_id"] = add(
+            out, "generator", {"bus": bus, "name": spec["name"], **spec["generator"]}, net, point
+        )
+        if spec["generator"]["mw"] > total_mw:
+            coherence.append(
+                {
+                    "code": "generation_over_connections",
+                    "message": f"La generación ({spec['generator']['mw']:g} MW) supera la capacidad de sus cables ({total_mw:g} MW).",
+                }
+            )
+    return out, {**ids, "coherence": coherence}
+
+
+def scenario_overlay(point_id: str, overrides: dict[str, Any], out_buses: list[str]) -> dict[str, Any]:
+    """An overlay with only the overrides of a prepared scenario and its substations out of service.
+    Why: loading a grid configuration replaces whatever the session added."""
+    out = empty_overlay()
+    out["bus_overrides"] = {k: dict(v) for k, v in overrides.get("bus_overrides", {}).items()}
+    out["line_overrides"] = {k: dict(v) for k, v in overrides.get("line_overrides", {}).items()}
+    for bid in out_buses:
+        out["bus_overrides"].setdefault(bid, {})["in_service"] = False
+    return out
 
 
 def patch(
@@ -194,10 +300,8 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
     in_service = [True] * total
     removed = [False] * total
     pinned: set[int] = set()  # buses whose generation the overlay sets: not redispatched
-    added_mw = 0.0
 
     def edit_bus(i: int, rec: dict[str, Any], where: str) -> None:
-        nonlocal added_mw
         if "name" in rec:
             names[i] = _name(rec["name"], f"{where}.name")
         if "kv" in rec:
@@ -210,9 +314,9 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
             _BUS_VALUES[:3], (load, gen, sync), (base["load"], base["gen"], base["sync"]), strict=True
         ):
             if key in rec:
-                arr[i] = _number(rec[key], f"{where}.{key}", 0.0, float(ref[i]) + MAX_ELEMENT_MW)
-                if key != "sync_mw":
-                    added_mw += abs(arr[i] - float(ref[i]))
+                # a base value below zero (net injection of embedded generation) may stay, never go lower
+                low = min(0.0, float(ref[i]))
+                arr[i] = _number(rec[key], f"{where}.{key}", low, float(ref[i]) + MAX_ELEMENT_MW)
         if "gen_mw" in rec or "sync_mw" in rec:
             pinned.add(i)
         if sync[i] > gen[i] + 1e-9:
@@ -224,7 +328,9 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         if "in_service" in rec:
             in_service[i] = _flag(rec["in_service"], f"{where}.in_service")
 
-    for values in (names, lat, lon, kv):  # slots of the added buses, filled below
+    for values in cast(
+        "tuple[list[Any], ...]", (names, lat, lon, kv)
+    ):  # slots of the added buses, filled below
         values.extend([""] * len(added) if values is names else [0.0] * len(added))
     for k, rec in enumerate(added):
         i = n + k
@@ -311,7 +417,6 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         if rec["kind"] not in LOAD_KINDS:
             raise OverlayError(f"{lid}.kind", "Tipo de carga desconocido.", sorted(LOAD_KINDS))
         _name(rec["name"], f"{lid}.name")
-        added_mw += mw
         if _flag(rec.get("in_service", True), f"{lid}.in_service"):
             load[i] += mw
     for rec in overlay.get("generators") or []:
@@ -326,7 +431,6 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
         h = _number(
             rec.get("inertia_h", DEFAULT_INERTIA_H), f"{gid}.inertia_h", 0.0, MAX_INERTIA_H, open_lo=True
         )
-        added_mw += mw
         if _flag(rec.get("in_service", True), f"{gid}.in_service"):
             gen[i] += mw
             if synchronous:
@@ -338,10 +442,6 @@ def apply_overlay(net: ReducedNetwork, point: OperatingPoint, overlay: dict[str,
     )
     if count > MAX_ADDED:
         raise OverlayError("overlay", f"Máximo {MAX_ADDED} elementos agregados por sesión.")
-    if added_mw > MAX_ADDED_MW:
-        raise OverlayError(
-            "overlay", f"Máximo {MAX_ADDED_MW:.0f} MW agregados o cambiados (carga + generación)."
-        )
 
     index = dict(net.index)
     for i in range(n, total):
@@ -505,6 +605,31 @@ def _bus_ref(ref: Any, total: int) -> int | None:
         i = int(ref[1:])
         return i if i < total else None
     return None
+
+
+def _bus_kv(overlay: dict[str, Any], net: ReducedNetwork, i: int) -> float:
+    if i < net.size:
+        rec = overlay["bus_overrides"].get(bus_id(i), {})
+        return float(rec.get("kv", net.kv[i]))
+    return float(overlay["buses"][i - net.size]["kv"])
+
+
+def _typical_capacity(net: ReducedNetwork, i: int, kv: float) -> float:
+    """Median capacity of the base lines at bus `i`; else of the lines of that voltage; else a default."""
+    caps = [ln.capacity_mw for ln in net.lines if i in (ln.a, ln.b)] or [
+        ln.capacity_mw for ln in net.lines if abs(ln.kv - kv) < 1e-6
+    ]
+    return round(float(np.median(caps)), 1) if caps else DEFAULT_CAPACITY_MW
+
+
+def _km(overlay: dict[str, Any], net: ReducedNetwork, bus_id_: str, i: int) -> float:
+    new = overlay["buses"][int(bus_id_[1:]) - net.size]
+    far = (
+        (net.lon[i], net.lat[i])
+        if i < net.size
+        else (overlay["buses"][i - net.size]["lon"], overlay["buses"][i - net.size]["lat"])
+    )
+    return haversine_km(float(new["lon"]), float(new["lat"]), float(far[0]), float(far[1]))
 
 
 def _default_x_pu(overlay: dict[str, Any], rec: dict[str, Any], net: ReducedNetwork) -> float:

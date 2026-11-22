@@ -1,17 +1,13 @@
 # Stack and architecture
 
-Status: revised after the planning session of 2026-11-21 and updated the same day to match the repo. Implemented so far: the grid data pipeline and read-only API (`backend/`, `datasets.md` section 0), the web map (`web/`, deck.gl offline map plus an optional Mapbox basemap), operating points and a secure DC-OPF base case (`data/scripts/`), Docker Compose and lint CI. Not implemented: the cascade engine, the timeline player and the fixtures in section 6. Visual direction: `design.md`.
+Status: revised after the planning session of 2026-11-21; sections 0 and 1 updated to match the repo on 2026-11-23. Implemented: the grid data pipeline and API (`backend/`), the two cascade engines, the strategic theatre, shared sessions, the MCP server and the assistant, the engine cache (`cascadasen-cache`, `web/public/cache/`), the web map (`web/`, deck.gl plus an optional Mapbox basemap), operating points and a secure DC-OPF base case (`data/scripts/`), Docker Compose and CI. Architecture as built: `architecture.md`. Visual direction: `design.md`.
 
-## 0. MVP scope
-
-The first MVPs are frontend only. The browser app reads a hand-written `network.json` and `timeline.json` fixture (the data contract in section 6). The app contains no physics and no server.
-
-Backend work (simulation engine, API, cache builder, CI) is backlog. Each backlog item gets a GitHub issue. The first MVPs do not depend on any backend item.
-
-Consequences for the first MVPs:
-- Every result on screen comes from fixtures, not from a computed simulation. Fixture numbers are placeholders and must carry an "assumption" or "fixture" label. The validation table stays empty or marked "not computed" until the engine exists.
-- When the engine arrives, it writes files in the same format as the fixtures. The frontend code should not change.
-- Frontend tests cover the logic the app owns: the playback clock, narration templates, layer mapping and fixture validation against the JSON schema.
+## 0. MVP scope (history)
+The first MVPs were planned as frontend only: the browser app would read a hand-written `network.json` and `timeline.json` fixture (the data contract in section 6), with no physics and no server. Backend work was backlog.
+That plan is superseded. The web app now reads the engine cache in `web/public/cache/` (written by `cascadasen-cache` from the backend engine) and, in session mode, the API under `/api`. The frontend still computes no physics. The cache files keep the fixture format, so the frontend did not change when the engine arrived.
+Rules kept from the MVP plan:
+- A number on screen carries a source or an "assumption" label.
+- Frontend tests cover the logic the app owns (`web/src/**/*.test.ts`, Vitest).
 
 ## 1. Decisions
 
@@ -22,13 +18,13 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 | Frontend | React + Vite + TypeScript | MVP | Decided earlier |
 | Map and 3D-style layers | deck.gl; Mapbox basemap when `VITE_MAPBOX_TOKEN` is set, offline Chile outline otherwise (`createBaseMap`) | Done | The main map (`/`, also `?mapa=3`) is mapa 3, the cascade viewer (`docs/mapa3.md`), with a 2D / 3D toggle (`?vista=2d`) and city labels. `?mapa=1` (offline deck.gl map) and `?mapa=2` (Mapbox) are deprecated and kept as reference. The strategic theatre's operation mode is specified for this map (`mapa3.md` section 10) |
 | Chile outline | Local simplified GeoJSON (Natural Earth admin-1 or IDE Chile/BCN, simplified with mapshaper) | MVP | Continental Chile only; see `datasets.md` |
-| State | Zustand | MVP | Holds one playback clock `t` that drives all animations |
-| Charts | uPlot | MVP | Frequency curve synchronised with `t`, read from fixture data |
-| Simulation engine | Python 3.11, numpy, networkx | Backlog (base case started) | Started: `data/scripts/build_operating_points.py` (PyPSA-CL demand and merit-order dispatch for 4 hours) and `build_baseline_opf.py` (DC-OPF so no branch exceeds s_nom, with an inertia floor; N-1 not enforced). No cascade or frequency model yet. Plan: one-equation-per-island frequency model; DC power flow solved with numpy. pandapower only if the full official network arrives (Plan A, optional). The MVP uses fixtures instead |
-| API | FastAPI (REST; WebSocket optional for live combinations) | Backlog | Needed only for combinations not in the cache |
-| Precompute | Script that runs every single-element failure for every scenario x defences x behaviour and writes static JSON | Backlog | MVP ships hand-written files in `web/public/cache/` in the same format |
-| Tests | Vitest (frontend logic) | MVP | pytest (engine, validation, provenance) is backlog |
-| CI | GitHub Actions | Lint: done. Rest: backlog | `.github/workflows/lint.yml` runs ruff and requires a `CHANGELOG.md` change in each pull request. Generating the validation table from the tests is still backlog |
+| State | React hooks (`useState`, `useEffect`); no state library | Done | The playback clock `t` lives in `CascadeApp.tsx` and drives the animations |
+| Charts | Custom SVG in `web/src/cascade/Timeline.tsx` (no chart library) | Done | Frequency curve synchronised with `t`, read from the cached timeline |
+| Simulation engine | Python 3.12, numpy, networkx | Done | Two engines (`architecture.md`, `adr/0001-two-engines.md`): 13 areas (`domain/simulation`, DC power flow, island swing-equation frequency, EDAC) and 188 buses (`domain/cascade`). Base case: `data/scripts/build_operating_points.py` and `build_baseline_opf.py` (DC-OPF so no branch exceeds s_nom, with an inertia floor; N-1 not enforced) |
+| API | FastAPI (REST, SSE for session changes) | Done | `backend/src/cascadasen/api/`, section 7. `POST /simulate` runs a combination that is not in the cache |
+| Precompute | `uv run cascadasen-cache` runs every single-line cut for every operating point and writes static JSON | Done | Output is committed in `web/public/cache/`; the offline theatre runs are written by `cascadasen-sim-fixtures` and git-ignored |
+| Tests | pytest (backend: unit, integration, validation), Vitest (frontend logic) | Done | Validation cases V1-V10 are in `backend/tests/validation` (`plan.md` section 5) |
+| CI | GitHub Actions | Done | `.github/workflows/`. Lint (ruff) and the `CHANGELOG.md` check run on pull requests; the other checks are listed in the root `README.md` section "Checks (CI)". Generating the validation table from the tests is still backlog |
 | Lint and agent tooling | ruff (Python), eslint/prettier (frontend, once installed), git and Claude Code hooks | Done | Single entry point `scripts/lint.sh`; rules and hooks in `AGENTS.md` |
 | Local run | Docker Compose (`web` Vite dev server, `backend` data API) | MVP | `docker compose up --build`, only Docker needed. See `docs/docker.md` |
 | Hosting | Static frontend plus fixtures; deploy from a personal mirror (see README of the template) | MVP | Platforms like Vercel cannot access the org repo |
@@ -37,12 +33,12 @@ Status column: **MVP** means needed for the first frontend MVPs. **Backlog** mea
 ## 2. Architecture
 
 ```
-datasets (public APIs) --scripts--> data/processed/network.json
+datasets (public APIs) --scripts--> data/processed/sen_network.json
                                          |
                                          v
         engine (Python) --simulate()--> timeline.json (events + frames + summary + provenance)
               |                                  |
-              | build_cache.py                   | POST /simulate (combinations only)
+              | cascadasen-cache                   | POST /simulate (combinations only)
               v                                  v
         web/public/cache/*.json  ------>  frontend player (reads timeline, renders from clock t)
 ```
@@ -75,7 +71,7 @@ web/                  Vite + React + TypeScript app (deck.gl map, Mapbox option,
 infrastructure/       Terraform and deploy script for AWS (`infrastructure.md`)
 scripts/              lint.sh and git hooks
 docker-compose.yml    backend and web services (`docs/docker.md`)
-.github/workflows/    lint.yml (ruff and changelog check)
+.github/workflows/    lint.yml (ruff and changelog check), checks.yml (pytest with coverage floor, mypy, web tsc/vitest/build), deploy.yml (needs checks)
 ```
 
 ## 4. Simulation model
@@ -93,7 +89,7 @@ DC power flow (flow proportional to angle difference over reactance), solved per
 2. Detect islands (connected components, networkx).
 3. Compute each island's initial imbalance: generation minus load, plus the flow that crossed the boundary.
 4. Run the island frequency model (4.4). An island that collapses loses all its load.
-5. DC flow on surviving islands. Per iteration open only the corridor with the highest relative loading above 120% of capacity (parameter); ties open together.
+5. DC flow on surviving islands. Per iteration open only the corridor with the highest relative loading above 120% of capacity (parameter); ties open together. The other lines above 120% are not lost: the next iteration re-evaluates them with the new flows. The next iteration starts only after the islands of this one finished their EDAC steps or went dark (188-bus engine: `max(t, last load_shed or island_blackout) + stage_spacing_s`, `docs/engine.md`).
 6. Distribute remaining imbalance among synchronous generators in proportion to available reserve.
 7. Automatic under-frequency load shedding (EDAC) applies per zone with the amounts of each zone, proportional across buses with positive load. Exclude buses with net negative load (distributed generation larger than demand).
 8. Overloads in the first ~2 s are labelled "separation through a weak link" (the 25F mechanism [4]). Later overloads are labelled "thermal overload, needs operator action" and do not trip anything in the default mode.
@@ -135,7 +131,7 @@ Seed values (25F, centre-south):
 | Uncertain: outside what the model evaluates | Pre-failure flow on the lost north 500 kV corridor exceeds the validity range of the CEN north defence scheme (1,600 MW north-to-south, 1,000 MW south-to-north [4]; 1,700 MW per [6]); voltage may dominate there |
 | Not modelled | The case needs something the model lacks (e.g. an island without defence data) |
 
-In the 188-bus cascade engine (`engine.md`) the uncertain verdict is `result: "voltage_limited"` with `summary.uncertain: true`, raised when a cut opens the 25F boundary with a pre-fault flow outside that range. The UI label is "limitado por tensión (incierto), evento documentado, no calculado".
+In the 188-bus cascade engine (`engine.md`) the out-of-range case is not "uncertain": when the 25F corridor separates with a pre-fault flow outside that range, the islands at both ends collapse by voltage (`island_blackout`, `reason: "voltage"`). It is a rule, not a voltage calculation.
 
 Consequence levels L0-L3 (`cyber.md` section 5) aggregate these island results into one headline value per run.
 
@@ -170,7 +166,7 @@ Hover on any number shows document and page, or the badge "assumption" / "approx
 
 ## 6. Data contracts (draft; freeze in hour 0)
 
-`data/processed/network.json`:
+`network.json` (the original fixture contract; the shipped network is `data/processed/sen_network.json`, with the same ideas but another shape):
 ```json
 {
   "version": 1,
@@ -201,7 +197,7 @@ Values above are placeholders; the node list and ids are decided in phase 0.
   "provenance": [{"key": "inertia_I1", "source": "[4] Table 4-1", "is_assumption": false}]
 }
 ```
-Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
+Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. In the 188-bus engine `island_blackout.ids` lists the buses that go dark (`B###`, the same ids as `frames[].dark`), so the UI darkens them at the event's own time; their union equals the last frame's `dark`. Island events carry `params.stage`. No `island_formed` is emitted when nothing split (stage 0 with one island), and the `load_mw` of `island_formed` and `island_blackout` is never negative. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
 
 ### 6.1 Optional fields for cyber consequence scenarios (draft)
 
@@ -224,6 +220,7 @@ These fields support the scenario classes in `cyber.md` section 4. All are optio
 - New event types: `defense_disabled` (a defence that does not act) and `control_lost` (plants that stay online but give no dispatch or reserve).
 - `consequence_level`: `L0` absorbed, `L1` contained, `L2` regional blackout, `L3` national blackout.
 - `failure_cost_usd` = `unserved_energy_mwh` x 1,000 x 8.79 US$/kWh [19]. The value is a regulatory valuation and depends on the assumed duration.
+- One formula, two engines: `outage_cost` in `domain/simulation/consequence.py` serves the `/simulate` consequence card and the cascade timeline `summary` (map 3, cache, sessions), which also carries `unserved_energy_mwh`, `failure_cost_usd` and `outage_duration_h` since issue #72. The cascade uses the default 4 h (`physics.yaml`, assumption); only `/simulate` takes another duration. The health index sits next to the cost, never converted into dollars (`health.md` "Cost").
 
 ### 6.2 Session overlay
 A session edits the 188-bus engine network (`domain/cascade/network.py`) of one pinned operating point through a JSON overlay (`domain/cascade/overlay.py`). The base dataset is never changed. The session document `sessions/<sid>.json` (`application/sessions.py`) is:
@@ -247,18 +244,21 @@ A session edits the 188-bus engine network (`domain/cascade/network.py`) of one 
 ```
 - **Ids.** Added buses continue the base numbering (`B188`, `B189`… on the real network). Added lines are `U###`, loads and datacenters `D###`, generators `G###`; the `seq` counters never reuse an id. Element references use these ids (`a`, `b`, `bus`).
 - **Edits.** `add`, `patch` and `remove` per kind (`bus`, `line`, `load`, `generator`). A patch on a base bus or line writes `bus_overrides`/`line_overrides` (bus: `name`, `kv`, `lat`, `lon`, `load_mw`, `gen_mw`, `sync_mw`, `inertia_mws`, `in_service`; line: `capacity_mw`, `x_pu`, `in_service`); a `null` clears a field. Base elements are never deleted (409, use `in_service: false`). An out-of-service bus keeps its index with load, generation, synchronous MW and inertia at 0, and its lines are dropped. Deleting a session bus leaves a tombstone (`removed: true`, hidden from views) so later ids stay stable; it is refused (409) while lines, loads or generators reference it.
-- **Bounds.** `kv` in the base set (66, 110, 154, 220, 500); line ends distinct, existing and in service; `capacity_mw` in (0, 5000]; `x_pu` in [5e-4, 1.0], default `haversine_km × mean(X_PER_KM[kv]) / (kv²/100)` (`domain/validation.py`); load and generator `mw` in (0, 3000]; bus overrides `load_mw`, `gen_mw`, `sync_mw` in [0, base value + 3000] with `sync_mw ≤ gen_mw` and `inertia_mws ≤ 10 s × sync_mw`; lat in [-56, -17], lon in [-76, -66]; at most 50 added elements and 5000 MW of added load plus generation plus the absolute `load_mw` and `gen_mw` change of bus overrides. Generator `tech` is `hidro`, `termica`, `bioenergia`, `geotermica` (synchronous by default, inertia `inertia_h × mw`, `inertia_h` default 4 s, an assumption) or `solar`, `eolica`; load `kind` is `datacenter` or `consumo`.
+- **Bounds.** `kv` in the base set (66, 110, 154, 220, 500); line ends distinct, existing and in service; `capacity_mw` in (0, 5000]; `x_pu` in [5e-4, 1.0], default `haversine_km × mean(X_PER_KM[kv]) / (kv²/100)` (`domain/validation.py`); load and generator `mw` in (0, 20000]; bus overrides `load_mw`, `gen_mw`, `sync_mw` in [0, base value + 20000] with `sync_mw ≤ gen_mw` and `inertia_mws ≤ 10 s × sync_mw`; lat in [-56, -17], lon in [-76, -66]; at most 50 added elements; no total MW cap. Generator `tech` is `hidro`, `termica`, `bioenergia`, `geotermica` (synchronous by default, inertia `inertia_h × mw`, `inertia_h` default 4 s, an assumption) or `solar`, `eolica`; load `kind` is `datacenter` or `consumo`.
 - **Balance rule (`is_assumption: true`).** Per island of the edited network, `delta = Σ(gen'−load') − Σ(gen−load)` (edited versus base arrays) is redispatched as `−delta` over the base synchronous units of the island in proportion to their base `sync_mw`; `gen` and `sync_mw` change, inertia does not; a unit is clamped at 0. A bus whose `gen_mw` or `sync_mw` the overlay sets keeps that value and takes no share. A bus out of service loses its base load and generation; when it (or a group of adjacent out-of-service buses) touched a single live island through its in-service base lines, that island redispatches the loss, so the base case stays balanced. When it touched several islands it split them, and each part keeps its base imbalance (`unbalanced_island`). Out-of-service buses get no warnings of their own. Each redispatch is reported as `balance: [{buses: {"B000": 54.5, …}, redispatch_mw, is_assumption: true, rule}]`. It is not an OPF: a large added load can overload lines in the base case, and the baseline shows it.
 - **Warnings** `{code, ids, message}`: `isolated_bus` (a bus with no line in service), `no_sync_to_redispatch` (no base synchronous generation, or clamped units, so the island stays unbalanced), `unbalanced_island` (a topology split, e.g. a line or bus taken out of service, keeps its base imbalance of ≥ 1 MW; splits belong in the sandbox cut).
-- **Concurrency.** Every change bumps `revision` and records `last_op`. Edits, reset, cut and repair also bump `dataset_revision`; run activity (`run_created`, `run_updated`) does not. Writes are conditional on the store etag and retried 3 times, then 409; a client `If-Match` that does not match `dataset_revision` gives 412. The network view and the session world are cached by `(sid, dataset_revision)`. A `run_updated` index write that loses 3 retries is skipped (the run record is already persisted) instead of answering 409.
+- **Concurrency.** Every change bumps `revision` and records `last_op`. Edits, reset, cut and repair also bump `dataset_revision`; run activity (`run_created`, `run_updated`) does not. Writes are conditional on the store etag and retried 3 times, then 409; a client `If-Match` that does not match `dataset_revision` gives 412. The network view and the session world are cached by `(sid, dataset_revision)`. A `run_updated` index write that loses 3 retries is skipped (the run record is already persisted) instead of answering 409. A backend process serves one request at a time per session (`SessionLocks` in `api/limits.py`, every `{sid}` route except the SSE stream): a request waits up to `session_lock_timeout_s` (10 s) and then gets 409 with `Retry-After: 1`, and beyond `session_lock_max_waiters` (10) queued requests it gets the 409 at once; across processes the conditional writes and `If-Match` remain the guard.
 - **Sandbox and runs.** `open_lines` holds the sandbox cut (1-3 lines per cut, repair some or all); each call re-runs the cascade from the edited base case. Edits that drop a line also drop it from `open_lines`. Runs are nested under the session (`sessions/<sid>/runs/<rid>.json`, at most 20) and pin the overlay of their creation in the run record's `extra`, so later edits never change them and a rebuilt run uses the same dataset.
 - **Network view.** The `theater_network` shape (`GET /api/v1/sim/network`) on the edited network plus `origin` (`base`/`session`), `overridden`, `in_service` and `is_assumption` on nodes and lines, `loads`, `generators`, `out_of_service {buses, lines}`, `warnings`, `balance`, `baseline {max_loading, overloaded, islands, load_shed_mw}` (the edited base case with no cut), `revision`, `dataset_revision` and `session_id`.
+### 6.3 Regional context layer (draft)
+
+`data/processed/latam/<ISO3>/{lines,substations,plants}.geojson` reduced like Chile's network: buses (`substations`), straight folded `lines` between buses (`a`, `b`, `kv`, `circuits`, `length_km`) and generation per bus (`plants`: `bus`, `mw`, `mw_by_tech`, `count`), plus `manifest.json` (counts reduced and raw, km per kV, sources with licence and attribution). Full schema and rules in `regional.md` section 2. It is not part of `network.json` and no engine reads it.
 
 ## 7. API
 
 The backend serves everything under `/api/v1` (FastAPI, `backend/src/cascadasen/api/`); the live schema is at `/docs`. The frontend can still work from fixtures only, which also gives the offline behaviour in section 9.
 
-External agents (and the future MCP server) use a separate spec with only the routes marked `x-sub50-agent`: `GET /api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`), versioned in `docs/openapi/agents.openapi.json`. Marking rules, operationIds, error model, tags and the regeneration command: `docs/openapi.md`. It holds `/sim/catalog`, `/sim/network`, `/sim/runs*` (section 7.1) and every session route except the SSE stream (section 7.2).
+External agents (and the MCP server, `docs/mcp.md`) use a separate spec with only the routes marked `x-sub50-agent`: `GET /api/v1/agents/openapi.json` (Swagger at `/api/v1/agents/docs`), versioned in `docs/openapi/agents.openapi.json`. Marking rules, operationIds, error model, tags and the regeneration command: `docs/openapi.md`. It holds `/sim/catalog`, `/sim/network`, `/sim/runs*` (section 7.1) and every session route except the SSE stream (section 7.2).
 
 `POST /api/v1/simulate` runs one physical contingency on the reduced network (`strategy.md` section 2.1) and returns a `timeline.json` (section 6). `elements_out` accepts corridor ids, area ids (`A01`-`A13`) or real snapshot node ids (`SE…`), resolved to the area that contains them.
 
@@ -281,7 +281,7 @@ External agents (and the future MCP server) use a separate spec with only the ro
 
 ### 7.1 Strategic experimentation API
 
-Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON, and narration comes as `rationale_key` + `params` (Spanish templates in the frontend).
+Concepts in `strategy.md`. 14 operations, all paths are under `/api/v1/sim`; responses are JSON, and narration comes as `rationale_key` + `params` (Spanish templates in the frontend).
 
 | Method and path | Purpose |
 |---|---|
@@ -292,6 +292,7 @@ Concepts in `strategy.md`. All paths are under `/api/v1/sim`; responses are JSON
 | `POST /sim/runs/{id}/step` | Advance `n` cycles; returns one snapshot per cycle |
 | `POST /sim/runs/{id}/replay` | New run with the same seed and injected events, and another policy or capabilities |
 | `GET /sim/runs/{id}` | Real, observed and per-agent estimated state, resources, field crews (`crews`: id, base, position, task, target, arrival, status), live indicators |
+| `GET /sim/runs/{id}/snapshots` | Snapshots already computed from a cycle on (`start`, 0-based, default 0); it returns the run summary too |
 | `GET /sim/runs/{id}/trace` | Hash-chained audit log and the replay recipe |
 | `GET /sim/runs/{id}/report` | Indicators, indices, consequence card (L0-L3, people, unserved MWh, cost) and after-action keys |
 | `POST /sim/campaigns`, `GET /sim/campaigns/{id}` | Campaign matrix (modes I, II, III): comparison table, Decisional Fragility Index, Adaptation Index |
@@ -317,11 +318,15 @@ Shared, persistent sessions under `/api/v1/sessions` (`api/session_routes.py`). 
 | Live | `GET /{sid}/events` | SSE `event: revision`, `: ping` every 15 s, closes after 55 s; not an agent tool |
 
 - Every agent endpoint takes `{sid}` in the path. Agent routes carry `x-sub50-agent`, an explicit `operationId` and English OpenAPI text (`docs/openapi.md`); error details stay in Spanish.
-- Limits (per process): 64 KB bodies (413), creation per client IP, cuts and writes per session (429 with `Retry-After`), 5 SSE streams per session and IP. Knobs are the `CASCADASEN_RATE_*` and `CASCADASEN_SSE_*` settings.
+- Limits (per process): 64 KB bodies (413), creation per client IP, cuts and writes per session (429 with `Retry-After`), 5 SSE streams per session and IP, one request in progress per session (up to 10 others wait up to 10 s, then 409; more get 409 at once). Knobs are the `CASCADASEN_RATE_*`, `CASCADASEN_SSE_*`, `CASCADASEN_SESSION_LOCK_TIMEOUT_S` and `CASCADASEN_SESSION_LOCK_MAX_WAITERS` settings.
+
+### 7.3 Assistant API
+
+`POST /api/v1/assistant/chat`, `POST /api/v1/assistant/chat/stream` (the same steps as Server-Sent Events) and `GET`/`DELETE /api/v1/assistant/conversations/{cid}` (`api/assistant_routes.py`) run natural-language requests through an LLM that calls the MCP tools over the app's own routes. Contract, limits and guardrails: `docs/assistant.md`. These routes are for the web client and are not marked `x-sub50-agent`.
 
 ## 8. Testing and CI
 
-MVP: Vitest tests for frontend logic (playback clock, narration templates, layer mapping, fixture validation against the JSON schema). Everything below is backlog.
+Implemented: Vitest tests for frontend logic (`web/src/**/*.test.ts`) and pytest for the backend (`backend/tests/{unit,integration,validation}`). The list below is the original test plan; the table-in-README item is still backlog.
 
 - Unit: initial frequency vs analytic formula, each EDAC step firing, power balance per island, island detection on a toy graph, unit check of D, provenance of every parameter.
 - Regression: validation cases in `plan.md` section 5.

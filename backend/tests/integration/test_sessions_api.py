@@ -4,11 +4,14 @@ limits, sandbox cuts, nested runs, the SSE stream and the agent OpenAPI conventi
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from fastapi.routing import iter_route_contexts
 from fastapi.testclient import TestClient
 
 from cascadasen.api.app import create_app
+from cascadasen.api.limits import SessionLocks
 from cascadasen.application.grid_queries import GridQueryService
 from cascadasen.application.run_experiment import RunCache
 from cascadasen.application.sessions import SessionService
@@ -24,6 +27,7 @@ OPERATION_IDS = {
     "delete_session",
     "get_session_network",
     "add_bus",
+    "add_substation",
     "update_bus",
     "delete_bus",
     "add_line",
@@ -49,8 +53,9 @@ OPERATION_IDS = {
     "get_run_report",
     "get_run_after_action",
     "submit_run_action",
+    "start_incident_run",
 }
-TAGS = {"sessions", "session-network", "session-sandbox", "session-runs"}
+TAGS = {"sessions", "session-network", "session-sandbox", "session-runs", "incidents"}
 
 
 @pytest.fixture
@@ -105,6 +110,45 @@ def test_a_stale_if_match_gives_412(client):
     assert client.post(f"{BASE}/{sid}/loads", json=DC, headers={"If-Match": '"0"'}).status_code == 201
     stale = client.post(f"{BASE}/{sid}/loads", json=DC, headers={"If-Match": '"0"'})
     assert stale.status_code == 412
+
+
+SUBSTATION = {
+    "name": "SE Nueva",
+    "lat": -31.1,
+    "lon": -71.0,
+    "kv": 220,
+    "connections": [{"to": "B002"}, {"to": "B003", "capacity_mw": 200}],
+    "load": {"mw": 40, "kind": "consumo"},
+}
+
+
+def test_a_substation_is_created_whole_and_a_bad_one_changes_nothing(client):
+    sid = _create(client)
+    ok = client.post(f"{BASE}/{sid}/substations", json=SUBSTATION, headers={"If-Match": '"0"'})
+    assert ok.status_code == 201 and ok.headers["ETag"] == '"1"'
+    body = ok.json()
+    assert (body["id"], body["line_ids"], body["load_id"], body["revision"]) == (
+        "B006",
+        ["U001", "U002"],
+        "D001",
+        1,
+    )
+    bad = {**SUBSTATION, "connections": [{"to": "B002"}, {"to": "B999"}]}
+    assert client.post(f"{BASE}/{sid}/substations", json=bad).status_code == 404
+    seven = {**SUBSTATION, "connections": [{"to": f"B00{i}"} for i in range(7)]}
+    assert client.post(f"{BASE}/{sid}/substations", json=seven).status_code == 422
+    assert client.get(f"{BASE}/{sid}").json()["revision"] == 1
+
+
+def test_a_scenario_reset_replaces_the_substation(client):
+    sid = _create(client)
+    client.post(f"{BASE}/{sid}/substations", json=SUBSTATION)
+    out = client.post(f"{BASE}/{sid}/reset", json={"scenario": {"out_buses": ["B004"]}})
+    assert out.status_code == 200
+    overlay = client.get(f"{BASE}/{sid}").json()["overlay"]
+    assert overlay["buses"] == [] and overlay["bus_overrides"]["B004"] == {"in_service": False}
+    other = client.post(f"{BASE}/{sid}/reset", json={"scenario": {"point": "feb2025-1500"}})
+    assert other.status_code == 422
 
 
 def test_deleting_a_bus_with_dependents_gives_409(client):
@@ -188,6 +232,20 @@ def test_a_body_over_64_kb_gives_413(client):
     sid = _create(client)
     r = client.post(f"{BASE}/{sid}/loads", json={**DC, "name": "x" * 70000})
     assert r.status_code == 413
+
+
+def test_a_chunked_body_over_64_kb_gives_413_and_a_small_one_passes(client):
+    sid = _create(client)
+    big = json.dumps({**DC, "name": "x" * 70000}).encode()
+    r = client.post(f"{BASE}/{sid}/loads", content=(big[i : i + 8192] for i in range(0, len(big), 8192)))
+    assert r.status_code == 413 and r.json() == {"detail": "Cuerpo demasiado grande (máximo 64 KB)."}
+    small = json.dumps(DC).encode()
+    ok = client.post(
+        f"{BASE}/{sid}/loads",
+        content=(small[i : i + 16] for i in range(0, len(small), 16)),
+        headers={"content-type": "application/json"},
+    )
+    assert ok.status_code == 201
 
 
 def test_unknown_and_malformed_sessions_give_404(client):
@@ -299,3 +357,114 @@ def test_global_runs_are_rate_limited_and_body_capped(app):
         "/api/v1/sim/runs", content=b"{" + b" " * 70000 + b"}", headers={"Content-Type": "application/json"}
     )
     assert big.status_code == 413
+
+
+def _slow_state(app, monkeypatch) -> list[tuple[float, float]]:
+    """Make the sandbox state read take 0.3 s and record its (start, end)."""
+    spans, real = [], app.state.sessions.state
+
+    def slow(sid):
+        start = time.monotonic()
+        time.sleep(0.3)
+        out = real(sid)
+        spans.append((start, time.monotonic()))
+        return out
+
+    monkeypatch.setattr(app.state.sessions, "state", slow)
+    return spans
+
+
+def _overlap(spans: list[tuple[float, float]]) -> bool:
+    first, second = sorted(spans)
+    return second[0] < first[1]
+
+
+def test_requests_on_one_session_run_one_after_another(app, client, monkeypatch):
+    sid = _create(client)
+    spans = _slow_state(app, monkeypatch)
+    with ThreadPoolExecutor(2) as pool:
+        codes = list(pool.map(lambda _: client.get(f"{BASE}/{sid}/state").status_code, range(2)))
+    assert codes == [200, 200] and len(spans) == 2 and not _overlap(spans)
+
+
+def test_requests_on_two_sessions_run_in_parallel(app, client, monkeypatch):
+    sids = [_create(client), _create(client)]
+    spans = _slow_state(app, monkeypatch)
+    with ThreadPoolExecutor(2) as pool:
+        codes = list(pool.map(lambda sid: client.get(f"{BASE}/{sid}/state").status_code, sids))
+    assert codes == [200, 200] and len(spans) == 2 and _overlap(spans)
+
+
+def test_a_request_that_cannot_get_the_lock_gets_409(app, client):
+    sid = _create(client)
+    app.state.session_locks = SessionLocks(0.2)
+    with app.state.session_locks.hold(sid):
+        busy = client.post(f"{BASE}/{sid}/cut", json={"lines": ["R1"]})
+    assert busy.status_code == 409 and "ocupada" in busy.json()["detail"]
+    assert busy.headers["Retry-After"] == "1"
+    assert client.post(f"{BASE}/{sid}/cut", json={"lines": ["R1"]}).status_code == 200
+    assert len(app.state.session_locks) == 0
+
+
+def _documented(app, operation_id: str):
+    """The model a route documents for its success body (agent_openapi.ok)."""
+    route = next(
+        r for r in iter_route_contexts(app.routes) if getattr(r, "operation_id", None) == operation_id
+    )
+    return route.responses[route.status_code or 200]["model"]
+
+
+def test_responses_match_the_documented_models(app, client):
+    calls = [("create_session", "post", BASE, {})]
+    r = client.post(BASE, json={})
+    sid = r.json()["session_id"]
+    s = f"{BASE}/{sid}"
+    calls += [
+        ("get_session", "get", s, None),
+        ("get_session_network", "get", f"{s}/network", None),
+        ("add_bus", "post", f"{s}/buses", {"name": "SE Nueva", "lat": -31.1, "lon": -71.0, "kv": 220}),
+        ("update_bus", "patch", f"{s}/buses/B006", {"name": "SE Otra"}),
+        ("add_line", "post", f"{s}/lines", {"a": "B006", "b": "B002", "kv": 220, "capacity_mw": 300}),
+        ("update_line", "patch", f"{s}/lines/U001", {"capacity_mw": 400}),
+        ("add_load", "post", f"{s}/loads", DC),
+        ("update_load", "patch", f"{s}/loads/D001", {"mw": 90}),
+        ("add_generator", "post", f"{s}/generators", {"bus": "B006", "mw": 50, "tech": "solar"}),
+        ("update_generator", "patch", f"{s}/generators/G001", {"mw": 40}),
+        ("delete_generator", "delete", f"{s}/generators/G001", None),
+        ("delete_load", "delete", f"{s}/loads/D001", None),
+        ("delete_line", "delete", f"{s}/lines/U001", None),
+        ("delete_bus", "delete", f"{s}/buses/B006", None),
+        ("reset_session", "post", f"{s}/reset", None),
+        ("cut_lines", "post", f"{s}/cut", {"lines": ["R1"]}),
+        ("get_cut_state", "get", f"{s}/state", None),
+        ("repair_lines", "post", f"{s}/repair", {"all": True}),
+    ]
+    for op, method, url, body in calls[1:]:
+        r = client.request(method, url, json=body)
+        assert r.status_code < 300, (op, r.text)
+        _documented(app, op).model_validate(r.json())
+    _documented(app, "create_session").model_validate(client.post(BASE, json={}).json())
+    run = client.post(f"{s}/runs", json={"seed": 3, "horizon": 8})
+    _documented(app, "create_run").model_validate(run.json())
+    rid = run.json()["run_id"]
+    t = f"{s}/runs/{rid}"
+    for op, method, url, body in [
+        ("get_run", "get", t, None),
+        ("inject_run_event", "post", f"{t}/events", {"type": "C3_transmission_opening", "target": "T2-T3"}),
+        ("step_run", "post", f"{t}/step", {"cycles": 1}),
+        (
+            "submit_run_action",
+            "post",
+            f"{t}/actions",
+            {"action": "restore_element", "target": "T2-T3", "role": "operations"},
+        ),
+        ("get_run", "get", t, None),
+        ("replay_run", "post", f"{t}/replay", {"policy": "A"}),
+        ("get_run_snapshots", "get", f"{t}/snapshots", None),
+        ("get_run_trace", "get", f"{t}/trace", None),
+        ("get_run_report", "get", f"{t}/report", None),
+        ("get_run_after_action", "get", f"{t}/after_action", None),
+    ]:
+        r = client.request(method, url, json=body)
+        assert r.status_code < 300, (op, r.text)
+        _documented(app, op).model_validate(r.json())

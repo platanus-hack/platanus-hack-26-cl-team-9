@@ -9,7 +9,7 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -17,13 +17,15 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from cascadasen.api import agent_openapi
-from cascadasen.api.agent_openapi import AGENT
+from cascadasen.api.agent_openapi import AGENT, ok
 from cascadasen.api.limits import SseSlots, client_ip
 from cascadasen.api.session_schemas import (
     ActionIn,
     BusIn,
     BusPatch,
     CutIn,
+    CutStateOut,
+    EditOut,
     GeneratorIn,
     GeneratorPatch,
     LineIn,
@@ -31,10 +33,29 @@ from cascadasen.api.session_schemas import (
     LoadIn,
     LoadPatch,
     RepairIn,
+    ResetIn,
     SessionCreate,
+    SessionDocOut,
+    SessionNetworkOut,
+    SubstationIn,
+    SubstationOut,
 )
 from cascadasen.api.simulation_routes import get_simulation, run_call
-from cascadasen.api.simulation_schemas import EventIn, ReplayIn, RunCreate, StepIn
+from cascadasen.api.simulation_schemas import (
+    AfterActionOut,
+    EventIn,
+    ReplayIn,
+    RunActionOut,
+    RunCreate,
+    RunEventOut,
+    RunReportOut,
+    RunSnapshotsOut,
+    RunStateOut,
+    RunStepOut,
+    RunTraceOut,
+    SessionRunOut,
+    StepIn,
+)
 from cascadasen.application.sessions import (
     SESSION_ID,
     PreconditionFailedError,
@@ -50,7 +71,9 @@ router = APIRouter(prefix="/api/v1/sessions")
 
 ERRORS = {
     404: "The session, run or element does not exist, or the id is malformed.",
-    409: "Conflict: the element is still referenced, the run finished, or another writer won; retry.",
+    409: "Conflict: the element is still referenced, the run finished, another writer won, or the session is "
+    "busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry "
+    "after Retry-After.",
     412: "If-Match does not match the current dataset_revision; re-read the network and retry.",
     422: "Invalid input: detail names the field and, when useful, the valid values.",
     429: "Rate limit reached; wait the seconds in Retry-After.",
@@ -63,7 +86,7 @@ def errors(*codes: int) -> dict[int | str, dict[str, Any]]:
 
 WRITE_ERRORS = errors(404, 409, 412, 422, 429)
 RUN_WRITE_ERRORS = errors(404, 409, 422, 429)
-READ_ERRORS = errors(404, 422)
+READ_ERRORS = errors(404, 409, 422)
 
 
 def get_sessions(request: Request) -> SessionService:
@@ -171,6 +194,11 @@ def limit(request: Request, name: str, key: str) -> None:
     request.app.state.limiter.check(name, key, per, window)
 
 
+def serial(request: Request, sid: str):
+    """Hold the session's lock: one request at a time per session in this process (409 when busy)."""
+    return request.app.state.session_locks.hold(sid)
+
+
 # ------------------------------------------------------------------ session documents
 @router.post(
     "",
@@ -182,7 +210,7 @@ def limit(request: Request, name: str, key: str) -> None:
     "point (default nov2026-1300). Call it first; every other session call takes the returned "
     "session_id in the path. The session expires 24 h after its last change. Anyone with the id can "
     "read and edit it (share_path is the browser link). Rate limited per client IP.",
-    responses=errors(422, 429),
+    responses=ok(SessionDocOut, 201) | errors(422, 429),
     openapi_extra=AGENT,
 )
 def create_session(
@@ -210,13 +238,15 @@ def create_session(
     "(sandbox cut), runs (id -> created_at, dataset_revision, cycle, status), last_op, share_path and "
     "expires_at. The ETag header is the revision; send it as If-None-Match to get 304 when nothing "
     "changed (polling fallback when SSE is not available). No side effects.",
-    responses={
+    responses=ok(SessionDocOut)
+    | {
         304: {"description": "Not modified: If-None-Match equals the current revision."},
         **READ_ERRORS,
     },
     openapi_extra=AGENT,
 )
 def get_session(
+    request: Request,
     sid: Sid,
     response: Response,
     svc: Sessions,
@@ -225,7 +255,8 @@ def get_session(
         Header(alias="If-None-Match", description='Last ETag seen, e.g. "3".', examples=['"3"']),
     ] = None,
 ) -> Any:
-    doc = session_call(svc.get, sid)
+    with serial(request, sid):
+        doc = session_call(svc.get, sid)
     tag = f'"{doc["revision"]}"'
     if if_none_match and tag in {t.strip().removeprefix("W/") for t in if_none_match.split(",")}:
         return Response(status_code=304, headers={"ETag": tag})
@@ -241,12 +272,13 @@ def get_session(
     summary="Delete a session and its runs",
     description="Deletes the session document and the records of its runs. Every client of the "
     "session loses it (their SSE stream ends). Irreversible.",
-    responses=errors(404, 422, 429),
+    responses=errors(404, 409, 422, 429),
     openapi_extra=AGENT,
 )
 def delete_session(request: Request, sid: Sid, svc: Sessions) -> Response:
     limit(request, "write", sid)
-    session_call(svc.delete, sid)
+    with serial(request, sid):
+        session_call(svc.delete, sid)
     return Response(status_code=204)
 
 
@@ -256,9 +288,12 @@ def delete_session(request: Request, sid: Sid, svc: Sessions) -> Response:
     operation_id="reset_session",
     summary="Drop every network edit of a session",
     description="Replaces the overlay with an empty one, so the network is the base dataset again. "
-    "Runs keep the dataset they were created with; the sandbox cut keeps the lines that still exist. "
+    "With a body {scenario: {point?, changes, open_lines, out_buses}} the network becomes that grid "
+    "configuration instead (changes as overrides, failed buses out of service, open lines cut); a scenario of "
+    "another point is 422. Runs keep the dataset they were created with; without a scenario the sandbox cut "
+    "keeps the lines that still exist. "
     "Bumps revision and dataset_revision; the ETag is the dataset_revision.",
-    responses=WRITE_ERRORS,
+    responses=ok(EditOut) | WRITE_ERRORS,
     openapi_extra=AGENT,
 )
 def reset_session(
@@ -266,11 +301,14 @@ def reset_session(
     response: Response,
     sid: Sid,
     svc: Sessions,
+    body: ResetIn | None = None,
     if_match: IfMatch = None,
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    out = session_call(svc.reset, sid, agent, if_revision(if_match))
+    scenario = body.scenario.model_dump() if body and body.scenario else None
+    with serial(request, sid):
+        out = session_call(svc.reset, sid, agent, if_revision(if_match), scenario)
     etag(response, out["dataset_revision"])
     return out
 
@@ -287,11 +325,12 @@ def reset_session(
     "(loading and load shed with no cut). With no edits it is the base dataset. Use it to get bus "
     "(B###) and line (R###, U###) ids before editing or cutting. The ETag is the dataset_revision, "
     "to send as If-Match on edits.",
-    responses=READ_ERRORS,
+    responses=ok(SessionNetworkOut) | READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_session_network(sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
-    view = session_call(svc.network_view, sid)
+def get_session_network(request: Request, sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        view = session_call(svc.network_view, sid)
     etag(response, view["dataset_revision"])
     return view
 
@@ -323,7 +362,7 @@ def _element_routes(
         operation_id=f"add_{kind}",
         summary=f"Add a {noun} to the session network",
         description=create_text + edit,
-        responses=WRITE_ERRORS,
+        responses=ok(EditOut, 201) | WRITE_ERRORS,
         openapi_extra=AGENT,
     )
     def add(
@@ -336,8 +375,9 @@ def _element_routes(
         agent: Agent = "anon",
     ) -> dict[str, Any]:
         limit(request, "write", sid)
-        fields = body.model_dump(exclude_unset=True)
-        out = session_call(svc.add, sid, kind, fields, agent, if_revision(if_match))
+        fields = cast(BaseModel, body).model_dump(exclude_unset=True)
+        with serial(request, sid):
+            out = session_call(svc.add, sid, kind, fields, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
         return out
 
@@ -347,7 +387,7 @@ def _element_routes(
         operation_id=f"update_{kind}",
         summary=f"Change a {noun}",
         description=patch_text + " Only the fields sent change; null clears a session value." + edit,
-        responses=WRITE_ERRORS,
+        responses=ok(EditOut) | WRITE_ERRORS,
         openapi_extra=AGENT,
     )
     def update(
@@ -361,8 +401,9 @@ def _element_routes(
         agent: Agent = "anon",
     ) -> dict[str, Any]:
         limit(request, "write", sid)
-        fields = body.model_dump(exclude_unset=True)
-        out = session_call(svc.patch, sid, kind, element_id, fields, agent, if_revision(if_match))
+        fields = cast(BaseModel, body).model_dump(exclude_unset=True)
+        with serial(request, sid):
+            out = session_call(svc.patch, sid, kind, element_id, fields, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
         return out
 
@@ -373,7 +414,7 @@ def _element_routes(
         summary=f"Delete a session {noun}",
         description=f"Deletes a {noun} the session added. Base elements are never deleted (409): "
         "PATCH them with in_service=false instead." + edit,
-        responses=WRITE_ERRORS,
+        responses=ok(EditOut) | WRITE_ERRORS,
         openapi_extra=AGENT,
     )
     def delete(
@@ -386,7 +427,8 @@ def _element_routes(
         agent: Agent = "anon",
     ) -> dict[str, Any]:
         limit(request, "write", sid)
-        out = session_call(svc.remove, sid, kind, element_id, agent, if_revision(if_match))
+        with serial(request, sid):
+            out = session_call(svc.remove, sid, kind, element_id, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
         return out
 
@@ -438,6 +480,39 @@ _element_routes(
 )
 
 
+@router.post(
+    "/{sid}/substations",
+    status_code=201,
+    tags=["session-network"],
+    operation_id="add_substation",
+    summary="Add a substation with its lines, all or nothing",
+    description="Adds a bus (B###), 1 to 6 lines (U###) from it to existing buses of the same voltage, and "
+    "optionally a load (D###) and a generator (G###) on it, in one write. If any part is invalid nothing is "
+    "saved. capacity_mw defaults to the median of the lines at the other end. Returns the ids, the usual "
+    "warnings and balance, and `coherence`: plausibility notes (capacity far from the neighbours, a line "
+    "over 300 km, load or generation above the capacity of the lines). Counts 1 + lines + load + generator "
+    "against the 80 added elements of the session. Bumps revision and dataset_revision (the ETag).",
+    responses=ok(SubstationOut, 201) | WRITE_ERRORS,
+    openapi_extra=AGENT,
+)
+def add_substation(
+    request: Request,
+    response: Response,
+    sid: Sid,
+    svc: Sessions,
+    body: SubstationIn,
+    if_match: IfMatch = None,
+    agent: Agent = "anon",
+) -> dict[str, Any]:
+    limit(request, "write", sid)
+    with serial(request, sid):
+        out = session_call(
+            svc.add_substation, sid, body.model_dump(exclude_none=True), agent, if_revision(if_match)
+        )
+    etag(response, out["dataset_revision"])
+    return out
+
+
 # ------------------------------------------------------------------ sandbox
 SANDBOX = (
     " Re-runs the cascade from the base case with every open line and returns {revision, "
@@ -454,7 +529,7 @@ SANDBOX = (
     description="Adds 1 to 3 line ids (R### or U###, from get_session_network) to the open lines. "
     "This shows the physical consequence of losing those lines; it does not search for the worst cut."
     + SANDBOX,
-    responses=WRITE_ERRORS,
+    responses=ok(CutStateOut) | WRITE_ERRORS,
     openapi_extra=AGENT,
 )
 def cut_lines(
@@ -467,7 +542,8 @@ def cut_lines(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "cut", sid)
-    out = session_call(svc.cut, sid, body.lines, agent, if_revision(if_match))
+    with serial(request, sid):
+        out = session_call(svc.cut, sid, body.lines, agent, if_revision(if_match))
     etag(response, out["dataset_revision"])
     return out
 
@@ -478,7 +554,7 @@ def cut_lines(
     operation_id="repair_lines",
     summary="Close open lines in the session sandbox",
     description="Closes the given open lines, or all of them with all=true." + SANDBOX,
-    responses=WRITE_ERRORS,
+    responses=ok(CutStateOut) | WRITE_ERRORS,
     openapi_extra=AGENT,
 )
 def repair_lines(
@@ -493,7 +569,8 @@ def repair_lines(
     if not body.all and not body.lines:
         raise HTTPException(422, {"field": "lines", "message": "Indica las líneas o all=true."})
     limit(request, "cut", sid)
-    out = session_call(svc.repair, sid, body.lines, body.all, agent, if_revision(if_match))
+    with serial(request, sid):
+        out = session_call(svc.repair, sid, body.lines, body.all, agent, if_revision(if_match))
     etag(response, out["dataset_revision"])
     return out
 
@@ -506,11 +583,12 @@ def repair_lines(
     description="Returns {revision, dataset_revision, open_lines, timeline, notice}: the cascade "
     "timeline with the current open lines (the baseline when none). The ETag is the dataset_revision. "
     "No side effects.",
-    responses=READ_ERRORS,
+    responses=ok(CutStateOut) | READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_cut_state(sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
-    out = session_call(svc.state, sid)
+def get_cut_state(request: Request, sid: Sid, response: Response, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        out = session_call(svc.state, sid)
     etag(response, out["dataset_revision"])
     return out
 
@@ -598,14 +676,17 @@ def _run_etag(response: Response, out: dict[str, Any]) -> dict[str, Any]:
     "empty or equal to the session point. Templates, policies and events come from "
     "GET /api/v1/sim/catalog. At most 20 runs per session. Returns the run summary and "
     "session_revision.",
-    responses=RUN_WRITE_ERRORS,
+    responses=ok(SessionRunOut, 201) | RUN_WRITE_ERRORS,
     openapi_extra=AGENT,
 )
 def create_run(
     request: Request, response: Response, sid: Sid, svc: Sessions, body: RunCreate, agent: Agent = "anon"
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    return _run_etag(response, session_call(svc.create_run, sid, body.config_dict(), body.auto_run, agent))
+    with serial(request, sid):
+        return _run_etag(
+            response, session_call(svc.create_run, sid, body.config_dict(), body.auto_run, agent)
+        )
 
 
 @router.get(
@@ -616,11 +697,12 @@ def create_run(
     description="Returns {run, latest, resources, series}: the run summary (cycle, status, rebuilt, "
     "trace_matches), the latest snapshot (real, observed and estimated state, decisions, executed), "
     "resources and the metric series." + RUN_TEXT,
-    responses=READ_ERRORS,
+    responses=ok(RunStateOut) | READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_run(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "state")
+def get_run(request: Request, sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "state")
 
 
 @router.post(
@@ -630,7 +712,7 @@ def get_run(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
     summary="Inject an event into a session run",
     description="Queues an event (type from the catalog events) on a target area, corridor or bus; it "
     "applies on the next cycle. Returns the resolved target and the run summary." + RUN_TEXT,
-    responses=RUN_WRITE_ERRORS,
+    responses=ok(RunEventOut) | RUN_WRITE_ERRORS,
     openapi_extra=AGENT,
 )
 def inject_run_event(
@@ -643,9 +725,10 @@ def inject_run_event(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    out = session_call(
-        svc.run_command, sid, rid, "inject", body.type, body.target, body.params, body.cause, by=agent
-    )
+    with serial(request, sid):
+        out = session_call(
+            svc.run_command, sid, rid, "inject", body.type, body.target, body.params, body.cause, by=agent
+        )
     return _run_etag(response, out)
 
 
@@ -656,7 +739,7 @@ def inject_run_event(
     summary="Advance a session run",
     description="Runs 1 to 72 cycles of 5 minutes and returns their snapshots. A finished run gives 409."
     + RUN_TEXT,
-    responses=RUN_WRITE_ERRORS,
+    responses=ok(RunStepOut) | RUN_WRITE_ERRORS,
     openapi_extra=AGENT,
 )
 def step_run(
@@ -669,7 +752,8 @@ def step_run(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    return _run_etag(response, session_call(svc.run_command, sid, rid, "step", body.cycles, by=agent))
+    with serial(request, sid):
+        return _run_etag(response, session_call(svc.run_command, sid, rid, "step", body.cycles, by=agent))
 
 
 @router.post(
@@ -683,7 +767,7 @@ def step_run(
     "not capped by the commander's operator attention and skips its choice, conflict rules and "
     "vetoes. Returns "
     "{accepted, applies_at_cycle, action, target, role, notice}." + RUN_TEXT,
-    responses=RUN_WRITE_ERRORS,
+    responses=ok(RunActionOut) | RUN_WRITE_ERRORS,
     openapi_extra=AGENT,
 )
 def submit_run_action(
@@ -696,18 +780,19 @@ def submit_run_action(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    out = session_call(
-        svc.run_command,
-        sid,
-        rid,
-        "action",
-        body.action,
-        body.target,
-        body.role,
-        body.params,
-        body.agent or agent,
-        by=agent,
-    )
+    with serial(request, sid):
+        out = session_call(
+            svc.run_command,
+            sid,
+            rid,
+            "action",
+            body.action,
+            body.target,
+            body.role,
+            body.params,
+            body.agent or agent,
+            by=agent,
+        )
     return _run_etag(response, out)
 
 
@@ -720,7 +805,7 @@ def submit_run_action(
     description="Creates a new run in the session with the original seed, events and actions and the "
     "given overrides (policy, uncertainty, seed, adversary, capabilities), on the original run's "
     "dataset. Returns the new run summary with replay_of." + RUN_TEXT,
-    responses=RUN_WRITE_ERRORS,
+    responses=ok(SessionRunOut, 201) | RUN_WRITE_ERRORS,
     openapi_extra=AGENT,
 )
 def replay_run(
@@ -733,7 +818,8 @@ def replay_run(
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
-    out = session_call(svc.run_command, sid, rid, "replay", body.overrides(), body.cycles, by=agent)
+    with serial(request, sid):
+        out = session_call(svc.run_command, sid, rid, "replay", body.overrides(), body.cycles, by=agent)
     return _run_etag(response, out)
 
 
@@ -743,16 +829,18 @@ def replay_run(
     operation_id="get_run_snapshots",
     summary="Read the snapshots of a session run",
     description="Returns {run, snapshots} with the snapshots already computed from cycle start." + RUN_TEXT,
-    responses=READ_ERRORS,
+    responses=ok(RunSnapshotsOut) | READ_ERRORS,
     openapi_extra=AGENT,
 )
 def get_run_snapshots(
+    request: Request,
     sid: Sid,
     rid: RunId,
     svc: Sessions,
     start: Annotated[int, Query(ge=0, description="First cycle to return.", examples=[0])] = 0,
 ) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "snapshots", start)
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "snapshots", start)
 
 
 @router.get(
@@ -762,11 +850,12 @@ def get_run_snapshots(
     summary="Read the audit log of a session run",
     description="Returns the hash-chained audit log, its head, verified and the recipe (config, "
     "injected events, actions) that rebuilds the run." + RUN_TEXT,
-    responses=READ_ERRORS,
+    responses=ok(RunTraceOut) | READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_run_trace(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "trace")
+def get_run_trace(request: Request, sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "trace")
 
 
 @router.get(
@@ -775,11 +864,12 @@ def get_run_trace(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
     operation_id="get_run_report",
     summary="Read the report of a session run",
     description="Returns indicators, indices and the physical consequence of the run so far." + RUN_TEXT,
-    responses=READ_ERRORS,
+    responses=ok(RunReportOut) | READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_run_report(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "report")
+def get_run_report(request: Request, sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "report")
 
 
 @router.get(
@@ -788,8 +878,9 @@ def get_run_report(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
     operation_id="get_run_after_action",
     summary="Read the after-action report of a session run",
     description="Returns the deterministic after-action report in Spanish, built from templates." + RUN_TEXT,
-    responses=READ_ERRORS,
+    responses=ok(AfterActionOut) | READ_ERRORS,
     openapi_extra=AGENT,
 )
-def get_run_after_action(sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
-    return session_call(svc.run_command, sid, rid, "after_action")
+def get_run_after_action(request: Request, sid: Sid, rid: RunId, svc: Sessions) -> dict[str, Any]:
+    with serial(request, sid):
+        return session_call(svc.run_command, sid, rid, "after_action")

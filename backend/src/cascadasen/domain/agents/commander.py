@@ -15,6 +15,9 @@ SAFETY_FIRST = ("digital_segmentation", "preventive_load_reduction", "islanding_
 RISK_TOLERANCE = {"A": 0.3, "B": 0.1, "C": 0.2}
 
 
+CONTAINMENT_CONFIDENCE = 0.75  # assumption: above every policy threshold but A heavy (0.8)
+
+
 class CommanderAgent:
     role = Role.C2
 
@@ -67,6 +70,10 @@ class CommanderAgent:
             c = max(c, isr.confidence)  # the area is part of the picture ISR is confident about
         if any(r.area == area and (r.digital_issue or r.physical_issue) for r in view.field_reports):
             c = 1.0
+        if view.containment and any(
+            o.area == area and o.comms in ("backup", "down") for o in view.observed.areas
+        ):
+            c = max(c, CONTAINMENT_CONFIDENCE)  # a declared intrusion: lost supervision there is suspect
         return c
 
     def _score(self, coa: COA, view: AgentView) -> float:
