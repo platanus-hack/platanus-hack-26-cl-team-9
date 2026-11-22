@@ -42,6 +42,7 @@ def _node_records() -> dict:
                 "id": p["id"],
                 "name": p["name"],
                 "kind": p["kind"],
+                "country": p.get("country", "CHL"),
                 "kv": p["kv"],
                 "kv_levels": p["kv_levels"],
                 "owner": p["owner"],

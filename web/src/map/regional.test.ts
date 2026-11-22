@@ -5,9 +5,9 @@ import { buildRegionalLayers, REGIONAL_NO_LOAD, regionalTooltip, type RegionalGr
 
 const GRID: RegionalGrid = {
   countries: [],
-  lines: [{ id: "BRA-R1", kv: 500, circuits: 2, lengthKm: 120.4, source: "EPE WebMap capa 23", path: [[-50, -10], [-51, -11]] }],
-  substations: [{ id: "BRA-B1", name: "SE A", kv: 500, kind: "substation", source: "EPE WebMap capa 22", position: [-50, -10] }],
-  plants: [{ id: "BRA-G1", name: "SE A", tech: "hidro", mw: 14000, count: 3, source: "EPE WebMap capa 16", position: [-50, -10] }],
+  lines: [{ id: "BRA-R1", country: "BRA", kv: 500, circuits: 2, lengthKm: 120.4, source: "EPE WebMap capa 23", path: [[-50, -10], [-51, -11]] }],
+  substations: [{ id: "BRA-B1", country: "BRA", name: "SE A", kv: 500, kind: "substation", source: "EPE WebMap capa 22", position: [-50, -10] }],
+  plants: [{ id: "BRA-G1", country: "BRA", name: "SE A", tech: "hidro", mw: 14000, count: 3, source: "EPE WebMap capa 16", position: [-50, -10] }],
 };
 
 describe("regional layers", () => {

@@ -337,3 +337,12 @@ def test_cascade_parameters_carry_provenance(tmp_path):
     (tmp_path / "bad.yaml").write_text("frequency:\n  f0_hz: 50.0\n", encoding="utf-8")
     with pytest.raises(ParameterError):
         load_params("bad", tmp_path)
+
+
+def test_network_json_carries_country_on_every_node_and_line():
+    """Issue #49: every element says which country it belongs to (ISO3), as data/processed/latam does."""
+    from cascadasen.application.cache_builder import network_json
+
+    doc = network_json(_toy_net())
+    assert all(n["country"] == "CHL" for n in doc["nodes"])
+    assert all(ln["country"] == "CHL" for ln in doc["lines"])

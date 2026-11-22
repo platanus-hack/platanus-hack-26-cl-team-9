@@ -7,6 +7,88 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** #81's flat 4 h x 8.79 US$/kWh gave US$ 390 M for the 25F; the ISCI study for Enel Foundation [44] gives US$ 984 M and 81,430 MWh, and a blackout costs more per hour than load shedding. Now the 25F gives US$ 984.3 M and 81,443 MWh.
 - **Agents:** the two calibrated terms come from [44] (`cascade.yaml` `cost`), not from tuning the engine; only the 25F is checked against a real figure. `failure_cost(shed)` without the dark split counts everything as dark with no premium (N-1 money at risk). The 13-area engine's consequence card (`outage_cost`) is unchanged.
 - **Files:** `backend/src/cascadasen/{domain/simulation/consequence.py,domain/cascade/engine.py,domain/cascade/health.py,domain/cascade/params/cascade.yaml,application/grid_simulation.py,api/grid_routes.py}`, tests, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,gridsApi.ts}`, `docs/{engine,datasets}.md`.
+## 2026-11-22 · Merge origin/main into feat/network-selector
+
+- **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.
+  - `CascadeApp.tsx` was rebuilt on main's version, and the network selector, the per-country camera, the view-only networks and the upload were applied again on top.
+  - **"Fuentes de la grilla" (`GridSources.tsx`) is now one choice (radio), not checkboxes** (user decision 2026-11-22: one network at a time wins). Choosing Chile composes it with no context; choosing another country composes only that country's context document and shows it alone. The marked row is the network on the map, synced with the panel header; choosing in the header returns to the app files.
+  - The backend `regional_document` (`domain/grids.py`) writes `country` on every line, substation and plant. `regionalFromDocuments` fills a missing one from the document's country.
+- **Why:** The merge conflicted in `CascadeApp.tsx`, `docs/mapa3.md` and this file, and main's multi-country composition contradicted issue #49 ("nunca hay más de una red dibujada").
+- **Agents:**
+  - On a network other than Chile's, the Estado de la red and Simulación tabs are disabled, and Prender todo, the timeline, the legend and the pins are hidden. Chile's changes (`edits`) are kept and come back with Chile, and the URL drops `cut` meanwhile.
+  - After a second merge of main (#53, #81, #91) all backend tests pass, including `test_the_committed_cache_matches_the_engine_for_a_single_cut`. The health index (#81) shows only in Chile's Simulación tab.
+  - The 404 on `/api/v1/grids/cost` is expected until issue #82.
+- **Files:** `web/src/cascade/{CascadeApp,GridSources}.tsx`, `web/src/map/regional.ts`, `backend/src/cascadasen/domain/grids.py`, `backend/tests/unit/{test_grids,test_cascade}.py`, `docs/{grids,mapa3}.md`.
+
+## 2026-11-22 · fix(map): never set the new country's limits mid-flight
+
+- **Changed:** In `baseMap.ts` the Mapbox `setTarget` fallback timer now lands the camera only when `!map.isMoving()`. `moveend` lands it otherwise. Also replaced a `return void fit()` flagged by the IDE linter.
+- **Why:** Found testing the Mapbox basemap in a browser. On a slow machine the 1.2 s flight lasted about 3.6 s, so the timer (1.7 s) could set the new `maxBounds` and min zoom while the camera was still flying and bend its path.
+- **Agents:** Mapbox is now tested in a browser (Chrome, real token), with the camera read from the map instance:
+  - all five countries and an upload in Germany land with their own frame, min zoom and `maxBounds`;
+  - 2D/3D is kept, `?pais=BRA` works, and the 25F case plays;
+  - dragging out to sea snaps back to the last valid coastal point.
+
+  Test-script pitfall: returning the Map instance from `page.evaluate` (for example `() => map.jumpTo(...)`) fails with "Execution context was destroyed". That is not an app error.
+- **Files:** `web/src/map/baseMap.ts`.
+
+## 2026-11-22 · docs(regional): document one network at a time, per-country camera and uploads
+
+- **Changed:**
+  - `mapa3.md` has a new section 4.1 (selector, camera per country, view-only networks, Red figures, the `country` field, upload formats, checks, safety and storage). It also gains the `?pais=` row, "Ver toda la red" and the new files in section 8.
+  - `regional.md`: the countries are shown one at a time and loaded on demand.
+  - `network-format.md` §6: the upload limits are now enforced, with the differences listed.
+  - `plan.md` §9 item 14 records the decisions of issue #49 and what is still open.
+- **Why:** AGENTS.md: behaviour changes are documented in the same delivery.
+- **Agents:** The CHANGELOG entry of 2026-11-21 saying "the proposed upload limits are not enforced anywhere yet" is now wrong: `web/src/map/upload.ts` enforces them. Still open: simulating an uploaded network (phase 2), sharing uploads (#34/#44), and running the Mapbox path in a browser.
+- **Files:** `docs/{mapa3,regional,network-format,plan}.md`.
+
+## 2026-11-22 · feat(map): one network at a time, per-country camera, selector and upload
+
+- **Changed:** Mapa 3 draws one network at a time.
+  - **Selector:** the panel header (`NetworkPicker.tsx`) picks Chile, a country with a drawn layer, or a network uploaded in this browser. `?pais=PER` opens Peru framed (`url.ts` writes and drops `pais`).
+  - **Camera:** `BaseMap.setTarget(target, ms)` flies to the network's frame keeping 2D/3D. On Mapbox it swaps `maxBounds`, the min zoom (frame − 1.5) and the over-land check to that country; the offline map gets the same frame and zoom limits.
+  - **Loading:** `regional.ts` loads one country on demand (`loadCountryGrid`, replaces `loadRegionalGrid`) and its outline (`loadOutline`).
+- **Changed:** Networks other than Chile's are view only. The Simulación tab and the Escenarios tree are disabled with `VIEW_ONLY`, and `?cut=` is ignored. The timeline, legend and pins are hidden. The Red tab shows `latam/manifest.json` figures (`summaryFromManifest`) or computes them from an upload (`summaryFromGrid`).
+- **Changed:** Upload ("Subir una red…", `UploadNetwork.tsx`):
+  - the form takes a file and a required ISO3 country, and asks to confirm when the file names another country;
+  - `upload.ts` `parseUpload` accepts the regional GeoJSON v2 or the v1 JSON, checks it and refuses it with a list of reasons;
+  - `uploadStore.ts` keeps uploads in IndexedDB; "Quitar" removes one.
+- **Changed:** Fixed the offline map's frame offset. `_viewState` spread a viewport and lost its longitude, so wide frames slid under the panel.
+- **Why:** Issue #49 parts B and C, with the user's choices: a selector only; both upload formats; the Red figures follow the network.
+- **Agents:**
+  - Only `networkId === "CHL"` draws `buildCascadeLayers`; the other networks draw `buildRegionalLayers` only. The cascade no longer takes a `regional` param from the app.
+  - A session forces CHL and locks the selector.
+  - Names from an upload are text only: React text and the deck.gl tooltip `text` field, never `html`.
+  - Tested by `upload.test.ts`, which includes Brazil's real `network.json` and a malicious name, and by `url.test.ts` (`pais`).
+  - Checked in the browser on the offline basemap (no Mapbox token on this machine): the five countries and an upload, in 2D and 3D, with no console errors. **The Mapbox path was not run in a browser.**
+- **Files:** `web/src/cascade/{CascadeApp,NetworkPicker,UploadNetwork,NetworkPanel}.tsx`, `web/src/cascade/{networkSummary,url}.ts`, `web/src/cascade/cascade.css`, `web/src/map/{baseMap,regional,upload,uploadStore}.ts`, tests.
+
+## 2026-11-22 · feat(map): network catalog, camera bounds from data and ISO3 list
+
+- **Changed:** New pure modules:
+  - `web/src/map/country.ts`: `countryOf` (missing field reads as `CHL`), the `BUILT_IN` catalog (only CHL `simulable`), `networkFromParam` for `?pais=`, `VIEW_ONLY` text;
+  - `web/src/map/countryBounds.ts`: `cameraTarget(buses, outline)` returns the frame, `maxBounds` and land, plus `boundsOf`, `pad`, `outlineOf`;
+  - `web/src/map/iso3.ts`: ISO 3166-1 alpha-3 list with Spanish names through `Intl.DisplayNames`.
+- **Why:** Issue #49 part B: the camera boxes must come from the data, not be written by hand, and must work for uploaded networks too.
+- **Agents:**
+  - The frame is the box of the network's buses plus 4 %; `maxBounds` is buses ∪ outline, grown by its larger side (at least 8°).
+  - `countryBounds.test.ts` reads `web/public/cache/network-2026.json` and `data/processed/latam/<ISO3>/substations.geojson`. It checks that each frame holds all substations, that `maxBounds` holds the frame, and that over 90 % of the substations are on the country's land.
+- **Files:** `web/src/map/{country,countryBounds,iso3}.ts`, `web/src/map/{country,countryBounds}.test.ts`.
+
+## 2026-11-22 · chore(data): regenerate Chile exports with country
+
+- **Changed:** `web/public/cache/network-{2025,2026}.json`, `data/processed/geo/*.geojson` and `data/processed/node_index.json` now carry `country: "CHL"` on every node, line and feature. No other value changed (checked by a JSON diff that ignores `country`).
+- **Why:** Issue #49 part A, decided with the user: regenerate now instead of waiting for #34. The frontend still reads a missing field as `CHL` (`countryOf`).
+- **Agents:** The geo layers and the node index were patched in place (field appended to each feature) instead of re-exported, because re-exporting from `grid_snapshot.json` rounds coordinates to 6 decimals and would have changed 1,217 positions. `network-*.json` came from `_network_json` over the same networks. The next `cascadasen-build` / `cascadasen-cache` writes the field by itself.
+- **Files:** `web/public/cache/network-*.json`, `data/processed/geo/*.geojson`, `data/processed/node_index.json`.
+
+## 2026-11-22 · feat(network): add country to the reduced network and exports
+
+- **Changed:** `Line` and `ReducedNetwork` (`domain/cascade/network.py`) get `country: str = "CHL"` (ISO3). `cache_builder._network_json` and `theater_network_view` (the session and `/sim/network` view) write `country` on every node and line. `GridQueryService.geojson` adds `country: "CHL"` to every feature of every layer (`geo/*.geojson`), and `data/scripts/build_node_index.py` copies it into `node_index.json`.
+- **Why:** Issue #49 part A: every substation, line and plant says which country it belongs to, with the same field the regional layer (`data/processed/latam/`) already has.
+- **Agents:** `country` is the network-level ISO3 of a `ReducedNetwork`; a reduced network never spans two countries. New constructors may omit it (default `CHL`). Tests: `test_network_json_carries_country_on_every_node_and_line`, plus asserts in `test_geojson_layers` and `test_theater_network_is_the_mapa3_network`.
+- **Files:** `backend/src/cascadasen/domain/cascade/network.py`, `backend/src/cascadasen/application/{cache_builder,simulation_service,grid_queries}.py`, `data/scripts/build_node_index.py`, `backend/tests/`.
 
 ## 2026-11-22 · fix(assistant): cut leaked DeepSeek tool markup from the text
 

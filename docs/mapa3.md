@@ -119,14 +119,15 @@ The cache (about 46 MB, 4 hours x (273 line cuts + 188 substation shutdowns + `h
 | `/?mapa=3&point=feb2025-1500` | Pick the hour: `feb2025-1500`, `feb2025-0300`, `nov2026-1300`, `nov2026-2000` |
 | `/?mapa=3&point=feb2025-1500&cut=R239` | The 25F corridor cut, already playing |
 | `/?point=feb2025-1500&cut=R239&vista=3d` | The same, with the camera tilted |
+| `/?pais=PER` | Peru's network, framed (also `ARG`, `BOL`, `BRA`; view only, section 4.1) |
 
-The URL follows the app: choosing a point, cutting a line or switching to 3D rewrites `point`, `cut` and `vista`, so the address bar is always a deep link to the current view. It carries only values that differ from the defaults: a point other than `nov2026-1300`, a cut, and `vista=3d`. Other params (`sesion`, `mapa`, `limite`) are kept. A bare `/` is the default view, and an explicit `?point=nov2026-1300` is normalised to `/` (`web/src/cascade/url.ts`).
+The URL follows the app: choosing a point, cutting a line or switching to 3D rewrites `point`, `cut` and `vista`, so the address bar is always a deep link to the current view. It carries only values that differ from the defaults: a point other than `nov2026-1300`, a cut, `vista=3d` and `pais` for a network other than Chile's (an uploaded network is not written: it exists only in that browser). Other params (`sesion`, `mapa`, `limite`) are kept. A bare `/` is the default view, and an explicit `?point=nov2026-1300` is normalised to `/` (`web/src/cascade/url.ts`).
 
 With `VITE_MAPBOX_TOKEN` in `web/.env.local` (git-ignored) the basemap is Mapbox. Without it, the offline Chile outline is used.
 
 ## 3. 2D and 3D views
 
-The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The map controls also have **Ver todo Chile**, which returns the camera to the initial fit. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`).
+The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The map controls also have **Ver toda la red**, which returns the camera to the frame of the network on the map. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`).
 
 ## 4. How to use it
 
@@ -140,7 +141,7 @@ Layout (Paper "Design v5", `docs/design.md` section 3.2, with the Design v6 rail
    | Apagón 2011 · Ancoa | `nov2026-2000` | cut `R006` (Alto Jahuel – Ancoa 500 kV) | 3.2 M people, 2,118 of 10,934 MW, 5 stages | 24 Sep 2011, 9.8 M people, Coquimbo to Maule; a 500/220 kV transformer failed at S/E Ancoa ([Wikipedia](https://es.wikipedia.org/wiki/Apag%C3%B3n_de_Chile_de_2011)) |
    | Terremoto 2010 · Charrúa | `nov2026-2000` | S/E Charrúa (`B043`) out of service | 4.1 M people, 2,410 of 10,934 MW, 2 stages | 14 Mar 2010, more than 13 M people, the whole SIC; a transformer damaged by the 27F earthquake failed |
 
-   ASSUMPTION: 2011 and 2010 are analogues on today's network at the closest hour we have (the 2026 evening peak), not reproductions: the reduced network folds transformers into lines, the post-earthquake damage is not in the repo, and the 2010 SIC was not joined to the north. Measured 2026-11-22. Issue #35 lists how to bring Charrúa closer to the real event. The cuts the user makes are not scenarios: they go to the tab Estado de la red. **Benchmark** holds the operating conditions with no cut, other than the 25F's own point: "Demanda mínima", "Mediodía solar" and "Punta nocturna", each with its date. Clicking an entry opens it (Benchmark on the Red tab with line colour Tensión, Desastres on Simulación with Carga). A bare `/` opens Mediodía solar with Chile alone; the selected background marks the active one. A cut on another hour is made by picking a Benchmark condition and cutting a line on the map. If the cache has no timeline for that cut at the point, the app shows the base case and a note. If the tree does not fit, it scrolls and "Ayuda" stays at the bottom. Code: `web/src/cascade/Scenarios.tsx`; the names and date lines come from `conditionName` and `conditionDate` in `text.ts`. "Fuentes de la grilla" below it picks the networks that make up the grid (docs/grids.md).
+   ASSUMPTION: 2011 and 2010 are analogues on today's network at the closest hour we have (the 2026 evening peak), not reproductions: the reduced network folds transformers into lines, the post-earthquake damage is not in the repo, and the 2010 SIC was not joined to the north. Measured 2026-11-22. Issue #35 lists how to bring Charrúa closer to the real event. The cuts the user makes are not scenarios: they go to the tab Estado de la red. **Benchmark** holds the operating conditions with no cut, other than the 25F's own point: "Demanda mínima", "Mediodía solar" and "Punta nocturna", each with its date. Clicking an entry opens it (Benchmark on the Red tab with line colour Tensión, Desastres on Simulación with Carga). A bare `/` opens Mediodía solar with Chile alone; the selected background marks the active one. A cut on another hour is made by picking a Benchmark condition and cutting a line on the map. If the cache has no timeline for that cut at the point, the app shows the base case and a note. If the tree does not fit, it scrolls and "Ayuda" stays at the bottom. Code: `web/src/cascade/Scenarios.tsx`; the names and date lines come from `conditionName` and `conditionDate` in `text.ts`. "Fuentes de la grilla" below it picks, from the documents the backend stores, the one network on the map (docs/grids.md, section 4.1).
 2. **Nav rail, other items**: "Fuentes y supuestos" opens the sources and every engine assumption in the panel; "Ayuda" opens what the map draws (section 5). "Validación" is not built yet.
 3. **Tab Red**: size of the whole IDE Energía grid (km of lines, substations, installed MW, km by voltage band). Line colour shows voltage.
 4. **Select and cut.** A single click on a line or a substation selects it at once (white halo on a line, larger outlined dot on a substation) and its card opens at the top of the panel, in whichever tab is open; selecting never switches tabs or the line colour, and it leaves Ayuda or Fuentes. Clicking empty map or pressing Escape clears it. The line card shows voltage, the model branches folded into the corridor (not physical circuits), capacity, flow with its direction, loading and status at the current second (en servicio, sobrecargada, fuera de servicio, sin tensión; a line exactly at 100 % reads "al límite"), its two end substations (a click selects them) and the button **Sacar de servicio**. A **double click** on a line does the same as the button. The cut line's card and the impact card offer **Reponer línea**, which returns to the base case at the same point. A cut clears the selection and switches the panel to **Simulación** and line colour to load, so the impact card is at the top. The substation card shows kV, zone, generation, demand, people and its connected lines with their loading; a click on one of those lines selects it. Its button **Apagar esta subestación** (or a double click on the substation) takes it out of service with its demand and generation; it is one more change in Estado de la red, simulated together with the others through `POST /api/v1/grids/simulate` (docs/grids.md). In a session it opens that substation's lines instead (section 11). A link `?cut=sub-B012` opens with that substation out of service. While it is out, its card and the impact card offer **Encender subestación**. The cache still holds `<point>/sub-B###.json` (every line of that bus opened at t = 0, built by `cascadasen-cache`); the app no longer reads it. How clicks arrive on each basemap: `web/src/cascade/clicks.ts`.
@@ -150,6 +151,50 @@ Layout (Paper "Design v5", `docs/design.md` section 3.2, with the Design v6 rail
 8. **Legend** (bottom right): "Color de líneas" switches between Tensión and Carga. The Tensión legend lists only the voltage tiers in the model network; the Carga legend always lists six items and dims the ones absent from the current frame.
 9. **Tabs outside a session:** **Estado de la red** (first), **Red** and **Simulación**. "Qué lo habría evitado" and "Validación" are not built yet and are not shown, so the tabs fit the 440 px panel. **Estado de la red** starts with "Resultado de la caída" (people without power and % of the country, MW lost, generation lost, islands that went dark: the same figures Simulación shows at its last second, and the cost from `POST /api/v1/grids/cost`, pending until issue #82 is built). It lists every change the user made (lines cut and substations out of service), each with **Reponer**, and **Reponer todo**. A new cut or outage adds to the list, never replaces it. A double click on a substation takes it out of service like on a line (a shared session keeps its own edits in Datos). With no change or one line the app reads the precalculated timeline from `web/public/cache`; with more it calls `POST /api/v1/grids/simulate` and plays the timeline it returns (docs/grids.md). Code: `web/src/cascade/{edits.ts,NetworkState.tsx}`.
 10. **Prender todo** (top right, left of the map controls): one step back to the full, energised network. It shows from every tab and from Ayuda, Fuentes and Sesión. It clears every cut, the selection and the notice, and puts the timeline at 0, paused. It clears the list in Estado de la red (lines and substations) and keeps the operating point, so the rail shows the Benchmark entry of that hour and the URL drops `cut`. The tab, the line colour and the 2D/3D view do not change. It is disabled ("No hay nada apagado ni editado.") while no change is in force; a selection or a timeline position alone does not enable it. Code: `web/src/cascade/powerAll.ts` (`canPowerAll`, `powerAll`). Session behaviour: section 11.
+
+### 4.1 One network at a time: other countries and uploaded networks
+
+Issue #49. The map draws **one network at a time**. The panel header names it ("Chile · Sistema Eléctrico Nacional") and is the selector: a click opens the list.
+- **Countries:** Chile and every country with a drawn layer (`docs/regional.md`).
+- **Redes subidas:** each one with its name, its country and **Quitar**.
+- **Subir una red…**
+
+**Fuentes de la grilla** (rail) chooses the same way, with one choice, from the documents the backend stores (docs/grids.md). Choosing a network removes the previous one from the map. The camera flies to the new one, keeping 2D or 3D. Code: `web/src/cascade/NetworkPicker.tsx` and the `networkId` state in `CascadeApp.tsx`; the catalog is `BUILT_IN` in `web/src/map/country.ts`.
+
+- **Camera per country** (`web/src/map/countryBounds.ts`, `cameraTarget`). Nothing is written by hand: everything comes from the data.
+  - The frame is the box of the network's own buses plus 4 %: Chile's reduced network, the other countries' `substations.geojson`, or the upload. It stops where the grid stops (Chiloé for Chile, not Cape Horn).
+  - The area the camera may wander (`maxBounds` on Mapbox) is the box of the buses and of the country outline (`chile.geojson`, or the `shapeGroup` of `latam/outlines.geojson`), grown by its larger side (at least 8°). It is wide on purpose: Mapbox keeps the whole viewport inside it, and Chile is tall and thin.
+  - The lowest zoom is the frame's zoom minus 1.5; the highest stays 13. So Brazil can zoom out much further than Chile.
+  - The over-land check uses only the chosen country's outline. An upload has none, because its country is only declared.
+  - The basemap's `BaseMap.setTarget` lifts the old limits, flies (1.2 s, `fitBounds` with the panel clearance) and sets the new limits when the camera lands. The first fit (page load or `?pais=`) jumps.
+  - `web/src/map/countryBounds.test.ts` checks, for each of the five countries, that the frame holds every substation, that `maxBounds` holds the frame, and that over 90 % of the substations are on that country's land.
+- **Only Chile's network is simulated.** The others are drawn at level L0 (`network-format.md` section 2: no reactance, capacity, demand or inertia). On those networks:
+  - the Estado de la red and Simulación tabs and the Escenarios tree are disabled, with the tip "Esta red es solo para ver…", and the Red tab repeats it;
+  - **Prender todo**, the timeline card, the map legend and the event pins are hidden. Chile's changes (Estado de la red) are kept and come back with Chile;
+  - `?cut=` is ignored, and the URL drops `cut` while another network is shown;
+  - their elements are not clickable as cuts (layer ids `regional-*`); the tooltip ends "Red solo para ver: no se simula".
+  - A shared session (`?sesion=`) is always Chile's, and the selector is locked there.
+- **Red tab figures.** Chile keeps the IDE Energía figures. A country takes its figures from `latam/manifest.json` (`line_km_by_kv`, `counts.substations`, `plant_mw_by_tech`, `summaryFromManifest`): these are the reduced layer's numbers, so its km undercount (`regional.md` section 2). An upload computes them from itself (`summaryFromGrid`); a line without `length_km` counts its drawn length.
+- **`country` field.** Every node and line of `network-<year>.json`, every feature of `data/processed/geo/*.geojson` and every record of `node_index.json` carry `country: "CHL"`. The frontend reads the field only through `countryOf` (`web/src/map/country.ts`), which treats a missing field as `CHL`, so an older cache still works.
+
+**Uploading a network** (part C; panel view "Subir una red", `web/src/cascade/UploadNetwork.tsx`):
+- The form asks for a file, a **required** country (ISO3 list, Spanish names from `Intl.DisplayNames`, `web/src/map/iso3.ts`) and an optional name.
+- Accepted formats, one file each (`docs/network-format.md`):
+  - a GeoJSON FeatureCollection in the regional schema v2: `LineString` lines with `a`, `b` and `kv`; `Point` substations with `kv`; `Point` plants with `bus` or `mw`;
+  - the v1 network JSON with `buses`, `lines`, `dc_links` and `plants` (Brazil's `latam/BRA/network.json` is accepted as is).
+- `parseUpload` (`web/src/map/upload.ts`) refuses the file with a list of what failed (up to 12 items, then "y N errores más"). It refuses:
+  - a file over 10 MB (checked before reading it), or with more than 5,000 buses or 10,000 lines;
+  - a file that is not JSON, or JSON of another shape;
+  - a country that is not ISO3;
+  - lat outside −90..90 or lon outside −180..180;
+  - kv not a number or outside 1..1,500, or mw negative;
+  - a missing or repeated id;
+  - a line end that is not a substation of the file, or `a = b`;
+  - a file with no substations.
+- If the file names another country, the form asks to confirm. The declared country is written onto every element.
+- **Safety:** the file is read with `JSON.parse` only. Values are copied field by field into new objects. Text is cut to 120 characters, without control characters. Names reach the screen only as React text and through the deck.gl tooltip's `text` (never `html`). `upload.test.ts` covers the refusals, the country mismatch and a name with `<img onerror>` / `<script>`.
+- **Storage:** IndexedDB in this browser only (`web/src/map/uploadStore.ts`, database `sub50`, store `uploaded-networks`); nothing is sent to a server. If the browser refuses to store it, the network still shows and a note says it will be lost on reload. Sharing it is for #34 / #44.
+- An upload is never simulated (phase 2 would need the inputs of `docs/minimum-dataset.md`).
 
 ## 5. Legend (what the map draws)
 
@@ -235,6 +280,10 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/src/cascade/cascade.css` | Styles of the shell (Design v5 tokens) |
 | `web/src/assistant/` | **Asistente** rail item: chat with the in-app assistant, its steps live, the map following its session (`docs/assistant.md` section 2c) |
 | `web/src/map/shapes.ts` | Outline of the rectangular bars |
+| `web/src/map/country.ts`, `countryBounds.ts` | Network catalog, `countryOf`, `?pais=`; camera frame, limits and land from the data (section 4.1) |
+| `web/src/map/regional.ts` | Loads one country's drawn layer (`loadCountryGrid`) and its outline (`loadOutline`); layers `regional-*` |
+| `web/src/map/upload.ts`, `uploadStore.ts`, `iso3.ts` | Upload validation, browser storage, ISO3 list |
+| `web/src/cascade/NetworkPicker.tsx`, `UploadNetwork.tsx` | Network selector in the panel header; upload form |
 
 The frontend only reads files. All physics is in `backend/src/cascadasen/domain/cascade/`.
 

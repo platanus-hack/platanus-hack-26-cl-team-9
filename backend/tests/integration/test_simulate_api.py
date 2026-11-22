@@ -119,6 +119,7 @@ def test_theater_network_is_the_mapa3_network(client):
     net = client.get("/api/v1/sim/network").json()
     ids = {n["id"] for n in net["nodes"]}
     assert ids == {f"B{i:03d}" for i in range(6)} and all(ln["id"].startswith("R") for ln in net["lines"])
+    assert all(x["country"] == "CHL" for x in net["nodes"] + net["lines"])
     assert [a["id"] for a in net["areas"]] == ["T1", "T2", "T3"]
     assert {c["id"] for c in net["corridors"]} == {"T1-T2", "T2-T3"}
     assert all(set(a["buses"]) <= ids and a["anchor_bus"] in a["buses"] for a in net["areas"])

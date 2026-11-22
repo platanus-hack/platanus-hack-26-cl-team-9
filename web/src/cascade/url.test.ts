@@ -28,4 +28,11 @@ describe("syncedSearch", () => {
   it("normalises an explicit default point away", () => {
     expect(syncedSearch("?point=nov2026-1300", base)).toBe("");
   });
+  it("writes a network other than Chile's, and drops ?pais=CHL", () => {
+    expect(syncedSearch("", { ...base, country: "PER" })).toBe("?pais=PER");
+    expect(syncedSearch("?pais=CHL", { ...base, country: "CHL" })).toBe("");
+  });
+  it("a session is always Chile's: no pais", () => {
+    expect(syncedSearch("?sesion=abc&pais=PER", { ...base, sid: "abc", country: "PER" })).toBe("?sesion=abc");
+  });
 });

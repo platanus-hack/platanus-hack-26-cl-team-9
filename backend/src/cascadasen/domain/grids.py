@@ -90,6 +90,7 @@ def regional_document(iso: str, meta: dict, lines: dict, substations: dict, plan
         "lines": [
             {
                 "id": props(f)["id"],
+                "country": iso,
                 "kv": props(f)["kv"],
                 "circuits": props(f)["circuits"],
                 "lengthKm": props(f)["length_km"],
@@ -101,6 +102,7 @@ def regional_document(iso: str, meta: dict, lines: dict, substations: dict, plan
         "substations": [
             {
                 "id": props(f)["id"],
+                "country": iso,
                 "name": props(f)["name"],
                 "kv": props(f)["kv"],
                 "kind": props(f)["kind"],
@@ -112,6 +114,7 @@ def regional_document(iso: str, meta: dict, lines: dict, substations: dict, plan
         "plants": [
             {
                 "id": props(f)["id"],
+                "country": iso,
                 "name": props(f)["name"],
                 "tech": props(f)["tech"],
                 "mw": props(f)["mw"],
