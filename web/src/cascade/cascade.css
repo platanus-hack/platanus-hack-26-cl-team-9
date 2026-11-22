@@ -197,6 +197,9 @@
   color: var(--fg); font-size: 11px; font-weight: 600; line-height: 12px; white-space: nowrap; cursor: pointer;
 }
 .shell .marker { position: absolute; top: 28px; }
+/* when the network splits into islands: a tick under the rail with the count, so the moment reads without opening a marker */
+.shell .island-tick { position: absolute; top: 41px; transform: translateX(-50%); padding: 0 3px; border: 0; border-top: 1px solid var(--faint); background: none; color: var(--faint); font: 500 9px/11px inherit; white-space: nowrap; cursor: pointer; }
+.shell .island-tick.past { border-top-color: var(--fg-2); color: var(--fg-2); }
 .shell .marker.future { border-color: #ffffff33; color: var(--faint); }
 .shell .marker.current, .shell .pin.current { height: 24px; min-width: 24px; border: 2px solid var(--fg); border-radius: 12px; background: var(--fault); color: #18191b; font-size: 12px; }
 .shell .marker.current { top: 26px; }
