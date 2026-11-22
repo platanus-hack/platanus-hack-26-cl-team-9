@@ -27,6 +27,7 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "add_generator": ("get_session_network", "add_generator"),
     "add_line": ("add_line",),
     "add_bus": ("add_bus",),
+    "add_substation": ("get_session_network", "add_substation"),
     "edit_element": ("update_bus", "update_line", "update_load", "update_generator"),
     "remove_element": ("delete_bus", "delete_line", "delete_load", "delete_generator"),
     "reset_network": ("reset_session",),
@@ -214,6 +215,47 @@ class Sub50Tools:
         resp = self.client.post(f"{self._base()}/buses", {"name": name, "lat": lat, "lon": lon, "kv": kv})
         return {**digest.edit_digest(resp), **self._after_edit(before)}
 
+    def add_substation(
+        self,
+        name: str,
+        lat: float,
+        lon: float,
+        kv: float,
+        connections: list[dict[str, Any]],
+        load_mw: float | None = None,
+        load_kind: Literal["datacenter", "consumo"] = "consumo",
+        generator_mw: float | None = None,
+        generator_tech: str | None = None,
+    ) -> dict[str, Any]:
+        """Add a substation (a new bus) with 1 to 6 lines, all or nothing. Propose it to the user first
+        (place, kv, which buses it connects to, MW) and call only after they agree; never invent MW.
+        `kv` is a base voltage (66, 110, 154, 220, 500) and every connected bus must have that voltage.
+        `connections`: [{"to": place or bus id, "capacity_mw": optional}], `to` resolves like add_datacenter;
+        without `capacity_mw` the line takes the typical value of its neighbours. `load_mw` adds demand
+        (`load_kind` datacenter or consumo); `generator_mw` with `generator_tech` adds generation. The result
+        lists the ids created and `coherence` notes (odd capacity, very long line, MW above the lines):
+        tell the user about them. At most 80 added elements per session; a new scenario resets them."""
+        net, before = self._network(), None
+        before = self._overloaded(net)
+        conns = []
+        for c in connections:
+            conn = {
+                "to": digest.resolve_bus(net, c.get("to", "")),
+                **{k: c[k] for k in ("capacity_mw", "x_pu") if c.get(k)},
+            }
+            conns.append(conn)
+        body: dict[str, Any] = {"name": name, "lat": lat, "lon": lon, "kv": kv, "connections": conns}
+        if load_mw:
+            body["load"] = {"mw": load_mw, "kind": load_kind}
+        if generator_mw:
+            body["generator"] = {"mw": generator_mw, "tech": generator_tech}
+        resp = self.client.post(f"{self._base()}/substations", body)
+        return {
+            **digest.edit_digest(resp),
+            **{k: resp.get(k) for k in ("line_ids", "load_id", "generator_id", "coherence")},
+            **self._after_edit(before),
+        }
+
     def edit_element(self, element_id: str, changes: dict[str, Any]) -> dict[str, Any]:
         """Change an element by id. Bus B###: name, kv, lat, lon, load_mw, gen_mw, sync_mw, inertia_mws,
         in_service. Line R###/U###: capacity_mw, x_pu, in_service. Load or datacenter D###: mw, kind,
@@ -230,10 +272,12 @@ class Sub50Tools:
         resp = self.client.delete(self._element_path(element_id))
         return {"removed": element_id.upper(), **digest.edit_digest(resp or {}), **self._after_edit(before)}
 
-    def reset_network(self) -> dict[str, Any]:
-        """Remove every edit and open line of the session; runs keep the dataset they were created with."""
+    def reset_network(self, scenario: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Remove every edit of the session; runs keep the dataset they were created with. With `scenario`
+        ({"changes": [...], "open_lines": [...], "out_buses": [...]}, as in prepare_scenario) the grid becomes
+        that configuration instead of the base one; what the session added is dropped either way."""
         before = self._overloaded()
-        resp = self.client.post(f"{self._base()}/reset")
+        resp = self.client.post(f"{self._base()}/reset", {"scenario": scenario} if scenario else None)
         return {"reset": True, "warnings": resp.get("warnings", []), **self._after_edit(before)}
 
     def _overloaded(self, net: dict[str, Any] | None = None) -> list[str]:

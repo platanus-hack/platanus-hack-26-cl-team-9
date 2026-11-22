@@ -14,6 +14,7 @@ const TOOL_NAMES: Record<string, string> = {
   add_generator: "Agregar generador",
   add_line: "Agregar línea",
   add_bus: "Agregar barra",
+  add_substation: "Agregar subestación",
   edit_element: "Editar elemento",
   remove_element: "Quitar elemento",
   reset_network: "Restablecer la red",
@@ -87,7 +88,7 @@ function failureText(result: unknown): string {
 
 /** What the map must reload after a tool: the session network, the cut state, or the run snapshots. */
 export type Refresh = "network" | "state" | "snapshots";
-const NETWORK_TOOLS = new Set(["start_session", "join_session", "add_datacenter", "add_generator", "add_line", "add_bus", "edit_element", "remove_element", "reset_network"]);
+const NETWORK_TOOLS = new Set(["start_session", "join_session", "add_datacenter", "add_generator", "add_line", "add_bus", "add_substation", "edit_element", "remove_element", "reset_network"]);
 const STATE_TOOLS = new Set(["cut_lines", "repair_lines"]);
 export function refreshFor(name: string): Refresh | null {
   if (NETWORK_TOOLS.has(name)) return "network";
