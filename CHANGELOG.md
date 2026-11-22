@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(api): enforce the 64 KB body limit on chunked requests
+- **Changed:** `BodyLimitMiddleware` now counts the body of a request without `content-length` (chunked) on the limited prefixes. Over `MAX_BODY_BYTES` it sends the same 413 JSON (`Cuerpo demasiado grande (máximo 64 KB).`). Otherwise it replays the buffered messages to the app. Requests with `content-length` keep the same path and the prefixes are unchanged.
+- **Why:** A chunked request skipped the limit entirely (review B-04).
+- **Agents:** The 413 body is built in `BodyLimitMiddleware._too_large`. New test `test_a_chunked_body_over_64_kb_gives_413_and_a_small_one_passes` in `tests/integration/test_sessions_api.py`.
+- **Files:** `backend/src/cascadasen/api/limits.py`, `backend/tests/integration/test_sessions_api.py`.
 ## 2026-11-22 · chore(api): log a dropped assistant stream callback at debug level
 - **Changed:** `Emitter.__call__` in `application/assistant.py` logs `stream callback dropped` with `log.debug(..., exc_info=True)` before it sets `callback = None`.
 - **Why:** The `except Exception` swallowed the cause silently. Behaviour is the same.

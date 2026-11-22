@@ -199,6 +199,20 @@ def test_a_body_over_64_kb_gives_413(client):
     assert r.status_code == 413
 
 
+def test_a_chunked_body_over_64_kb_gives_413_and_a_small_one_passes(client):
+    sid = _create(client)
+    big = json.dumps({**DC, "name": "x" * 70000}).encode()
+    r = client.post(f"{BASE}/{sid}/loads", content=(big[i : i + 8192] for i in range(0, len(big), 8192)))
+    assert r.status_code == 413 and r.json() == {"detail": "Cuerpo demasiado grande (máximo 64 KB)."}
+    small = json.dumps(DC).encode()
+    ok = client.post(
+        f"{BASE}/{sid}/loads",
+        content=(small[i : i + 16] for i in range(0, len(small), 16)),
+        headers={"content-type": "application/json"},
+    )
+    assert ok.status_code == 201
+
+
 def test_unknown_and_malformed_sessions_give_404(client):
     assert client.get(f"{BASE}/{'A' * 22}").status_code == 404
     assert client.get(f"{BASE}/no-such").status_code == 404
