@@ -13,7 +13,7 @@ resource "aws_cloudfront_distribution" "main" {
   is_ipv6_enabled = true
   http_version    = "http2and3"
   price_class     = "PriceClass_100"
-  aliases         = [var.domain_name]
+  aliases         = [var.domain_name, "www.${var.domain_name}"]
 
   origin {
     origin_id   = "alb"

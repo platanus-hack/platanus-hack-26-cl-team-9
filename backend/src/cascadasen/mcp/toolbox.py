@@ -37,6 +37,7 @@ NO_SESSION_NEEDED = frozenset({"start_session", "join_session", "list_options", 
 NEEDS_RUN = frozenset({"inject_event", "submit_action"})  # a run is opened for them when none is active
 MAX_STEP_CYCLES = 24  # a step of many cycles can outlast the request deadline
 USER_SIZED = frozenset({"add_datacenter", "add_generator"})  # their MW must come from the user
+SUBSTATION_MW = ("load_mw", "generator_mw")  # add_substation: these MW, and each capacity_mw, too
 SIZED_TARGETS = frozenset({"demand", "generation", "population"})  # prepare_scenario `add` from the user too
 
 
@@ -82,6 +83,19 @@ class SessionTools:
                 "error": f"El usuario no indicó {args.get('mw')} MW. No elijas la potencia: pregúntale "
                 "cuántos MW quiere y espera su respuesta."
             }
+        if call.name == "add_substation" and self.said is not None:
+            values = [args.get(k) for k in SUBSTATION_MW if args.get(k)]
+            values += [
+                c.get("capacity_mw")
+                for c in args.get("connections") or []
+                if isinstance(c, dict) and c.get("capacity_mw")
+            ]
+            wrong = [v for v in values if not stated(v, self.said)]
+            if wrong:
+                return False, {
+                    "error": f"El usuario no indicó {', '.join(f'{v:g}' for v in wrong)} MW. No elijas la potencia: "
+                    "propón la subestación y pregunta antes de crearla."
+                }
         invented = self.invented_adds(call.name, args)
         if invented is not None:
             return False, {
