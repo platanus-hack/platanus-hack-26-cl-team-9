@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { loadOutageCost, type OutageCost, type SimulationResult } from "./gridsApi";
+import { loadOutageCost, type OutageCost, type Prepared, type SimulationResult } from "./gridsApi";
 import { impactAt } from "./simulation";
-import type { Edits } from "./edits";
-import { countEdits } from "./edits";
+import type { Edits, StressChange } from "./edits";
+import { changesOf, countEdits, countFailures } from "./edits";
 import { formatPeople, int, lineName, pct, placeName } from "./text";
 import type { BusState, Network, Timeline } from "./types";
 import { Info } from "./ui";
@@ -11,9 +11,11 @@ import { Info } from "./ui";
  * Tab "Estado de la red": every change made to the grid, kept together so that a new cut adds to the others and
  * never replaces them. Each one can be put back alone, or all at once.
  */
-export function NetworkState({ network, buses, point, edits, result, timeline, restoreLine, restoreBus, restoreAll }: {
+export function NetworkState({ network, buses, point, edits, result, timeline, restoreLine, restoreBus, restoreAll, prepared, dropChange }: {
   network: Network; buses: Record<string, BusState>; point: string; edits: Edits; result: SimulationResult | null; timeline: Timeline | null;
   restoreLine(id: string): void; restoreBus(id: string): void; restoreAll(): void;
+  /** The prepared grid of the scenario's changes, and how to drop one change. */
+  prepared: Prepared | null; dropChange(index: number): void;
 }) {
   const total = countEdits(edits);
   if (total === 0) {
@@ -49,6 +51,16 @@ export function NetworkState({ network, buses, point, edits, result, timeline, r
             <button className="text-btn" onClick={() => restoreBus(id)}>Reponer</button>
           </div>
         ))}
+        {changesOf(edits).length > 0 && <div className="list-head"><span>Escenario preparado · {changesOf(edits).length}</span><span>{prepared ? `${prepared.overloaded_lines.length} líneas sobre su límite` : ""}</span></div>}
+        {changesOf(edits).map((c, i) => (
+          <div className="state-row" key={`${i}-${JSON.stringify(c)}`}>
+            <span className="ellipsis" title={describeChange(c, nodeName, (id) => lineName(network, id))}>{describeChange(c, nodeName, (id) => lineName(network, id))}{matchedText(prepared, i)}</span>
+            <button className="text-btn" onClick={() => dropChange(i)}>Quitar</button>
+          </div>
+        ))}
+        {prepared && changesOf(edits).length > 0 && countFailures(edits) === 0 && (
+          <p className="meta">La red está preparada: {formatPeople(prepared.totals.people_total)} personas, {int(prepared.totals.load_total_mw)} MW de demanda. Saca una línea o apaga una subestación para simularla.{prepared.overloaded_lines.length ? ` ${prepared.overloaded_lines.length} líneas ya superan su límite: la cascada parte con ellas.` : ""}</p>
+        )}
       </div>
       <CascadeLines network={network} timeline={timeline} />
       {result && edits.buses.length > 0 && (
@@ -132,14 +144,38 @@ type CostState = { state: "loading" | "ready" | "pending" | "error"; value: Outa
 
 function useOutageCost(point: string, edits: Edits): CostState {
   const [cost, setCost] = useState<CostState>({ state: "loading", value: null });
-  const key = `${point}|${edits.lines.join(",")}|${edits.buses.join(",")}`;
+  const key = `${point}|${edits.lines.join(",")}|${edits.buses.join(",")}|${JSON.stringify(changesOf(edits))}`;
   useEffect(() => {
     let live = true;
     setCost({ state: "loading", value: null });
-    loadOutageCost({ point, open_lines: edits.lines, out_buses: edits.buses })
+    loadOutageCost({ point, open_lines: edits.lines, out_buses: edits.buses, changes: changesOf(edits) })
       .then((value) => live && setCost({ state: value ? "ready" : "pending", value }))
       .catch((e) => live && setCost({ state: "error", value: null, error: String(e.message) }));
     return () => { live = false; };
   }, [key]);
   return cost;
 }
+
+const TARGET_NAME: Record<StressChange["target"], string> = { population: "Personas", demand: "Demanda", generation: "Generación", lines: "Capacidad" };
+const TECH_NAME: Record<string, string> = {
+  hidro: "hidro", solar: "solar", eolica: "eólica", carbon: "carbón", gas: "gas", diesel: "diésel", bioenergia: "bioenergía",
+  geotermica: "geotérmica", termica: "térmica",
+};
+
+/** One change in words: what it changes, where, and by how much. */
+export function describeChange(c: StressChange, nodeName: (id: string) => string, lineLabel: (id: string) => string): string {
+  const where = [
+    ...(c.buses ?? []).map(nodeName), ...(c.lines ?? []).map(lineLabel), ...(c.comunas ?? []),
+    ...(c.zones ?? []).map((z) => `zona ${z}`), ...(c.areas ?? []).map((a) => `área ${a}`),
+    ...(c.tech ?? []).map((t) => TECH_NAME[t] ?? t), ...(c.kv ?? []).map((k) => `${k} kV`),
+  ];
+  const how = c.factor !== undefined ? `× ${c.factor}` : c.add !== undefined ? `${c.add >= 0 ? "+" : ""}${int(c.add)}${c.target === "population" ? " personas" : " MW"}` : "";
+  const x = c.x_factor !== undefined ? `, reactancia × ${c.x_factor}` : "";
+  return `${TARGET_NAME[c.target]} ${how}${x} · ${where.length ? where.join(", ") : "todo el país"}`;
+}
+
+function matchedText(prepared: Prepared | null, i: number): string {
+  const n = prepared?.changes[i]?.matched;
+  return n === undefined ? "" : ` · ${n} ${n === 1 ? "elemento" : "elementos"}`;
+}
+

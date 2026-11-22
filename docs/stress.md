@@ -61,3 +61,13 @@ The overlay's rule is unchanged: the island's synchronous base units take the im
 `POST /grids/simulate` with or without `changes` adds `supply`. For each generating substation it gives `should_feed` (on the prepared grid before the failure), `feeds` (once the cascade settled) and `pct_fed` (percent). People at a substation out of service count as not fed. `by_zone` adds the same up per zone. A simulation still needs at least one cut or substation out.
 
 Percentages carry 2 decimals. Sources are ordered by id, never by damage (`docs/cyber.md` section 8.2). The assistant tool gets only the per-zone stat.
+
+## Web map
+
+- **Edit in place.** The card of a selected substation has factors for Personas, Demanda and Generación. The card of a line has one for Capacidad. A factor applies on Enter or when the field loses focus, and 1 removes it. Each one writes a change for that component alone (`{"target": "population", "buses": ["B062"], "factor": 2}`), kept with the cuts in `Edits.changes` (`web/src/cascade/edits.ts`, also in localStorage).
+- **Batch changes only from the assistant.** Changes by filters (zones, technologies, comunas) come from the assistant. The person edits one component at a time. "Estado de la red" lists every change, with "Quitar" on each.
+- **Simulation.** With changes, the web never reads the precalculated cache: `/grids/simulate`, `/dependency` and `/cost` get `changes`. With changes and no failure, the map shows the base case, and the panel shows the prepared grid from `/grids/prepare`: totals, lines already over their limit, and the prepared values in the card. "Simulación" shows `supply` per zone, and a generating substation's card shows its own numbers.
+- **Reset.** Opening a disaster or a Benchmark condition drops the changes. "Prender todo" drops everything.
+- **Assistant.** `prepare_scenario` sets the final grid of the map: point, changes, lines out and substations off. It replaces what was on the map. With failures the tool also simulates (people without power with and without the changes, supply per zone), and the map loads the timeline paused at 0. The user presses play. The tool needs no session.
+- **Shared sessions are hidden from the web for now** (#101). There is no rail button, `?sesion=` is ignored and the assistant no longer joins its session. The session code stays in place, inactive.
+

@@ -1,6 +1,16 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): edit components in place, prepared scenarios on the map, the assistant sets the grid; sessions hidden (#101)
+
+- **Changed:** the card of a substation edits Personas, Demanda and Generación by factor, and the card of a line edits Capacidad. They are kept in `Edits.changes` and sent as `changes` to `/grids/simulate`, `/dependency` and `/cost`. "Estado de la red" lists them with "Quitar", plus the prepared grid (`/grids/prepare`). "Simulación" shows supply per zone, and a generator's card shows its own.
+  - The assistant's `prepare_scenario` takes `open_lines` and `out_buses`. With failures it simulates (`simulate_grid`, now an agent route) against the base. The web loads its `scenario` as the final grid, paused at 0.
+  - "Fuentes de la grilla" uses checkboxes again: with Chile ticked, the other countries are drawn around it as context; without Chile they are shown together, view only. This reverses the radio of the #49 merge, by user decision.
+  - Every scenario starts on Carga: the tab no longer switches the colour mode.
+  - Shared sessions are hidden from the web: no rail button, `?sesion=` ignored, the assistant does not join sessions.
+- **Why:** user decisions on 2026-11-22. A person edits one component at a time and batch changes by filters are for the model only. The assistant decides the final grid before a simulation. The cascade still runs only in the existing processes.
+- **Agents:** `prepare_scenario` needs no session (`NO_SESSION_NEEDED`). `useAssistant(s, onScenario)` and `scenarioOf()` read the tool result. `useSession` starts with no session (shortcut comment, #101). `Edits.changes` is optional: old saved edits still load. A prepared scenario never uses the cache. Context layers are drawn under Chile's (`contextLayers`) but are not clickable yet.
+- **Files:** `web/src/cascade/{edits.ts,gridsApi.ts,CascadeApp.tsx,SelectionCard.tsx,NetworkState.tsx,SimulationPanel.tsx,GridSources.tsx,cascade.css,stressEdits.test.ts}`, `web/src/assistant/{useAssistant.ts,scenario.test.ts}`, `web/src/session/useSession.ts`, `backend/src/cascadasen/mcp/{tools.py,digest.py,toolbox.py}`, `backend/src/cascadasen/api/{grid_routes.py,stress_schemas.py}`, `backend/tests/unit/test_prepare_scenario_tool.py`, `docs/{stress.md,openapi/agents.openapi.json}`.
 ## 2026-11-22 · feat(grids): prepared scenarios for population, demand, generation and lines, and supply per source (#97)
 
 - **Changed:** new `POST /api/v1/grids/prepare` (agent route `prepare_scenario`, tool `prepare_scenario`). It resolves filters (buses, zones, areas, comunas, tech, lines, kv) into a prepared grid. It does not simulate: it returns what each change touches, lines already over their limit and whom each generator should feed.
