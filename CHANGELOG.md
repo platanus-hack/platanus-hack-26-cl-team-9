@@ -1,6 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(tests): cache-vs-engine test tolerates one rounding unit of platform float noise
+- **Changed:** in `backend/tests/unit/test_grid_simulation.py` the helper `_without_boundary_status` is now `_without_rounding_noise`: an edge `flow_mw` (whole MW) or `loading` (3 decimals) that differs from the committed cache by at most one unit of its last rounded digit is taken from the cache, and the existing `status` tolerance at loading 1.0 is kept. Everything else must still be equal.
+- **Why:** the cache was written on another machine. On macOS arm64 nov2026-2000-R001 gave R113 `flow_mw` -40 vs -39 cached; on linux/amd64 feb2025-1500-R239 gave R091 `loading` 0.314 vs 0.313. Float noise at a rounding boundary, so the test would fail the CI `backend-test` job and block deploys.
+- **Agents:** test only. The engine and `web/public/cache/**` are unchanged and the cache is not regenerated. The test passes on macOS arm64 and linux/amd64 (QEMU).
+- **Files:** `backend/tests/unit/test_grid_simulation.py`, `CHANGELOG.md`.
+
 ## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
 
 - **Changed:** `_loadTimeline` (`web/src/cascade/CascadeApp.tsx`) calls `setPlaying(false); seek(0)` before it asks for the new timeline, and `timeline` is only set when `loaded.key === timelineKey`. A new scenario or cut loads paused at 0.

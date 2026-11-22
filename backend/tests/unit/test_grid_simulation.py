@@ -88,12 +88,23 @@ def test_api_simulate():
     )
 
 
-def _without_boundary_status(timeline: dict, cached: dict) -> dict:
-    """Copy `timeline` with `status` taken from `cached` on edges whose loading is exactly 1.0."""
+# Edge values the engine rounds before they are written: flow_mw to whole MW, loading to 3 decimals.
+_EDGE_ROUNDING_UNIT = {"flow_mw": 1.0, "loading": 0.001}
+
+
+def _without_rounding_noise(timeline: dict, cached: dict) -> dict:
+    """Copy `timeline` with each edge value that differs from `cached` only by rounding noise taken from `cached`.
+
+    Noise means: `flow_mw` or `loading` within one unit of its last rounded digit, and `status` when the
+    loading is at the 1.0 boundary (`ratio > 1.0` in domain/cascade/engine.py `_frame`).
+    """
     out = json.loads(json.dumps(timeline, default=float))
     for frame, ref in zip(out["frames"], cached["frames"], strict=True):
         for key, edge in frame["edges"].items():
             other = ref["edges"][key]
+            for field, unit in _EDGE_ROUNDING_UNIT.items():
+                if abs(edge[field] - other[field]) <= unit * 1.001:
+                    edge[field] = other[field]
             if edge["loading"] == other["loading"] == 1.0 and {edge["status"], other["status"]} <= {
                 "ok",
                 "overload",
@@ -106,13 +117,14 @@ def _without_boundary_status(timeline: dict, cached: dict) -> dict:
 def test_the_committed_cache_matches_the_engine_for_a_single_cut(sim, point, line):
     """The web reads the cache for one cut and this service for several: they must agree (regenerate with cascadasen-cache).
 
-    One tolerance: an edge whose rounded loading is exactly 1.0 may be `ok` in one side and `overload` in the
-    other. The engine decides with `ratio > 1.0` (domain/cascade/engine.py `_frame`), so last-bit BLAS/platform
-    float noise flips it. Everything else must be equal.
+    One tolerance (`_without_rounding_noise`): the cache was written on another machine, and last-bit BLAS/platform
+    float noise (macOS arm64 vs linux/amd64) moves an edge's `flow_mw` or `loading` by one rounding unit when the
+    exact value sits on a rounding boundary, and flips `status` of an edge whose loading is exactly 1.0
+    (`ratio > 1.0` in domain/cascade/engine.py `_frame`). Everything else must be equal.
     """
     cached = json.loads((REPO_ROOT / f"web/public/cache/{point}/{line}.json").read_text())
     live = sim.simulate_workflow(point, [line], [])["timeline"]
-    assert _without_boundary_status(live, cached) == cached
+    assert _without_rounding_noise(live, cached) == cached
 
 
 def test_cost_endpoint_gives_the_25f_of_the_isci_study_and_a_cost_per_hour():
