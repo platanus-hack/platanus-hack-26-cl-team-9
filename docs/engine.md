@@ -46,9 +46,38 @@ The data scripts need the PyPSA-CL files in `data/raw/pypsa_cl/` (they download 
 | Feb 2025 15:00 | 217 | 16.8 M people, 11,096 of 11,096 MW, 2 stages, both islands collapse by voltage at 2.0 s |
 | Feb 2025 03:00 | 231 | 0.3 M people, 631 of 8,719 MW (corridor S→N under 1,000 MW: no voltage collapse) |
 | Nov 2026 13:00 | 204 | 17.0 M people, 10,836 of 10,836 MW, 2 stages, voltage collapse |
-| Nov 2026 20:00 | 213 | 3.9 M people, 1,825 of 10,934 MW (1,287 MW N→S, under the limit) |
+| Nov 2026 20:00 | 213 | 3.9 M people, 1,825 of 10,934 MW (1,287 MW N→S, under the limit), 3 stages (the third waits until 6.48 s) |
 
-Measured 2026-11-22. The real 25F left about 19 M people (98.5 %) without power (figure given by the team, source to cite). The model reaches 16.8 M because it assigns 18.16 M people in total and 23 substations over 20 MW have 0 people (`docs/minimum-dataset.md`). The corridor result depends on how loaded it was: that matches the CEN account of the 25F. Do not present these numbers as a forecast. A health index built on these results is in [`health.md`](health.md).
+Re-measured 2026-11-22 after issue #90. The causal stages move only times, never people or MW: the flow of each stage already used the settled state. With `resplit_memory=True` only the Nov 2026 20:00 row would move, to 14.7 M people and 6,738 MW. The 98-bus island that splits off at stage 3 would not fire EDAC step 1 a second time (307.9 MW) and would have little reserve left, so it falls slowly and collapses 19.1 s into its transient, close to the 20 s horizon. That makes it sensitive to the reserve and damping assumptions. Pinned by `tests/validation/test_results_so_far.py`. The real 25F left about 19 M people (98.5 %) without power (figure given by the team, source to cite). The model gives 16.8 M for a whole-system blackout. The model assigns 18.16 M people in total, and the 1.4 M gap comes from buses whose net load is zero or negative (at Feb 2025 15:00, 25 buses with net negative load hold 1.08 M people and buses at 0 MW hold 0.31 M): `_timeline`, the theatre (`theater/grid.py`) and the web (`impactAt`) count the people of a bus only when its net load is positive, even when the bus is dark. Whether those dark buses should count their people is an open decision (`plan.md` §9 item 15). The corridor result depends on how loaded it was: that matches the CEN account of the 25F. Do not present these numbers as a forecast. A health index built on these results is in [`health.md`](health.md).
+
+## Hand-checked cuts (issue #90)
+
+Followed stage by stage from the cache (`web/public/cache/<point>/<cut>.json`): the islands with gen/load after settling, and the most loaded lines with their DC flow and loading. Checked 2026-11-22.
+
+| Cut | Stage, t | Islands (buses: gen/load MW) | Most loaded lines (flow MW / capacity MW, loading) | What happens |
+|---|---|---|---|---|
+| 25F, `feb2025-1500/R239` | 0, 0.0 s | 188: 11,096/11,096 | R254 2,042/500 (408 %), R157 989/250 (396 %), R217 1,057/500 (211 %) | Worst only: R254 opens at 1.0 s. R157 is re-evaluated: 131 MW (52 %) once R254 is open |
+| | 1, 1.0 s | 188: 11,096/11,096 | R216 2,205/78 (2,827 %), R203 408/225 (181 %), R240 1,642/930 (176 %) | R216 opens at 2.0 s and splits the corridor |
+| | 2, 2.0 s | 115 and 73, both dark | none | The corridor ends separate with 2,209 MW N→S before the fault (limit 1,600): both islands collapse by voltage at 2.0 s |
+| `nov2026-1300/R026` (4 stages, re-split) | 0, 0.0 s | 188: 10,836/10,836 | R109 129/106.7 (120.4 %), R061 543/500 (109 %) | R109 opens at 1.0 s |
+| | 1, 1.0 s | 188 | R061 672/500 (134 %), R130 35/30 (116 %) | R061 opens at 2.0 s; R130 stays under 120 % |
+| | 2, 2.0 s | 143: 9,395/8,723 surplus (curtails to 8,766/8,723); 45: 1,441/2,112 | R063 111/75 (148 %) | The 45-bus island sheds steps 1-6 (2.32-3.99 s) and still blacks out by frequency at 6.59 s. R063 waits and opens at 7.59 s (was 3.0 s) |
+| | 3, 7.59 s | 143 | R062 613/500 (123 %), R185 581/500 (116 %) | R062 opens at 8.59 s (was 4.0 s) |
+| | 4, 8.59 s | 142: 8,155/8,725; 1 (611 MW of generation, no load) | all under 93 % | The lone bus goes dark (`no_load`). The 142-bus island sheds steps 1 and 3 (it had shed nothing before) and settles at 8,080/8,054 |
+| `feb2025-1500/R090` (1-bus island) | 0, 0.0 s | 188 | R204 340/210 (162 %), R205 300/270 (111 %) | R204 opens at 1.0 s |
+| | 1, 1.0 s | 187: 10,658/10,998; 1: 437/97 | all at or under 101 % | The lone bus has a 340 MW surplus: over 52 Hz, dark at 1.39 s. The 187-bus island falls slowly and sheds step 1 (501.6 MW) at 12.26 s; 0.9 M people |
+| No effect, `feb2025-1500/R000` | 0, 0.0 s | 188 | the lines at their base-case limit (100 %) | Nothing above 120 %: one event (`line_cut`), 20 s timeline |
+
+Findings of the review:
+
+- **Causality** was broken before #90. With island events tagged by stage, 98 of the 1,844 cached cuts (273 lines + 188 substations x 4 hours) had a `load_shed` or `island_blackout` of a stage-k island after a stage k+1 opening; 10 if only blackouts count. After the fix: 0.
+- **One line per stage** is the `stack.md` 4.3 rule. The other lines above 120 % are re-evaluated with the new flows (25F stage 0: R157 at 396 % does not open once R254 is open). Test: `test_only_the_worst_overload_opens_and_the_rest_is_re_evaluated`.
+- **Flow of stage k+1** uses `s.gen` and `s.load` after the EDAC, blackouts and reserve of stage k, not the operating point.
+- **Islands without generation or load** go dark (`no_generation`, `no_load`) and enter `dark`. They count in `people_without_power` only when their net load is positive (see above).
+- **The 25F voltage rule** uses the pre-fault flow (`prefault_boundary_mw`, computed before the cascade) and darkens both islands.
+- **Settled islands are balanced** within 5 % of their load (largest residual in the cache: 3.3 %), because damping and curtailment absorb the rest. An island whose EDAC step fires late (after about 12 s) can end the 20 s horizon unsettled: the toy grids in the tests do. No real cached cut showed it beyond 3.3 %.
+- **`truncated`** is set when the 20-stage cap is reached. No cached cut reaches it.
+- **Re-split islands double count EDAC and reserve** (default, documented assumption). In `nov2026-1300/R026` the parent 143-bus island had shed nothing, so it does not matter there; in `nov2026-2000/R239` it does (item 5, "re-split islands"). The fix exists behind `resplit_memory`.
 
 ## Assumptions (also returned in every timeline)
 

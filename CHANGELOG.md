@@ -1,6 +1,23 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · test(cascade): cascade invariants and hand-checked cuts
+
+- **Changed:** `tests/unit/test_cascade.py` adds `_assert_invariants`, run on toy grids and on four real cuts. It checks:
+  - time order and causality by `params.stage`;
+  - settled islands balanced within 5 % of load;
+  - `dark` never shrinking, and blackout `ids` equal to the final `dark`;
+  - `people_without_power` rebuilt from the dark buses plus the EDAC share.
+
+  Other new tests: one opening per stage (the rest re-evaluated), `truncated`, the waiting stage, a no-effect cut having only `line_cut`, and `resplit_memory` off and on.
+- **Changed:** `tests/validation/test_results_so_far.py` pins the four R239 rows of `docs/engine.md`. People and MW did not move with the causal stages; only times after a waiting stage did (Nov 2026 20:00: stage 3 at 6.48 s, was 3.0 s). `docs/engine.md` gets a "Hand-checked cuts" table (25F, `nov2026-1300/R026`, `feb2025-1500/R090`, `feb2025-1500/R000`) and the review findings.
+- **Why:** Issue #90 part A: fix the engine's behaviour with tests and a manual stage-by-stage review.
+- **Agents:**
+  - The toys skip the balance check: their EDAC fires late and the 20 s horizon ends before they settle.
+  - Finding, not changed: dark buses with zero or negative net load count no people (engine, theatre and web agree). That is why the 25F full blackout gives 16.8 M of the model's 18.16 M people. The old explanation in `engine.md` ("23 substations with 0 people") was wrong. Open decision: `plan.md` §9 item 15.
+  - Causality scan before the fix: 98 of 1,844 cuts (10 counting only blackouts).
+- **Files:** `backend/tests/unit/test_cascade.py`, `backend/tests/validation/test_results_so_far.py`, `docs/{engine,plan}.md`.
+
 ## 2026-11-22 · feat(cascade): optional re-split memory for EDAC steps and reserve
 
 - **Changed:** `_State` keeps `edac_fired` (the `(zone, step index)` that fired, per bus) and `reserve_used` (primary reserve deployed, MW per bus). With `CascadeParams(resplit_memory=True)`, `_island_input` passes the fired steps with fraction 0 (indices and step numbers stay). It also gives `sync_mw` without the deployed reserve (same governor gain) and lowers the reserve cap by the reserve already deployed (`extra_reserve_mw - used`). `frequency.py` is unchanged.
