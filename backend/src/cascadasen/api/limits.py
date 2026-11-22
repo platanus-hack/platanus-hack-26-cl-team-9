@@ -126,7 +126,7 @@ def client_ip(request: Request) -> str:
 
 
 class BodyLimitMiddleware:
-    """ASGI middleware: 413 when a sessions or global runs request declares a body over MAX_BODY_BYTES."""
+    """ASGI middleware: 413 when a sessions or global runs request body (declared or chunked) exceeds MAX_BODY_BYTES."""
 
     def __init__(
         self, app: Any, max_bytes: int = MAX_BODY_BYTES, prefixes: tuple[str, ...] = BODY_LIMIT_PREFIXES

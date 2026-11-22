@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(quality): fix the BodyLimitMiddleware docstring and the scipy row in stack.md
+
+- **Changed:** the `BodyLimitMiddleware` docstring says the limit covers declared and chunked bodies. `docs/stack.md` no longer lists scipy in the simulation engine row (only `data/scripts/build_baseline_opf.py` imports it, via the `data` dependency group).
+- **Why:** Two stale statements the final review found after the chunked-limit fix and the scipy group.
+- **Agents:** Docstring and docs only, no behaviour change.
+- **Files:** `backend/src/cascadasen/api/limits.py`, `docs/stack.md`.
+
 ## 2026-11-22 · chore(ci): run tests, mypy baseline and web checks in CI, and make deploy need them
 - **Changed:** new `.github/workflows/checks.yml` (runs on `pull_request` and `workflow_call`) with jobs `backend-test` (`uv sync --locked --group dev`, `pytest --cov=cascadasen --cov-fail-under=87`), `backend-mypy` (`mypy src`, `continue-on-error: true`, baseline of 52 errors) and `web` (`npm ci`, `tsc --noEmit`, `vitest run`, `npm run build`). `deploy.yml` gets a `checks` job (`uses: ./.github/workflows/checks.yml`) and `needs: checks` on `deploy`; nothing else in it changed. `lint.yml` also runs `ruff check` and `ruff format --check` on `../data/scripts` (backend config).
 - **Why:** Review R-01, B-02, W-03: no test ran in CI and a broken main could deploy. Coverage measured 89% (12147 statements, 1311 missed) without the mcp/llm extras; the floor is 87.
