@@ -10,7 +10,7 @@ import { loadBuses, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./a
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourcePick } from "./GridSources";
-import { addBus, changesOf, countEdits, countFailures, dropBus, dropChange, dropLine, addLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits, setFactor, startEdits, type Edits, type StressChange, type Target } from "./edits";
+import { addBus, changesOf, countEdits, countFailures, dropBus, dropChange, dropLine, addLine, editKey, fromCache, loadEdits, NO_EDITS, scenarioEdits, saveEdits, setFactor, startEdits, type Edits, type StressChange, type Target } from "./edits";
 import { composeGrid, loadContextDocument, loadDependency, prepareScenario, simulateGrid, type Prepared, type SimulationResult } from "./gridsApi";
 import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
@@ -885,22 +885,44 @@ export function CascadeApp() {
    * (so a cut keeps its result on Simulación, B3-03, F-19), and plays when failures are in force. A prepared scenario
    * never carries over. Opening the disaster already on the map replays it from 0.
    */
+  /**
+   * Why: a disaster or a Benchmark condition starts from zero. Nothing of the previous scenario survives: no cut, no
+   * substation off, no assistant change, no incident or cyber cascade, no prepared grid, no running playback (the 25F
+   * substations used to stay off after picking a condition and the grid kept falling).
+   */
   function openScenario(next: ScenarioChoice) {
     if (!current.simulable) return;
-    setSelection(null);
-    setNotice(null);
+    _resetScenarioState();
     setLastPick(next.edits ? "disaster" : "condition");
-    const replay = !!next.edits && next.point === pointId && activeDisaster(pointId, edits) === activeDisaster(next.point, next.edits) && loadedReady;
-    if (replay) { seek(0); setPlaying(!reducedMotion()); chooseTab("sim"); return; }
-    // Plays when a new timeline comes: a disaster, or another hour with failures in force (the same hour changes nothing).
-    autoplay.current = !!next.edits || (next.point !== pointId && countFailures(edits) > 0);
-    setPointId(next.point);
-    const fresh = { lines: [...(next.edits ?? edits).lines], buses: [...(next.edits ?? edits).buses] };
-    setAdjustments([]);
+    autoplay.current = !!next.edits; // a disaster plays; a condition is the base case at that hour
+    const fresh = scenarioEdits(next.edits);
     prevEdits.current = fresh; // the scenario's own failures are not adjustments
+    setPointId(next.point);
     setEdits(fresh);
     if (composed === DEFAULT_COUNTRY) void composeFromSources(next.point, picksRef.current); // the composed grid follows the chosen hour
-    chooseTab(next.edits ? "sim" : tab === "datos" ? "sim" : tab);
+    chooseTab("sim");
+  }
+
+  /** Everything a scenario leaves behind goes: playback, cascades of incidents and cyber, results, heat maps, history. */
+  function _resetScenarioState() {
+    setPlaying(false);
+    seek(0);
+    inc.stop();
+    cyb.pause();
+    cyb.showOnMap(null);
+    setSelection(null);
+    setNotice(null);
+    setAdjustments([]);
+    setPrepared(null);
+    setSimResult(null);
+    setSimError(null);
+    setLoaded(null);
+    lastFrame.current = undefined;
+    timelineRequest.current = ""; // the same scenario again is loaded again, from 0
+    setHeat("none");
+    setDependency(null);
+    setHeatError(null);
+    heatRequest.current = null;
   }
 
   // "Mapa" is the highlighted row only while no other rail view is open (D7).

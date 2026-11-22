@@ -24,6 +24,9 @@ export const countEdits = (e: Edits) => countFailures(e) + changesOf(e).length;
 /** Zero or one line, no substation and no prepared change: the app cache already has that cascade. */
 export const fromCache = (e: Edits) => changesOf(e).length === 0 && e.buses.length === 0 && e.lines.length <= 1;
 
+/** The edits a scenario starts from: its own failures, or none. Nothing of the previous scenario is kept. */
+export const scenarioEdits = (own: Edits | null): Edits => (own ? { lines: [...own.lines], buses: [...own.buses] } : NO_EDITS);
+
 export const addLine = (e: Edits, id: string): Edits => (e.lines.includes(id) ? e : { ...e, lines: [...e.lines, id] });
 export const addBus = (e: Edits, id: string): Edits => (e.buses.includes(id) ? e : { ...e, buses: [...e.buses, id] });
 export const dropLine = (e: Edits, id: string): Edits => ({ ...e, lines: e.lines.filter((x) => x !== id) });

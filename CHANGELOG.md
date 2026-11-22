@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): picking a disaster or a condition resets the whole scenario
+
+- **Changed:** `openScenario` calls `_resetScenarioState` (stops playback and seeks 0, stops the incident and cyber cascades, clears selection, notice, history, prepared grid, simulation result and error, loaded timeline, last frame, timeline and heat requests, heat map) and starts from `scenarioEdits(next.edits)`: the disaster's own failures or nothing. The "replay the same disaster" shortcut is gone: the same scenario loads again from 0.
+- **Why:** user bug: after 25F, picking a Benchmark condition kept 25F's substations off (`next.edits ?? edits`) and the grid kept falling.
+- **Agents:** `scenarioEdits` in `edits.ts` has a test in `edits.test.ts`. A condition no longer keeps the user's changes.
+- **Files:** `web/src/cascade/{CascadeApp.tsx,edits.ts,edits.test.ts}`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · feat(web): no cold start card in Simulación
 
 - **Changed:** `ColdStartCard` ("¿Qué pasa si se corta una línea?", search, Ver el apagón del 25 feb 2025) is removed, with its CSS and the `open25F` prop. `SimulationPanel` takes `edited` from `CascadeApp`, so the assistant's changes (no cut) show the impact card and the history.
