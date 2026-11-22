@@ -67,12 +67,13 @@ export const loadDependency = (body: GridChanges) =>
   request<{ point: string; open_lines: string[]; nodes: Record<string, DependencyNode> }>("dependency", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 /** One element a change touched, before and after (`[before, after]`). */
-export interface PreparedElement { id: string; name?: string; load_mw?: [number, number]; gen_mw?: [number, number]; people?: number; capacity_mw?: [number, number] }
+export interface PreparedElement { id: string; name?: string; lat?: number; lon?: number; kv?: number; load_mw?: [number, number]; gen_mw?: [number, number]; people?: number; capacity_mw?: [number, number] }
 /** Where a place of a change went: the one substation it resolved to, and how (Spanish, shown as is). */
 export interface PreparedPlace { place: string; bus: string; bus_name: string; how: string }
 export interface PreparedChange {
   target: string; matched: number; people_delta?: number; load_delta_mw?: number; gen_delta_mw?: number; elements?: PreparedElement[];
   places?: PreparedPlace[]; tech?: string[]; new_plant?: boolean;
+  new_substation?: boolean; connects_to?: string[]; load_mw?: number | null; gen_mw?: number | null;
 }
 /** The grid of a prepared scenario with no failure (`POST /grids/prepare`, docs/stress.md). */
 export interface Prepared {

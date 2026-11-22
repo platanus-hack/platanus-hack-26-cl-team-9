@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(assistant): un solo punto de entrada a la grilla y la grilla del mapa como fuente de verdad (#130)
+
+- **Changed:** `StressChange` tiene `target: "substation"` (lugar, nombre, `load_mw` o `generator_mw` con `tech`): crea una subestación nueva con sus líneas (`overlay.add_substation`) en el camino sin sesión, así que viaja en los mismos `changes` que la web reenvía a prepare, simulate, dependency y cost. `add_substation` sale de las herramientas del asistente. `POST /chat` y `/chat/stream` aceptan `grid` (la grilla del mapa) y la ponen en el prompt de ese mensaje; la web la envía en cada mensaje.
+- **Why:** `add_substation` escribía en una sesión que la web no muestra, y el asistente reconstruía la grilla desde su historial: tras elegir un escenario o benchmark seguía reenviando cambios viejos.
+- **Agents:** la nueva subestación se conecta a la que sirve el lugar y a la más cercana del mismo kV (supuesto, 2 caminos). No se puede apagar con `out_buses` y la web dibuja su pin pero no sus líneas. `_source_row(ctx, net, …)` recibe la red aplicada porque hay barras fuera de la base. Detalle en `docs/stress.md` sección 4 y `docs/assistant.md` sección 2d.
+- **Files:** `backend/src/cascadasen/{api/stress_schemas,api/assistant_routes,application/grid_stress,application/grid_simulation,application/assistant,mcp/tools,mcp/digest,mcp/toolbox}.py`, `web/src/{cascade/placed,cascade/edits,cascade/CascadeApp,assistant/useAssistant,assistant/assistantApi}.ts*`.
+
 ## 2026-11-22 · feat(assistant): el agente elige la herramienta correcta para salud de la red y refuerzos (#127)
 
 - **Changed:** el prompt del asistente lleva una guía "qué herramienta usar" (`TOOL_GUIDE`): salud de la red o de un nodo con `describe_network`, fallas y refuerzos con `prepare_scenario`, eventos en el tiempo con las herramientas de corrida. `INSTRUCTIONS` se divide en `WORKFLOW` y `RULES`; el asistente solo recibe `RULES`. Se quita del prompt la mención a `reset_network`, que el asistente no tiene.

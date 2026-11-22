@@ -269,3 +269,20 @@ def test_the_stream_pings_while_the_model_thinks(make_app):
     client = TestClient(make_app(SlowModel(AssistantTurn("ok")), assistant_stream_ping_s=0.05))
     body = client.post(STREAM, json={"message": "x"}).text
     assert ": ping" in body and parse_sse(body)[-1][0] == "done"
+
+
+def test_the_grid_on_the_map_goes_to_the_prompt_of_that_message_only(make_app):
+    model = ScriptedModel(AssistantTurn("a"), AssistantTurn("b"), AssistantTurn("c"))
+    client = TestClient(make_app(model))
+    change = {"target": "generation", "tech": ["hidro"], "factor": 0.5}
+    grid = {"point": "nov2026-1300", "changes": [change], "open_lines": [], "out_buses": ["B039"]}
+    first = client.post(CHAT, json={"message": "hola", "grid": grid}).json()
+    base = {"point": "feb2025-1500", "changes": [], "open_lines": [], "out_buses": []}
+    client.post(CHAT, json={"message": "otra", "conversation_id": first["conversation_id"], "grid": base})
+    client.post(CHAT, json={"message": "sin grilla", "conversation_id": first["conversation_id"]})
+    assert "Grilla actual del mapa" in model.systems[0] and '"factor": 0.5' in model.systems[0]
+    assert '"out_buses": ["B039"]' in model.systems[0]
+    assert "Estado basal del punto feb2025-1500" in model.systems[1] and "B039" not in model.systems[1]
+    assert "Grilla actual" not in model.systems[2]  # a client that sends none gets the plain prompt
+    bad = client.post(CHAT, json={"message": "x", "grid": {**grid, "changes": [{"target": "nope"}]}})
+    assert bad.status_code == 422
