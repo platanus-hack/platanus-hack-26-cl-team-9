@@ -173,7 +173,6 @@
 .shell .search-field input { width: 100%; height: 32px; padding: 0 10px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg); font: 13px/16px var(--font-sans); }
 .shell .search-field input::placeholder { color: var(--muted); }
 .shell .search-field input:focus { outline: 1px solid var(--fg-3); outline-offset: 0; }
-.shell .cold-start .actions { margin-top: 2px; }
 .shell .disclosure-block { border-top: 1px solid var(--border); padding-top: 10px; }
 .shell .disclosure-block summary { display: flex; align-items: center; gap: 6px; color: var(--fg-3); font-size: 13px; line-height: 16px; cursor: pointer; list-style: none; }
 .shell .disclosure-block summary::-webkit-details-marker { display: none; }

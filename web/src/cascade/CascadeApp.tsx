@@ -10,7 +10,7 @@ import { loadBuses, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./a
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourcePick } from "./GridSources";
-import { addBus, changesOf, countEdits, countFailures, dropBus, dropChange, dropLine, addLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits, setFactor, startEdits, type Edits, type StressChange, type Target } from "./edits";
+import { addBus, changesOf, countEdits, countFailures, dropBus, dropChange, dropLine, addLine, editKey, fromCache, loadEdits, NO_EDITS, scenarioEdits, saveEdits, setFactor, startEdits, type Edits, type StressChange, type Target } from "./edits";
 import { composeGrid, loadContextDocument, loadDependency, prepareScenario, simulateGrid, type Prepared, type SimulationResult } from "./gridsApi";
 import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
@@ -22,9 +22,9 @@ import { NetworkPicker } from "./NetworkPicker";
 import { summaryFromGrid, summaryFromManifest } from "./networkSummary";
 import { NetworkState } from "./NetworkState";
 import { batches, isSwitchedOff } from "./outage";
-import { activeDisaster, DISASTERS, ScenarioTree, type ScenarioChoice, type ScenarioKind } from "./Scenarios";
+import { activeDisaster, ScenarioTree, type ScenarioChoice, type ScenarioKind } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
-import { ColdStartCard, PrefaultHealth, SimulationPanel } from "./SimulationPanel";
+import { PrefaultHealth, SimulationPanel } from "./SimulationPanel";
 import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, recentDarkAt, timeWarp, type Marker } from "./simulation";
 import { clock, conditionName, errorText, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
@@ -114,7 +114,7 @@ export function CascadeApp() {
   const cyb = useCyber(speed); // and for the Ciberataque run
   // Playback starts by itself when the next timeline arrives (D1): after a cut or shutdown, a Desastres entry, a `?cut=`
   // link, or another hour picked while changes are in force. Never after Prender todo or a restore, nor with reduced motion.
-  const autoplay = useRef(!!startCut);
+  const autoplay = useRef(false); // a scenario opened from the URL waits paused too
   // Simulación is the default tab (D8); another country's network opens on Red, the only tab it has.
   const [tab, setTab] = useState<Tab>(startNetwork !== DEFAULT_COUNTRY ? "red" : "sim");
   const [view, setView] = useState<View>("tabs");
@@ -885,24 +885,45 @@ export function CascadeApp() {
    * (so a cut keeps its result on Simulación, B3-03, F-19), and plays when failures are in force. A prepared scenario
    * never carries over. Opening the disaster already on the map replays it from 0.
    */
+  /**
+   * Why: a disaster or a Benchmark condition starts from zero. Nothing of the previous scenario survives: no cut, no
+   * substation off, no assistant change, no incident or cyber cascade, no prepared grid, no running playback (the 25F
+   * substations used to stay off after picking a condition and the grid kept falling).
+   */
   function openScenario(next: ScenarioChoice) {
     if (!current.simulable) return;
-    setSelection(null);
-    setNotice(null);
+    _resetScenarioState();
     setLastPick(next.edits ? "disaster" : "condition");
-    const replay = !!next.edits && next.point === pointId && activeDisaster(pointId, edits) === activeDisaster(next.point, next.edits) && loadedReady;
-    if (replay) { seek(0); setPlaying(!reducedMotion()); chooseTab("sim"); return; }
-    // Plays when a new timeline comes: a disaster, or another hour with failures in force (the same hour changes nothing).
-    autoplay.current = !!next.edits || (next.point !== pointId && countFailures(edits) > 0);
-    setPointId(next.point);
-    const fresh = { lines: [...(next.edits ?? edits).lines], buses: [...(next.edits ?? edits).buses] };
-    setAdjustments([]);
+    autoplay.current = false; // every disaster and condition opens paused at 0: the user presses Play
+    const fresh = scenarioEdits(next.edits);
     prevEdits.current = fresh; // the scenario's own failures are not adjustments
+    setPointId(next.point);
     setEdits(fresh);
     if (composed === DEFAULT_COUNTRY) void composeFromSources(next.point, picksRef.current); // the composed grid follows the chosen hour
-    chooseTab(next.edits ? "sim" : tab === "datos" ? "sim" : tab);
+    chooseTab("sim");
   }
-  const open25F = () => openScenario({ point: DISASTERS[0].point, edits: DISASTERS[0].edits });
+
+  /** Everything a scenario leaves behind goes: playback, cascades of incidents and cyber, results, heat maps, history. */
+  function _resetScenarioState() {
+    setPlaying(false);
+    seek(0);
+    inc.stop();
+    cyb.pause();
+    cyb.showOnMap(null);
+    setSelection(null);
+    setNotice(null);
+    setAdjustments([]);
+    setPrepared(null);
+    setSimResult(null);
+    setSimError(null);
+    setLoaded(null);
+    lastFrame.current = undefined;
+    timelineRequest.current = ""; // the same scenario again is loaded again, from 0
+    setHeat("none");
+    setDependency(null);
+    setHeatError(null);
+    heatRequest.current = null;
+  }
 
   // "Mapa" is the highlighted row only while no other rail view is open (D7).
   const mapOn = view === "tabs" || view === "upload" || view === "session";
@@ -1033,9 +1054,8 @@ export function CascadeApp() {
           {view === "tabs" && isChile && tab === "sim" && network && (timeline && timelineReady ? (
             <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} darkCount={darkNow} totalPeople={totalPeople}
               seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} health={s.sid || composed ? null : health}
-              supply={simResult?.supply ?? null} disaster={external ? null : disaster} shareable={shareable} select={select} open25F={open25F} external={external} />
-          ) : !edited ? <ColdStartCard network={network} health={s.sid || composed ? null : health} select={select} open25F={open25F} />
-            : !error && !failed && <Loading text="Cargando la simulación" />)}
+              supply={simResult?.supply ?? null} disaster={external ? null : disaster} shareable={shareable} select={select} edited={edited} external={external} />
+          ) : edited && !error && !failed && <Loading text="Cargando la simulación" />)}
           {view === "tabs" && tab === "datos" && (s.network
             ? <DataPanel network={s.network} edit={s.edit} pick={_pick} picking={picking} />
             : <p className="meta">Cargando la sesión…</p>)}

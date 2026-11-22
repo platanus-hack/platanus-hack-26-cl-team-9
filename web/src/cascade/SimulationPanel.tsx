@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Pick } from "./clicks";
 import type { Supply } from "./gridsApi";
 import type { Disaster } from "./Scenarios";
-import { findOption, matches, searchOptions } from "./search";
 import { systemFrequency, voltageCollapse, withstandsAt, type Impact, type IslandFrequency } from "./simulation";
 import { cutName, hoursText, hz, index2, int, narrate, pct, pct2, placeName, secs, usdM } from "./text";
 import type { Assumed, EventCost, HealthReport, N1Cost, Network, Timeline } from "./types";
@@ -24,7 +23,9 @@ interface Props {
   /** The URL describes the view, so "Copiar enlace" is offered (never in a session). */
   shareable: boolean;
   /** Cold start card: select a line or substation from the search field, open the 25F. */
-  select(pick: Pick): void; open25F(): void;
+  select(pick: Pick): void;
+  /** Something to simulate: cuts, substations off or scenario changes (the assistant's). */
+  edited: boolean;
   /** An incident or cyber cascade on the map: whose it is, the way back to its run and how to take it off the map. */
   external?: ExternalCascade | null;
 }
@@ -34,10 +35,10 @@ export interface ExternalCascade { label: string; back: string; open(): void; re
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
 export function SimulationPanel(p: Props) {
   const assumptions = p.timeline.assumptions.length;
-  const edited = p.cuts.length + p.outBuses.length > 0 || !!p.external;
+  const edited = p.edited || !!p.external; // the assistant's changes count, not only cuts
   return (
     <>
-      {edited ? <ImpactCard {...p} /> : <ColdStartCard network={p.network} health={p.health} select={p.select} open25F={p.open25F} />}
+      {edited && <ImpactCard {...p} />}
       {/* The history sits right under the impact card, so its current row stays in view while the cascade plays. */}
       {edited && <History {...p} />}
       {edited && p.supply && <SupplyCard supply={p.supply} />}
@@ -90,42 +91,6 @@ export function PrefaultHealth({ health }: { health: HealthReport }) {
       </div>
       <p className="meta">{cost ? `Modelo Sub50 antes de cualquier corte, con ${hoursText(cost.outage_duration_h)} de corte.` : "Modelo Sub50 antes de cualquier corte."}</p>
     </details>
-  );
-}
-
-/**
- * Cold start (D8): what the product answers, the keyboard route to the core task (a search field that selects a line or
- * substation and opens its card) and the 25F as the one-click example. The technical indicators stay closed.
- */
-export function ColdStartCard({ network, health, select, open25F }: { network: Network; health: HealthReport | null; select(pick: Pick): void; open25F(): void }) {
-  const options = useMemo(() => searchOptions(network), [network]);
-  const [text, setText] = useState("");
-  const [miss, setMiss] = useState<string | null>(null);
-  const choose = (value: string, commit: boolean) => {
-    const hit = findOption(options, value);
-    if (hit && (commit || hit.value === value)) { select(hit.pick); setText(""); setMiss(null); }
-    else if (commit) setMiss(matches(options, value).length > 1 ? "Hay varias con ese nombre: elige una de la lista." : "No hay una línea ni una subestación con ese nombre.");
-  };
-  return (
-    <div className="card empty cold-start">
-      <h3>¿Qué pasa si se corta una línea?</h3>
-      <p>Haz clic en una línea o subestación del mapa y luego en Sacar de servicio. Sub50 simula la cascada segundo a segundo.</p>
-      <label className="search-field">
-        <span className="sr-only">Buscar una línea o subestación</span>
-        <input type="search" list="grid-search" placeholder="Buscar una línea o subestación" value={text} autoComplete="off"
-          onChange={(e) => { setText(e.target.value); setMiss(null); choose(e.target.value, false); }}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); choose(text, true); } }} />
-        <datalist id="grid-search">
-          {options.map((o) => <option key={`${o.pick.kind}:${o.pick.id}`} value={o.value} label={o.kind} />)}
-        </datalist>
-      </label>
-      {miss && <p className="field-error" role="alert">{miss}</p>}
-      <div className="actions">
-        <button className="primary-btn" onClick={open25F}>Ver el apagón del 25 feb 2025</button>
-      </div>
-      <p className="meta">Red resumida con datos públicos. Las cifras son estimaciones del modelo, no una predicción.</p>
-      {health && <PrefaultHealth health={health} />}
-    </div>
   );
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addBus, addLine, countEdits, dropBus, dropLine, editKey, fromCache, loadEdits, NO_EDITS, parseFactor, saveEdits, startEdits } from "./edits";
+import { addBus, addLine, countEdits, dropBus, dropLine, editKey, fromCache, loadEdits, NO_EDITS, parseFactor, saveEdits, scenarioEdits, startEdits } from "./edits";
 
 describe("edits", () => {
   it("keeps every change, not only the last one", () => {
@@ -77,5 +77,15 @@ describe("card factors (A2-02)", () => {
     expect(parseFactor("5,5", "demand")).toEqual({ error: "Escribe un número entre 0 y 5." });
     expect(parseFactor("-1", "population")).toHaveProperty("error");
     expect(parseFactor("1,5", "lines")).toEqual({ factor: 1.5 });
+  });
+});
+
+describe("scenarioEdits", () => {
+  it("a condition starts with nothing off, and a disaster with only its own failures", () => {
+    expect(scenarioEdits(null)).toEqual(NO_EDITS);
+    const own = { lines: ["R1"], buses: ["B2"] };
+    const fresh = scenarioEdits(own);
+    expect(fresh).toEqual(own);
+    expect(fresh.lines).not.toBe(own.lines); // a copy: later cuts never write into the scenario's list
   });
 });
