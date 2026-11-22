@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(web): unique keys for the simulation warnings in Estado de la red
+
+- **Changed:** `NetworkState.tsx` keys each warning of `POST /grids/simulate` by code and position instead of code plus message.
+- **Why:** Taking a substation out of service can leave several buses isolated, and the API sends one `isolated_bus` warning per bus with the same message, so React logged "Encountered two children with the same key" on every render (seen in the browser check of #42).
+- **Agents:** Warnings from the API are not unique by code or message; never key them by text.
+- **Files:** `web/src/cascade/NetworkState.tsx`.
+
 ## 2026-11-21 · fix(web): help text and styles after merging the substation shutdown
 
 - **Changed:** Ayuda (`Legend.tsx`) no longer says substations can only be switched off in a session: the second click or **Apagar subestación** works with and without one, and it says what switching off does (out of service with its demand and generation; in a session, all its lines open). `cascade.css` drops the disabled-button style and a stray comment left from the session-only button. The substation card reads "apagada" instead of "sin suministro" while the user has it off.
