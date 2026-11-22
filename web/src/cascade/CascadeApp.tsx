@@ -1003,6 +1003,8 @@ export function CascadeApp() {
               <h1>{VIEW_TITLES[view] ?? "Ayuda"}</h1>
               <div className="head-actions">
                 {view === "assistant" && <button className="text-btn" onClick={() => void a.reset()} disabled={!a.state.turns.length && !a.state.conversationId}>Nueva conversación</button>}
+                {/* The start button sits in the header, next to Cerrar, so it is in view without scrolling the form. */}
+                {view === "cyber" && cyb.catalog && !cyb.run && <button className="primary-btn" disabled={cyb.busy} onClick={() => void cyb.launch()}>{cyb.busy ? "Preparando…" : "Iniciar ciberataque"}</button>}
                 <button className="text-btn" onClick={() => setView("tabs")}>Cerrar</button>
               </div>
             </div>

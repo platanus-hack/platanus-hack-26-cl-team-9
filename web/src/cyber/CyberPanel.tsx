@@ -81,7 +81,6 @@ function Form({ c }: { c: Cyber }) {
           <label className="cy-field"><span>Semilla (vacía: al azar)</span>
             <span className="cy-input"><input type="number" min={0} step={1} value={c.seed ?? ""} onChange={(e) => c.setSeed(e.target.value === "" ? null : Math.max(0, Math.round(Number(e.target.value))))} /></span></label>
         </div>
-        <button className="btn cy-go" disabled={c.busy} onClick={() => void c.launch()}>{c.busy ? "Preparando…" : "Iniciar ciberataque"}</button>
         <p className="meta">Corre sobre la red base (nodos originales, nov. 2026 13:00) en una sesión nueva. Necesita el backend.</p>
       </div>
     </>
