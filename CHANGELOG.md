@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(data): regenerate Chile exports with country
+
+- **Changed:** `web/public/cache/network-{2025,2026}.json`, `data/processed/geo/*.geojson` and `data/processed/node_index.json` now carry `country: "CHL"` on every node, line and feature. No other value changed (checked by a JSON diff that ignores `country`).
+- **Why:** Issue #49 part A, decided with the user: regenerate now instead of waiting for #34. The frontend still reads a missing field as `CHL` (`countryOf`).
+- **Agents:** The geo layers and the node index were patched in place (field appended to each feature) instead of re-exported, because re-exporting from `grid_snapshot.json` rounds coordinates to 6 decimals and would have changed 1,217 positions. `network-*.json` came from `_network_json` over the same networks. The next `cascadasen-build` / `cascadasen-cache` writes the field by itself.
+- **Files:** `web/public/cache/network-*.json`, `data/processed/geo/*.geojson`, `data/processed/node_index.json`.
+
 ## 2026-11-22 · feat(network): add country to the reduced network and exports
 
 - **Changed:** `Line` and `ReducedNetwork` (`domain/cascade/network.py`) get `country: str = "CHL"` (ISO3). `cache_builder._network_json` and `theater_network_view` (the session and `/sim/network` view) write `country` on every node and line. `GridQueryService.geojson` adds `country: "CHL"` to every feature of every layer (`geo/*.geojson`), and `data/scripts/build_node_index.py` copies it into `node_index.json`.
