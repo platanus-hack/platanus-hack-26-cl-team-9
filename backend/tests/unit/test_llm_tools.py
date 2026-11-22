@@ -94,3 +94,16 @@ def test_the_log_detail_names_the_aws_error_code_but_the_client_text_stays_gener
         ConverseToolChat("qwen.x", FakeConverse(error=ClientError("boom"))).turn("s", [], [SPEC])
     assert "AccessDeniedException no access to the model" in caplog.text and "qwen.x" in caplog.text
     assert "AccessDenied" not in str(caught.value)
+
+
+def test_leaked_tool_call_markup_is_cut_from_the_text():
+    leaked = "Ahora cortaré la línea R014:\n\n<｜DSML｜function_calls"
+    client = FakeConverse(
+        [{"text": leaked}, {"toolUse": {"toolUseId": "t1", "name": "cut_lines", "input": {}}}]
+    )
+    out = ConverseToolChat("deepseek.v3.2", client).turn("s", [{"role": "user", "text": "corta"}], [SPEC])
+    assert out.text == "Ahora cortaré la línea R014:" and len(out.tool_calls) == 1
+    assert (
+        ConverseToolChat("m", FakeConverse([{"text": "a < b y c > d"}])).turn("s", [], [SPEC]).text
+        == "a < b y c > d"
+    )

@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(assistant): cut leaked DeepSeek tool markup from the text
+
+- **Changed:** `ConverseToolChat.turn` passes the model text through `clean_text` (`infrastructure/llm_tools.py`), which cuts it at the first `<｜…｜` marker. `docs/assistant.md` §2c and §3 record the live Bedrock check of the web chat and the fix; §5 no longer lists that check as pending.
+- **Why:** The live test of the web chat with `deepseek.v3.2` showed "<｜DSML｜function_calls" after the assistant's text in every step that called a tool.
+- **Agents:** Test `test_leaked_tool_call_markup_is_cut_from_the_text`. The marker uses fullwidth bars (U+FF5C); plain `<` and `>` in text are kept.
+- **Files:** `backend/src/cascadasen/infrastructure/llm_tools.py`, `backend/tests/unit/test_llm_tools.py`, `docs/assistant.md`.
+
 ## 2026-11-21 · docs(assistant): document the web chat
 
 - **Changed:** `docs/assistant.md` gets section 2c "Web client" (files, which session a message uses, refresh rules, persistence key, rehydration limits, error texts, what was checked) and §5 drops "The web UI" in favour of the pending Bedrock check. `web/README.md` adds a paragraph on the **Asistente** rail item and a row for `src/assistant/`. `docs/mapa3.md` §8 and §11 mention the new rail item and folder.
