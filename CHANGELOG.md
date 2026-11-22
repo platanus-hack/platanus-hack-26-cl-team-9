@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · chore(cache): regenerate the cache with substation cuts
+
+- **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache`: 752 new `sub-B###.json` (188 per point) and the 1,097 existing files rewritten. Size went from 23 MB to 42 MB (`du -sh`); the docs say so.
+- **Why:** The web reads substation shutdowns from the cache. The existing files were stale: they lacked the newer summary fields (`final_hz`, `rocof_hz_s`, `inertia_mws`, `shed_mw`, `battery_mw`, `uncertain`, `prefault_boundary_mw`) and the current assumption texts, so line cuts now match the engine too.
+- **Agents:** Checked: `nov2026-1300/sub-B012.json` has `failed_elements` = `["R042","R043"]`, the two lines of B012, and its first event is `line_cut` with both ids at t = 0. A full run takes about a minute.
+- **Files:** `web/public/cache/`, `docs/mapa3.md`, `docs/engine.md`, `web/README.md`.
+
 ## 2026-11-21 · fix(hooks): find a staged CHANGELOG.md in commits with many files
 
 - **Changed:** `scripts/hooks/pre-commit` pipes the staged list into `grep -x ... >/dev/null` instead of `grep -qx`.
