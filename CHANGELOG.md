@@ -30,6 +30,71 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** A scenario id in the cache is now either a line id `R###` or `sub-B###`; both files share the timeline format. The cache is regenerated in the next commit. "Bloquear" (loss of control) is not modelled.
 - **Files:** `backend/src/cascadasen/application/cache_builder.py`, `docs/mapa3.md`, `docs/engine.md`, `web/README.md`.
 
+## 2026-11-21 · docs(mapa3): document the clean default URL
+
+- **Changed:** `docs/mapa3.md` §2: the URL carries only values that differ from the defaults, a bare `/` is the default view, and `?point=nov2026-1300` is normalised away. §11: a session URL drops `point` as well as `cut`.
+- **Why:** The docs have to match `syncedSearch` from the previous commit.
+- **Agents:** No new rules beyond the previous entry.
+- **Files:** `docs/mapa3.md`.
+
+## 2026-11-21 · fix(web): keep the mapa 3 URL clean on defaults
+
+- **Changed:** New `web/src/cascade/url.ts` with `DEFAULT_POINT` (`nov2026-1300`) and the pure `syncedSearch(search, { pointId, cut, mode, sid })`. `_syncUrl` in `CascadeApp.tsx` uses it and keeps `location.hash`. The URL now writes `point` only when it differs from the default and there is no session, `cut` only without a session, and `vista=3d` only in 3D. It keeps every other param (`sesion`, `mapa`, `limite`) and drops the `?` when nothing is left.
+- **Why:** The first render of `/` became `/?point=nov2026-1300`, and an empty search still left a trailing `?`. Explicit `?point=`/`?cut=`/`?vista=3d` links still open the same state.
+- **Agents:** A bare `/` is the default view. A session URL carries `sesion` (and `vista`) but no `point` or `cut`. Tests are in `web/src/cascade/url.test.ts`. No slug or path aliases (such as `/25f`): ids stay the only deep-link format. Note: `scripts/lint.sh` only lints `frontend/*`, so `web/` files are not linted.
+- **Files:** `web/src/cascade/{url.ts,url.test.ts,CascadeApp.tsx}`.
+
+## 2026-11-21 · docs(network): add network-format.md and update regional and datasets docs
+
+- **Changed:** New `docs/network-format.md`, the data contract for adding or uploading a network, in seven sections:
+  1. Fields, types, units, ISO3 and provenance per bus, line, DC link and plant.
+  2. Readiness levels L0 / L1 / L1+ / L2.
+  3. Gap filling, with the error measured on Brazil.
+  4. Worked examples: Chile, Brazil, Peru, Argentina and Bolivia.
+  5. A checklist to add a country.
+  6. Upload safety (#49 part C).
+  7. What each level can claim.
+- **Changed:** `regional.md` gets section 6 (Brazil flow network: sources, units, decisions, result) and fixes section 4: ONS `SUBESTACAO.csv` **has** coordinates. `datasets.md` adds sources [42] and [43] (ONS, CC BY, downloaded 2026-11-21). `architecture.md`, `plan.md` §9 item 14, `backend/README.md` and the AGENTS.md read order (item 10) mention the new pieces.
+- **Why:** Issue part B. The contract has to be followable without reading the code, and it has to say how much a deduced network can be trusted.
+- **Agents:** Expected error of a deduced network, from Brazil:
+  - x: median 15 %, p90 39 %;
+  - capacity with Chile's typical ratings: median 31 %, p90 62 %;
+  - distance-snapped topology: precision 89 %, recall 99 %.
+
+  Treat these as a lower bound for the OSM countries. The proposed upload limits (10 MB, 5,000 buses, 10,000 lines) are not enforced anywhere yet.
+- **Files:** `docs/{network-format,regional,datasets,architecture,plan}.md`, `AGENTS.md`, `backend/README.md`.
+
+## 2026-11-21 · feat(data): build Brazil flow network from ONS
+
+- **Changed:** New `data/processed/latam/BRA/network.json` (730 KB): 853 buses, 1,305 AC lines (1,842 circuits, 230-765 kV), 4 HVDC links (12 records) and 495 plant groups. `manifest.json` gains `countries.BRA.flow`. The drawn BRA geojson files are unchanged, except that the manifest's EPE `fetched_at` was refreshed.
+- **Changed:** New `backend/tests/validation/test_ons_network.py` (skips without the file). It checks provenance on every element, x > 0 and capacity > 0, a unit guard (the median ohm/km per kV must sit inside `X_PER_KM`), the main component ≥ 95 %, length within ±15 % of 189,308 km, coordinate match ≥ 98 %, and that the manifest counts match the file.
+- **Why:** Issue part A3/A4. The figures: AC 174,428 circuit-km (−7.9 %) and AC+DC 196,456 km (+3.8 %) against 189,308 km. Coordinates come from ONS for 853 of 855 substations (USIBA 230 kV and COL BOA SORTE 2 500 kV have none, and neither is in EPE). 215 circuits use an assumed capacity. 18 lines with a foreign end are excluded.
+- **Agents:** A5 result (also in the manifest):
+  - Deduced x is off by a median of 15 % (p90 39 %); deduced capacity by a median of 31 % (p90 62 %).
+  - The distance-snapped drawn corridors have precision 0.89 and recall 0.99 against the ONS corridors, on the 728 substations both layers share.
+  - ONS coordinates match EPE substations of the same name within a median of 50 m (582 pairs, 9 more than 10 km apart).
+  - HVDC MW are `kV × A` per record: Xingu gives 4,200 MW per bipole (4,000 nominal), but Madeira gives 12,600 MW (6,300 nominal), so DC MW are unverified. Itaipu HVDC states no amperes (`capacity_mw: null`).
+- **Files:** `data/processed/latam/{BRA/network.json,manifest.json}`, `backend/tests/validation/test_ons_network.py`.
+
+## 2026-11-21 · feat(regional): write BRA/network.json with cascadasen-regional --ons
+
+- **Changed:** `cd backend && uv run cascadasen-regional --countries BRA --ons` now also builds Brazil's flow network through the new use case `BuildFlowNetwork` (`application/build_regional.py`, wired by `container.flow_network_use_case`). It writes `data/processed/latam/BRA/network.json` and a `flow` block under `manifest.countries.BRA`. That block has counts, circuit-km per kV, the length check against 189,308 km, assumed values, exclusions, the coordinate match rate and `deduction_error`. The command prints a summary and every warning.
+- **Changed:** `BuildRegionalGrid` keeps a country's existing `flow` block when it rewrites the drawn layer.
+- **Why:** Issue part A3: one command produces the network file and the figures the docs cite.
+- **Agents:** `--ons` needs `BRA` in `--countries`. It reads the EPE layer (cached raw) for plants, the name fallback and the A5 topology check. `as_of` defaults to the UTC build date. The ONS CSVs are cached in `data/raw/regional/bra/ons_*.csv` (git-ignored); `--refresh` downloads them again.
+- **Files:** `backend/src/cascadasen/application/build_regional.py`, `backend/src/cascadasen/infrastructure/container.py`, `backend/tests/unit/test_ons_brasil.py`.
+
+## 2026-11-21 · feat(regional): add ONS adapter and pure flow-network builder for Brazil
+
+- **Changed:** New `domain/regional_network.py` (pure). It turns ONS line and substation rows into a flow network: one bus per ONS substation (`id_subestacao`), AC circuits folded like Chile's `_parallel`, HVDC records as `dc_links`, and EPE plants attached by distance. It also holds `deduction_error`, which compares typical x and capacity, and the distance-snapped drawn topology, against the real values (issue part A5). New adapter `infrastructure/sources/regional/ons_brasil.py` reads `LINHA_TRANSMISSAO.csv` and `SUBESTACAO.csv`. New port `FlowNetworkSource`; settings `ons_lines_url` and `ons_substations_url`.
+- **Why:** Brazil was only a drawn layer. ONS declares each line's two bus numbers and positive-sequence r, x and shunt, and `SUBESTACAO.csv` gives each bus a substation **and coordinates** (older docs say it has none). Line ends no longer need to be guessed.
+- **Agents:**
+  - ONS states no units. From the magnitudes, r and x are percent on 100 MVA and shunt is Mvar at nominal voltage (ANAREDE), so `x_pu = val_reatancia / 100` with no kV conversion.
+  - The thermal base is `val_capacoperlongacomlimit` (long duration, with limiting factor). Missing amperes, including 0 A, use the ONS median MW per circuit at the same kV and are marked `assumed_fields: ["capacity_mw"]`.
+  - Lines that are deactivated or enter service after `as_of` are excluded, as in `_built_by`. *Ramal* rows and line ends outside the ONS registry (Uruguay, Argentina, Paraguay, Venezuela) are dropped with a warning naming the substation and kV.
+  - `regional_reduction._km` and `_nearest` are now public as `km_xy` and `nearest`.
+- **Files:** `backend/src/cascadasen/domain/{regional_network,regional_reduction,ports}.py`, `backend/src/cascadasen/infrastructure/{settings.py,sources/regional/ons_brasil.py}`, `backend/tests/unit/test_ons_brasil.py`.
+
 ## 2026-11-21 · docs(assistant): document the step stream for map clients
 
 - **Changed:** `docs/assistant.md` section 2b: the events of `POST /chat/stream` with examples, which session routes to fetch after each tool to draw, pings and the 90 s stream deadline, disconnect behaviour, a `fetch` reader for browsers (`EventSource` only does GET) and a `curl -N` example. `docs/stack.md` 7.3 lists the route.

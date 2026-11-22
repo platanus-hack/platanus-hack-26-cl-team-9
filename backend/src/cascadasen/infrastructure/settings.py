@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     )
 
     epe_webmap_url: str = "https://gisepeprd2.epe.gov.br/arcgis/rest/services/WMS_Webmap_EPE_Data/MapServer"
+    ons_lines_url: str = (
+        "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv"
+    )
+    ons_substations_url: str = (
+        "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/subestacao/SUBESTACAO.csv"
+    )
     osinergmin_url: str = (
         "https://gisem.osinergmin.gob.pe/serverosih/rest/services/Electricidad/MapaSEIN_Operacion/MapServer"
     )

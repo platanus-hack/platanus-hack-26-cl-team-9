@@ -21,6 +21,7 @@ Last updated: 2026-11-21. Status labels: **verified** (opened or downloaded and 
 | Public cyber incidents on the SEN | Cyber scenarios, case V10 (`cyber.md`) | pv magazine articles citing CEN daily reports [34][35] | **Read** (secondary source) |
 | Critical loads (hospitals, water, Metro) with location | Question Q4 in `cyber.md` | None found | **Missing** |
 | Other countries' grids (Argentina, Bolivia, Brazil, Peru), context layer | Drawn under Chile's, never simulated (`regional.md`) | EPE WebMap (Brazil), Osinergmin GISEM (Peru), OpenStreetMap (Bolivia), Secretaría de Energía (Argentina) | **Built** for Brazil, Peru, Bolivia and (from OSM) Argentina; Argentina's official source was unreachable on 2026-11-21 |
+| Brazil flow network: declared line ends, r, x, shunt, ampacity, substation coordinates | Ready for a DC flow, not wired to the engine (`regional.md` section 6, `network-format.md`) | ONS Dados Abertos [42], [43] | **Built** 2026-11-21 (`BRA/network.json`). Units of r, x and shunt inferred from magnitudes (ONS does not state them) |
 | Basemap (streets, water, buildings, place names) | Zoom-level designs (`design.md` section 4), `?mapa=2` in `web/` | Mapbox [40] | **Used** by `web/` `?mapa=2` and the Paper mockups; needs a token and internet |
 | Towers, poles, transformers, MT lines | Closest zoom levels (`design.md` section 4) | OpenStreetMap [41] | **Mockups only** (Calama, Nueva Pan de Azucar); not in the pipeline |
 
@@ -173,6 +174,8 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 | 39 | MITRE ATT&CK, 2016 Ukraine Electric Power Attack (campaign C0025) | https://attack.mitre.org/campaigns/C0025/ | Found via search. The 2015 and 2016 Ukraine figures in `cyber.md` come from secondary sources and are not verified |
 | 40 | Mapbox (Streets v8 vector tiles, Standard style) | https://www.mapbox.com/ | Used: `web/` `?mapa=2` and design mockups. Requires a public token (`web/.env.local`, git-ignored) |
 | 41 | OpenStreetMap power data (towers, poles, transformers, lines) | https://www.openstreetmap.org/ | Used in design mockups only (2026-11-21); ODbL licence requires attribution if shipped |
+| 42 | ONS Dados Abertos, `linha-transmissao` (CC BY, updated daily): lines from 230 kV with bus numbers, r, x, shunt, ampacity | https://dados.ons.org.br/dataset/linha-transmissao (file `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv`) | Verified, downloaded 2026-11-21, in pipeline (`ons_brasil.py`). Dictionary states no unit for r, x, shunt: percent on 100 MVA and Mvar inferred (`regional.md` section 6) |
+| 43 | ONS Dados Abertos, `subestacao` (CC BY): busbars from 69 kV with substation code and coordinates | https://dados.ons.org.br/dataset/subestacao (file `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/subestacao/SUBESTACAO.csv`) | Verified, downloaded 2026-11-21, in pipeline |
 | - | Article by CEN engineers on the 25F protection sequence | https://www.pacw.org/chilean-grid-blackout-of-february-2025 | Read by the evaluator |
 | - | Andes (similar hackathon project, click-to-fail) | https://github.com/aleetreny/Encode | Verified |
 | - | COSMIC (MATLAB dynamic cascade simulator) | https://github.com/ecotillasanchez/cosmic | Verified |

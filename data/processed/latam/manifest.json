@@ -169,7 +169,7 @@
       "substations",
       "plants"
      ],
-     "fetched_at": "2026-11-21T21:55:11+00:00"
+     "fetched_at": "2026-11-22T00:44:21+00:00"
     }
    ],
    "warnings": [
@@ -177,7 +177,218 @@
     "433 líneas con los dos extremos en la misma subestación descartadas",
     "1 subestaciones sin ninguna línea resuelta descartadas",
     "531 centrales (15,581 MW) a más de 40 km de una subestación descartadas"
-   ]
+   ],
+   "flow": {
+    "file": "BRA/network.json",
+    "built_at": "2026-11-22T00:44:22+00:00",
+    "as_of": "2026-11-22",
+    "level": "L1+",
+    "counts": {
+     "buses": 853,
+     "lines": 1305,
+     "circuits": 1842,
+     "dc_links": 4,
+     "dc_records": 12,
+     "plants": 495
+    },
+    "circuit_km_by_kv": {
+     "765": 2706.0,
+     "525": 12241.0,
+     "500": 70502.5,
+     "440": 7071.5,
+     "345": 11201.8,
+     "230": 70704.6
+    },
+    "length_check": {
+     "circuit_km_ac": 174427.5,
+     "corridor_km_ac": 124665.9,
+     "dc_km": 22028.0,
+     "official_km": 189308,
+     "official_source": "MapYourGrid transmission length index, 220 kV and up (CC BY 4.0, not opened)",
+     "ac_vs_official": -0.079,
+     "ac_dc_vs_official": 0.038
+    },
+    "assumed": {
+     "capacity_mw": 215,
+     "x_pu": 0,
+     "length_km": 11
+    },
+    "excluded": {
+     "deactivated": 473,
+     "future": 0,
+     "ramal": 5,
+     "foreign_end": 18,
+     "no_coordinates": 2
+    },
+    "coordinates": {
+     "substations_needed": 855,
+     "from_ons": 853,
+     "from_epe_exact_name": 0,
+     "from_epe_fuzzy_name": 0,
+     "missing": 2,
+     "match_rate": 0.9977,
+     "fuzzy_min": 0.85
+    },
+    "typical_capacity_mw": {
+     "230": 324.3,
+     "345": 854.5,
+     "440": 1524.2,
+     "500": 2502.8,
+     "525": 2464.3,
+     "765": 4132.7
+    },
+    "units": {
+     "kv": "kV",
+     "length_km": "km",
+     "r_pu": "pu on base_mva (ONS val_resistencia is percent on 100 MVA)",
+     "x_pu": "pu on base_mva (ONS val_reatancia is percent on 100 MVA)",
+     "b_pu": "pu on base_mva (ONS val_shunt is Mvar at nominal voltage)",
+     "r_ohm": "ohm",
+     "x_ohm": "ohm",
+     "capacity_a": "A per circuit, long duration with limiting factor (val_capacoperlongacomlimit)",
+     "capacity_mw": "MW (sqrt(3) * kV * A; treated as MW like Chile's s_nom_mva)",
+     "mw": "MW installed"
+    },
+    "sources": [
+     {
+      "id": "ons_linha_transmissao",
+      "name": "ONS, linhas de transmissão da rede de operação",
+      "publisher": "Operador Nacional do Sistema Elétrico (ONS), Brasil",
+      "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv",
+      "license": "CC BY (Creative Commons Atribuição), ONS Dados Abertos",
+      "attribution": "ONS Dados Abertos",
+      "provides": [
+       "lines"
+      ],
+      "fetched_at": "2026-11-22T00:44:24+00:00"
+     },
+     {
+      "id": "ons_subestacao",
+      "name": "ONS, subestações da rede de operação",
+      "publisher": "Operador Nacional do Sistema Elétrico (ONS), Brasil",
+      "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/subestacao/SUBESTACAO.csv",
+      "license": "CC BY (Creative Commons Atribuição), ONS Dados Abertos",
+      "attribution": "ONS Dados Abertos",
+      "provides": [
+       "substations"
+      ],
+      "fetched_at": "2026-11-22T00:44:24+00:00"
+     }
+    ],
+    "warnings": [
+     "5 ramales de línea sin extremo 'para' descartados (CANOAS 1, OLINDINA, PITUACU, SCHINCARIOL, TIMOTEO 1)",
+     "subestación sin coordenadas: USIBA 230 kV (barra 8046)",
+     "subestación sin coordenadas: COL BOA SORTE 2 500 kV (barra 45751)",
+     "18 líneas con un extremo fuera del registro de subestaciones del ONS (interconexiones u otro país) descartadas: ITAIPU 50 HZ 500 kV (4); MARGEM DIREIT 500 kV (8); MELO 525 kV (1); R.D.MANGANES 230 kV (1); RINCON S. M. 500 kV (2); RIVERA 230 kV (1); SANTA ELENA 230 kV (1)",
+     "2 líneas con un extremo sin coordenadas descartadas",
+     "566 centrales (13,107 MW) a más de 40 km de una barra del flujo descartadas",
+     "215 circuitos sin capacidad en amperes usan la mediana del ONS para su tensión (supuesto)"
+    ],
+    "deduction_error": {
+     "x": {
+      "230": {
+       "n": 958,
+       "median_abs": 0.167,
+       "p90_abs": 0.334,
+       "median_bias": -0.115
+      },
+      "345": {
+       "n": 162,
+       "median_abs": 0.034,
+       "p90_abs": 0.378,
+       "median_bias": 0.015
+      },
+      "440": {
+       "n": 63,
+       "median_abs": 0.053,
+       "p90_abs": 0.183,
+       "median_bias": 0.05
+      },
+      "500": {
+       "n": 408,
+       "median_abs": 0.181,
+       "p90_abs": 0.722,
+       "median_bias": 0.174
+      },
+      "525": {
+       "n": 87,
+       "median_abs": 0.048,
+       "p90_abs": 0.178,
+       "median_bias": 0.04
+      },
+      "765": {
+       "n": 9,
+       "median_abs": 0.032,
+       "p90_abs": 0.039,
+       "median_bias": -0.032
+      },
+      "all": {
+       "n": 1687,
+       "median_abs": 0.153,
+       "p90_abs": 0.388,
+       "median_bias": 0.014
+      }
+     },
+     "capacity": {
+      "230": {
+       "n": 939,
+       "median_abs": 0.342,
+       "p90_abs": 0.725,
+       "median_bias": 0.234
+      },
+      "345": {
+       "n": 169,
+       "median_abs": 0.16,
+       "p90_abs": 0.555,
+       "median_bias": 0.053
+      },
+      "440": {
+       "n": 66,
+       "median_abs": 0.115,
+       "p90_abs": 0.163,
+       "median_bias": 0.115
+      },
+      "500": {
+       "n": 364,
+       "median_abs": 0.321,
+       "p90_abs": 0.418,
+       "median_bias": -0.321
+      },
+      "525": {
+       "n": 83,
+       "median_abs": 0.31,
+       "p90_abs": 0.486,
+       "median_bias": -0.31
+      },
+      "765": {
+       "n": 6,
+       "median_abs": 0.589,
+       "p90_abs": 0.589,
+       "median_bias": -0.589
+      },
+      "all": {
+       "n": 1627,
+       "median_abs": 0.313,
+       "p90_abs": 0.619,
+       "median_bias": -0.013
+      }
+     },
+     "topology": {
+      "drawn_buses_snapped": 728,
+      "drawn_links_compared": 1160,
+      "drawn_links_unmapped": 122,
+      "real_links_compared": 1049,
+      "true_links": 1036,
+      "precision": 0.893,
+      "recall": 0.988
+     },
+     "method": {
+      "x": "midpoint of X_PER_KM (domain/validation.py, nearest class) * length_km",
+      "capacity": "typical_capacity_mva (domain/simulation/params/network.yaml, nearest class)",
+      "topology": "drawn-layer buses snapped to the nearest flow bus within 3 km"
+     }
+    }
+   }
   },
   "PER": {
    "country": "PER",
@@ -240,5 +451,5 @@
    ]
   }
  },
- "built_at": "2026-11-21T21:55:18+00:00"
+ "built_at": "2026-11-22T00:44:24+00:00"
 }
