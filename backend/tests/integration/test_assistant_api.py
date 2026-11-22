@@ -69,7 +69,7 @@ def test_a_message_runs_tools_through_the_real_routes(make_app):
     sid, rid = out["session_id"], out["run_id"]
     doc = client.get(f"/api/v1/sessions/{sid}").json()
     assert rid in doc["runs"] and doc["last_op"]["by"] == "asistente"
-    assert "Sub50 simulates" in model.systems[0]  # the shared guardrails are in the prompt
+    assert "does the most damage" in model.systems[0]  # the shared guardrails are in the prompt
     assert "places" in model.systems[0]  # and how to put a point on the map
 
 

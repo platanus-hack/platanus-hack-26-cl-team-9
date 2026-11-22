@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(assistant): el agente elige la herramienta correcta para salud de la red y refuerzos (#127)
+
+- **Changed:** el prompt del asistente lleva una guía "qué herramienta usar" (`TOOL_GUIDE`): salud de la red o de un nodo con `describe_network`, fallas y refuerzos con `prepare_scenario`, eventos en el tiempo con las herramientas de corrida. `INSTRUCTIONS` se divide en `WORKFLOW` y `RULES`; el asistente solo recibe `RULES`. Se quita del prompt la mención a `reset_network`, que el asistente no tiene.
+- **Why:** el prompt le decía al modelo que empezara con `start_session` y usara `add_datacenter` y `cut_lines`, herramientas excluidas; el modelo probó nombres como ids y llamó herramientas equivocadas.
+- **Agents:** el MCP server sigue enviando `INSTRUCTIONS` completo (`WORKFLOW + RULES`). Un test falla si el prompt nombra una herramienta de `EXCLUDED`. No hay herramienta nueva de salud: `describe_network` ya entrega déficit por área y líneas sobrecargadas del caso base; si hace falta salud después de un escenario, ese dato sale de `prepare_scenario`. `add_substation` sigue ofrecida al asistente pero sus cambios no llegan al mapa (decisión abierta).
+- **Files:** `backend/src/cascadasen/api/assistant_routes.py`, `backend/src/cascadasen/mcp/tools.py`, `backend/tests/unit/test_assistant.py`, `backend/tests/integration/test_assistant_api.py`, `docs/assistant.md`.
+
 ## 2026-11-22 · feat(assistant): el agente decide dimensiones y ejecuta sin exigir MW al usuario (#125)
 
 - **Changed:** se elimina la guardia "los MW deben venir del usuario" (`stated`, `numbers`, `USER_SIZED`, `SUBSTATION_MW`, `invented_adds`) y el argumento `said` de `toolbox_for`. El prompt del asistente y los docstrings de `add_datacenter`, `add_generator` y `add_substation` dicen que el modelo decide, ejecuta y declara el valor como supuesto.
