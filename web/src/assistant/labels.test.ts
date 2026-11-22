@@ -75,3 +75,13 @@ describe("prepare_scenario in the chat", () => {
     expect(resultText("prepare_scenario", true, {})).toBe("mapa preparado");
   });
 });
+
+describe("find_line in the chat", () => {
+  it("names the tool and shows the line it found", () => {
+    expect(toolName("find_line")).toBe("Buscar línea");
+    const one = { lines: [{ id: "R239", name: "S/E NUEVA MAITENCILLO – S/E NUEVA PAN DE AZUCAR (500 kV)" }] };
+    expect(resultText("find_line", true, one)).toBe("R239 · S/E NUEVA MAITENCILLO – S/E NUEVA PAN DE AZUCAR (500 kV)");
+    const many = { lines: ["R006", "R026", "R027", "R028", "R029"].map((id) => ({ id, name: id })) };
+    expect(resultText("find_line", true, many)).toBe("5 líneas: R006, R026, R027, R028…");
+  });
+});
