@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(infra): ECS task of 4 vCPU and 8 GB
+- **Changed:** `aws_ecs_task_definition.app` goes from 2 vCPU / 4 GB to 4 vCPU / 8 GB (`cpu = 4096`, `memory = 8192`, a valid Fargate pair). `docs/infrastructure.md` says so.
+- **Why:** The user asked for a bigger task. The Fargate On-Demand vCPU quota is 30, so two 4 vCPU tasks fit during a blue/green rollout.
+- **Agents:** The service has `ignore_changes = [task_definition]`, so the new size only reaches it after a one-time `aws ecs update-service --task-definition cascadasen:<revision>` that points at the revision Terraform registers; CI deploys copy that revision and keep the size.
+- **Files:** `infrastructure/ecs.tf`, `docs/infrastructure.md`.
 ## 2026-11-21 · feat(web): shut down a substation from its card
 
 - **Changed:** The substation card has **Apagar esta subestación** ("Abre sus N líneas en t = 0.") and, while it is shut down, **Encender subestación**. Without a session it sets the cut to `sub-B###` and plays `<point>/sub-B###.json`; in a session it opens the substation's closed lines in one `POST /{sid}/cut` and repairs exactly those lines to power it on.
