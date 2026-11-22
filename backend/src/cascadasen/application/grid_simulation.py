@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from cascadasen.application.grids import GridError
 from cascadasen.domain.cascade.engine import failure_cost, run_cascade_workflow
+from cascadasen.domain.cascade.frequency import cascade_params
 from cascadasen.domain.cascade.health import with_event_health
 from cascadasen.domain.cascade.overlay import OverlayError, apply_overlay, empty_overlay
+from cascadasen.domain.simulation.params import load_params, value
 from cascadasen.domain.theater.world import TheaterWorld
 
 MAX_EDITS = 50  # lines plus substations in one request
@@ -33,6 +35,46 @@ class GridSimulator:
             "warnings": edited.warnings,
             "timeline": with_event_health(_mark_out_of_service(timeline, out_buses, direct)),
         }
+
+
+def cost_workflow(simulator: GridSimulator, point: str, open_lines: list[str], out_buses: list[str]) -> dict:
+    """Failure cost of the user's changes, total and per hour of outage (docs/engine.md, "Cost"). No change: no cost."""
+    if not (open_lines or out_buses):
+        _load(simulator.world, point)  # still 404 for an unknown point
+        return _cost_view(point, failure_cost(0.0, 0.0, 0.0), 0.0)
+    summary = simulator.simulate_workflow(point, open_lines, out_buses)["timeline"]["summary"]
+    return _cost_view(point, {k: summary[k] for k in COST_KEYS}, summary["people_without_power"])
+
+
+COST_KEYS = (
+    "failure_cost_usd",
+    "cost_per_hour_usd",
+    "unserved_energy_mwh",
+    "outage_duration_h",
+    "cost_breakdown",
+)
+
+
+def _cost_view(point: str, cost: dict, people: float) -> dict:
+    params = cascade_params()["cost"]
+    voll = load_params("physics")["voll_usd_per_kwh"]
+    return {
+        "point": point,
+        "cost_usd": cost["failure_cost_usd"],
+        "cost_per_hour_usd": cost["cost_per_hour_usd"],
+        "energy_not_served_mwh": cost["unserved_energy_mwh"],
+        "outage_hours": {
+            **cost["outage_duration_h"],
+            "note": "black start" if cost["cost_breakdown"]["dark_mw"] > 0 else "EDAC",
+        },
+        "unserved_cost_usd_per_mwh": {
+            "value": round(float(value(voll)) * 1000.0),
+            "source": voll.get("source"),
+        },
+        "breakdown": cost["cost_breakdown"],
+        "people_without_power": people,
+        "assumptions": [str(params[k].get("note") or params[k].get("source")).strip() for k in params],
+    }
 
 
 def prepare_edits(
@@ -109,7 +151,9 @@ def _mark_out_of_service(timeline: dict, out_buses: list[str], direct: dict) -> 
             summary["load_total_mw"] + direct["load_mw"], 1
         )  # the demand of the hour
         summary["dark_buses"] += len(set(out_buses))
+        summary["dark_load_mw"] = round(summary.get("dark_load_mw", 0.0) + direct["load_mw"], 1)
+        # the cost follows the MW lost, direct loss included: a substation out of service is dark demand
         summary.update(
-            failure_cost(summary["load_shed_mw"])
-        )  # the cost follows the MW lost, direct loss included
+            failure_cost(summary["load_shed_mw"], summary["dark_load_mw"], summary["load_total_mw"])
+        )
     return timeline

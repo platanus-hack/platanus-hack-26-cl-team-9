@@ -1,6 +1,18 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
+
+- **Changed:** `_loadTimeline` (`web/src/cascade/CascadeApp.tsx`) calls `setPlaying(false); seek(0)` before it asks for the new timeline, and `timeline` is only set when `loaded.key === timelineKey`. A new scenario or cut loads paused at 0.
+- **Why:** the old run kept playing and its cascade stayed on the map until the new timeline arrived (seconds for `POST /grids/simulate`).
+- **Agents:** the cut-then-autoplay behaviour is gone for hand cuts too, they share this path. Session timelines are unchanged.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+## 2026-11-22 · feat(grids): failure cost that tells a total blackout from a slow grid, per hour, at POST /grids/cost (#82)
+
+- **Changed:** `blackout_cost` (`domain/simulation/consequence.py`) values dark demand with 7.34 h of black start and a total-blackout premium (k = 1.375, scaled by the dark share), and EDAC load shedding with 1 h and no premium; it also gives `cost_per_hour_usd`. The cascade summary adds `dark_load_mw`, `cost_per_hour_usd` and `cost_breakdown`; substations out of service count as dark. New `POST /api/v1/grids/cost` (`cost_workflow`), read by Estado de la red (total, per hour, MWh and "apagón total / parcial / corte parcial de carga"). Cache regenerated.
+- **Why:** #81's flat 4 h x 8.79 US$/kWh gave US$ 390 M for the 25F; the ISCI study for Enel Foundation [44] gives US$ 984 M and 81,430 MWh, and a blackout costs more per hour than load shedding. Now the 25F gives US$ 984.3 M and 81,443 MWh.
+- **Agents:** the two calibrated terms come from [44] (`cascade.yaml` `cost`), not from tuning the engine; only the 25F is checked against a real figure. `failure_cost(shed)` without the dark split counts everything as dark with no premium (N-1 money at risk). The 13-area engine's consequence card (`outage_cost`) is unchanged.
+- **Files:** `backend/src/cascadasen/{domain/simulation/consequence.py,domain/cascade/engine.py,domain/cascade/health.py,domain/cascade/params/cascade.yaml,application/grid_simulation.py,api/grid_routes.py}`, tests, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,gridsApi.ts}`, `docs/{engine,datasets}.md`.
 ## 2026-11-22 · docs(readme): product README and stale docs
 - **Changed:** `README.md` is now the Sub50 product README (what it is and simulates, `docker compose up --build`, honest validation scope, CI checks, names, repo map, doc links); the hackathon template text is gone, team list and logo stay at the end. `docs/stack.md`: status, section 0 (now history), decision rows (React hooks, custom charts, engine, API, precompute, tests, CI), `cascadasen-cache`, `sen_network.json`, section 7.1 with `GET /sim/runs/{id}/snapshots` (14 operations). `docs/plan.md`: built state, CI and `cascadasen-cache` lines, V6 marked skipped, duplicate decision 14 renumbered to 15. `docs/mapa3.md`: Glossary moved to section 12 (no duplicate `## 10`), missing `web/src/cascade` modules in the section 8 table, theatre-cache git-ignore wording, deleted `icons.ts` sentence dropped. `web/README.md`, `docs/architecture.md` (`built_at` exception), `docs/datasets.md` (no personal path, 188 buses, appendices not in repo) and `backend/README.md` (endpoint list) corrected.
 - **Why:** Review R-14, R-15 and section 7 rows 2-17. Docs only: no code, cache or OpenAPI change.

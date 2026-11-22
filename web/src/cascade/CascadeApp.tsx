@@ -120,12 +120,12 @@ export function CascadeApp() {
   const shownGrid = !isChile && shown?.id === networkId ? shown.grid : null;
 
   const point = index?.points.find((p) => p.id === pointId);
-  const timeline = loaded?.timeline ?? null;
   // In a session the timeline is the session state's, keyed "session".
   const cached = fromCache(edits); // zero or one line: the precalculated cascade; more changes: the server simulates them together
   const cut = cached ? edits.lines[0] ?? null : null;
   const timelineKey = s.sid ? "session" : cached ? `${pointId}/${cut ?? "baseline"}` : editKey(pointId, edits);
   const timelineReady = loaded?.key === timelineKey;
+  const timeline = timelineReady ? loaded.timeline : null; // a timeline of another scenario never drives the map
   const cuts = s.sid ? s.state?.open_lines ?? [] : edits.lines;
   const outBuses = s.sid ? [] : edits.buses;
   const edited = cuts.length + outBuses.length > 0;
@@ -293,13 +293,14 @@ export function CascadeApp() {
 
   function _loadTimeline() {
     if (!network) return;
+    setPlaying(false); seek(0); // a new scenario or cut stops the previous run; the user presses play
     timelineRequest.current = timelineKey;
     const key = timelineKey;
     if (!cached) return _simulateEdits(key);
     setSimResult(null);
     loadTimeline(pointId, cut ?? "baseline").then((tl) => {
       if (timelineRequest.current !== key) return; // a newer point or cut was asked for meanwhile
-      setLoaded({ key, timeline: tl }); setT(0); setPlaying(!!cut);
+      setLoaded({ key, timeline: tl }); setT(0); setPlaying(false);
     }).catch((e) => {
       if (timelineRequest.current !== key) return;
       if (!cut) return setError(String(e.message));
@@ -323,7 +324,7 @@ export function CascadeApp() {
   function _simulateEdits(key: string) {
     simulateGrid({ point: pointId, open_lines: edits.lines, out_buses: edits.buses }).then((r) => {
       if (timelineRequest.current !== key) return;
-      setError(null); setSimResult(r); setLoaded({ key, timeline: r.timeline }); setT(0); setPlaying(true);
+      setError(null); setSimResult(r); setLoaded({ key, timeline: r.timeline }); setT(0); setPlaying(false);
     }).catch((e) => {
       if (timelineRequest.current !== key) return;
       setError(`${String(e.message)} Repón un cambio en Estado de la red.`);
