@@ -18,8 +18,9 @@ class StressChange(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    target: Literal["population", "demand", "generation", "lines"] = Field(
-        description="population (people; demand follows), demand (MW alone), generation (MW), lines (capacity)."
+    target: Literal["population", "demand", "generation", "lines", "substation"] = Field(
+        description="population (people; demand follows), demand (MW alone), generation (MW), lines (capacity), "
+        "substation (a new substation next to the one that serves `places[0]`, with its own lines)."
     )
     buses: list[str] = Field(default=[], description="Substation ids B###.")
     zones: list[str] = Field(default=[], description="Zones NG, NC, CE, CS, SU.")
@@ -53,9 +54,37 @@ class StressChange(BaseModel):
     x_factor: float | None = Field(
         default=None, gt=0.0, le=MAX_FACTOR, description="Lines only: multiplies the reactance x_pu."
     )
+    name: str | None = Field(default=None, max_length=60, description="Substation only: its name.")
+    lat: float | None = Field(
+        default=None, description="Substation only: latitude (default: next to `places[0]`)."
+    )
+    lon: float | None = Field(
+        default=None, description="Substation only: longitude (default: next to `places[0]`)."
+    )
+    load_mw: float | None = Field(default=None, gt=0.0, description="Substation only: demand it serves, MW.")
+    generator_mw: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Substation only: generation it injects, MW; `tech` has its technology.",
+    )
 
     @model_validator(mode="after")
     def _consistent(self) -> StressChange:
+        own = (self.name, self.lat, self.lon, self.load_mw, self.generator_mw)
+        if self.target == "substation":
+            if len(self.places) != 1:
+                raise ValueError("substation: indica un solo lugar en places")
+            if self.buses or self.zones or self.areas or self.comunas or self.lines or self.kv:
+                raise ValueError("substation: solo places, name, lat, lon, load_mw, generator_mw y tech")
+            if self.factor is not None or self.add is not None or self.x_factor is not None:
+                raise ValueError("substation: no lleva factor ni add")
+            if self.generator_mw and len(self.tech) != 1:
+                raise ValueError("substation: con generator_mw indica una tecnología en tech")
+            return self
+        if any(v is not None for v in own):
+            raise ValueError(
+                f"{self.target}: name, lat, lon, load_mw y generator_mw son solo para substation"
+            )
         if self.target == "lines":
             if self.add is not None or (self.factor is None and self.x_factor is None):
                 raise ValueError("lines: usa factor y/o x_factor")

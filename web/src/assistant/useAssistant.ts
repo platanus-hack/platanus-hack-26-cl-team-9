@@ -26,13 +26,13 @@ export interface Assistant {
 /** The final grid the assistant set with `prepare_scenario`; the map loads it paused. */
 export interface AssistantScenario { point: string; changes: StressChange[]; open_lines: string[]; out_buses: string[] }
 
-export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => void, gridNow?: () => ChatGrid | null): Assistant {
+export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => void, getGrid?: () => AssistantScenario | null): Assistant {
   const [state, setState] = useState<ChatState>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [restoring, setRestoring] = useState(() => !!readCid());
-  const live = useRef({ state, s, busy, onScenario, gridNow });
-  live.current = { state, s, busy, onScenario, gridNow };
+  const live = useRef({ state, s, busy, onScenario, getGrid });
+  live.current = { state, s, busy, onScenario, getGrid };
   const abort = useRef<AbortController | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -82,7 +82,7 @@ export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => 
     const ctrl = new AbortController();
     abort.current = ctrl;
     try {
-      const finished = await streamChat({ message: text, conversation_id: st.conversationId ?? undefined, grid: live.current.gridNow?.() ?? undefined }, onEvent, ctrl.signal);
+      const finished = await streamChat({ message: text, conversation_id: st.conversationId ?? undefined, grid: live.current.getGrid?.() ?? undefined }, onEvent, ctrl.signal);
       if (!finished) await recover();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;

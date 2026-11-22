@@ -8,6 +8,27 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** the model asked which operating point to use, split changes to dodge the 5000 MW cap, and said it "turned off" substations when it only zeroed generation (nothing turns red without a failure). The prompt now says that turning a substation off is `out_buses`.
 - **Agents:** `ChatIn.grid` is optional (MCP and curl clients keep working). `labels.changeText` is shared by the tool card and the history. `docs/openapi/agents.openapi.json` regenerated.
 - **Files:** backend/src/cascadasen/api/{assistant_routes,stress_schemas,session_schemas}.py, application/{assistant,grid_stress}.py, domain/cascade/overlay.py, mcp/digest.py, web/src/assistant/*, web/src/changelog/*, web/src/cascade/{CascadeApp.tsx,gridsApi.ts,SimulationPanel.tsx}, docs/{assistant,stress,sessions-api,stack}.md.
+## 2026-11-22 · feat(web): el asistente muestra un spinner y colapsa los pasos de herramientas (#126)
+
+- **Changed:** `AssistantTurnView` (exportado) muestra solo "Pensando…" con spinner mientras el turno está en curso. Al terminar muestra la respuesta y los pasos (textos y tarjetas) dentro de un `<details>` cerrado "Detalles del trabajo (N herramientas)".
+- **Why:** el panel mostraba un mensaje por cada paso del modelo; el usuario quiere un spinner nada más.
+- **Agents:** el stream SSE no cambia: `steps.ts` sigue acumulando los pasos y el mapa se sigue refrescando. Test nuevo en `AssistantPanel.test.tsx`.
+- **Files:** `web/src/assistant/AssistantPanel.tsx`, `web/src/assistant/AssistantPanel.test.tsx`, `docs/assistant.md`.
+
+## 2026-11-22 · feat(assistant): un solo punto de entrada a la grilla y la grilla del mapa como fuente de verdad (#130)
+
+- **Changed:** `StressChange` tiene `target: "substation"` (lugar, nombre, `load_mw` o `generator_mw` con `tech`): crea una subestación nueva con sus líneas (`overlay.add_substation`) en el camino sin sesión, así que viaja en los mismos `changes` que la web reenvía a prepare, simulate, dependency y cost. `add_substation` sale de las herramientas del asistente. `POST /chat` y `/chat/stream` aceptan `grid` (la grilla del mapa) y la ponen en el prompt de ese mensaje; la web la envía en cada mensaje.
+- **Why:** `add_substation` escribía en una sesión que la web no muestra, y el asistente reconstruía la grilla desde su historial: tras elegir un escenario o benchmark seguía reenviando cambios viejos.
+- **Agents:** la nueva subestación se conecta a la que sirve el lugar y a la más cercana del mismo kV (supuesto, 2 caminos). No se puede apagar con `out_buses` y la web dibuja su pin pero no sus líneas. `_source_row(ctx, net, …)` recibe la red aplicada porque hay barras fuera de la base. Detalle en `docs/stress.md` sección 4 y `docs/assistant.md` sección 2d.
+- **Files:** `backend/src/cascadasen/{api/stress_schemas,api/assistant_routes,application/grid_stress,application/grid_simulation,application/assistant,mcp/tools,mcp/digest,mcp/toolbox}.py`, `web/src/{cascade/placed,cascade/edits,cascade/CascadeApp,assistant/useAssistant,assistant/assistantApi}.ts*`.
+
+## 2026-11-22 · feat(assistant): el agente elige la herramienta correcta para salud de la red y refuerzos (#127)
+
+- **Changed:** el prompt del asistente lleva una guía "qué herramienta usar" (`TOOL_GUIDE`): salud de la red o de un nodo con `describe_network`, fallas y refuerzos con `prepare_scenario`, eventos en el tiempo con las herramientas de corrida. `INSTRUCTIONS` se divide en `WORKFLOW` y `RULES`; el asistente solo recibe `RULES`. Se quita del prompt la mención a `reset_network`, que el asistente no tiene.
+- **Why:** el prompt le decía al modelo que empezara con `start_session` y usara `add_datacenter` y `cut_lines`, herramientas excluidas; el modelo probó nombres como ids y llamó herramientas equivocadas.
+- **Agents:** el MCP server sigue enviando `INSTRUCTIONS` completo (`WORKFLOW + RULES`). Un test falla si el prompt nombra una herramienta de `EXCLUDED`. No hay herramienta nueva de salud: `describe_network` ya entrega déficit por área y líneas sobrecargadas del caso base; si hace falta salud después de un escenario, ese dato sale de `prepare_scenario`. `add_substation` sigue ofrecida al asistente pero sus cambios no llegan al mapa (decisión abierta).
+- **Files:** `backend/src/cascadasen/api/assistant_routes.py`, `backend/src/cascadasen/mcp/tools.py`, `backend/tests/unit/test_assistant.py`, `backend/tests/integration/test_assistant_api.py`, `docs/assistant.md`.
+
 ## 2026-11-22 · feat(assistant): el agente decide dimensiones y ejecuta sin exigir MW al usuario (#125)
 
 - **Changed:** se elimina la guardia "los MW deben venir del usuario" (`stated`, `numbers`, `USER_SIZED`, `SUBSTATION_MW`, `invented_adds`) y el argumento `said` de `toolbox_for`. El prompt del asistente y los docstrings de `add_datacenter`, `add_generator` y `add_substation` dicen que el modelo decide, ejecuta y declara el valor como supuesto.

@@ -39,7 +39,7 @@ import { cutLines, repairLines } from "../session/sessionApi";
 import { canPowerAll, powerAll } from "./powerAll";
 import { useSession } from "../session/useSession";
 import { AssistantPanel } from "../assistant/AssistantPanel";
-import { useAssistant } from "../assistant/useAssistant";
+import { useAssistant, type AssistantScenario } from "../assistant/useAssistant";
 import { IncidentPanel } from "../incidents/IncidentPanel";
 import { ChangePanel } from "../changelog/ChangePanel";
 import { cascadeEntries, cyberEntries, diffEdits, withPrepared, type Entry } from "../changelog/changelog";
@@ -84,9 +84,8 @@ export function CascadeApp() {
   // ?point=<id>&cut=<line id | sub-<bus id>>&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
   const params = useMemo(() => new URLSearchParams(location.search), []);
   const s = useSession();
-  // owned here so the chat survives view changes; it always works on the grid on the map (outside a session)
-  const a = useAssistant(s, (sc) => applyScenario(sc), () => (live.current.sid || !live.current.isChile ? null
-    : { point: live.current.pointId, changes: live.current.changes, open_lines: live.current.offState.lines, out_buses: live.current.offState.buses }));
+  const gridRef = useRef<AssistantScenario | null>(null); // the scenario on the map, sent with each message
+  const a = useAssistant(s, (sc) => applyScenario(sc), () => gridRef.current); // owned here so the chat survives view changes
   const inc = useIncident(s); // likewise for the incident result and the cascade it plays
   const [speed, setSpeed] = useState(1); // the timeline card's speed: cascade seconds and Ciberataque cycles alike
   const cyb = useCyber(speed); // and for the Ciberataque run
@@ -109,6 +108,8 @@ export function CascadeApp() {
   // Historial de cambios: the adjustments (user or assistant); falls are derived from the timeline. A scenario click empties it.
   const [adjustments, setAdjustments] = useState<Entry[]>([]);
   const prevEdits = useRef<Edits>(edits);
+  // What the assistant starts from: the grid as the user sees it. A scenario or Benchmark click empties it, so the assistant restarts at baseline.
+  gridRef.current = s.sid ? null : { point: pointId, changes: changesOf(edits), open_lines: edits.lines, out_buses: edits.buses };
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   // The prepared grid of the scenario's changes (POST /grids/prepare), keyed like the changes it belongs to.
   const [prepared, setPrepared] = useState<{ key: string; value: Prepared } | null>(null);

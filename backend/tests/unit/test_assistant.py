@@ -331,3 +331,15 @@ def test_a_first_session_at_the_default_point_waits_until_a_tool_needs_it():
     assert box.run(call("start_session", point="nov2026-1300"))[1]["deferred"] and not opened
     ok, out = box.run(call("start_session", point="feb2025-1500"))  # an incident's own point: open it now
     assert ok and out["session_id"] == SID and opened == ["feb2025-1500"]
+
+
+def test_the_system_prompt_only_names_tools_the_assistant_is_offered():
+    import re
+
+    from cascadasen.api.assistant_routes import SYSTEM
+    from cascadasen.mcp.toolbox import EXCLUDED
+    from cascadasen.mcp.tools import TOOLS
+
+    named = {t for t in TOOLS if re.search(rf"\b{t}\b", SYSTEM)}
+    assert {"describe_network", "prepare_scenario"} <= named
+    assert not named & EXCLUDED, named & EXCLUDED

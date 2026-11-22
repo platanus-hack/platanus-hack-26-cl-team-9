@@ -82,3 +82,28 @@ def test_technology_names_people_use_are_mapped_and_nuclear_is_said_to_be_an_ass
     assert sent[0]["tech"] == ["termica"] and sent[1]["tech"] == ["eolica", "bateria"]
     assert out["scenario"]["changes"] == sent  # the web loads what was really sent
     assert "térmica sincrónica" in out["notes"][0]
+
+
+def test_the_digest_says_which_substation_a_change_created():
+    from cascadasen.mcp.digest import prepare_digest
+
+    out = prepare_digest(
+        {
+            "changes": [
+                {
+                    "target": "substation",
+                    "matched": 1,
+                    "new_substation": True,
+                    "connects_to": ["B105", "B068"],
+                    "places": [{"bus": "B105"}],
+                    "elements": [{"id": "B188", "name": "S/E Solar Vallenar", "kv": 220.0}],
+                }
+            ],
+            "totals": {},
+            "overloaded_lines": [],
+            "should_feed": {"by_zone": {}},
+            "per_capita_w": 1,
+            "assumptions": [],
+        }
+    )
+    assert out["changes"][0]["created"] == "B188 S/E Solar Vallenar (220 kV), conectada a B105, B068"

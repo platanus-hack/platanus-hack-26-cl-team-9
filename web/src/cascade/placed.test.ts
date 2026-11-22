@@ -43,4 +43,14 @@ describe("placedPoints", () => {
     expect(out).toEqual([]);
     expect(placedPoints(changes, null, NETWORK)).toEqual([]);
   });
+
+  it("pins a new substation where it was built, with its plant technology", () => {
+    const changes = [{ target: "substation" as const, places: ["Vallenar"], generator_mw: 120, tech: ["solar"] }];
+    const out = placedPoints(changes, prepared([
+      { target: "substation", matched: 1, new_substation: true, tech: ["solar"], gen_mw: 120, load_mw: null, connects_to: ["B010"], elements: [{ id: "B188", name: "S/E Solar", lat: -28.6, lon: -70.7, kv: 220 }] },
+    ]), NETWORK);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ name: "S/E Solar", lat: -28.6, lon: -70.7, kind: "gen", label: "Subestación nueva · +120 MW solar" });
+    expect(out[0].color).toBe("rgb(255, 196, 0)");
+  });
 });

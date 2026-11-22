@@ -25,6 +25,17 @@ export function placedPoints(changes: StressChange[], prepared: Prepared | null,
   const nodes = new Map(network.nodes.map((n) => [n.id, n]));
   const out: PlacedPoint[] = [];
   changes.forEach((c, i) => {
+    if (c.target === "substation") {
+      const made = prepared.changes[i];
+      const at = made?.elements?.[0];
+      if (!made?.new_substation || !at || at.lat === undefined || at.lon === undefined) return;
+      const gen = !!made.gen_mw;
+      const what = gen ? techLabel(made.tech) : "de demanda";
+      const mw = Math.round((gen ? made.gen_mw : made.load_mw) ?? 0);
+      const label = `Subestación nueva${mw ? ` · +${mw.toLocaleString("es-CL")} MW ${what}` : ""}`;
+      out.push({ key: `${i}-${at.id}`, lon: at.lon, lat: at.lat, label, name: at.name ?? at.id, kind: gen ? "gen" : "load", color: gen ? techColor(made.tech) : null });
+      return;
+    }
     if ((c.target !== "demand" && c.target !== "generation") || !c.add || c.add <= 0) return;
     const elements = prepared.changes[i]?.elements ?? [];
     if (!elements.length || elements.length > MAX_PINS_PER_CHANGE) return;
