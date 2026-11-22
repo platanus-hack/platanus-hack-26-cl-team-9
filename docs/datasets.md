@@ -134,6 +134,7 @@ INE Census 2024 by region/commune (https://censo2024.ine.gob.cl/resultados/). Th
 
 ### 4.4 Other
 - Chile outline: continental only (drop Easter Island and Antarctic territory). Simplify with mapshaper. Not downloaded.
+- Economic loss of the 25F: US$ 984 million, press estimate [44], not verified. Reference for magnitudes only (`docs/health.md` "Cost"); the model's cost is the CNE failure cost [19] times an assumed duration, a different quantity.
 - Line capacity for corridors other than the 25F one: the CEN transmission-restrictions study may have it; current version not verified.
 
 ## 5. Plant -> node assignment (task)
@@ -176,6 +177,7 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 | 41 | OpenStreetMap power data (towers, poles, transformers, lines) | https://www.openstreetmap.org/ | Used in design mockups only (2026-11-21); ODbL licence requires attribution if shipped |
 | 42 | ONS Dados Abertos, `linha-transmissao` (CC BY, updated daily): lines from 230 kV with bus numbers, r, x, shunt, ampacity | https://dados.ons.org.br/dataset/linha-transmissao (file `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv`) | Verified, downloaded 2026-11-21, in pipeline (`ons_brasil.py`). Dictionary states no unit for r, x, shunt: percent on 100 MVA and Mvar inferred (`regional.md` section 6) |
 | 43 | ONS Dados Abertos, `subestacao` (CC BY): busbars from 69 kV with substation code and coordinates | https://dados.ons.org.br/dataset/subestacao (file `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/subestacao/SUBESTACAO.csv`) | Verified, downloaded 2026-11-21, in pipeline |
+| 44 | Revista Electricidad, "Estudio estima las pérdidas económicas generadas por el blackout del 25 de febrero" (US$ 984 million for the 25F), cited in `pitch_idea.md` [1] | https://www.revistaei.cl/estudio-estima-las-perdidas-economicas-generadas-por-el-blackout-del-25-de-febrero/ | Press estimate, not verified: the study behind it was not opened and its method is unknown. Used only in `tests/validation/test_health_25f.py` and `docs/health.md` to order magnitudes, never shown in the UI |
 | - | Article by CEN engineers on the 25F protection sequence | https://www.pacw.org/chilean-grid-blackout-of-february-2025 | Read by the evaluator |
 | - | Andes (similar hackathon project, click-to-fail) | https://github.com/aleetreny/Encode | Verified |
 | - | COSMIC (MATLAB dynamic cascade simulator) | https://github.com/ecotillasanchez/cosmic | Verified |

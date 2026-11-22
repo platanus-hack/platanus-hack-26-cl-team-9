@@ -2,7 +2,7 @@ import type { Layer, PickingInfo } from "@deck.gl/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
 import { buildRegionalLayers, regionalFromDocuments, regionalTooltip, type RegionalGrid } from "../map/regional";
-import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
+import { loadBuses, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourceSelection } from "./GridSources";
@@ -20,7 +20,7 @@ import { SimulationPanel } from "./SimulationPanel";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
-import type { BusState, DependencyNode, Index, Network, Timeline } from "./types";
+import type { BusState, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
 import { Icon, TipLayer, Wordmark } from "./ui";
 import { DataPanel } from "../session/DataPanel";
 import { SessionBar } from "../session/SessionBar";
@@ -64,6 +64,7 @@ export function CascadeApp() {
   const [pointId, setPointId] = useState(params.get("point") ?? DEFAULT_POINT);
   const [network, setNetwork] = useState<Network | null>(null);
   const [buses, setBuses] = useState<Record<string, BusState>>({});
+  const [health, setHealth] = useState<HealthReport | null>(null);
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
   // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
@@ -145,6 +146,8 @@ export function CascadeApp() {
   useEffect(() => _loadHeat(), [heat, heatKey]);
   useEffect(() => { if (!s.sid && !composed) _loadPoint(); }, [pointId, index, s.sid, composed]);
   useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
+  // Pre-fault health of the base point; null when the cache predates it. Hidden in a session or a composed grid: they change the network.
+  useEffect(() => { let live = true; setHealth(null); loadHealth(pointId).then((h) => { if (live) setHealth(h); }); return () => { live = false; }; }, [pointId]);
   useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
   useEffect(() => { if (s.state) { timelineRequest.current = "session"; setLoaded({ key: "session", timeline: s.state.timeline }); setT(0); setPlaying(s.state.open_lines.length > 0); } }, [s.state]);
   useEffect(() => _onSessionChange(), [s.sid]);
@@ -557,7 +560,7 @@ export function CascadeApp() {
           )}
           {view === "tabs" && tab === "sim" && network && (timeline && timelineReady ? (
             <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} totalPeople={totalPeople}
-              seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} />
+              seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} health={s.sid || composed ? null : health} />
           ) : !error && <Loading text="Cargando la simulación" />)}
           {view === "tabs" && tab === "datos" && (s.network
             ? <DataPanel network={s.network} edit={s.edit} pick={_pick} picking={picking} />

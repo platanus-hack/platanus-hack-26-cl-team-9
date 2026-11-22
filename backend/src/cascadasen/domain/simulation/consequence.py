@@ -29,6 +29,21 @@ def consequence_level(islands: list[IslandResult], load_lost_mw: float) -> tuple
     return "L0", uncertain
 
 
+def outage_cost(
+    load_lost_mw: float, outage_h: float, outage_is_assumption: bool, voll_usd_per_kwh: float
+) -> dict[str, Any]:
+    """Unserved energy and its regulatory valuation (CNE failure cost [19], stack.md 6.1).
+
+    A valuation for planning, not a measured economic loss. Shared by the consequence card and the
+    cascade timeline summary so the formula lives in one place."""
+    mwh = load_lost_mw * outage_h
+    return {
+        "unserved_energy_mwh": round(mwh, 1),
+        "failure_cost_usd": round(mwh * 1000.0 * voll_usd_per_kwh),
+        "outage_duration_h": {"value": outage_h, "is_assumption": outage_is_assumption},
+    }
+
+
 def consequence_card(
     islands: list[IslandResult],
     load_lost_mw: float,
@@ -39,15 +54,12 @@ def consequence_card(
     voll_usd_per_kwh: float,
 ) -> dict[str, Any]:
     level, uncertain = consequence_level(islands, load_lost_mw)
-    mwh = load_lost_mw * outage_h
     return {
         "consequence_level": level,
         "uncertain": uncertain,
         "people_without_power": round(people),
         "load_shed_mw": round(load_shed_mw, 1),
         "load_lost_mw": round(load_lost_mw, 1),
-        "unserved_energy_mwh": round(mwh, 1),
-        "failure_cost_usd": round(mwh * 1000.0 * voll_usd_per_kwh),
-        "outage_duration_h": {"value": outage_h, "is_assumption": outage_is_assumption},
+        **outage_cost(load_lost_mw, outage_h, outage_is_assumption, voll_usd_per_kwh),
         "islands": [i.summary() for i in islands],
     }

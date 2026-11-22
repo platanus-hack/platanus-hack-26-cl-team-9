@@ -1,6 +1,78 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(health): merge main; cost under the voltage rule and in grids/simulate
+
+- **Changed:** Merges `origin/main` (#70, #76, #83, #66, #63) into `feat/health-cost`. `event_cost` drops `is_floor` for `voltage_rule` (islands darkened by the 25F voltage-collapse rule, `reason: "voltage"`), since #76 removed `voltage_limited`/`uncertain`; the web reads "costo estimado, colapso por regla" with no "≥".
+- **Changed:** `GridSimulator` (`POST /api/v1/grids/simulate`) recomputes the summary cost after adding the direct loss of substations out of service and attaches `health` (`with_event_health`), so it matches the cache. The pre-fault row also hides on a composed grid.
+- **Changed:** Cache regenerated. 25F figures with the new engine: R239 at `feb2025-1500` costs US$ 390.1 M (11,096 MW, whole system); N-1 expected US$ 7.5 M, worst US$ 390.1 M (5 costliest carry 60-80 %); reference `feb2025-0300` N-1 expected US$ 4.5 M. The gap to US$ 984 M is now only the assumed 4 h (about 10.1 h needed).
+- **Why:** Resolve the PR #81 conflicts with main and keep the cost correct under the new voltage rule and the multi-edit API.
+- **Agents:** `health.cost.is_floor` no longer exists: use `voltage_rule`. Any timeline from cache, session or `/grids/simulate` carries `summary.failure_cost_usd` and `health`. Older entries below that quote US$ 69 M / 3.5 M / 72.6 M or "floor" are superseded.
+- **Files:** `backend/src/cascadasen/{domain/cascade/{engine,health}.py,application/{grid_simulation,grid_health}.py}`, `backend/tests/{unit/test_health.py,unit/test_grid_simulation.py,validation/test_health_25f.py}`, `web/src/cascade/{SimulationPanel.tsx,CascadeApp.tsx,types.ts}`, `web/public/cache/`, `docs/{health,engine,mapa3,grids}.md`.
+
+## 2026-11-21 · docs(health): cost section
+
+- **Changed:** `docs/health.md` gets a "Cost" section: the figures table, the rules (no index in dollars, no ids of costly cuts, N-1 reuses the runs), the 25F and reference results and the US$ 984 M validation gap. "Run" adds the cache and `-s`; "Not done" drops the cache `health.json` and lists the cost items left out.
+- **Changed:** `docs/engine.md` item 7 (failure cost in the summary), `docs/stack.md` 6.1 (one formula for both engines), `docs/plan.md` 9.10 (4 h stays the default assumption, fixed in map 3), `docs/mapa3.md` (Simulación tab rows and the `health.json` cache file).
+- **Why:** Issue #72: the docs must match the code of the previous commits.
+- **Agents:** `docs/health.md` "Cost" is the reference for the cost fields and their rules. Plan 9.10 is answered for the duration; the team still owns the rest of that item.
+- **Files:** `docs/{health.md,engine.md,stack.md,plan.md,mapa3.md}`.
+
+## 2026-11-21 · feat(web): health index and cost in the simulation panel
+
+- **Changed:** `SimulationPanel.tsx`: the impact card adds a ruled row with the after-cut "índice de margen operativo" (with "incierto") and "US$ X M · costo estimado" ("≥" and "piso" when the result is uncertain), captioned "Al final de la simulación. Índice de margen operativo (modelo) y valoración regulatoria (costo de falla CNE), 4 h supuestas." The empty card ("Escenario nuevo") shows the pre-fault index plus "en riesgo N-1, esperado" and "peor" from `health.json`.
+- **Changed:** `types.ts` adds optional `summary.failure_cost_usd`, `unserved_energy_mwh`, `outage_duration_h`, `uncertain`, `Timeline.health` and the `HealthReport`, `EventCost`, `N1Cost` types. `api.ts` adds `loadHealth(point)`, which resolves to `null` when the file is missing. `text.ts` adds `usdM` ("US$ 69,3 M") and `index2` ("0,67").
+- **Why:** Issue #72: the index and the money side by side in map 3.
+- **Agents:** Every new field is optional: an old cache shows neither row (checked in the browser with `health.json` and the R239 fields removed). The pre-fault row is hidden in a session (`health={s.sid ? null : health}`), because session edits change the network. The figures are end-of-simulation values, not animated with `t`. No duration input in map 3 and no US$ 984 M in the UI (user decisions). Tests: `api.test.ts`, `text.test.ts`.
+- **Files:** `web/src/cascade/{SimulationPanel.tsx,CascadeApp.tsx,api.ts,api.test.ts,types.ts,text.ts,text.test.ts}`.
+
+## 2026-11-21 · chore(data): regenerate cache with health and cost
+
+- **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache`: 4 new `<point>/health.json`, and every line and substation timeline rewritten with `summary.failure_cost_usd`, `unserved_energy_mwh`, `outage_duration_h` and `health`. Size went from 42 MB to 46 MB; `web/README.md`, `docs/engine.md` and `docs/mapa3.md` say so.
+- **Why:** The web shows the index and the cost from the cache (issue #72).
+- **Agents:** Checked: `feb2025-1500/R239.json` has `failure_cost_usd` 69,335,520 and `health.cost.is_floor` true; `feb2025-1500/health.json` has index 0.0 (`transfer_25f`), N-1 expected US$ 3,510,591 and worst US$ 72,605,400. A full run takes about 1.5 minutes.
+- **Files:** `web/public/cache/`, `web/README.md`, `docs/engine.md`, `docs/mapa3.md`.
+
+## 2026-11-21 · feat(cache): health.json and event health per timeline
+
+- **Changed:** `cascadasen-cache` writes `<point>/health.json` = `prefault_health(net, op, n1_results=...)`, fed by the single-line runs `_build_point` already makes (no extra run). Every `<line>.json` and `sub-B###.json` gains `health`: the after-cut report with its `cost`.
+- **Changed:** New `with_event_health(timeline)` in `domain/cascade/health.py` attaches `health` from the timeline summary. The session sandbox timeline (`application/sessions.py::_timeline`) uses it too, so session cuts carry the same field.
+- **Why:** Issue #72: the web reads the index and the cost from the cache (no server for static cuts).
+- **Agents:** `health` and `health.json` are optional for the web: an old cache without them must keep working. `baseline.json` has no `health`. The cache is regenerated in the next commit. Test: `test_cache_writes_health_json_and_event_health_without_extra_runs` counts the runs.
+- **Files:** `backend/src/cascadasen/application/{cache_builder.py,sessions.py}`, `backend/src/cascadasen/domain/cascade/health.py`, `backend/tests/unit/test_health.py`.
+
+## 2026-11-21 · test(health): 25F cost validation
+
+- **Changed:** `tests/validation/test_health_25f.py` pins the cost figures: R239 at `feb2025-1500` about US$ 69 M (a floor, uncertain), a full blackout of 11,096 MW x 4 h about US$ 390 M, about 10.1 h of full blackout to reach the press estimate of US$ 984 M, and N-1 expected US$ 3.5 M / worst US$ 72.6 M. Run with `-s` to print them.
+- **Changed:** `docs/datasets.md` adds source [44] (revistaei.cl via `pitch_idea.md`, US$ 984 M, "press estimate, not verified") and a bullet in section 4.4.
+- **Why:** Issue #72 asks to write down the gap between the model cost and the 25F estimate without tuning the duration to match.
+- **Agents:** The US$ 984 M figure lives only in this test and the docs, never in the UI (user decision). The gap is the documented-not-computed voltage collapse plus the assumed 4 h; do not tune `default_outage_h` to close it.
+- **Files:** `backend/tests/validation/test_health_25f.py`, `docs/datasets.md`.
+
+## 2026-11-21 · feat(health): cost in cascadasen-health
+
+- **Changed:** `application/grid_health.py`: `format_cost` adds a `$` line under each report. Pre-fault: "Dinero en riesgo N-1 (modelo): esperado US$ X M, peor US$ Y M; k de 273 cortes con costo, los 5 más caros suman <banda>". After a cut: "Costo estimado: US$ X M (costo de falla CNE [19], 4 h supuestas; piso, no estimación)" when uncertain. `--json` carries the `cost` object through `extra`.
+- **Changed:** The `n1_worst` margin no longer names the worst line in `measured` ("2065 MW" instead of "2065 MW (R222)").
+- **Why:** Issue #72 asks for the cost next to the index in the CLI. The worst cut is also the costliest one, and `cyber.md` section 8 forbids naming the most costly cuts once the report reaches the web cache.
+- **Agents:** 25F results: R239 at `feb2025-1500` costs US$ 69.3 M (floor, uncertain); N-1 expected US$ 3.5 M, worst US$ 72.6 M. Reference `feb2025-0300`: R239 US$ 22.2 M; N-1 expected US$ 4.1 M, worst US$ 306.6 M (the whole-system artefact of `n1_worst`).
+- **Files:** `backend/src/cascadasen/application/grid_health.py`, `backend/src/cascadasen/domain/cascade/health.py`.
+
+## 2026-11-21 · feat(health): cost next to the health index
+
+- **Changed:** `domain/cascade/health.py`: new `event_report(summary, scenario, cut)` builds the after-cut report from a cascade `summary` without a new run; `event_health` uses it. Its `extra["cost"]` = `{cost_usd, unserved_energy_mwh, outage_duration_h, is_floor, source, note}`, `is_floor` = the report is uncertain.
+- **Changed:** `prefault_health(..., n1_results=None)` accepts single-cut results already computed. New `n1_cost(results)` goes in `extra["cost"]`: `n1_expected_cost_usd` (mean, equal weights, `is_assumption: true`), `n1_worst_cost_usd`, `n1_cuts`, `n1_cuts_with_cost`, `n1_cost_share: {count: 5, share_band: "60-80 %"}`.
+- **Why:** Issue #72: the index and the money side by side, from the same MW lost, without a new run.
+- **Agents:** The cost never enters the index and the index is never converted to dollars (the index is a minimum, so they can move apart). `n1_cost` never emits line ids: totals, counts and 20-point bands only (`cyber.md` section 8). Pass `n1_results` whenever the cuts already ran.
+- **Files:** `backend/src/cascadasen/domain/cascade/health.py`, `backend/tests/unit/test_health.py`.
+
+## 2026-11-21 · feat(cascade): failure cost in the cascade summary
+
+- **Changed:** New pure `outage_cost(load_lost_mw, outage_h, outage_is_assumption, voll)` in `domain/simulation/consequence.py` returns `unserved_energy_mwh`, `failure_cost_usd` and `outage_duration_h: {value, is_assumption}`. `consequence_card` uses it; its output is unchanged.
+- **Changed:** The cascade timeline `summary` (`domain/cascade/engine.py::_timeline`) adds the same three fields through `failure_cost(load_shed_mw)`, with `default_outage_h` (4 h, assumption) and `voll_usd_per_kwh` (8.79, CNE [19]) read from `physics.yaml`.
+- **Why:** Issue #72: show the money next to the health index. The cascade (map 3, cache, sessions) had MW lost but no cost.
+- **Agents:** One formula for both engines: never recompute the cost by hand, call `outage_cost`. The cascade cost uses the rounded `load_shed_mw`, so `failure_cost_usd = load_shed_mw x 4 x 1000 x 8.79` exactly. It is a regulatory valuation, not a measured loss. The cache is not regenerated yet.
+- **Files:** `backend/src/cascadasen/domain/simulation/consequence.py`, `backend/src/cascadasen/domain/cascade/engine.py`, `backend/tests/unit/{test_cascade.py,test_sim_engine.py}`.
+
 ## 2026-11-22 · feat(web): Desastres adds the 2011 Ancoa blackout and the 2010 earthquake (S/E Charrúa) (#88)
 
 - **Changed:** `DISASTERS` in `Scenarios.tsx` lists Apagón 25F, Apagón 2011 · Ancoa (cut `R006` at `nov2026-2000`) and Terremoto 2010 · Charrúa (S/E Charrúa `B043` out of service at `nov2026-2000`). A scenario is now `{point, edits}`: a disaster replaces the changes of Estado de la red, a Benchmark condition keeps them. `activeDisaster` marks the entry whose hour and changes match exactly. The 25F tooltip named the wrong corridor (Alto Jahuel–Ancoa); it now says Nueva Maitencillo – Nueva Pan de Azúcar.

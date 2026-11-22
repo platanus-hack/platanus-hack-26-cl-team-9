@@ -52,7 +52,7 @@ The interface follows the Paper "Design v5" frames (`docs/design.md` section 3.2
 Click a line or substation to see its detail; double click a line (or use "Sacar de servicio" in its card) to cut it and replay the cascade computed by the engine (`docs/engine.md`). It reads precomputed files from `web/public/cache/`, which is committed (the deployed image has no Python). After changing the engine or the data, regenerate and commit it:
 
 ```bash
-cd backend && uv run cascadasen-cache      # about 42 MB, 4 hours x (273 line cuts + 188 substation shutdowns), about a minute
+cd backend && uv run cascadasen-cache      # about 46 MB, 4 hours x (273 line cuts + 188 substation shutdowns + `health.json`), about a minute
 ```
 
 Session mode: `?sesion=<sid>` (or the **Sesión compartida** rail item) opens a shared, editable copy of the network served by the backend; the **Datos** tab edits buses, lines, generators, loads and datacenters, and every client of the session sees the changes live (SSE, with a 2 s polling fallback). Guide: [`docs/mapa3.md`](../docs/mapa3.md) section 11, API: [`docs/sessions-api.md`](../docs/sessions-api.md). The browser calls `/api`, which `npm run dev` proxies to `VITE_API_TARGET` (default `http://localhost:8000`, start it with `cd backend && uv run cascadasen-api`; docker compose sets `http://backend:8000`). Without `?sesion=` the app makes no `/api` request and needs no backend.

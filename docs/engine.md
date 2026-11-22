@@ -24,6 +24,7 @@ Click a line, get the consequences: islands, load shed, people in the dark and t
    - EDAC with the real steps (centro-sur table and norte grande Table 3-9 of the CEN 25F report). The extreme-contingency EDAC (671.55 MW by df/dt, [4] Tables 3-10/3-11) is not modelled: on its own it kept the centro-sur island above 47.5 Hz in the 25F, which the real system did not do, because the model has no voltage collapse or generator trips (removed 2026-11-22).
    Blackout below 47.5 Hz. Each island reports `min_hz`, `final_hz`, `rocof_hz_s` (initial df/dt), `inertia_mws`, `shed_mw` and `battery_mw`.
 6. **Voltage collapse, a rule** (`engine.py`, `stack.md` 4.6): the DC model has no voltage. When the 25F corridor separates (its two ends, Nueva Maitencillo and Nueva Pan de Azúcar, end up in different islands) with a pre-fault flow above 1,600 MW N→S or 1,000 MW S→N, both islands collapse by voltage: `island_blackout` with `reason: "voltage"`, and the island in `summary.islands` carries `reason: "voltage"`. It is the only corridor with published limits. The health index marks that report uncertain (a rule, not a calculation). There is no `voltage_limited` result or `summary.uncertain` any more.
+7. **Failure cost** (`engine.py::failure_cost`, issue #72): every timeline `summary` carries `unserved_energy_mwh`, `failure_cost_usd` and `outage_duration_h: {value, is_assumption}`, computed by `outage_cost` in `domain/simulation/consequence.py` (the theatre's formula) as `load_shed_mw` x 4 h (`physics.yaml` `default_outage_h`, assumption) x 1,000 x 8.79 US$/kWh (CNE [19]). A regulatory valuation, not a measured loss. When the voltage-collapse rule darkens the 25F islands (`reason: "voltage"`), the cost counts that rule-based load (`health.cost.voltage_rule: true`). The cache and the session sandbox also attach `health`, the after-cut index with its cost (`health.md`).
 
 **25F check (V1 on this network, not hand-tuned):** at Feb 2025 15:00 the pre-fault DC flow is 1,905 MW on the 500 kV line and 287 MW on 220 kV (targets 1,800 and 314 MW, ±15%). Reactances are PyPSA-CL values, not calibrated; they are not real line data either.
 
@@ -31,7 +32,7 @@ Click a line, get the consequences: islands, load shed, people in the dark and t
 
 ```bash
 cd backend
-uv run cascadasen-cache            # writes web/public/cache/ (about 42 MB, 4 hours x (273 line cuts + 188 substation shutdowns `sub-B###`))
+uv run cascadasen-cache            # writes web/public/cache/ (about 46 MB, 4 hours x (273 line cuts + 188 substation shutdowns `sub-B###` + `health.json`))
 uv run pytest tests/unit/test_cascade.py
 ```
 

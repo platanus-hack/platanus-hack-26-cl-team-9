@@ -24,6 +24,7 @@ from cascadasen.application.simulation_service import theater_network_view
 from cascadasen.application.theater_world import SessionWorld
 from cascadasen.domain.cascade import overlay as ov
 from cascadasen.domain.cascade.engine import run_cascade_workflow
+from cascadasen.domain.cascade.health import with_event_health
 from cascadasen.domain.ports import CommanderAdvisor, ConflictError, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.network import NetworkSpec
@@ -338,7 +339,7 @@ class SessionService:
     # ------------------------------------------------------------ sandbox
     def _timeline(self, doc: dict[str, Any]) -> dict[str, Any]:
         net, op = self._world(doc).load(doc["point"])
-        return run_cascade_workflow(net.buses, op, sorted(doc["open_lines"]))
+        return with_event_health(run_cascade_workflow(net.buses, op, sorted(doc["open_lines"])))
 
     def _check_lines(self, doc: dict[str, Any], lines: list[str]) -> None:
         live = {ln.id for ln in self._world(doc).applied.net.lines}
