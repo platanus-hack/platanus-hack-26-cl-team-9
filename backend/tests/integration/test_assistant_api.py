@@ -91,6 +91,25 @@ def test_a_point_lands_at_the_substation_that_serves_the_place(make_app):
     assert tool["result"]["scenario"]["changes"] == changes  # what the web loads on the map
 
 
+def test_a_named_line_is_found_and_cut_without_opening_a_session(make_app):
+    """The production request: a solar plant in Antofagasta and the line Nueva Maitencillo – Nueva Pan de Azúcar.
+    find_line gives R239 in one step and prepare_scenario cuts it; neither opens a session."""
+    msg = "Agrega una planta solar de 200 MW en Antofagasta y corta la línea Nueva Maitencillo – Nueva Pan de Azúcar"
+    solar = {"target": "generation", "places": ["Antofagasta"], "tech": ["solar"], "add": 200}
+    model = ScriptedModel(
+        calls(("find_line", {"name": "Nueva Maitencillo – Nueva Pan de Azúcar"})),
+        calls(("prepare_scenario", {"changes": [solar], "open_lines": ["R239"]})),
+        AssistantTurn("Listo."),
+    )
+    out = TestClient(make_app(model)).post(CHAT, json={"message": msg}).json()
+    found, prepared = out["tool_calls"]
+    assert found["ok"] and [ln["id"] for ln in found["result"]["lines"]] == ["R239"]
+    assert prepared["ok"], prepared["result"]
+    assert prepared["result"]["prepared"]["changes"][0]["places"][0]["bus_name"] == "S/E ANTOFAGASTA"
+    assert prepared["result"]["simulation"]["with_changes"]["people_without_power"] > 0
+    assert out["session_id"] is None and out["steps"] == 3
+
+
 def test_a_line_with_factor_zero_tells_the_model_to_use_open_lines(make_app):
     zero = {"target": "lines", "lines": ["R239"], "factor": 0}
     model = ScriptedModel(

@@ -30,6 +30,7 @@ Nothing is stored. Each request carries the whole scenario, like the cuts do. Th
 | `POST /api/v1/grids/dependency` | (web only) | Heat maps on the prepared grid after the failures. |
 | `POST /api/v1/grids/cost` | (web only) | Failure cost on the prepared grid. |
 | `GET /api/v1/grids/places?q=Iquique` | `resolve_place` | The one substation a place resolves to, with `how` (the rule of `places`, section 3.1). The MCP session tools `add_datacenter` and `add_generator` call it. |
+| `GET /api/v1/grids/lines?q=Ancoa – Alto Jahuel` | `find_line` | The lines a person names, in id order (section 3.2). The MCP tool `find_line` calls it; its ids go in `open_lines`. |
 
 The agent operations are in `docs/openapi/agents.openapi.json` (tag `grid-stress`), with every field described. Bodies:
 
@@ -86,6 +87,18 @@ Comunas off the SEN answer 404 "no está conectada al Sistema Eléctrico Naciona
 Why: the earlier rule matched area names first, so the assistant put a datacenter for "Antofagasta" at S/E ESCONDIDA (140 km away) and one for "Arica" or "Iquique" at S/E COLLAHUASI, a mine inland.
 
 Areas: `A01` Arica–Iquique, `A02` Crucero–Kimal, `A03` Antofagasta–Taltal (NG); `A04` Cumbre–Diego de Almagro, `A05` Copiapó, `A06` Vallenar, `A07` La Serena–Coquimbo (NC); `A08` Los Vilos–Valparaíso, `A09` Santiago (CE); `A10` O'Higgins–Maule, `A11` Biobío (CS); `A12` Araucanía, `A13` Los Ríos–Los Lagos (SU).
+
+### 3.2 Lines by name (`application/line_lookup.py`)
+
+A line of the reduced network has no name of its own: it is named by its two end substations, as the web does ("Nueva Maitencillo – Nueva Pan de Azúcar (500 kV)"). `GET /grids/lines?q=…` (agent operation `find_line`, MCP tool `find_line`) reads:
+
+1. A line id `R###`/`U###`.
+2. Two substations, in either order, joined by a dash (–, —, or - with spaces), "a", "y", "hasta", "con" or " / ", optionally after "la línea" or "entre": every line between them. Each end is a substation named exactly so (`Maitencillo` → S/E MAITENCILLO, not S/E NUEVA MAITENCILLO), else every substation whose name contains it. "Nueva Maitencillo – Nueva Pan de Azúcar" → `R239`; "Maitencillo – Pan de Azúcar" → `R216` (the 110 kV line); "entre Ancoa y Alto Jahuel" → `R006`.
+3. One substation: every line that ends there.
+
+A voltage in the text ("500 kV") keeps only the lines at that voltage when any match. The answer (`query`, `how`, `matched`, `lines: [{id, name, kv, a, b, capacity_mw}]`, `truncated`) lists at most 12 lines **in id order**: a lookup by name, never a ranking (`cyber.md` section 8). 404 for an unknown substation or two substations with no direct line, 422 for an empty query. Every one of the 273 lines is found by the names of its two ends (`tests/unit/test_line_lookup.py`).
+
+Why: on 2026-11-22 the assistant, asked to cut "la línea Nueva Maitencillo – Nueva Pan de Azúcar", searched the network area by area with `describe_network` (Santiago first) and ran out of its 8 steps.
 
 ## 4. What each target does
 
@@ -185,7 +198,7 @@ Examples:
 
 The tool maps technology names people use before sending (`digest.normalize_tech`): "eólica", "fotovoltaica", "baterías"/"BESS", "biomasa"… and "nuclear" to `termica`, with a note that it is an assumption (there is no nuclear plant in Chile). The prepared summary says, for a change that touched one to five substations, which ones (`at`), and a change that touched none carries a `warning` so the model never reports a plant that was not built.
 
-Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239`. A line out of service goes in `open_lines` only: a `lines` change with `factor` 0 answers 422 with that hint.
+Ids: `find_line` (a line by its substations, section 3.2), `describe_network` or the web give `B###` and `R###`. The 25F line is `R239`. A line out of service goes in `open_lines` only: a `lines` change with `factor` 0 answers 422 with that hint.
 
 ## 8. Errors
 

@@ -11,11 +11,19 @@ from pydantic import BaseModel, Field, model_validator
 
 from cascadasen.api.agent_openapi import AGENT, errors, ok
 from cascadasen.api.limits import client_ip
-from cascadasen.api.stress_schemas import PlaceOut, PrepareIn, PrepareOut, SimulateOut, StressChange
+from cascadasen.api.stress_schemas import (
+    LineLookupOut,
+    PlaceOut,
+    PrepareIn,
+    PrepareOut,
+    SimulateOut,
+    StressChange,
+)
 from cascadasen.application.grid_dependency import GridDependency
 from cascadasen.application.grid_simulation import GridSimulator, cost_workflow
 from cascadasen.application.grid_stress import MAX_CHANGES, prepare_workflow, stress_context
 from cascadasen.application.grids import GridComposer, GridError, catalog_workflow
+from cascadasen.application.line_lookup import find_lines
 from cascadasen.application.places import resolve_place
 from cascadasen.application.theater_world import default_world
 from cascadasen.infrastructure.container import grid_store
@@ -199,3 +207,35 @@ def place(
 ) -> dict:
     world = default_world(str(request.app.state.settings.processed_dir))
     return _run(lambda: resolve_place(stress_context(world, point), q))
+
+
+@router.get(
+    "/lines",
+    tags=["grid-stress"],
+    operation_id="find_line",
+    summary="Find a line by its name",
+    description="Finds the lines of the 188-bus network a person names: a line id (R###), its two end substations "
+    '("Nueva Maitencillo – Nueva Pan de Azúcar", "entre Ancoa y Alto Jahuel", either order) or one substation '
+    '(every line that ends there). A voltage in the text ("500 kV") narrows the answer. Lines come in id order: '
+    "this is a lookup by name, it never ranks lines (docs/cyber.md section 8). Use the id in `open_lines` of "
+    "/grids/simulate or prepare_scenario to take the line out of service.",
+    responses=ok(LineLookupOut)
+    | errors({404: "Unknown line or substation, or no direct line between them.", 422: "Empty query."}),
+    openapi_extra=AGENT,
+)
+def line(
+    request: Request,
+    q: str = Query(
+        min_length=1,
+        max_length=160,
+        description="The line as a person names it.",
+        examples=["Nueva Maitencillo – Nueva Pan de Azúcar"],
+    ),
+    point: str = Query(
+        "nov2026-1300",
+        description="Operating point id (the network is the same at every point).",
+        examples=["nov2026-1300"],
+    ),
+) -> dict:
+    world = default_world(str(request.app.state.settings.processed_dir))
+    return _run(lambda: find_lines(stress_context(world, point), q))

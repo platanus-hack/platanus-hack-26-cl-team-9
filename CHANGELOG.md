@@ -1,5 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · feat(stress): find a line by its name or its two end substations
+
+- **Changed:** New `application/line_lookup.py` (`find_lines`) and route `GET /api/v1/grids/lines?q=` (agent operation `find_line`, `LineLookupOut` in `api/stress_schemas.py`). It reads a line id, two end substations in either order ("Nueva Maitencillo – Nueva Pan de Azúcar", "entre Ancoa y Alto Jahuel", optional "500 kV") or one substation, and lists at most 12 matching lines in id order. New MCP tool `find_line` (in `NO_SESSION_NEEDED`, so the assistant uses it without a session), labelled "Buscar línea" in the web chat. `describe_network` and `prepare_scenario` point to it.
+- **Why:** Nothing resolved a line by name (`places` resolves buses only), so the assistant searched areas one by one with `describe_network` and ran out of its 8 steps on "corta la línea Nueva Maitencillo – Nueva Pan de Azúcar".
+- **Agents:** A lookup by name only (`docs/cyber.md` section 8): no ranking and no criticality field; a test checks the id order. Every one of the 273 lines is found by the names of its two ends. A substation named exactly wins over a partial match ("Maitencillo" is S/E MAITENCILLO, R216, not NUEVA MAITENCILLO). `docs/openapi/agents.openapi.json` regenerated; `docs/stress.md` section 3.2, `docs/mcp.md` section 3, `docs/assistant.md` labels row.
+- **Files:** `backend/src/cascadasen/{application/line_lookup.py,api/grid_routes.py,api/stress_schemas.py,mcp/tools.py,mcp/toolbox.py}`, `backend/tests/{unit/test_line_lookup.py,unit/test_mcp_tools.py,integration/test_assistant_api.py}`, `web/src/assistant/{labels.ts,labels.test.ts}`, `docs/{stress,mcp,assistant}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-22 · fix(stress): a lines change with factor 0 says to use open_lines
 
 - **Changed:** `StressChange` (`api/stress_schemas.py`) rejects a `lines` change with `factor` 0 with `LINE_OUT_HINT` (`application/grid_stress.py`): "factor 0 no saca una línea de servicio … pon su id R### en open_lines". `_lines` raises the same `GridError` for callers that skip the schema. The `factor` description says lines need more than 0. Tests in `test_grid_stress.py` (workflow and `/grids/simulate`) and `test_assistant_api.py` (the tool error reaches the model).

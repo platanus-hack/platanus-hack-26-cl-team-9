@@ -45,6 +45,7 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "after_action": ("get_run_after_action",),
     "replay": ("replay_run",),
     "prepare_scenario": ("prepare_scenario", "simulate_grid"),
+    "find_line": ("find_line",),
 }
 TOOLS = tuple(OPERATIONS)
 
@@ -166,7 +167,8 @@ class Sub50Tools:
         population, what the session added, warnings and the baseline (overloaded lines, load shed).
         With `focus`: one area or bus, with its buses, lines and which of them are overloaded. Pass the
         place as the user wrote it (a city or area name such as "Santiago", or an id such as A09 or
-        B010): the tool resolves names, so never guess an area id."""
+        B010): the tool resolves names, so never guess an area id. To find a line by name use find_line,
+        not this tool."""
         net = self._network()
         return digest.focus_digest(net, focus) if focus else digest.network_digest(net)
 
@@ -464,6 +466,16 @@ class Sub50Tools:
 
     # -- scenario preparation (stateless, docs/stress.md) -------------------------------------------
 
+    def find_line(self, name: str, point: str | None = None) -> dict[str, Any]:
+        """Find a transmission line by the name the user gives it and return its id R###. `name` as the user
+        wrote it: the two end substations ("Nueva Maitencillo – Nueva Pan de Azúcar", "entre Ancoa y Alto
+        Jahuel", either order, a voltage such as "500 kV" narrows it), one substation (every line that ends
+        there) or an id. Needs no session. Call it once before prepare_scenario or cut_lines when the user
+        names a line, instead of searching areas with describe_network. A lookup by name only: lines come in
+        id order and nothing is ranked. When several match, ask the user which one (show `name`)."""
+        found = self.client.get("/grids/lines", q=name, point=point or DEFAULT_POINT)
+        return {**found, "notice": digest.NOTICE}
+
     def prepare_scenario(
         self,
         changes: list[StressChange] | None = None,
@@ -482,7 +494,8 @@ class Sub50Tools:
         Antofagasta is {"target": "demand", "places": ["Antofagasta"], "add": 120}; a solar plant of 80 MW
         in Iquique is {"target": "generation", "places": ["Iquique"], "tech": ["solar"], "add": 80} (a
         battery is tech bateria; nuclear is modelled as termica). Each change's `places` says which
-        substation the place became: tell the user. Failures: `open_lines` (R###) and `out_buses` (B###).
+        substation the place became: tell the user. Failures: `open_lines` (R###; a line the user names by
+        its substations comes from find_line) and `out_buses` (B###).
         With failures it also simulates the cascade: people without power against the same failures
         without the changes, and per zone the people the generators should feed against the people they
         still feed. `point`: feb2025-1500, feb2025-0300, nov2026-1300 (default), nov2026-2000."""

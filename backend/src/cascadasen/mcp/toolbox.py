@@ -33,7 +33,9 @@ EXCLUDED = frozenset(
         "get_grid_state",
     }
 )
-NO_SESSION_NEEDED = frozenset({"start_session", "join_session", "list_options", "prepare_scenario"})
+NO_SESSION_NEEDED = frozenset(
+    {"start_session", "join_session", "list_options", "prepare_scenario", "find_line"}
+)
 NEEDS_RUN = frozenset({"inject_event", "submit_action"})  # a run is opened for them when none is active
 MAX_STEP_CYCLES = 24  # a step of many cycles can outlast the request deadline
 USER_SIZED = frozenset({"add_datacenter", "add_generator"})  # their MW must come from the user

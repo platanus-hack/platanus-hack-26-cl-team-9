@@ -124,6 +124,27 @@ class PlaceOut(AgentOut):
     how: str = Field(description="How the place was resolved, in Spanish (say it to the person).")
 
 
+class LineMatch(BaseModel):
+    """One line that matches the name."""
+
+    id: str = Field(description="Line id R### (use it in `open_lines` or `lines`).")
+    name: str = Field(description="Its two end substations and voltage, as the web names it.")
+    kv: float = Field(description="Voltage level, kV.")
+    a: str = Field(description="Substation id B### of one end.")
+    b: str = Field(description="Substation id B### of the other end.")
+    capacity_mw: float = Field(description="Thermal capacity of the reduced line, MW.")
+
+
+class LineLookupOut(AgentOut):
+    """The lines whose name matches the query, in id order (a lookup, never a ranking)."""
+
+    query: str = Field(description="The line as it was asked.")
+    how: str = Field(description="How the name was read, in Spanish (which substations).")
+    matched: int = Field(description="Lines that match.")
+    lines: list[LineMatch] = Field(description="At most 12 matching lines, in id order.")
+    truncated: bool = Field(description="True when more than 12 lines matched: name both ends.")
+
+
 class SimulateOut(BaseModel):
     """The cascade of the failures on the prepared grid."""
 

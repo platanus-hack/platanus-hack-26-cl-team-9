@@ -461,3 +461,21 @@ def test_prepare_scenario_works_without_a_session_and_only_calls_what_the_input_
     seen.clear()
     tools.prepare_scenario(open_lines=["R000"])
     assert [s[1] for s in seen] == ["/grids/simulate"]  # no changes: one run serves as both sides
+
+
+def test_find_line_asks_the_lines_route_and_needs_no_session():
+    answer = {
+        "query": "Ancoa – Alto Jahuel",
+        "how": "h",
+        "matched": 1,
+        "lines": [{"id": "R006"}],
+        "truncated": False,
+    }
+
+    def handler(request):
+        assert request.url.path == "/api/v1/grids/lines"
+        assert dict(request.url.params) == {"q": "Ancoa – Alto Jahuel", "point": "nov2026-1300"}
+        return httpx.Response(200, json=answer)
+
+    found = Sub50Tools(client_for(handler)).find_line("Ancoa – Alto Jahuel")  # no session in the state
+    assert found["lines"] == [{"id": "R006"}] and found["notice"] == digest.NOTICE
