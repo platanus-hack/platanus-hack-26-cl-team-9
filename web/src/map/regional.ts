@@ -4,6 +4,7 @@ import { fetchJson } from "../lib/fetchJson";
 import { hex, NODE_COLOR, tierOf, type ColorMode } from "../cascade/layers";
 import chileUrl from "../../../data/processed/chile.geojson?url";
 import { outlineOf } from "./countryBounds";
+import { TECH_COLORS, TECH_NAMES, type Rgb } from "./layers";
 
 type OutlineFile = Parameters<typeof outlineOf>[0];
 
@@ -81,11 +82,13 @@ export function regionalFromDocuments(docs: { meta: RegionalCountry; lines: DocE
   };
 }
 
+const withAlpha = (c: Rgb, a: number): [number, number, number, number] => [c[0], c[1], c[2], a];
+const OTHER_TECH: Rgb = [200, 200, 200];
 /** Not part of the load ramp (green to red), so it reads as "no data" in the Simulación view. */
 export const REGIONAL_NO_LOAD = "#767B80";
 
 /**
- * Lines and substations drawn exactly like Chile's (no power plants, as in Chile) (cascade/layers.ts): same voltage tiers, widths and node style.
+ * Lines and substations drawn exactly like Chile's (cascade/layers.ts): same voltage tiers, widths and node style.
  * In the load view they are neutral gray: they carry no load, and the green of the ramp would claim "< 50 %".
  * Not clickable as a cut: the layer ids start with "regional-" and the tooltip says they are not simulated.
  */
@@ -93,27 +96,41 @@ export function buildRegionalLayers(grid: RegionalGrid, colorMode: ColorMode = "
   const lineColor = colorMode === "voltage" ? (l: RegionalLine) => hex(tierOf(l.kv).color) : () => hex(REGIONAL_NO_LOAD);
   return [
     new PathLayer<RegionalLine>({
-      id: "regional-lines", data: grid.lines, pickable: true, autoHighlight: true, highlightColor: [255, 255, 255, 255], widthUnits: "pixels", capRounded: true, getPath: (l) => l.path,
+      id: "regional-lines", data: grid.lines, pickable: true, widthUnits: "pixels", capRounded: true, getPath: (l) => l.path,
       getColor: lineColor, getWidth: (l) => tierOf(l.kv).width, updateTriggers: { getColor: colorMode },
     }),
     new ScatterplotLayer<RegionalSubstation>({
       id: "regional-substations", data: grid.substations, pickable: true, radiusUnits: "pixels", getPosition: (s) => s.position,
       getRadius: (s) => (s.kv >= 500 ? 3 : 2), getFillColor: hex(NODE_COLOR, 200),
-      stroked: true, lineWidthUnits: "pixels", getLineWidth: 0, getLineColor: [255, 255, 255, 64],
+    }),
+    // Plants are solid discs in their technology colour with a dark rim (docs/design.md section 3), smaller than before so
+    // they never hide the lines; none of the colours is red, which means failure (E-28, G-06).
+    new ScatterplotLayer<RegionalPlant>({
+      id: "regional-plants", data: grid.plants, pickable: true, radiusUnits: "pixels", getPosition: (p) => p.position,
+      getRadius: (p) => Math.min(8, 2 + Math.sqrt(p.mw) * 0.16), getFillColor: (p) => withAlpha(TECH_COLORS[p.tech ?? ""] ?? OTHER_TECH, 235),
+      stroked: true, lineWidthUnits: "pixels", getLineWidth: 1, getLineColor: [24, 25, 27, 255],
     }),
   ];
 }
 
 const FOOT = "Red solo para ver: no se simula";
+const num = (n: number) => n.toLocaleString("es-CL", { maximumFractionDigits: 1 });
+/** "EPE WebMap capa 17; EPE WebMap capa 18" -> "Fuente: EPE WebMap": the publisher, not its layer numbers (D11). */
+const sourceLine = (s: string) => `Fuente: ${[...new Set(s.split(";").map((x) => x.replace(/\s*capa \d+\s*$/i, "").trim()).filter(Boolean))].join(", ")}`;
 
 export function regionalTooltip(layerId: string, object: unknown): string | null {
   if (layerId === "regional-lines") {
     const l = object as RegionalLine;
-    return `Línea de ${l.kv} kV${l.circuits && l.circuits > 1 ? ` · ${l.circuits} circuitos` : ""}${l.lengthKm ? ` · ${Math.round(l.lengthKm)} km` : ""}\n${l.source}\n${FOOT}`;
+    return `Línea de ${num(l.kv)} kV${l.circuits && l.circuits > 1 ? ` · ${l.circuits} circuitos` : ""}${l.lengthKm ? ` · ${num(Math.round(l.lengthKm))} km` : ""}\n${sourceLine(l.source)}\n${FOOT}`;
   }
   if (layerId === "regional-substations") {
     const s = object as RegionalSubstation;
-    return `${s.name || (s.kind === "junction" ? "Derivación de línea" : "Subestación")}\n${s.kv} kV\n${s.source}\n${FOOT}`;
+    return `${s.name || (s.kind === "junction" ? "Derivación de línea" : "Subestación")}\n${num(s.kv)} kV\n${sourceLine(s.source)}\n${FOOT}`;
+  }
+  if (layerId === "regional-plants") {
+    const p = object as RegionalPlant;
+    const tech = p.tech ? (TECH_NAMES[p.tech] ?? p.tech).toLowerCase() : "otra tecnología";
+    return `${p.name || "Generación"}\n${p.count} ${p.count === 1 ? "central" : "centrales"} · ${tech} · ${num(Math.round(p.mw))} MW\n${sourceLine(p.source)}\n${FOOT}`;
   }
   return null;
 }

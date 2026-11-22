@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { darkAt, frequencyAt, groupEvents, impactAt, islandMoments, islandTicks, lineStateAt, MARKER_GAP_PX, markerLabel, MIN_GAP_VIEW_S, recentDarkAt, sample, TAIL_SHARE, timeWarp, withstandsAt } from "./simulation";
+import { darkAt, floorTenths, frequencyAt, groupEvents, impactAt, islandDash, lineStateAt, MARKER_GAP_PX, markerLabel, MIN_GAP_VIEW_S, recentDarkAt, sample, systemFrequency, TAIL_SHARE, timeWarp, voltageCollapse, withstandsAt, type IslandFrequency } from "./simulation";
 import type { BusState, Event, NetLine, Timeline } from "./types";
 
 const ev = (t: number, type: string, params: Event["params"] = {}): Event => ({ t, type, ids: [], text_key: type, params });
@@ -170,17 +170,50 @@ describe("a cut the system withstands", () => {
   });
 });
 
-describe("islandMoments", () => {
-  it("groups the islands that form at the same instant, in time order", () => {
-    const e = (t: number, type: string) => ({ t, type, ids: [], text_key: type, params: {} });
-    expect(islandMoments([e(0, "line_cut"), e(2, "island_formed"), e(2, "island_formed"), e(3.5, "island_formed"), e(4, "island_blackout")]))
-      .toEqual([{ t: 2, count: 2 }, { t: 3.5, count: 1 }]);
+const evp = (t: number, type: string, params: Event["params"] = {}, ids: string[] = []): Event => ({ t, type, ids, text_key: type, params });
+
+describe("frequency shown at second t (D3)", () => {
+  const island = (id: string, hz: number | null, collapsed = false): IslandFrequency => ({ id, name: id, hz, minHz: hz ?? 50, started: hz != null, collapsed });
+  it("is a blackout when every substation is dark, never 50 Hz", () => {
+    expect(systemFrequency([], 188, 188)).toEqual({ blackout: true });
+    expect(systemFrequency([island("Isla 1", 47, true), island("Isla 2", 47.2, true)], 188, 188)).toEqual({ blackout: true });
+  });
+  it("is the lowest live island while some live, and skips collapsed ones", () => {
+    const f = systemFrequency([island("Isla 1", 47, true), island("Isla 2", 49.6), island("Isla 3", 48.8)], 50, 188);
+    expect(f).toMatchObject({ blackout: false, hz: 48.8, fault: true });
+  });
+  it("is 50 Hz with no island formed", () => {
+    expect(systemFrequency([], 0, 188)).toMatchObject({ blackout: false, hz: 50, fault: false, island: null });
+  });
+  it("knows a collapse by the voltage rule", () => {
+    const tl = { events: [evp(2, "island_blackout", { reason: "voltage" })] } as unknown as Timeline;
+    expect(voltageCollapse(tl)).toBe(true);
+    expect(voltageCollapse({ events: [evp(2, "island_blackout", { reason: "frequency" })] } as unknown as Timeline)).toBe(false);
+  });
+  it("gives each island its own stroke pattern", () => {
+    expect(new Set([0, 1, 2, 3].map(islandDash)).size).toBe(4);
   });
 });
 
-describe("islandTicks", () => {
-  it("joins moments too close on the rail so labels never overlap", () => {
-    const ticks = islandTicks([{ t: 1, count: 3 }, { t: 1.2, count: 2 }, { t: 9, count: 2 }], (t) => t * 20);
-    expect(ticks.map((k) => [k.t, k.count, k.times])).toEqual([[1, 5, [1, 1.2]], [9, 2, [9]]]);
+describe("headline and share from the same data (A2-13)", () => {
+  it("never shows more people than the buses hold", () => {
+    const tl: Timeline = {
+      scenario: "p", label: "p", failed_elements: ["R1"], truncated: false, duration_s: 5,
+      events: [evp(0, "line_cut"), evp(2, "island_blackout", { reason: "voltage" }, ["B1", "B2"])],
+      frames: [{ t: 0, edges: {}, dark: [], islands: [] }, { t: 2, edges: {}, dark: ["B1", "B2"], islands: [] }],
+      frequency_hz: {}, assumptions: [],
+      summary: { people_without_power: 306, load_shed_mw: 300, load_total_mw: 300, stages: 1, lines_opened: ["R1"], dark_buses: 2, islands: [] },
+    };
+    const buses: Record<string, BusState> = { B1: { gen_mw: 0, load_mw: 100, people: 100 }, B2: { gen_mw: 0, load_mw: 200, people: 200 } };
+    expect(impactAt(tl, buses, 5)).toMatchObject({ people: 300, share: 1 });
+    expect(frequencyAt(tl, 5)).toEqual([]);
+  });
+});
+
+describe("clock and position (A2-10)", () => {
+  it("round down to tenths the same way", () => {
+    expect(floorTenths(0.05)).toBe(0);
+    expect(floorTenths(13.59)).toBe(13.5);
+    expect(floorTenths(0.3)).toBe(0.3);
   });
 });

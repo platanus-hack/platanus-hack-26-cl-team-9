@@ -11,7 +11,8 @@ const CONTINUE = "continúa";
 /**
  * The Asistente view of mapa 3 (docs/assistant.md section 2c): the history with each step of the model as it happens
  * (text, tool cards with their state, final reply), and the message box. It shows only what the tools returned; the
- * scenario notice goes with each reply because it carries the assumption note (AGENTS.md section 4).
+ * scenario notice goes with each reply because it carries the assumption note (AGENTS.md section 4). Opening the view
+ * asks the server once whether the assistant is available; when it is not, one notice says so and the box is disabled.
  */
 export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode }) {
   const [text, setText] = useState("");
@@ -19,6 +20,7 @@ export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode
   const endRef = useRef<HTMLDivElement>(null);
   const { turns, restoredTools } = a.state;
   const lastTurn = turns[turns.length - 1];
+  useEffect(() => { a.probe(); }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [turns]);
 
   const submit = (msg: string) => {
@@ -30,21 +32,16 @@ export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode
 
   return (
     <div className="assistant">
-      <div className="card">
-        <div className="card-head">
-          <h3>Asistente</h3>
-          <button className="text-btn" onClick={() => void a.reset()} disabled={!turns.length && !a.state.conversationId}>Nueva conversación</button>
-        </div>
-        <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, avanzar una corrida. El mapa muestra lo que el asistente cambia en la sesión.</p>
-      </div>
+      {/* The title and "Nueva conversación" live in the panel header, next to Cerrar (CascadeApp). */}
+      <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, apagar centrales. El mapa muestra lo que el asistente cambia.</p>
 
-      <div className="cy-subtabs" role="tablist">
+      <div className="seg" role="tablist" aria-label="Vista del asistente">
         {([["chat", "Chat"], ["salud", "Salud de la red"]] as const).map(([k, label]) => (
           <button key={k} role="tab" aria-selected={sub === k} className={sub === k ? "on" : ""} onClick={() => setSub(k)}>{label}</button>
         ))}
       </div>
       {sub === "salud" ? health ?? <p className="meta">Sin datos de salud.</p> : <>
-      {!a.enabled && <p className="note">{errorMessage(503)}</p>}
+      {!a.enabled && <div className="notice" role="status"><span>{errorMessage(503)}</span></div>}
       {a.restoring && <p className="meta">Recuperando la conversación…</p>}
 
       {restoredTools.length > 0 && (
@@ -59,13 +56,15 @@ export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode
         : <AssistantTurnView key={i} turn={t} last={t === lastTurn} onContinue={() => submit(CONTINUE)} busy={a.busy} />))}
 
       <form className="chat-form" onSubmit={(e) => { e.preventDefault(); submit(text); }}>
-        <textarea aria-label="Mensaje para el asistente" rows={2} placeholder={a.enabled ? "Agrega un datacenter de 120 MW en Antofagasta y corta R014" : "El asistente no está disponible"}
+        <textarea aria-label="Mensaje para el asistente" rows={2} placeholder={a.enabled ? "Por ejemplo: agrega un datacenter de 120 MW en Antofagasta" : "El asistente no está disponible"}
           value={text} disabled={!a.enabled} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text); } }} />
         <div className="chat-form-foot">
-          <span className={tooLong ? "meta fault" : "meta"}>{text.length.toLocaleString("es-CL")} / {MAX_MESSAGE.toLocaleString("es-CL")}</span>
-          <span className="meta">Enter envía · Shift+Enter, nueva línea</span>
-          <button type="submit" className="btn" disabled={!a.enabled || a.busy || !text.trim() || tooLong}>{a.busy ? "Trabajando…" : "Enviar"}</button>
+          {a.enabled && <>
+            <span className={tooLong ? "meta fault" : "meta"}>{text.length.toLocaleString("es-CL")} / {MAX_MESSAGE.toLocaleString("es-CL")}</span>
+            <span className="meta">Enter envía · Shift+Enter, nueva línea</span>
+          </>}
+          <button type="submit" className="primary-btn" disabled={!a.enabled || a.busy || !text.trim() || tooLong}>{a.busy ? "Trabajando…" : "Enviar"}</button>
         </div>
       </form>
       </>}
@@ -74,26 +73,19 @@ export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode
   );
 }
 
-export function AssistantTurnView({ turn, last, busy, onContinue }: { turn: AssistantTurn; last: boolean; busy: boolean; onContinue(): void }) {
+function AssistantTurnView({ turn, last, busy, onContinue }: { turn: AssistantTurn; last: boolean; busy: boolean; onContinue(): void }) {
   const truncated = truncatedText(turn.truncated);
-  const streaming = turn.status === "streaming";
-  const tools = turn.steps.reduce((n, s) => n + s.items.filter((i) => i.kind === "tool").length, 0);
   return (
     <div className="chat-turn" aria-live={last ? "polite" : undefined}>
-      {streaming && <p className="meta chat-wait"><span className="spinner" aria-hidden />Pensando…</p>}
+      {turn.steps.map((s) => <StepView key={s.step} step={s} />)}
+      {turn.status === "streaming" && <p className="meta chat-wait"><span className="spinner" aria-hidden />{turn.steps.length ? "Pensando el siguiente paso…" : "Leyendo tu mensaje…"}</p>}
       {turn.reply && <Markdown className="chat-reply" text={turn.reply} />}
       {turn.notice && <div className="notice"><span>{turn.notice}</span></div>}
       {truncated && (
         <div className="notice"><span>{truncated}</span>{last && <button className="text-btn" disabled={busy} onClick={onContinue}>Continuar</button>}</div>
       )}
-      {turn.status === "error" && turn.error && <p className="note">{errorMessage(turn.error.status, typeof turn.error.detail === "number" ? turn.error.detail : null)}</p>}
+      {turn.status === "error" && turn.error && turn.error.status !== 503 && <p className="note" role="alert">{errorMessage(turn.error.status, typeof turn.error.detail === "number" ? turn.error.detail : null)}</p>}
       {turn.status === "interrupted" && <p className="note">Se cortó la conexión antes de terminar. El servidor termina el mensaje y lo guarda: se intenta recuperar la respuesta.</p>}
-      {!streaming && turn.steps.length > 0 && (
-        <details className="chat-restored">
-          <summary>Detalles del trabajo ({tools} {tools === 1 ? "herramienta" : "herramientas"})</summary>
-          {turn.steps.map((s) => <StepView key={s.step} step={s} />)}
-        </details>
-      )}
     </div>
   );
 }

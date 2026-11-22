@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AssistantError, getConversation, streamChat } from "./assistantApi";
+import { AssistantError, getConversation, PROBE_CID, probeAssistant, streamChat } from "./assistantApi";
 import type { SseEvent } from "./sse";
 
 const stream = (chunks: string[]) => new Response(new ReadableStream({
@@ -47,5 +47,16 @@ describe("assistantApi", () => {
     await expect(streamChat({ message: "x" }, () => undefined)).rejects.toMatchObject({ status: 0 });
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail: "no" }), { status: 404 }));
     await expect(getConversation("abc")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("probes availability by reading a conversation that does not exist: 503 off, 404 on, anything else unknown", async () => {
+    expect(PROBE_CID).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail: "off" }), { status: 503 }));
+    expect(await probeAssistant()).toBe(false);
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/v1/assistant/conversations/${PROBE_CID}`);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail: "no" }), { status: 404 }));
+    expect(await probeAssistant()).toBe(true);
+    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+    expect(await probeAssistant()).toBeNull();
   });
 });

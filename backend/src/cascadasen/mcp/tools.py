@@ -491,8 +491,8 @@ class Sub50Tools:
         serves the place, at its voltage, linked to it and to the nearest one of that voltage; the result says its
         id (`created`). At most 5 per scenario. Each change's `places` says which
         substation the place became: tell the user. Failures: `open_lines` (R###) and `out_buses` (B###).
-        With failures it also simulates the cascade: people without power against the same failures
-        without the changes, and per zone the people the generators should feed against the people they
+        It also simulates the cascade (with changes alone it starts from the lines they overload): people
+        without power against the same failures without the changes, and per zone the people the generators should feed against the people they
         still feed. `point`: feb2025-1500, feb2025-0300, nov2026-1300 (default), nov2026-2000."""
         rows, notes = [], []
         for c in changes or []:
@@ -511,9 +511,14 @@ class Sub50Tools:
             out["prepared"] = digest.prepare_digest(
                 self.client.post("/grids/prepare", {"point": point, "changes": rows})
             )
-        if lines or buses:
+        if lines or buses or rows:
             failure = {"point": point, "open_lines": lines, "out_buses": buses}
             stressed = self.client.post("/grids/simulate", {**failure, "changes": rows})
-            base = self.client.post("/grids/simulate", failure) if rows else stressed
+            # no failure and no change: the base grid has no cascade, so nobody loses supply
+            base = (
+                (self.client.post("/grids/simulate", failure) if rows else stressed)
+                if lines or buses
+                else None
+            )
             out["simulation"] = digest.simulation_digest(stressed, base)
         return out

@@ -1,4 +1,4 @@
-"""The assistant's prepare_scenario tool sets the final grid and, with failures, simulates it (docs/stress.md)."""
+"""The assistant's prepare_scenario tool sets the final grid and simulates it (docs/stress.md)."""
 
 import json
 
@@ -51,10 +51,19 @@ def test_changes_and_failures_prepare_then_simulate_against_the_base():
     assert "elements" not in out["prepared"]["changes"][0]
 
 
-def test_without_failures_nothing_is_simulated():
+def test_changes_without_failures_are_simulated_once_against_a_base_that_loses_nothing():
     calls = []
-    out = tools_logging(calls).prepare_scenario([{"target": "demand", "zones": ["NG"], "add": 100}])
-    assert [p.rsplit("/", 1)[-1] for p, _ in calls] == ["prepare"] and "simulation" not in out
+    out = tools_logging(calls).prepare_scenario([{"target": "generation", "tech": ["hidro"], "factor": 0}])
+    assert [p.rsplit("/", 1)[-1] for p, _ in calls] == ["prepare", "simulate"]
+    assert calls[1][1] == {
+        "point": "nov2026-1300",
+        "open_lines": [],
+        "out_buses": [],
+        "changes": [{"target": "generation", "tech": ["hidro"], "factor": 0}],
+    }
+    assert out["simulation"]["with_changes"]["people_without_power"] == 7
+    assert out["simulation"]["without_changes"]["people_without_power"] == 0
+    assert out["simulation"]["lines_opened_by_cascade"] == ["R002"]
 
 
 def test_a_change_that_touched_nothing_carries_a_warning_and_small_ones_say_where():

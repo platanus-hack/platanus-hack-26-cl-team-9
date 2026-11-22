@@ -36,9 +36,12 @@
 
 /* ---- Message box ---- */
 .shell .chat-form { position: sticky; bottom: -12px; display: flex; flex-direction: column; gap: 6px; margin: 0 -12px -12px; padding: 10px 12px 12px; background: var(--surface); border-top: 1px solid var(--border); }
-.shell .chat-form textarea { width: 100%; min-height: 52px; max-height: 160px; padding: 6px 8px; resize: vertical; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font: 13px/18px var(--font-sans); }
+.shell .chat-form textarea { width: 100%; min-height: 52px; max-height: 160px; padding: 6px 8px; resize: none; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font: 13px/18px var(--font-sans); }
 .shell .chat-form textarea:focus { outline: 1px solid var(--muted); outline-offset: -1px; }
 .shell .chat-form textarea:disabled { color: var(--faint); }
 .shell .chat-form-foot { display: flex; align-items: center; gap: 10px; }
-.shell .chat-form-foot .btn { margin-left: auto; }
+.shell .chat-form-foot .primary-btn { margin-left: auto; }
+.shell .chat-intro { display: flex; align-items: flex-start; gap: 12px; }
+.shell .chat-intro .meta { flex: 1; }
+.shell .chat-intro .text-btn { flex-shrink: 0; }
 .shell .chat-form .meta.fault { color: var(--fault); }

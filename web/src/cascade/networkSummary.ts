@@ -18,14 +18,26 @@ export const VOLTAGE_BANDS: { label: string; minKv: number; color: string; strok
 export interface NetworkSummary { km: number; substations: number; mw: number; kmByBand: number[] }
 interface Collection<P> { features: { properties: P }[] }
 
-/** Why: the "Red" panel states how big the whole grid is (all of the IDE Energía data, not only the 188-bus model). */
-export async function loadNetworkSummary(): Promise<NetworkSummary> {
-  const [lines, subs, plants] = await Promise.all([
+let summaryPromise: Promise<NetworkSummary> | null = null;
+let summaryValue: NetworkSummary | null = null;
+
+/** The summary once it has loaded, so the Red tab draws it at once on every later visit (G-04). */
+export const cachedNetworkSummary = () => summaryValue;
+
+/**
+ * Why: the "Red" panel states how big the whole grid is (all of the IDE Energía data, not only the 188-bus model). The
+ * three files are read once per page: the promise and the value are kept, and a failed read is retried on the next call.
+ */
+export function loadNetworkSummary(): Promise<NetworkSummary> {
+  summaryPromise ??= Promise.all([
     fetchJson<Collection<{ kv: number | null; length_km: number | null }>>(linesUrl),
     fetchJson<Collection<object>>(substationsUrl),
     fetchJson<Collection<{ mw: number | null }>>(plantsUrl),
-  ]);
-  return summarize(lines.features.map((f) => f.properties), subs.features.length, plants.features.map((f) => f.properties));
+  ]).then(([lines, subs, plants]) => {
+    summaryValue = summarize(lines.features.map((f) => f.properties), subs.features.length, plants.features.map((f) => f.properties));
+    return summaryValue;
+  }).catch((e) => { summaryPromise = null; throw e; });
+  return summaryPromise;
 }
 
 export function summarize(lines: { kv: number | null; length_km: number | null }[], substations: number, plants: { mw: number | null }[]): NetworkSummary {

@@ -34,13 +34,13 @@ const label = (kind: string, i: number, id: unknown) => `${kind} ${i + 1}${clean
  * (section 2, L0) or the v1 network JSON (section 1, like data/processed/latam/BRA/network.json). Neither is simulated.
  */
 export function parseUpload(text: string, bytes: number, declared: string): UploadResult {
-  if (bytes > MAX_BYTES) return fail(`El archivo pesa ${(bytes / 1024 / 1024).toFixed(1)} MB; el máximo es ${MAX_BYTES / 1024 / 1024} MB.`);
+  if (bytes > MAX_BYTES) return fail(`El archivo pesa ${(bytes / 1024 / 1024).toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB; el máximo es ${MAX_BYTES / 1024 / 1024} MB.`);
   if (!isIso3(declared)) return fail("Indica el país de la red con un código ISO3 válido (por ejemplo, PER).");
   let doc: unknown;
   try { doc = JSON.parse(text); } catch { return fail("El archivo no es JSON válido."); }
   if (isObj(doc) && doc.type === "FeatureCollection" && Array.isArray(doc.features)) return _fromGeoJson(doc, declared);
   if (isObj(doc) && Array.isArray(doc.buses) && Array.isArray(doc.lines)) return _fromV1(doc, declared);
-  return fail("Formato no reconocido: se espera un GeoJSON FeatureCollection (esquema regional) o el JSON de red v1 con buses y lines (docs/network-format.md).");
+  return fail("Formato no reconocido: se espera un GeoJSON con subestaciones, líneas y centrales, o un archivo de red en JSON con barras y líneas.");
 }
 
 const fail = (...errors: string[]): UploadFail => ({ ok: false, errors });

@@ -9,7 +9,7 @@ export type HeatKind = "none" | "population" | "dependency" | "criticality" | "a
 export const HEAT_OPTIONS: { kind: HeatKind; label: string; hint: string }[] = [
   { kind: "none", label: "Ninguno", hint: "" },
   { kind: "population", label: "Población", hint: "Personas que atiende cada subestación en este punto de operación: más claro, más gente." },
-  { kind: "dependency", label: "Dependencia de generadores", hint: "Personas que dependen de cada generador, según por dónde le llega la energía (reparto proporcional del flujo), con los cambios de Estado de la red aplicados. Más claro, más gente." },
+  { kind: "dependency", label: "Dependencia de generadores", hint: "Personas que dependen de cada generador, según por dónde le llega la energía (reparto proporcional del flujo), con los cambios de la pestaña Cambios aplicados. Más claro, más gente." },
   { kind: "criticality", label: "Criticidad de subestaciones", hint: "Qué se pierde sin respaldo si cae la subestación, de 0 a 1, en la red tal como quedó tras los cambios. Más intenso, más crítica." },
 ];
 
@@ -46,3 +46,17 @@ export function heatLayers(kind: HeatKind, points: HeatPoint[]): Layer[] {
     getPosition: (p) => [p.lon, p.lat], getWeight: (p) => p.weight, radiusPixels: kind === "population" || kind === "affected" ? 50 : 65,
   })];
 }
+
+/** CSS gradient of a heat map's ramp, low to high, for its key in the map legend (A2-07). */
+export function heatGradient(kind: Exclude<HeatKind, "none">): string {
+  const stops = RAMPS[kind].map(([r, g, b, a], i, all) => `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(2)}) ${Math.round((i / (all.length - 1)) * 100)}%`);
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
+}
+
+/** Low and high ends of each heat map's key. */
+export const HEAT_ENDS: Record<Exclude<HeatKind, "none">, [string, string]> = {
+  population: ["menos personas", "más personas"],
+  dependency: ["menos personas", "más personas"],
+  criticality: ["0", "1, más crítica"],
+  affected: ["menos personas", "más personas"],
+};
