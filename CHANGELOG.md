@@ -1,5 +1,10 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · feat(index): generated repository index with a drift test
+- **Changed:** New `scripts/build_index.py` (standard library plus the real FastAPI app for the route table) writes `docs/index/repo-index.json`: every tracked source, test, doc, script and config file (language, line count, purpose, public symbols with line numbers, backend layer, covering tests), the route table (method, path, operation id, summary, `in_agent_spec`, handler file and line), doc headings, `data/processed` and `data/scenarios` sizes and the CHANGELOG headings. `docs/index/README.md` documents the schema and `jq` queries. New `backend/tests/integration/test_repo_index.py` fails while the committed file differs from the generated one.
+- **Why:** Technical-review follow-up (issue #79): an agent or reviewer finds a file, a symbol, a route or a test with one query instead of reading the tree.
+- **Agents:** Regenerate with `cd backend && uv run python ../scripts/build_index.py` (`--check` verifies) before every commit that adds, removes or edits a source, doc or test file, a route or this file, and `git add` new files first (the builder reads `git ls-files`). The index does not list itself, holds no timestamp or hash, and is byte-identical across runs. Python symbols with no docstring carry `"undocumented": true`. No product code changed.
+- **Files:** `scripts/build_index.py`, `docs/index/{README.md,repo-index.json}`, `backend/tests/integration/test_repo_index.py`.
 
 ## 2026-11-22 · test(web): render and interaction tests for SelectionCard, NetworkState and IncidentPanel
 - **Changed:** Three new component test files (26 tests): `web/src/cascade/SelectionCard.test.tsx` (11), `web/src/cascade/NetworkState.test.tsx` (6), `web/src/incidents/IncidentPanel.test.tsx` (9). New dev dependencies in `web/package.json` and `web/package-lock.json`: `jsdom`, `@testing-library/react`, `@testing-library/dom`.
