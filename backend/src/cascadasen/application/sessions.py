@@ -19,6 +19,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from cascadasen.application.grid_stress import scenario_overrides
 from cascadasen.application.run_experiment import RunCache, RunManager, RunNotFoundError, run_config
 from cascadasen.application.simulation_service import theater_network_view
 from cascadasen.application.theater_world import SessionWorld
@@ -56,7 +57,8 @@ class SessionLimitError(ValueError):
 
 class _Lru:
     def __init__(self, size: int) -> None:
-        self.size, self._items, self._lock = size, OrderedDict(), threading.Lock()
+        self.size, self._lock = size, threading.Lock()
+        self._items: OrderedDict[Any, Any] = OrderedDict()
 
     def get(self, key: Any) -> Any:
         with self._lock:
@@ -79,6 +81,10 @@ class _Lru:
 
 
 class SessionService:
+    """One shared session = one JSON document in the `DocumentStore` (overlay, open lines, revisions).
+    Why: every write goes through `mutate`, a conditional write with retries, so any instance of the API
+    can serve any session and two writers never overwrite each other (ADR 0004)."""
+
     def __init__(
         self,
         world: TheaterWorld,
@@ -142,7 +148,7 @@ class SessionService:
         if point not in points:
             raise RunInputError("point", "punto de operación desconocido", sorted(points))
         sid, now = secrets.token_urlsafe(16), self._now()
-        doc = {
+        doc: dict[str, Any] = {
             "session_id": sid,
             "label": label,
             "point": point,
@@ -223,6 +229,8 @@ class SessionService:
         def fn(doc: dict[str, Any]) -> dict[str, Any]:
             net, point = self._base(doc["point"])
             doc["overlay"], out = change(doc["overlay"], net, point)
+            if "set_open_lines" in out:  # a scenario reset replaces the sandbox cut in the same write
+                doc["open_lines"] = out.pop("set_open_lines")
             applied = SessionWorld(self.world, doc["point"], doc["overlay"], self.spec).applied
             live = {ln.id for ln in applied.net.lines}
             doc["open_lines"] = [lid for lid in doc["open_lines"] if lid in live]
@@ -269,8 +277,56 @@ class SessionService:
 
         return self._edit(sid, change, f"{kind}_removed", [element_id], by, if_revision)
 
-    def reset(self, sid: str, by: str = "anon", if_revision: int | None = None) -> dict[str, Any]:
-        return self._edit(sid, lambda o, net, point: (ov.empty_overlay(), {}), "reset", [], by, if_revision)
+    def add_substation(
+        self, sid: str, spec: dict[str, Any], by: str = "anon", if_revision: int | None = None
+    ) -> dict[str, Any]:
+        def change(o, net, point):
+            o, out = ov.add_substation(o, spec, net, point)
+            ids = [out["id"], *out["line_ids"], *(i for i in (out["load_id"], out["generator_id"]) if i)]
+            return o, {**out, "ids": ids}
+
+        return self._edit(sid, change, "substation_added", None, by, if_revision)
+
+    def reset(
+        self,
+        sid: str,
+        by: str = "anon",
+        if_revision: int | None = None,
+        scenario: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Drop every edit. With a `scenario` (`prepare_scenario` shape) the grid becomes that configuration:
+        its changes as overrides, its failed substations out of service and its open lines cut."""
+        if scenario is None:
+            return self._edit(
+                sid, lambda o, net, point: (ov.empty_overlay(), {}), "reset", [], by, if_revision
+            )
+        open_lines = sorted(set(scenario.get("open_lines") or []))
+
+        def change(o, net, point):
+            if scenario.get("point") not in (None, doc_point[0]):
+                raise ov.OverlayError(
+                    "scenario.point",
+                    "El escenario es de otro punto de operación: crea otra sesión.",
+                    [doc_point[0]],
+                )
+            unknown = sorted(set(open_lines) - {ln.id for ln in net.lines})
+            if unknown:
+                raise ov.OverlayError(
+                    "scenario.open_lines", f"No existen estas líneas: {', '.join(unknown)}.", not_found=True
+                )
+            bad = sorted(set(scenario.get("out_buses") or []) - {f"B{i:03d}" for i in range(net.size)})
+            if bad:
+                raise ov.OverlayError(
+                    "scenario.out_buses", f"No existen estas barras: {', '.join(bad)}.", not_found=True
+                )
+            changes = scenario.get("changes") or []
+            overrides = scenario_overrides(self.world, doc_point[0], changes)[0] if changes else {}
+            return ov.scenario_overlay(doc_point[0], overrides, scenario.get("out_buses") or []), {
+                "set_open_lines": open_lines
+            }
+
+        doc_point = [self._fetch(sid)[0]["point"]]  # the point never changes in a session
+        return self._edit(sid, change, "reset", [], by, if_revision)
 
     # -------------------------------------------------------------- views
     def network_view(self, sid: str) -> dict[str, Any]:

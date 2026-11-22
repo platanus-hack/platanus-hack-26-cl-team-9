@@ -1,7 +1,8 @@
 import type { Balance, SessionNetwork, SessionWarning, Timeline } from "../cascade/types";
 
 /** Client of the sessions API (docs/sessions-api.md). Only used with ?sesion=; the no-session path reads /cache/. */
-export const BASE = "/api/v1/sessions";
+export const API = "/api/v1";
+export const BASE = `${API}/sessions`;
 export const AGENT = "web";
 const SID = /^[A-Za-z0-9_-]{22}$/;
 export type Kind = "buses" | "lines" | "loads" | "generators";
@@ -17,7 +18,7 @@ export interface RevisionEvent { type?: "revision"; revision: number; dataset_re
 type Json = Record<string, unknown>;
 
 export class ApiError extends Error {
-  constructor(public status: number, public detail: unknown) { super(errorText(status, detail)); }
+  constructor(public status: number, public detail: unknown, public retryAfter: number | null = null) { super(errorText(status, detail)); }
 }
 
 /** The session id in `?sesion=`, the only place a session comes from (no URL, no session, no `/api` call); anything
@@ -28,20 +29,22 @@ export function sessionIdFrom(search: string): string | null {
 }
 /** Retries of a busy 409 (docs/sessions-api.md section 7). The server did not run that request, so any method is safe. */
 const BUSY_RETRIES = 2;
-async function call<T>(method: string, path: string, opts: { body?: unknown; ifMatch?: number } = {}): Promise<T> {
+const call = <T>(method: string, path: string, opts: { body?: unknown; ifMatch?: number } = {}) => callAt<T>(BASE, method, path, opts);
+/** `call` under another prefix of the API (the incident catalog lives outside /sessions). */
+async function callAt<T>(base: string, method: string, path: string, opts: { body?: unknown; ifMatch?: number } = {}): Promise<T> {
   const headers: Record<string, string> = { "X-Sub50-Agent": AGENT };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   if (opts.ifMatch !== undefined) headers["If-Match"] = `"${opts.ifMatch}"`;
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
-  let r = await fetch(`${BASE}${path}`, { method, headers, body });
+  let r = await fetch(`${base}${path}`, { method, headers, body });
   for (let i = 0; i < BUSY_RETRIES && r.status === 409 && r.headers.has("Retry-After"); i++) {
     const wait = Math.min(Number(r.headers.get("Retry-After")) || 1, 10);
     await new Promise((done) => setTimeout(done, wait * 1000));
-    r = await fetch(`${BASE}${path}`, { method, headers, body });
+    r = await fetch(`${base}${path}`, { method, headers, body });
   }
   if (r.status === 204) return undefined as T;
   const data = await r.json().catch(() => null);
-  if (!r.ok) throw new ApiError(r.status, data?.detail ?? data);
+  if (!r.ok) throw new ApiError(r.status, data?.detail ?? data, r.headers.has("Retry-After") ? Number(r.headers.get("Retry-After")) || null : null);
   return data as T;
 }
 const sid = (id: string) => `/${encodeURIComponent(id)}`;
@@ -72,6 +75,13 @@ export const getRunSnapshots = (id: string, rid: string, start = 0) => call<Json
 export const getRunTrace = (id: string, rid: string) => call<Json>("GET", `${run(id, rid)}/trace`);
 export const getRunReport = (id: string, rid: string) => call<Json>("GET", `${run(id, rid)}/report`);
 export const getRunAfterAction = (id: string, rid: string) => call<Json>("GET", `${run(id, rid)}/after_action`);
+
+// Documented-incident scenarios (docs/attack-sim.md section 3.1): only catalog ids, no free effects.
+export interface IncidentRunBody { scenario: string; policy: "A" | "B" | "C"; seed?: number }
+// Catalog of the strategic theatre; its `cyber_attack` block drives the Ciberataque form (docs/attack-sim.md 3.2).
+export const getSimCatalog = () => callAt<Json>(API, "GET", "/sim/catalog");
+export const getIncidentCatalog = () => callAt<Json>(API, "GET", "/attacks/catalog");
+export const startIncidentRun = (id: string, body: IncidentRunBody) => call<Json>("POST", `${sid(id)}/attacks/runs`, { body });
 export type LiveMode = "sse" | "poll";
 export interface Subscription { readonly mode: LiveMode; close(): void }
 
@@ -93,7 +103,7 @@ export function subscribe(id: string, onRevision: (e: RevisionEvent) => void, op
         const doc = (await r.json()) as SessionDoc;
         if (!closed) onRevision({ type: "revision", ...doc.last_op, revision: doc.revision });
       }
-    } catch { /* network error: try again on the next tick */ }
+    } catch (e) { console.warn("session poll failed, retrying on the next tick", e); /* network error: try again on the next tick */ }
     if (!closed) timer = setTimeout(poll, pollMs);
   };
   const startPolling = () => { mode = "poll"; opts.onMode?.("poll"); poll(); };

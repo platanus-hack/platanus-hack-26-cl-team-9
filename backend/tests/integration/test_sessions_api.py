@@ -28,6 +28,7 @@ OPERATION_IDS = {
     "delete_session",
     "get_session_network",
     "add_bus",
+    "add_substation",
     "update_bus",
     "delete_bus",
     "add_line",
@@ -53,8 +54,9 @@ OPERATION_IDS = {
     "get_run_report",
     "get_run_after_action",
     "submit_run_action",
+    "start_incident_run",
 }
-TAGS = {"sessions", "session-network", "session-sandbox", "session-runs"}
+TAGS = {"sessions", "session-network", "session-sandbox", "session-runs", "incidents"}
 
 
 @pytest.fixture(scope="module")
@@ -114,6 +116,45 @@ def test_a_stale_if_match_gives_412(client):
     assert client.post(f"{BASE}/{sid}/loads", json=DC, headers={"If-Match": '"0"'}).status_code == 201
     stale = client.post(f"{BASE}/{sid}/loads", json=DC, headers={"If-Match": '"0"'})
     assert stale.status_code == 412
+
+
+SUBSTATION = {
+    "name": "SE Nueva",
+    "lat": -31.1,
+    "lon": -71.0,
+    "kv": 220,
+    "connections": [{"to": "B002"}, {"to": "B003", "capacity_mw": 200}],
+    "load": {"mw": 40, "kind": "consumo"},
+}
+
+
+def test_a_substation_is_created_whole_and_a_bad_one_changes_nothing(client):
+    sid = _create(client)
+    ok = client.post(f"{BASE}/{sid}/substations", json=SUBSTATION, headers={"If-Match": '"0"'})
+    assert ok.status_code == 201 and ok.headers["ETag"] == '"1"'
+    body = ok.json()
+    assert (body["id"], body["line_ids"], body["load_id"], body["revision"]) == (
+        "B006",
+        ["U001", "U002"],
+        "D001",
+        1,
+    )
+    bad = {**SUBSTATION, "connections": [{"to": "B002"}, {"to": "B999"}]}
+    assert client.post(f"{BASE}/{sid}/substations", json=bad).status_code == 404
+    seven = {**SUBSTATION, "connections": [{"to": f"B00{i}"} for i in range(7)]}
+    assert client.post(f"{BASE}/{sid}/substations", json=seven).status_code == 422
+    assert client.get(f"{BASE}/{sid}").json()["revision"] == 1
+
+
+def test_a_scenario_reset_replaces_the_substation(client):
+    sid = _create(client)
+    client.post(f"{BASE}/{sid}/substations", json=SUBSTATION)
+    out = client.post(f"{BASE}/{sid}/reset", json={"scenario": {"out_buses": ["B004"]}})
+    assert out.status_code == 200
+    overlay = client.get(f"{BASE}/{sid}").json()["overlay"]
+    assert overlay["buses"] == [] and overlay["bus_overrides"]["B004"] == {"in_service": False}
+    other = client.post(f"{BASE}/{sid}/reset", json={"scenario": {"point": "feb2025-1500"}})
+    assert other.status_code == 422
 
 
 def test_deleting_a_bus_with_dependents_gives_409(client):
@@ -197,6 +238,20 @@ def test_a_body_over_64_kb_gives_413(client):
     sid = _create(client)
     r = client.post(f"{BASE}/{sid}/loads", json={**DC, "name": "x" * 70000})
     assert r.status_code == 413
+
+
+def test_a_chunked_body_over_64_kb_gives_413_and_a_small_one_passes(client):
+    sid = _create(client)
+    big = json.dumps({**DC, "name": "x" * 70000}).encode()
+    r = client.post(f"{BASE}/{sid}/loads", content=(big[i : i + 8192] for i in range(0, len(big), 8192)))
+    assert r.status_code == 413 and r.json() == {"detail": "Cuerpo demasiado grande (máximo 64 KB)."}
+    small = json.dumps(DC).encode()
+    ok = client.post(
+        f"{BASE}/{sid}/loads",
+        content=(small[i : i + 16] for i in range(0, len(small), 16)),
+        headers={"content-type": "application/json"},
+    )
+    assert ok.status_code == 201
 
 
 def test_unknown_and_malformed_sessions_give_404(client):

@@ -171,16 +171,25 @@ def test_session_tools_reject_unknown_and_excluded_tools_and_cap_step_cycles():
             seen["cycles"] = cycles
             return {"cycles": cycles}
 
-        def cut_lines(self, lines: list[str]):
-            raise ToolError("sin sesión")
+        def run_status(self):
+            raise ToolError("sin corrida")
 
     box = SessionTools(Tools(Sub50Client(base_url="http://x"), McpState(SID)))
     assert box.run(call("end_session")) == (False, {"error": "Herramienta desconocida: end_session"})
     assert box.run(call("nada"))[0] is False
     assert box.run(call("step", cycles=500)) == (True, {"cycles": 24}) and seen["cycles"] == 24
-    assert box.run(call("cut_lines", lines=["R1"])) == (False, {"error": "sin sesión"})
-    assert box.run(call("cut_lines", otra=1))[1]["error"].startswith("Argumentos inválidos")
-    assert "end_session" not in {s.name for s in box.specs()}
+    assert box.run(call("run_status")) == (False, {"error": "sin corrida"})
+    assert box.run(call("step", otra=1))[1]["error"].startswith("Argumentos inválidos")
+    names = {s.name for s in box.specs()}
+    assert "end_session" not in names
+
+
+def test_the_assistant_edits_only_through_the_grid_the_map_draws():
+    """The web draws only prepare_scenario's grid (#101): session edits and cuts never reached the map."""
+    names = {s.name for s in SessionTools(Sub50Tools(Sub50Client(base_url="http://x"))).specs()}
+    hidden = {"add_datacenter", "add_generator", "add_line", "add_bus", "edit_element", "remove_element"}
+    assert not names & (hidden | {"cut_lines", "repair_lines", "reset_network", "get_grid_state"})
+    assert {"prepare_scenario", "describe_network", "start_run", "step", "start_incident_run"} <= names
 
 
 def test_the_first_tool_that_needs_a_session_opens_one_and_says_so():
@@ -243,15 +252,27 @@ def test_megawatts_must_come_from_the_user():
     assert stated(120, "agrega 120 MW") and stated(500, "medio GW: 0,5 GW") and not stated(500, "en Calama")
 
     class Tools(Sub50Tools):
-        def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter"):
-            return {"mw": mw}
+        def prepare_scenario(
+            self,
+            changes: list[dict] | None = None,
+            open_lines: list[str] | None = None,
+            out_buses: list[str] | None = None,
+            point: str | None = None,
+        ):
+            return {"changes": changes}
 
     tools = Tools(Sub50Client(base_url="http://x"), McpState(SID))
+    dc = {"target": "demand", "places": ["Calama"], "add": 500}
     box = SessionTools(tools, said="Agrega un datacenter en Calama")
-    ok, out = box.run(call("add_datacenter", bus="Calama", mw=500))
-    assert not ok and "pregúntale" in out["error"]
+    ok, out = box.run(call("prepare_scenario", changes=[dc]))
+    assert not ok and "pregúntale" in out["error"] and "500 MW" in out["error"]
     box = SessionTools(tools, said="Agrega un datacenter en Calama\n300 MW")
-    assert box.run(call("add_datacenter", bus="Calama", mw=300)) == (True, {"mw": 300})
+    ok, _ = box.run(call("prepare_scenario", changes=[{**dc, "add": 300}]))
+    assert ok
+    # a factor is not a quantity the user types ("a la mitad"), and a later turn may resend earlier changes
+    half = {"target": "generation", "tech": ["hidro"], "factor": 0.5}
+    box = SessionTools(tools, said="300 MW en Calama\nbaja a la mitad la hidro")
+    assert box.run(call("prepare_scenario", changes=[{**dc, "add": 300}, half]))[0]
 
 
 def test_the_toolbox_gets_everything_the_user_said():
@@ -314,3 +335,44 @@ def test_a_longer_deadline_can_be_given_per_message():
     a = make(model, deadline_s=25, clock=lambda: next(now))
     out = a.chat("x", None, None, lambda s, r, t: FakeBox(), deadline_s=90)
     assert out["reply"] == "listo" and out["truncated"] is None
+
+
+def test_add_substation_refuses_mw_the_user_never_wrote():
+    from cascadasen.domain.ports import ToolCall
+    from cascadasen.mcp.toolbox import SessionTools
+
+    class Tools:
+        state = type("S", (), {"session_id": "x", "run_id": None})()
+
+        def add_substation(self, **kw):
+            return {"ok": True}
+
+    box = SessionTools.__new__(SessionTools)
+    box.tools, box.exclude, box.said, box.names = (
+        Tools(),
+        frozenset(),
+        "crea una subestación con 80 MW",
+        {"add_substation"},
+    )
+    args = {"name": "SE", "lat": -23, "lon": -70, "kv": 220, "connections": [{"to": "B001"}]}
+    ok, _ = box.run(ToolCall(id="1", name="add_substation", arguments={**args, "load_mw": 80}))
+    bad, out = box.run(ToolCall(id="2", name="add_substation", arguments={**args, "load_mw": 500}))
+    assert ok and not bad and "500" in out["error"]
+
+
+def test_a_first_session_at_the_default_point_waits_until_a_tool_needs_it():
+    """The model opened a session before every map change; prepare_scenario never uses one."""
+    opened = []
+
+    class Tools(Sub50Tools):
+        def start_session(self, point: str | None = None, label: str | None = None):
+            opened.append(point)
+            self.state.session_id = SID
+            return {"session_id": SID, "point": point}
+
+    box = SessionTools(Tools(Sub50Client(base_url="http://x")))
+    ok, out = box.run(call("start_session"))
+    assert ok and out["deferred"] and not opened
+    assert box.run(call("start_session", point="nov2026-1300"))[1]["deferred"] and not opened
+    ok, out = box.run(call("start_session", point="feb2025-1500"))  # an incident's own point: open it now
+    assert ok and out["session_id"] == SID and opened == ["feb2025-1500"]

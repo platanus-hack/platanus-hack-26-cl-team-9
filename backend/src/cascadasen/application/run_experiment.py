@@ -20,6 +20,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from cascadasen.domain.agents.propagation import BOUNDS as PROPAGATION_BOUNDS
 from cascadasen.domain.ports import CommanderAdvisor, ConflictError, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.domain.simulation.timeline import NOTICE
@@ -409,6 +410,27 @@ def catalog(world: TheaterWorld) -> dict[str, Any]:
         "resources": cfg.resources,
         "uncertainty_levels": {"0": "información perfecta", "1": "línea base", "2": "entorno degradado"},
         "cycle_minutes": cfg.clock["cycle_minutes"],
+        "cyber_attack": _cyber_catalog(cfg, world),
+    }
+
+
+def _cyber_catalog(cfg, world: TheaterWorld) -> dict[str, Any]:
+    """What the Ciberataque form needs: defaults and bounds of each parameter, the outcomes, and the
+    public area adjacency (operating areas that share a corridor) the intrusion follows."""
+    net = world.load(world.points()[0])[0] if world.points() else None
+    return {
+        "template": "ciberataque",
+        "defaults": cfg.cyber_attack,
+        "bounds": {k: list(v) for k, v in PROPAGATION_BOUNDS.items()},
+        "outcomes": ["attack", "defense", "undecided"],
+        "crews_default": cfg.resources.get("field_crews"),
+        "adjacency": {a: sorted({c.b if c.a == a else c.a for c in net.incident(a)}) for a in net.order}
+        if net
+        else {},
+        "areas": [{"id": a, "name": net.areas[a].name, "zone": net.areas[a].zone} for a in net.order]
+        if net
+        else [],
+        "is_assumption": True,
     }
 
 

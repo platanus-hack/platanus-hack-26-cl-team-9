@@ -1,14 +1,21 @@
 import { useEffect, useRef } from "react";
+import type { Supply } from "./gridsApi";
 import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
 import { cutName, hz, index2, int, narrate, pct, placeName, secs, usdM } from "./text";
 import type { EventCost, HealthReport, N1Cost, Network, Timeline } from "./types";
 import { Chevron, Info } from "./ui";
 
 interface Props {
+  /** network and timeline: what is on the map and its cascade. cuts and outBuses: the lines and substations switched off.
+   *  t: playhead in simulated seconds. impact: people and MW out at `t`. islands: frequency per island at `t`.
+   *  totalPeople: people the network assigns to buses. Callbacks: seek the playhead, open the assumptions view, restore
+   *  every change. source: the base-map or outline note added to the "Fuente" line. */
   network: Network; timeline: Timeline; cuts: string[]; outBuses: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
   seek(t: number): void; openSources(): void; restore(): void; source: string;
   /** Pre-fault health of the point (`<point>/health.json`); null in an old cache or in a session. */
   health: HealthReport | null;
+  /** People the generators should feed against the people they still feed (server simulation only). */
+  supply: Supply | null;
 }
 
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
@@ -18,6 +25,7 @@ export function SimulationPanel(p: Props) {
   return (
     <>
       {edited ? <ImpactCard {...p} /> : <EmptyCard health={p.health} />}
+      {edited && p.supply && <SupplyCard supply={p.supply} />}
       {edited && <History {...p} />}
       {p.timeline.truncated && <p className="note">La cascada llegó al tope de 20 etapas: el resultado puede ser mayor.</p>}
       <button className="assumptions-row" onClick={p.openSources}>
@@ -74,7 +82,7 @@ function EmptyCard({ health }: { health: HealthReport | null }) {
   return (
     <div className="card empty">
       <h3>Escenario nuevo</h3>
-      <p>Haz doble clic en una línea del mapa para sacarla de servicio, o haz clic para ver su detalle y usa Sacar de servicio. El motor calcula la cascada: líneas que se sobrecargan, islas que se separan, cortes automáticos de carga y apagones.</p>
+      <p>Haz clic en una línea o una subestación del mapa para ver su detalle; un segundo clic, o el botón de su detalle, la saca de servicio. El motor calcula la cascada: líneas que se sobrecargan, islas que se separan, cortes automáticos de carga y apagones.</p>
       <p className="meta">Sin cortes, el sistema opera normal en este punto de operación.</p>
       {health && <PrefaultHealth health={health} />}
     </div>
@@ -137,10 +145,13 @@ function ImpactCard(p: Props) {
           <span>{p.islands.length > 1 ? `frecuencia ${lowest?.name.toLowerCase() ?? "más baja"}` : "frecuencia"}</span>
         </div>
       </div>
+      {p.timeline.truncated && (
+        <p className="notice truncated" role="note">{`La cascada se cortó en ${p.timeline.summary.stages} etapas (límite del motor); podría seguir.`}</p>
+      )}
       <EventHealth timeline={p.timeline} />
       <div className="cut-row">
         <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => cutName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>
-        <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Encender subestación"}</button>
+        <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Volver a conectar todas" : "Volver a conectar") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Volver a encender"}</button>
       </div>
     </div>
   );
@@ -173,3 +184,25 @@ function History(p: Props) {
     </div>
   );
 }
+
+const ZONE_NAME: Record<string, string> = { NG: "Norte Grande", NC: "Norte Chico", CE: "Centro", CS: "Centro-sur", SU: "Sur" };
+const SUPPLY_TIP = "Por zona: personas que sus subestaciones generadoras deberían alimentar antes de la falla y las que siguen alimentando cuando la cascada se asienta, con el porcentaje (POST /grids/simulate, reparto por flujo DC; supuesto del modelo). Sobre 100 % significa que esa zona toma gente que antes alimentaban otras. Se muestra por zona, nunca como ranking de subestaciones (docs/cyber.md 8.2).";
+
+/** Supply per zone after the cascade: who the generators should feed against who they still feed. */
+function SupplyCard({ supply }: { supply: Supply }) {
+  const zones = Object.entries(supply.by_zone);
+  if (!zones.length) return null;
+  return (
+    <div className="card state-list">
+      <div className="card-head"><div className="title"><h3>Abastecimiento por zona</h3></div><Info tip={SUPPLY_TIP} /></div>
+      <div className="list-head"><span>Zona · debería → alimenta</span><span>%</span></div>
+      {zones.map(([z, v]) => (
+        <div className="state-row" key={z}>
+          <span className="ellipsis">{ZONE_NAME[z] ?? z} · {int(v.should_feed)} → {int(v.feeds)}</span>
+          <span className={v.pct_fed < 100 ? "num fault" : "num"}>{v.pct_fed.toFixed(2)} %</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+

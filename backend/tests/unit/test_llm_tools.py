@@ -107,3 +107,23 @@ def test_leaked_tool_call_markup_is_cut_from_the_text():
         ConverseToolChat("m", FakeConverse([{"text": "a < b y c > d"}])).turn("s", [], [SPEC]).text
         == "a < b y c > d"
     )
+
+
+def test_reasoning_blocks_never_reach_the_reply():
+    """Seen in production: the web showed "<thinking> The user wants … </thinking>" as the answer."""
+    text = "<thinking> The user wants to cut a line. I need its id. </thinking>\nBusco la línea."
+    out = ConverseToolChat("m", FakeConverse([{"text": text}])).turn("s", [], [SPEC])
+    assert out.text == "Busco la línea."
+    unclosed = ConverseToolChat("m", FakeConverse([{"text": "Listo.<think>sigo pensando"}])).turn(
+        "s", [], [SPEC]
+    )
+    assert unclosed.text == "Listo."
+
+
+def test_an_answer_without_content_is_a_model_failure_not_a_crash():
+    class Odd(FakeConverse):
+        def converse(self, **kw):
+            return {"stopReason": "guardrail_intervened", "output": {}}
+
+    with pytest.raises(ToolChatError, match="no respondió"):
+        ConverseToolChat("m", Odd()).turn("s", [], [SPEC])

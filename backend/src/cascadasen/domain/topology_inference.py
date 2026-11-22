@@ -53,6 +53,21 @@ class InferenceResult:
 def infer_line_topology(
     substations: list[Node], lines: list[RawLine], cfg: InferenceConfig | None = None
 ) -> InferenceResult:
+    """Infer the end nodes of every line part and split lines at taps, following the rules in the module
+    docstring. Passes, in order:
+
+    1. For each line end, match a substation (rules 1 to 4). `ends` records the node, the method and the
+       distance in metres.
+    2. Ends that stay unmatched and touch the interior of another line (within `tap_m`) become taps. Taps on
+       the same host within `junction_m` of each other share one junction node `J<n>`, and the host is cut
+       there.
+    3. TAP / SECCIONADORA substations next to a line of their voltage (within 1 kV and `tap_sub_m`) that is
+       not already attached at two ends cut that line too.
+    4. Remaining ends join an already resolved end within `junction_m`, else they cluster into a junction
+       `J<n>`, else they become a dangling node `X<n>`.
+    5. Each part becomes one edge per piece between consecutive stops. Ids are `L<record>[p<part>][s<k>]`.
+
+    Pure function of its arguments: it uses no randomness, and results depend on the order of `lines`."""
     cfg = cfg or InferenceConfig()
     subs = [n for n in substations if n.located]
     sub_ll = np.array([(n.lon, n.lat) for n in subs], dtype=float)
@@ -156,8 +171,8 @@ def infer_line_topology(
     for ie in still:
         d = np.hypot(*(resolved_xy - end_xy[ie]).T) if len(resolved_xy) else np.array([])
         if len(d) and d.min() <= cfg.junction_m:
-            k = resolved[int(np.argmin(d))]
-            ends[ie] = {"node": ends[k]["node"], "method": "join_end", "dist_m": round(float(d.min()))}
+            nearest = resolved[int(np.argmin(d))]
+            ends[ie] = {"node": ends[nearest]["node"], "method": "join_end", "dist_m": round(float(d.min()))}
         else:
             pending.append(ie)
     clusters: list[list] = []

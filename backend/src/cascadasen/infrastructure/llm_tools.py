@@ -20,12 +20,16 @@ MAX_TOKENS = 2000
 # DeepSeek on Converse sometimes leaks the start of its own tool-call markup ("<｜DSML｜function_calls", with
 # fullwidth bars) into the text block next to a real toolUse block. Everything from the marker on is markup.
 LEAKED_MARKUP = re.compile(r"<｜[^｜>]*｜")
+# Some models write their reasoning in the text block ("<thinking> The user wants … </thinking>"). Seen in
+# production on 2026-11-22: the web showed it as the reply. A block that never closes runs to the end.
+REASONING = re.compile(r"<(thinking|think|reasoning)>.*?(?:</\1>|\Z)", re.DOTALL | re.IGNORECASE)
 
 
 def clean_text(text: str) -> str:
-    """The model's visible text without leaked tool-call markup."""
+    """The model's visible text without leaked tool-call markup or reasoning blocks."""
     match = LEAKED_MARKUP.search(text)
-    return (text[: match.start()] if match else text).strip()
+    visible = text[: match.start()] if match else text
+    return REASONING.sub("", visible).strip()
 
 
 def _result_block(msg: dict[str, Any]) -> dict[str, Any]:
@@ -97,7 +101,12 @@ class ConverseToolChat:
             if name == "ValidationException":
                 raise ToolChatError("El modelo configurado no acepta herramientas o la solicitud.") from exc
             raise ToolChatError("El modelo de lenguaje no está disponible ahora; reintenta.") from exc
-        blocks = out["output"]["message"]["content"]
+        try:
+            blocks = out["output"]["message"]["content"]
+        except (KeyError, TypeError) as exc:  # a guardrail or an odd stop reason: a model failure, not a 500
+            reason = out.get("stopReason") if isinstance(out, dict) else None
+            log.warning("assistant LLM answer without content (stopReason %s)", reason)
+            raise ToolChatError("El modelo de lenguaje no respondió; reintenta.") from exc
         text = clean_text("\n".join(b["text"] for b in blocks if "text" in b))
         calls = tuple(
             ToolCall(u["toolUseId"], u["name"], u["input"] if isinstance(u.get("input"), dict) else {})

@@ -22,8 +22,8 @@ def fold(text: str) -> str:
 
 def bus_place(net: dict[str, Any], bus_id: str | None) -> dict[str, Any]:
     """Where a bus is (name and area), so the model never guesses a bus's location."""
-    node = next((n for n in net.get("nodes", []) if n["id"] == bus_id), {})
-    area = next((a for a in net.get("areas", []) if a["id"] == node.get("area")), {})
+    node: dict[str, Any] = next((n for n in net.get("nodes", []) if n["id"] == bus_id), {})
+    area: dict[str, Any] = next((a for a in net.get("areas", []) if a["id"] == node.get("area")), {})
     return {
         "bus": bus_id,
         "bus_name": node.get("name"),
@@ -42,17 +42,26 @@ def baseline_digest(baseline: dict[str, Any]) -> dict[str, Any]:
 
 
 def edit_digest(resp: dict[str, Any]) -> dict[str, Any]:
-    """Result of an edit: new id, warnings and the redispatch rule, without the per-bus split."""
+    """Result of an edit: new id, warnings and the redispatch rule, without the per-bus split. The sign is said
+    in words: a model repeated "redespacho de -200 MW" without saying who moved."""
     out: dict[str, Any] = {"id": resp.get("id"), "warnings": resp.get("warnings", [])}
     out["redispatch"] = [
         {
             "redispatch_mw": b.get("redispatch_mw"),
+            "meaning": redispatch_meaning(b.get("redispatch_mw")),
             "rule": b.get("rule"),
             "is_assumption": b.get("is_assumption"),
         }
         for b in resp.get("balance", [])
     ]
     return out
+
+
+def redispatch_meaning(mw: Any) -> str | None:
+    if not isinstance(mw, int | float) or abs(mw) < 0.05:
+        return None
+    verb = "suben" if mw > 0 else "bajan"
+    return f"las centrales sincrónicas de la isla {verb} {abs(mw):.0f} MW en total para mantener el balance"
 
 
 def island_digest(island: dict[str, Any]) -> dict[str, Any]:
@@ -159,21 +168,56 @@ def focus_digest(net: dict[str, Any], focus: str) -> dict[str, Any]:
     }
 
 
-def resolve_bus(net: dict[str, Any], text: str) -> str:
-    """A bus id from `B###`, an area id or name (its anchor bus) or a unique part of a bus name."""
+def resolve_bus(net: dict[str, Any], text: str, client: Any = None) -> tuple[str, str]:
+    """The bus for a place and how it was found. A bus id (also one the session added) or the exact name of a
+    bus of this session resolves here; anything else goes to `GET /grids/places`, which knows the comunas and
+    the substations that serve them (docs/stress.md section 3). Matching area names first sent "Iquique" to a
+    mine 150 km inland, the anchor of the area "Arica–Iquique"."""
     nodes = net.get("nodes", [])
-    ids = {n["id"] for n in nodes}
-    if text.upper() in ids:
-        return text.upper()
+    if text.strip().upper() in {n["id"] for n in nodes}:
+        return text.strip().upper(), "barra indicada por id"
     key = fold(text.strip())
-    for a in net.get("areas", []):
-        if a["id"].lower() == key or key in fold(a.get("name", "")):
-            return a["anchor_bus"]
-    hits = [n["id"] for n in nodes if key and key in fold(n.get("name", ""))]
-    if len(hits) == 1:
-        return hits[0]
-    shown = hits[:10] if hits else [a["id"] for a in net.get("areas", [])]
-    raise ToolError(f"No pude elegir una barra para '{text}'. Candidatas o áreas válidas: {shown}")
+    named = [n for n in nodes if fold(n.get("name", "")) in (key, f"s/e {key}")]
+    if len(named) == 1:
+        return named[0]["id"], f"barra {named[0].get('name')}"
+    if client is None:
+        raise ToolError(f"No pude elegir una barra para '{text}'. Usa un id B### de describe_network.")
+    found = client.get("/grids/places", q=text, point=net.get("point") or "nov2026-1300")
+    return found["bus"], found["how"]
+
+
+# Technology names people use -> the ids the API takes. Nuclear has no plant in Chile: it is modelled as a
+# synchronous thermal plant, and the tool says so.
+TECH_ALIASES = {
+    "eolico": "eolica",
+    "eolica": "eolica",
+    "viento": "eolica",
+    "fotovoltaica": "solar",
+    "fotovoltaico": "solar",
+    "fv": "solar",
+    "pv": "solar",
+    "hidroelectrica": "hidro",
+    "hidraulica": "hidro",
+    "hidrica": "hidro",
+    "biomasa": "bioenergia",
+    "geotermia": "geotermica",
+    "carbon": "carbon",
+    "gas natural": "gas",
+    "gnl": "gas",
+    "petroleo": "diesel",
+    "baterias": "bateria",
+    "almacenamiento": "bateria",
+    "bess": "bateria",
+    "nuclear": "termica",
+}
+NUCLEAR_NOTE = "No hay centrales nucleares en Chile: se modela como térmica sincrónica (supuesto)."
+
+
+def normalize_tech(tech: str) -> tuple[str, str | None]:
+    """The API id of a technology name, and a note when the mapping is an assumption."""
+    key = fold(tech.strip())
+    note = NUCLEAR_NOTE if key == "nuclear" else None
+    return TECH_ALIASES.get(key, key), note
 
 
 def level_text(level: str | None) -> str | None:
@@ -232,6 +276,27 @@ def run_digest(run: dict[str, Any]) -> dict[str, Any]:
     return {k: run[k] for k in keys if k in run}
 
 
+INCIDENT_NOTICES = [
+    "Escenario hipotético: se modela el efecto, no el ataque.",
+    "Consecuencia simulada en una red reducida, no una predicción.",
+]
+
+
+def incident_catalog_digest(cat: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "incidents": [
+            {
+                **{k: i[k] for k in ("id", "title", "date", "kind", "verified", "notes")},
+                "sources": [s["url"] for s in i["sources"]],
+                "effects": [f"ciclo {e['cycle']}: {e['type']} en {e['target']}" for e in i["effects"]],
+            }
+            for i in cat["incidents"]
+        ],
+        "cost_basis": cat["cost_basis"],
+        "notices": cat["notices"],
+    }
+
+
 def report_digest(rep: dict[str, Any]) -> dict[str, Any]:
     ind = rep.get("indicators", {})
     consequence = dict(rep.get("consequence") or {})
@@ -248,4 +313,55 @@ def report_digest(rep: dict[str, Any]) -> dict[str, Any]:
         "consequence": consequence,
         "coordination": rep.get("coordination"),
         "notice": rep.get("notice", NOTICE),
+        **_incident_digest(rep.get("incident")),
+    }
+
+
+def _incident_digest(inc: dict[str, Any] | None) -> dict[str, Any]:
+    if not inc:
+        return {}
+    keys = ("id", "title", "kind", "verified", "mitigations", "notes", "consequence_card")
+    return {"incident": {k: inc[k] for k in keys if k in inc}}
+
+
+def prepare_digest(out: dict[str, Any]) -> dict[str, Any]:
+    """Counts and totals per change, the prepared totals, how many lines start over their limit and the per-zone
+    stat; no per-substation ranking (docs/cyber.md section 8.2). A change that touched one to five substations says
+    which ones (the person asked for that place), and one that touched none carries a warning, so the model never
+    reports a plant that was not built."""
+    changes = []
+    for c in out["changes"]:
+        row = {k: v for k, v in c.items() if k != "elements"}
+        elements = c.get("elements") or []
+        if 0 < len(elements) <= 5 and not row.get("places"):
+            row["at"] = [f"{e.get('id')} {e.get('name')}" for e in elements]
+        if not c.get("matched"):
+            row["warning"] = (
+                "Este cambio no tocó ninguna subestación: no digas que se aplicó. Revisa el lugar o la tecnología."
+            )
+        changes.append(row)
+    return {
+        "changes": changes,
+        "totals": out["totals"],
+        "overloaded_lines": len(out["overloaded_lines"]),
+        # a model said "8 líneas sobrecargadas, las mismas que en la base" when the base had 1
+        "overloaded_lines_note": "Líneas sobre su límite en la red preparada, sin falla. El resultado no dice cuántas "
+        "había sin estos cambios: no las compares con la red base.",
+        "should_feed_by_zone": out["should_feed"]["by_zone"],
+        "per_capita_w": out["per_capita_w"],
+        "assumptions": [a["text"] for a in out["assumptions"]],
+    }
+
+
+def simulation_digest(stressed: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
+    """The cascade of the failures on the prepared grid against the same failures on the base grid, and the
+    per-zone supply stat."""
+    keys = ("people_without_power", "load_shed_mw", "dark_load_mw")
+    return {
+        "with_changes": {k: stressed["timeline"]["summary"][k] for k in keys},
+        "without_changes": {k: base["timeline"]["summary"][k] for k in keys},
+        "lines_opened_by_cascade": sorted(
+            {i for e in stressed["timeline"]["events"] if e["type"] == "line_overload_open" for i in e["ids"]}
+        ),
+        "supply_by_zone": stressed["supply"]["by_zone"],
     }

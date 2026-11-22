@@ -7,6 +7,7 @@ Stateless; the last results are kept in memory because criticality runs one casc
 
 from __future__ import annotations
 
+import json
 from collections import OrderedDict
 
 from cascadasen.application.grid_simulation import prepare_edits
@@ -24,17 +25,28 @@ class GridDependency:
         self.world = world
         self._cache: OrderedDict[tuple, dict] = OrderedDict()
 
-    def dependency_workflow(self, point: str, open_lines: list[str], out_buses: list[str]) -> dict:
-        key = (point, tuple(sorted(set(open_lines))), tuple(sorted(set(out_buses))))
+    def dependency_workflow(
+        self, point: str, open_lines: list[str], out_buses: list[str], changes: list[dict] | None = None
+    ) -> dict:
+        key = (
+            point,
+            tuple(sorted(set(open_lines))),
+            tuple(sorted(set(out_buses))),
+            json.dumps(changes or [], sort_keys=True),
+        )
         if key not in self._cache:
-            self._cache[key] = self._compute(point, open_lines, out_buses)
+            self._cache[key] = self._compute(point, open_lines, out_buses, changes)
             if len(self._cache) > CACHE_SIZE:
                 self._cache.popitem(last=False)
         self._cache.move_to_end(key)
         return self._cache[key]
 
-    def _compute(self, point: str, open_lines: list[str], out_buses: list[str]) -> dict:
-        _, edited, kept, _ = prepare_edits(self.world, point, open_lines, out_buses, allow_empty=True)
+    def _compute(
+        self, point: str, open_lines: list[str], out_buses: list[str], changes: list[dict] | None
+    ) -> dict:
+        _, edited, kept, _ = prepare_edits(
+            self.world, point, open_lines, out_buses, allow_empty=True, changes=changes
+        )
         settled, still_open = _after_cascade(edited.net, edited.point, kept)
         fed = {
             r["bus"]: r

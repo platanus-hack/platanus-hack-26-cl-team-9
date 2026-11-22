@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getRunSnapshots } from "../session/sessionApi";
 import type { Session } from "../session/useSession";
 import { AssistantError, deleteConversation, getConversation, MAX_MESSAGE, streamChat } from "./assistantApi";
+import type { StressChange } from "../cascade/edits";
 import { refreshFor } from "./labels";
 import type { SseEvent } from "./sse";
 import { annotate, begin, EMPTY, fail, fromConversation, interrupt, reduce, type ChatState } from "./steps";
@@ -22,13 +23,16 @@ export interface Assistant {
  * result reloads the session (network and cut state); after `step` the run snapshots are fetched and summarised in
  * the card. The conversation id is kept in localStorage and the chat is rebuilt from `GET /conversations/{cid}`.
  */
-export function useAssistant(s: Session): Assistant {
+/** The final grid the assistant set with `prepare_scenario`; the map loads it paused. */
+export interface AssistantScenario { point: string; changes: StressChange[]; open_lines: string[]; out_buses: string[] }
+
+export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => void): Assistant {
   const [state, setState] = useState<ChatState>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [restoring, setRestoring] = useState(() => !!readCid());
-  const live = useRef({ state, s, busy });
-  live.current = { state, s, busy };
+  const live = useRef({ state, s, busy, onScenario });
+  live.current = { state, s, busy, onScenario };
   const abort = useRef<AbortController | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -40,7 +44,6 @@ export function useAssistant(s: Session): Assistant {
     getConversation(cid).then((view) => {
       if (!alive) return;
       setState(fromConversation(view));
-      if (view.session_id && !live.current.s.sid) live.current.s.join(view.session_id);
     }, (e) => {
       if (!alive) return;
       if (e instanceof AssistantError && e.status === 404) writeCid(null);
@@ -51,24 +54,16 @@ export function useAssistant(s: Session): Assistant {
   useEffect(() => { if (state.conversationId) writeCid(state.conversationId); }, [state.conversationId]);
   useEffect(() => () => { abort.current?.abort(); clearTimeout(refreshTimer.current); }, []);
 
-  /** Join the session the assistant works on when it is not the one on screen; true when it joined. */
-  const follow = useCallback((sid: unknown) => {
-    const cur = live.current.s;
-    if (typeof sid !== "string" || !sid || sid === cur.sid) return false;
-    cur.join(sid);
-    return true;
-  }, []);
-
   const onEvent = useCallback((e: SseEvent) => {
     setState((st) => reduce(st, e));
     const d = (e.data ?? {}) as Record<string, unknown>;
-    if (e.event === "start" || e.event === "done") { follow(d.session_id); return; }
     if (e.event !== "tool_result") return;
-    const joined = follow(d.session_id);
+    const scenario = d.ok && d.name === "prepare_scenario" ? scenarioOf(d.result) : null;
+    if (scenario) live.current.onScenario(scenario); // the assistant decided the final grid of the map
     const what = refreshFor(typeof d.name === "string" ? d.name : "");
     if (!d.ok || !what) return;
-    // The session SSE reports the change too; this reload is the fallback (a joined session loads by itself).
-    if (!joined) {
+    // Shared sessions are hidden from the web for now: the map does not follow the assistant's session.
+    if (live.current.s.sid) {
       clearTimeout(refreshTimer.current);
       refreshTimer.current = setTimeout(() => { live.current.s.refresh().catch(() => undefined); }, REFRESH_MS);
     }
@@ -76,18 +71,18 @@ export function useAssistant(s: Session): Assistant {
       const id = typeof d.id === "string" ? d.id : "";
       void summariseSnapshots(d.session_id, d.run_id, d.result).then((text) => text && setState((st) => annotate(st, id, text)));
     }
-  }, [follow]);
+  }, []);
 
   const send = useCallback(async (raw: string) => {
     const text = raw.trim();
     if (!text || text.length > MAX_MESSAGE || live.current.busy) return;
-    const { state: st, s: sess } = live.current;
+    const { state: st } = live.current;
     setBusy(true);
     setState((x) => begin(x, text));
     const ctrl = new AbortController();
     abort.current = ctrl;
     try {
-      const finished = await streamChat({ message: text, conversation_id: st.conversationId ?? undefined, session_id: sess.sid ?? undefined }, onEvent, ctrl.signal);
+      const finished = await streamChat({ message: text, conversation_id: st.conversationId ?? undefined }, onEvent, ctrl.signal);
       if (!finished) await recover();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -159,3 +154,13 @@ function readCid(): string | null {
 function writeCid(cid: string | null) {
   try { if (cid) localStorage.setItem(CID_KEY, cid); else localStorage.removeItem(CID_KEY); } catch { /* storage blocked */ }
 }
+
+/** The `scenario` of a prepare_scenario result, or null when it does not have the expected shape. */
+export function scenarioOf(result: unknown): AssistantScenario | null {
+  const sc = (result as { scenario?: Record<string, unknown> } | null)?.scenario;
+  if (!sc || typeof sc.point !== "string") return null;
+  const ids = (x: unknown) => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : []);
+  const changes = Array.isArray(sc.changes) ? (sc.changes.filter((c) => !!c && typeof c === "object" && "target" in c) as StressChange[]) : [];
+  return { point: sc.point, changes, open_lines: ids(sc.open_lines), out_buses: ids(sc.out_buses) };
+}
+

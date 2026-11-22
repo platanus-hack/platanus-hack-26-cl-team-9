@@ -152,3 +152,64 @@ def test_a_generation_override_is_not_redispatched_back(base):
 def test_bus_overrides_are_bounded(base, fields):
     with pytest.raises(ov.OverlayError):
         ov.patch(ov.empty_overlay(), "bus", "B000", fields, *base)
+
+
+SUB = {
+    "name": "SE Nueva",
+    "lat": -31.1,
+    "lon": -71.0,
+    "kv": 220,
+    "connections": [{"to": "B002"}, {"to": "B003"}],
+}
+
+
+def test_a_substation_adds_its_bus_lines_load_and_generator_in_one_step(base):
+    spec = {**SUB, "load": {"mw": 40, "kind": "consumo"}, "generator": {"mw": 30, "tech": "solar"}}
+    o, out = ov.add_substation(ov.empty_overlay(), spec, *base)
+    assert (out["id"], out["line_ids"], out["load_id"], out["generator_id"]) == (
+        "B006",
+        ["U001", "U002"],
+        "D001",
+        "G001",
+    )
+    assert len(o["buses"]) == 1 and len(o["lines"]) == 2
+    assert ov.apply_overlay(*base, o).net.size == 7
+
+
+def test_a_failing_connection_leaves_the_overlay_untouched(base):
+    start = ov.empty_overlay()
+    bad = {**SUB, "connections": [{"to": "B002"}, {"to": "B999"}]}
+    with pytest.raises(ov.OverlayError):
+        ov.add_substation(start, bad, *base)
+    assert ov.is_empty(start)
+
+
+@pytest.mark.parametrize(
+    "conns",
+    [[], [{"to": "B002"}] * 2, [{"to": f"B00{i}"} for i in range(6)] + [{"to": "B002"}]],
+)
+def test_connections_are_one_to_six_and_distinct(base, conns):
+    with pytest.raises(ov.OverlayError):
+        ov.add_substation(ov.empty_overlay(), {**SUB, "connections": conns}, *base)
+
+
+def test_a_connection_of_another_voltage_is_refused(base, monkeypatch):
+    monkeypatch.setattr(ov, "_bus_kv", lambda *_: 110.0)  # the toy network has only 220 kV buses
+    with pytest.raises(ov.OverlayError, match="kV"):
+        ov.add_substation(ov.empty_overlay(), SUB, *base)
+
+
+def test_coherence_notes_odd_capacity_and_load_above_the_lines(base):
+    spec = {**SUB, "connections": [{"to": "B002", "capacity_mw": 5000}]}
+    _, out = ov.add_substation(ov.empty_overlay(), spec, *base)
+    assert [n["code"] for n in out["coherence"]] == ["capacity_out_of_range"]
+    spec = {**SUB, "connections": [{"to": "B002"}], "load": {"mw": 3000, "kind": "consumo"}}
+    _, out = ov.add_substation(ov.empty_overlay(), spec, *base)
+    assert [n["code"] for n in out["coherence"]] == ["load_over_connections"]
+
+
+def test_the_session_limit_counts_every_element(base):
+    o = ov.empty_overlay()
+    with pytest.raises(ov.OverlayError, match=str(ov.MAX_ADDED)):
+        for _ in range(ov.MAX_ADDED):
+            o, _ = ov.add_substation(o, {**SUB, "connections": [{"to": "B002"}]}, *base)

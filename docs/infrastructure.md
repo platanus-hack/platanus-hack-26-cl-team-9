@@ -71,7 +71,7 @@ NS delegation is a manual step. Read `terraform -chdir=infrastructure output rou
 Optional, in `infrastructure/terraform.tfvars` (git-ignored, example in `terraform.tfvars.example`): `origin_https = true` and `alb_certificate_arn` make the ALB production listener HTTPS :443 and CloudFront use `https-only`. That needs a certificate whose name matches the origin host, so it also needs a record such as `alb.sub50.cl` pointing to the ALB; it is not set up.
 
 ## Automatic deploy from GitHub
-`.github/workflows/deploy.yml` runs on every push to `main` (and by hand with "Run workflow") and uses only the AWS CLI, no Terraform. Steps: assume the role `arn:aws:iam::402909940511:role/IAM-Role-ECS-Deploy` through GitHub OIDC; build and push the `backend` and `web` images to ECR tagged with the short commit; register a new revision of the `cascadasen` task definition with those images; `aws ecs update-service` and wait for the blue/green deploy to be stable; invalidate CloudFront (`/*`, distribution found by the alias `sub50.cl`). Runs are serialized (`concurrency: deploy`).
+`.github/workflows/deploy.yml` runs on every push to `main` (and by hand with "Run workflow") and uses only the AWS CLI, no Terraform. Steps: assume the role `arn:aws:iam::402909940511:role/IAM-Role-ECS-Deploy` through GitHub OIDC; build and push the `backend` and `web` images to ECR tagged with the short commit; register a new revision of the `cascadasen` task definition with those images; `aws ecs update-service` and wait for the blue/green deploy to be stable; invalidate CloudFront (`/*`, distribution found by the alias `sub50.cl`). Runs are serialized (`concurrency: deploy`). The `deploy` job has `needs: checks`: the `checks` job calls `.github/workflows/checks.yml` (pytest with a coverage floor, `mypy src`, web `tsc`, `vitest` and `build`), so a failing check blocks the deploy.
 The role ARN, registry, cluster, service, and domain are hardcoded in the workflow: the repository variables cannot be edited, and none of them is a secret. The public Mapbox token is read from the default in `deploy.sh` (GitHub push protection rejects the token when it is written in the workflow file).
 Infrastructure changes (new resources, sizing, the ECR repositories) are not deployed by the workflow. Apply them by hand with `infrastructure/deploy.sh`. The ECS service has `ignore_changes = [task_definition]`, so a manual `terraform apply` does not roll the service back to an older revision.
 Setup in AWS (account 402909940511), done once by hand (already done):
@@ -81,6 +81,10 @@ Setup in AWS (account 402909940511), done once by hand (already done):
 Pushing `.github/workflows/*` needs a GitHub token with the `workflow` scope (`gh auth refresh -h github.com -s workflow`).
 ## Mapbox token
 The web image needs `VITE_MAPBOX_TOKEN` at build time (Vite inlines it). `deploy.sh` passes it as a build argument. The value is a public `pk.*` token with a default in `deploy.sh`; export `VITE_MAPBOX_TOKEN` to override it.
+
+## www subdomain
+
+`www.sub50.cl` serves the same site as the apex. Applied by hand on 2026-11-22: CloudFront `E1OAZRNNNTLPXE` got the alias `www.sub50.cl`, and the zone got `www` A and AAAA aliases to `d2bc0ohphbh56u.cloudfront.net`. The ACM certificate already covers `*.sub50.cl`. `cloudfront.tf` and `route53.tf` (`aws_route53_record.www`) hold the same change. Before the next `terraform apply`, import the records: `terraform import 'aws_route53_record.www["A"]' Z06674952Y03E6KTIVEQ3_www.sub50.cl_A` (same for `AAAA`). There is no redirect from www to the apex; both answer 200.
 
 ## Backlog
 No issue numbers yet: `scripts/issue.sh` does not exist in the repo and the fork has issues disabled. Create these in the team tracker:

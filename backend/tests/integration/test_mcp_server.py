@@ -84,8 +84,10 @@ def test_invalid_input_comes_back_as_a_readable_error(tools):
     tools.start_session()
     with pytest.raises(ToolError, match="API respondió 404"):
         tools.cut_lines(["R99"])
-    with pytest.raises(ToolError, match="No pude elegir"):
-        tools.add_datacenter(bus="Narnia", mw=10)
+    with pytest.raises(ToolError, match="No encuentro el lugar 'Narnia'"):
+        tools.add_datacenter(
+            bus="Narnia", mw=10
+        )  # a place that is not a bus of the session goes to /grids/places
     with pytest.raises(ToolError, match="API respondió 409"):
         tools.remove_element("R1")  # base elements are never deleted
 

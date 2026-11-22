@@ -24,7 +24,7 @@ SID=$(curl -s -X POST "$API/sessions" -H 'Content-Type: application/json' \
 curl -s "$API/sessions/$SID" | jq '{revision, point, share_path, expires_at}'
 ```
 
-The body is optional; `{"point": "feb2025-1500"}` pins another point. The response carries `share_path: "/?sesion=<sid>"`. The browser opens a session only from `?sesion=<sid>` in the URL and stores the id nowhere else. The server sets no cookie. To join from another machine, use the same `sid`.
+The body is optional; `{"point": "feb2025-1500"}` pins another point. The response carries `share_path: "/?sesion=<sid>"`. The web app does not open a session from `?sesion=<sid>` since #101 (`docs/mapa3.md` section 11); it only joins the session an **Incidentes** run creates. An API client or an MCP client uses the `sid` directly. The server sets no cookie. To join from another machine, use the same `sid`.
 
 ## 3. The session id goes in the path
 
@@ -45,9 +45,10 @@ All paths are under `/api/v1/sessions`. Mutations accept `If-Match: "<revision>"
 | `POST ""` | `create_session` | `{point?, label?}` | session document | 201, 422, 429 |
 | `GET /{sid}` | `get_session` | | session document (`ETag`; `If-None-Match` gives 304) | 200, 304, 404, 409 |
 | `DELETE /{sid}` | `delete_session` | | empty | 204, 404, 409, 429 |
-| `POST /{sid}/reset` | `reset_session` | | `{revision, warnings, balance}` | 200, 404, 409, 412, 429 |
+| `POST /{sid}/reset` | `reset_session` | optional `{scenario: {point?, changes, open_lines, out_buses}}`: the grid becomes that configuration (changes as overrides, `out_buses` out of service, `open_lines` cut, what the session added is dropped); another `point` gives 422 | `{revision, warnings, balance}` | 200, 404, 409, 412, 429 |
 | `GET /{sid}/network` | `get_session_network` | | network view (section 9) | 200, 404, 409 |
 | `POST /{sid}/buses` | `add_bus` | `{name, lat, lon, kv}` | `{id, revision, warnings, balance}` | 201, 404, 409, 412, 422, 429 |
+| `POST /{sid}/substations` | `add_substation` | `{name, lat, lon, kv, connections: [{to, capacity_mw?, x_pu?}] (1-6), load?: {mw, kind}, generator?: {mw, tech, ...}}`. Every `to` is an existing bus of the same `kv`. All or nothing, one revision | `{id, line_ids, load_id, generator_id, coherence, revision, warnings, balance}`; `coherence` lists plausibility notes (capacity far from the neighbours, line over 300 km, MW above the lines) | 201, 404, 409, 412, 422, 429 |
 | `PATCH /{sid}/buses/{element_id}` | `update_bus` | any of `name, kv, lat, lon, load_mw, gen_mw, sync_mw, inertia_mws, in_service` | same | 200, 404, 409, 412, 422, 429 |
 | `DELETE /{sid}/buses/{element_id}` | `delete_bus` | | same | 200, 404, 409, 412, 429 |
 | `POST /{sid}/lines` | `add_line` | `{a, b, kv, capacity_mw, x_pu?, name?}` | same | 201, ... |
@@ -64,6 +65,7 @@ All paths are under `/api/v1/sessions`. Mutations accept `If-Match: "<revision>"
 | `GET /{sid}/state` | `get_cut_state` | | same | 200, 404, 409 |
 | `GET /{sid}/events` | (not an agent tool) | | `text/event-stream` (section 6) | 200, 404, 429 |
 | `POST /{sid}/runs` | `create_run` | the `POST /sim/runs` body (`template, policy, seed, horizon, adversary, capabilities, initial_events, auto_run, stochastic, llm_commander`) | run summary + `session_revision` | 201, 404, 409, 422, 429 |
+| `POST /{sid}/attacks/runs` | `start_incident_run` | `{scenario, policy?, seed?, uncertainty?, stochastic?, adversary?}` (`scenario` from `GET /api/v1/attacks/catalog`; `attack-sim.md` section 3.1). The session's `point` must equal the incident's `operating_point`, else 422 with that point in `valid` | run summary + `session_revision` | 201, 404, 409, 422, 429 |
 | `GET /{sid}/runs/{rid}` | `get_run` | | `{run, latest, resources, series}` | 200, 404, 409 |
 | `POST /{sid}/runs/{rid}/events` | `inject_run_event` | `{type, target, params?, cause?}` | resolved target, `run`, `session_revision` | 200, 404, 409, 422, 429 |
 | `POST /{sid}/runs/{rid}/step` | `step_run` | `{cycles: 1-72}` | `{run, snapshots, session_revision}` | 200, 404, 409, 422, 429 |
@@ -165,7 +167,7 @@ The SSE route is not an agent tool (it is unmarked in the OpenAPI spec). An agen
 | Other edits and run commands | 60 per minute per session | `CASCADASEN_RATE_WRITES_PER_MINUTE` |
 | SSE streams | 5 per session and client IP | `CASCADASEN_SSE_PER_SESSION_IP` |
 | Requests in progress per session | 1 per backend process; up to 10 others wait up to 10 s, then 409 with `Retry-After: 1`; an eleventh waiter gets 409 at once | `CASCADASEN_SESSION_LOCK_TIMEOUT_S`, `CASCADASEN_SESSION_LOCK_MAX_WAITERS` |
-| Added elements | 50 per session (buses + lines + loads + generators), 3000 MW each, 5000 MW of added load plus generation plus the MW changed by bus overrides; bus `load_mw`/`gen_mw`/`sync_mw` at most the base value + 3000 MW, `inertia_mws` at most 10 s × `sync_mw` | `domain/cascade/overlay.py` |
+| Added elements | 80 per session (buses + lines + loads + generators; each counts 1, so a substation with 6 lines and a load counts 8), 3000 MW each, 5000 MW of added load plus generation plus the MW changed by bus overrides; bus `load_mw`/`gen_mw`/`sync_mw` at most the base value + 3000 MW, `inertia_mws` at most 10 s × `sync_mw` | `domain/cascade/overlay.py` |
 | Lines per cut call | 1 to 3 | |
 | Runs per session | 20 (422 above) | |
 | Session lifetime | 24 h after the last change | `CASCADASEN_SESSION_TTL_HOURS` |

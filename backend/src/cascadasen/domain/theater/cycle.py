@@ -15,7 +15,7 @@ Everything is appended to a hash-chained audit log. A run is reproducible from i
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any
+from typing import Any, cast
 
 from cascadasen.domain.agents.adversary import AdversaryAgent
 from cascadasen.domain.agents.auditor import AuditorAgent, CycleRecord
@@ -24,6 +24,11 @@ from cascadasen.domain.agents.commander import CommanderAgent
 from cascadasen.domain.agents.isr import ISRAgent
 from cascadasen.domain.agents.logistics import LogisticsAgent
 from cascadasen.domain.agents.operations import OperationsAgent
+from cascadasen.domain.agents.propagation import (
+    PropagatingAdversary,
+    PropagationParamError,
+    propagation_params,
+)
 from cascadasen.domain.agents.stabilization import StabilizationAgent
 from cascadasen.domain.ports import CommanderAdvisor
 from cascadasen.domain.simulation.grid import Physics
@@ -44,6 +49,7 @@ from cascadasen.domain.theater.execution import (
     UnknownEventTargetError,
 )
 from cascadasen.domain.theater.grid import TheaterGrid
+from cascadasen.domain.theater.incident import incident_card, incident_public
 from cascadasen.domain.theater.resources import Ledger
 from cascadasen.domain.theater.rng import new_seed, rng_for
 from cascadasen.domain.theater.state import AreaDigital, ObservedState, RealState
@@ -76,14 +82,22 @@ class RunFinishedError(RuntimeError):
 
 @dataclass(frozen=True)
 class AdversaryConfig:
+    """Seeded abstract adversary of a run: effects from the catalog only, a budget, optionally adaptive
+    (docs/strategy.md 5.1; it never picks a technique, `cyber.md` section 8)."""
+
     enabled: bool = False
     objective: str = "reduce_observability"
     budget: float = 8.0
     adaptive: bool = True
+    mode: str = "exp3"  # exp3 | propagation (the Ciberataque scenario, docs/attack-sim.md 3.2)
+    propagation: dict[str, float] | None = None  # overrides of theater.yaml → cyber_attack
 
 
 @dataclass(frozen=True)
 class RunConfig:
+    """Inputs that, with the injected events, decide a run. Frozen so `Simulation.recipe()` can store it and a
+    replay can override one field at a time."""
+
     template: str = "open_field"
     policy: str = "C"
     seed: int | None = None  # None: a fresh random seed, recorded in the recipe
@@ -125,6 +139,10 @@ class RunConfig:
 
 @dataclass
 class Simulation:
+    """One run of the cyber-physical theatre, advanced one cycle at a time (docs/strategy.md section 7).
+    Why: a run is fully determined by `config` (seed included) plus the events and actions injected, so
+    `recipe()` is enough to rebuild it or replay it with another policy."""
+
     world: TheaterWorld
     config: RunConfig
     physics: Physics = field(default_factory=Physics.load)
@@ -133,6 +151,15 @@ class Simulation:
     light: bool = False  # campaigns: skip the per-cycle map frame (no effect on the run itself)
 
     def __post_init__(self) -> None:
+        """Build the whole run from `config` and the world, without simulating any cycle.
+
+        Order: a fresh seed when none was given (stored in `config`, so the recipe replays the run), config
+        validation, template and horizon, the adversary config (the request's, else the template's), the
+        operating point (`RunInputError` when unknown) and its network, the real state, the resource ledger
+        (catalog resources plus the requested capabilities), the agents, and last the scheduled events (scenario
+        first, then the user's), each checked by `_check_event` and indexed by cycle. All randomness comes from
+        named streams of the seed (`Chance`, `rng_for`), so the same config and seed give the same run. Writes
+        the first audit entry, `run_created`. `light` only skips the per-cycle map frame."""
         if self.config.seed is None:
             self.config = replace(self.config, seed=new_seed())
         cfg, conf = self.cfg, self.config
@@ -144,8 +171,20 @@ class Simulation:
             objective=self.template.adversary.get("objective", "reduce_observability"),
             budget=float(self.template.adversary.get("budget", cfg.adversary["budget"])),
             adaptive=bool(self.template.adversary.get("adaptive", True)),
+            mode=self.template.adversary.get("mode", "exp3"),
         )
         self.adversary_config = adv
+        self.propagation = (
+            propagation_params(cfg.cyber_attack, adv.propagation)
+            if adv.enabled and adv.mode == "propagation"
+            else None
+        )
+        # a propagating intrusion lasts hours: far crews are still worth sending
+        crews_cfg = (
+            {**cfg.crews, "max_eta_cycles": int(self.propagation["crew_max_eta_cycles"])}
+            if self.propagation and cfg.crews
+            else cfg.crews
+        )
         self.operating_point = conf.operating_point or self.template.operating_point
         if self.operating_point not in self.world.points():
             raise RunInputError(
@@ -162,7 +201,9 @@ class Simulation:
         self.ledger = Ledger({**cfg.resources, **dict(conf.capabilities)})
         self.defense_areas = net.defense_areas()
         self.chance = (
-            Chance.for_run(conf.seed, cfg.stochastic) if conf.stochastic and cfg.stochastic else None
+            Chance.for_run(cast(int, conf.seed), cfg.stochastic)
+            if conf.stochastic and cfg.stochastic
+            else None
         )
         self.executor = Executor(net, cfg, self.defense_areas, self.chance)
         self.ex = ExecutionState()
@@ -178,7 +219,7 @@ class Simulation:
             CrewRoster.build(
                 net,
                 int(self.ledger.capacity.get("field_crews", 0)),
-                cfg.crews,
+                crews_cfg,
                 cfg.clock["cycle_minutes"],
                 rng=self.chance.field if self.chance else None,
             )
@@ -186,11 +227,20 @@ class Simulation:
             else None
         )
         self.logistics = LogisticsAgent(
-            net, self.crew_actions, cfg.crews.get("max_eta_cycles"), self.defense_areas
+            net, self.crew_actions, crews_cfg.get("max_eta_cycles"), self.defense_areas
         )
         self.auditor = AuditorAgent()
-        self.adversary: AdversaryAgent | None = None
-        if adv.enabled:
+        self.adversary: AdversaryAgent | PropagatingAdversary | None = None
+        self.outcome: str | None = None  # propagation runs: attack | defense once one side wins
+        if self.propagation:
+            self.adversary = PropagatingAdversary(
+                neighbours={
+                    a: sorted({c.b if c.a == a else c.a for c in net.incident(a)}) for a in net.order
+                },
+                params=self.propagation,
+                rng=rng_for(cast(int, conf.seed), "adversary"),
+            )
+        elif adv.enabled:
             self.adversary = AdversaryAgent(
                 targets={
                     "area": list(net.order),
@@ -201,13 +251,13 @@ class Simulation:
                 budget=adv.budget,
                 adaptive=adv.adaptive,
                 plan=list(self.template.adversary.get("plan") or []),
-                rng=rng_for(conf.seed, "adversary"),
+                rng=rng_for(cast(int, conf.seed), "adversary"),
                 catalog=cfg.adversary,
             )
         self.evaluator = Evaluator(
             self.mission.priority_areas, cfg.clock["cycle_minutes"] / 60.0, self.physics.voll_usd_per_kwh
         )
-        self.rng_digital = rng_for(conf.seed, "digital")
+        self.rng_digital = rng_for(cast(int, conf.seed), "digital")
         self.history_real = [self._real_snapshot()]
         self.observations: list[ObservedState] = []
         self.snapshots: list[dict[str, Any]] = []
@@ -266,6 +316,13 @@ class Simulation:
             raise RunInputError("adversary.objective", "objetivo desconocido", list(OBJECTIVES))
         if conf.adversary and not 0 <= conf.adversary.budget <= 50:
             raise RunInputError("adversary.budget", "entre 0 y 50")
+        if conf.adversary and conf.adversary.mode not in ("exp3", "propagation"):
+            raise RunInputError("adversary.mode", "modo desconocido", ["exp3", "propagation"])
+        if conf.adversary and conf.adversary.propagation:
+            try:
+                propagation_params(cfg.cyber_attack, conf.adversary.propagation)
+            except PropagationParamError as exc:
+                raise RunInputError(f"adversary.propagation.{exc.name}", str(exc)) from exc
         for pool, cap in conf.capabilities:
             if pool not in cfg.resources:
                 raise RunInputError("capabilities", f"{pool}: recurso desconocido", sorted(cfg.resources))
@@ -284,7 +341,39 @@ class Simulation:
 
     @property
     def finished(self) -> bool:
-        return self.cycle >= self.horizon
+        return self.cycle >= self.horizon or self.outcome is not None
+
+    def _judge(self) -> None:
+        """Propagation runs end early: the attack wins when the lost share of demand reaches its threshold,
+        the defence when no area is still compromised and every effect the attack caused is repaired."""
+        adv = self.adversary
+        if not isinstance(adv, PropagatingAdversary) or not adv.started:
+            return
+        g = self.real.grid
+        demand = sum(g.load_mw.values())
+        lost = 1 - sum(g.served_mw.values()) / demand if demand else 0.0
+        if lost >= adv.params["attack_win_lost_share"] - 1e-9:
+            self.outcome = "attack"
+        elif not adv.active() and not any(e.source == "adversary" for e in self.real.active_effects()):
+            self.outcome = "defense"  # no intrusion left and every effect it caused repaired
+
+    def _cyber_report(self) -> dict[str, Any] | None:
+        adv = self.adversary
+        if not isinstance(adv, PropagatingAdversary):
+            return None
+        peak = max(
+            (s["cyber"]["counts"]["compromised"] + s["cyber"]["counts"]["struck"] for s in self.snapshots),
+            default=0,
+        )
+        return {
+            "outcome": self.outcome or ("undecided" if self.finished else None),
+            "start_area": adv.start,
+            "params": adv.params,
+            "peak_active_areas": peak,
+            "ever_compromised": sorted(a for a, st in adv.areas.items() if st.state != "clean"),
+            "events": adv.events,
+            "is_assumption": True,
+        }
 
     def inject(
         self, type_: str, target: str, params: dict[str, Any] | None = None, cause: str = "intentional"
@@ -360,6 +449,7 @@ class Simulation:
         }
 
     def step(self, n: int = 1) -> list[dict[str, Any]]:
+        """Run up to `n` cycles and stop at the horizon; returns what each cycle produced (its snapshot)."""
         out = []
         for _ in range(n):
             if self.finished:
@@ -368,6 +458,7 @@ class Simulation:
         return out
 
     def run_to_end(self) -> None:
+        """Run every remaining cycle: campaigns and `auto_run` read the report afterwards, not each cycle."""
         while not self.finished:
             self._cycle()
 
@@ -391,6 +482,7 @@ class Simulation:
             feedback=tuple(self.feedback),
             active=tuple(sorted(self.ex.active)),
             crew_eta=self._crew_eta(),
+            containment=isinstance(self.adversary, PropagatingAdversary),
             **extra,
         )
 
@@ -441,7 +533,9 @@ class Simulation:
                     "bus": bus_id(anchor) if anchor is not None else None,
                     "lon": buses.lon[anchor] if anchor is not None else None,
                     "lat": buses.lat[anchor] if anchor is not None else None,
-                    "target_bus": bus_id(self.network.areas[target].anchor_bus) if target else None,
+                    "target_bus": bus_id(cast(int, self.network.areas[target].anchor_bus))
+                    if target
+                    else None,
                 }
             )
         return out
@@ -487,6 +581,25 @@ class Simulation:
     # ---------------------------------------------------------------- cycle
 
     def _cycle(self) -> dict[str, Any]:
+        """Run one decision cycle and return its snapshot. The steps are ordered because each reads what the
+        previous one wrote.
+
+        0. Let the executor advance the actions already in force and free the resources it releases.
+        1. Events: the ones scheduled for this cycle, the queued injections, background failures (stochastic
+           runs only, from cycle 1) and the adversary's. They hit the real state before anything is observed, so
+           the cycle sees its own events.
+        2. Observe: agents never read the real state. `observe` builds what the digital layer lets through
+           (delay, bias, false alarms) from the real history.
+        3. ISR builds the picture, C2 sets the intent, and the staff (operations, stabilization, logistics)
+           propose courses of action (COA). Duplicates by key keep the highest benefit.
+        4. Validate every COA against the real state and the resources, collect the vetoes of stabilization and
+           logistics, and let C2 decide (with an LLM pick when one is configured). Actions queued by an external
+           agent are approved too, unless C2 already approved the same key.
+        5. Execute the approved COAs one by one. Each approval spends operator attention and is validated again,
+           because earlier actions of this cycle change the state. A failed validation, a stochastic action
+           failure or a missing crew becomes `ActionFeedback`, not an exception.
+        6. Evaluate, audit, let the adversary learn, write the audit log, build the snapshot and advance
+           `self.cycle`."""
         k, real, net = self.cycle, self.real, self.network
         real.cycle = k
         self.ledger.new_cycle(k)
@@ -671,6 +784,7 @@ class Simulation:
         )
         if self.adversary:
             self.adversary.learn(self._adversary_view())
+        self._judge()
 
         decisions_out = [d.as_dict() for d in decisions]
         self.log.append(
@@ -698,6 +812,17 @@ class Simulation:
         snapshot = self._snapshot(
             k, applied, obs, isr_report, intent, coas, decisions, executed, notes, findings, metrics.as_dict()
         )
+        if isinstance(self.adversary, PropagatingAdversary):
+            g = self.real.grid
+            demand = sum(g.load_mw.values())
+            snapshot["cyber"] = {
+                **self.adversary.snapshot(),
+                "outcome": self.outcome,
+                "lost_share": round(1 - sum(g.served_mw.values()) / demand, 4) if demand else 0.0,
+                "people_without_power": round(self._people()),
+                "crews_busy": sum(c["status"] == "busy" for c in self._crews_view()),
+                "events": [e for e in self.adversary.events if e["cycle"] == k],
+            }
         self.snapshots.append(snapshot)
         self.cycle += 1
         return snapshot
@@ -716,6 +841,9 @@ class Simulation:
         findings: list,
         metrics: dict[str, Any],
     ) -> dict[str, Any]:
+        """The record of cycle `k`: real state per area, what supervision showed, the agents' proposals and
+        decisions, what was executed, resources and metrics. Why: the API serves it per cycle
+        (`snapshots`), so a client reads the run from these dicts and never touches the live state."""
         real, net = self.real, self.network
         g = real.grid
         areas = {}
@@ -832,6 +960,7 @@ class Simulation:
                 return None
             keys = tuple(str(x) for x in chosen if str(x) in {o["id"] for o in options})[:capacity]
             self.llm_record[k] = keys
+            assert answer is not None  # `chosen` came from it
             explanation = str(answer.get("explanation", ""))[:2000]
             self.log.append(
                 k, "decide", "c2", "llm_choice", {"chosen": list(keys), "explanation": explanation}
@@ -849,6 +978,8 @@ class Simulation:
         return pick
 
     def recipe(self) -> dict[str, Any]:
+        """Everything that decides the run: config and seed, injected events, recorded LLM picks, external
+        actions and the cycle reached. Why: `RunManager` rebuilds an evicted run and replays from this."""
         return {
             "config": self.config.as_dict(),
             "injected": list(self.injected),
@@ -858,6 +989,8 @@ class Simulation:
         }
 
     def trace(self) -> dict[str, Any]:
+        """The hash-chained audit log with its head, whether the chain verifies, and the recipe. Why: a
+        reader can check that nothing was altered and that a replay reaches the same head."""
         return {
             "head": self.log.head,
             "verified": self.log.verify(),
@@ -866,6 +999,9 @@ class Simulation:
         }
 
     def report(self) -> dict[str, Any]:
+        """Indicators, consequence card, coordination findings, adversary summary and after-action moments
+        of the run so far (and the `incident` block when the template is a documented incident). Read only
+        and valid on a running run. Why: the API and the MCP `run_report` read this one dict."""
         ind = self.evaluator.report(
             self.mission.continuity_threshold, self.mission.observability_threshold, self.real.worst_level
         )
@@ -881,7 +1017,7 @@ class Simulation:
         rec = ind.get("recoverability_cycles")
         if rec is not None and self.evaluator.onset is not None:
             moments.append({"cycle": self.evaluator.onset + rec, "rationale_key": "aar_recovered"})
-        return {
+        out = {
             "run": {
                 "template": self.template.id,
                 "question_key": self.template.question_key,
@@ -913,6 +1049,24 @@ class Simulation:
                 "spent": self.adversary.spent,
                 "strategy_mix": self.adversary.strategy_mix(),
             },
-            "after_action": sorted(moments, key=lambda m: m["cycle"]),
+            "cyber_attack": self._cyber_report(),
+            "after_action": sorted(moments, key=lambda m: cast(int, m["cycle"])),
             "trace_head": self.log.head,
         }
+        inc = self.cfg.incidents.get(self.template.id)
+        if inc:
+            out["incident"] = {
+                **incident_public(
+                    inc,
+                    len(self.template.scenario_events),
+                    self.horizon,
+                    self.operating_point,
+                ),
+                "consequence_card": incident_card(
+                    inc,
+                    self.evaluator.series,
+                    self.real.worst_level,
+                    [s["transient"]["summary"] for s in self.snapshots if s.get("transient")],
+                ),
+            }
+        return out

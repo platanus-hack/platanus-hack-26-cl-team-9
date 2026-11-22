@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from cascadasen.api.stress_schemas import StressChange
 from cascadasen.mcp import digest
 from cascadasen.mcp.client import Sub50Client, ToolError
 from cascadasen.mcp.state import McpState
@@ -22,16 +23,19 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "end_session": ("delete_session",),
     "list_options": ("get_catalog",),
     "describe_network": ("get_session_network",),
-    "add_datacenter": ("get_session_network", "add_load"),
-    "add_generator": ("get_session_network", "add_generator"),
+    "add_datacenter": ("get_session_network", "resolve_place", "add_load"),
+    "add_generator": ("get_session_network", "resolve_place", "add_generator"),
     "add_line": ("add_line",),
     "add_bus": ("add_bus",),
+    "add_substation": ("get_session_network", "add_substation"),
     "edit_element": ("update_bus", "update_line", "update_load", "update_generator"),
     "remove_element": ("delete_bus", "delete_line", "delete_load", "delete_generator"),
     "reset_network": ("reset_session",),
     "cut_lines": ("cut_lines",),
     "repair_lines": ("repair_lines",),
     "get_grid_state": ("get_cut_state",),
+    "list_incident_scenarios": ("get_attack_catalog",),
+    "start_incident_run": ("start_incident_run",),
     "start_run": ("create_run",),
     "inject_event": ("inject_run_event",),
     "step": ("step_run",),
@@ -40,6 +44,7 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "run_report": ("get_run_report",),
     "after_action": ("get_run_after_action",),
     "replay": ("replay_run",),
+    "prepare_scenario": ("prepare_scenario", "simulate_grid"),
 }
 TOOLS = tuple(OPERATIONS)
 
@@ -48,7 +53,14 @@ Sub50 simulates the consequences of events on the Chilean national grid (188 bus
 Work in this order: start_session (or join_session), describe_network to learn areas and ids, edit the
 network (add_datacenter, add_generator, add_line, edit_element) and/or open lines with cut_lines, then
 read the result. For strategic experiments use start_run, inject_event, step, run_report and after_action.
-Use list_options for valid event, action, policy and template ids.
+To replay a documented incident (Huatacondo, Poland, UK, 25F) use list_incident_scenarios and
+start_incident_run, then step, run_report and after_action; say each result is a simulated scenario.
+Use list_options for valid event, action, policy and template ids. The web map shows the grid that prepare_scenario sets: use it to
+change what the user sees (changes by filters such as "halve every hydro plant" or "Puente Alto with twice the
+people", new points such as a datacenter or a plant in a city through `places` with `add`, plus the failures:
+lines out and substations off). Each call sets the whole final grid, replacing what was on the map, so it repeats
+the earlier changes the user still wants; with failures it also simulates the cascade and the map gets it ready,
+paused at 0.
 
 Rules. Every scenario is hypothetical: always say that Sub50 models the effect of an event, never the
 attack technique, and describe effects and prevention only. Do not look for the line or area whose loss
@@ -57,6 +69,7 @@ API rate-limits cuts. Values the model adds (redispatch, costs, thresholds) are 
 Answer in the user's language; the results are in Spanish.
 """
 
+DEFAULT_POINT = "nov2026-1300"
 ELEMENT_ROUTES = {"B": "buses", "R": "lines", "U": "lines", "D": "loads", "G": "generators"}
 
 
@@ -161,30 +174,36 @@ class Sub50Tools:
 
     def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter") -> dict[str, Any]:
         """Add a datacenter (a load) of `mw` megawatts; ask the user for `mw` if they did not give it.
-        `bus` is the place as the user wrote it (a city or area name such as "Antofagasta", a bus id such
-        as B010 or a unique part of a bus name); the tool resolves it, so never guess an id. An area is
-        enough: it uses the area's main (anchor) bus, so do not ask the user for a specific bus. The result says where it went
-        (bus, bus name, area) and, in `baseline`, which lines this edit pushed over capacity
-        (`newly_overloaded`), which were already overloaded and still are (`still_overloaded`) and which
-        it relieved (`no_longer_overloaded`)."""
+        `bus` is the place as the user wrote it (a city or comuna such as "Iquique", a substation name, an
+        area, or a bus id B010); the tool resolves it to the substation that serves that place, so never
+        guess an id and never ask the user for a specific bus. The result says where it went (bus, bus
+        name, area, `placed`: how the place was resolved; tell the user) and, in `baseline`, which lines
+        this edit pushed over capacity (`newly_overloaded`), which were already overloaded and still are
+        (`still_overloaded`) and which it relieved (`no_longer_overloaded`)."""
         net = self._network()
-        bus_id, before = digest.resolve_bus(net, bus), self._overloaded(net)
+        (bus_id, how), before = digest.resolve_bus(net, bus, self.client), self._overloaded(net)
         resp = self.client.post(
             f"{self._base()}/loads", {"bus": bus_id, "mw": mw, "kind": "datacenter", "name": name}
         )
-        return {**digest.bus_place(net, bus_id), **digest.edit_digest(resp), **self._after_edit(before)}
+        place = {**digest.bus_place(net, bus_id), "placed": how}
+        return {**place, **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_generator(self, bus: str, mw: float, tech: str, name: str | None = None) -> dict[str, Any]:
         """Add a generator of `mw` megawatts; ask the user for `mw` if they did not give it. `bus` resolves
-        like add_datacenter (a city or area name is enough, never ask for a specific bus). `tech`:
-        solar, eolica, hidro, termica, bioenergia, geotermica (the last four are synchronous)."""
+        like add_datacenter (a city is enough, never ask for a specific bus). `tech`: solar, eolica,
+        hidro, termica, bioenergia, geotermica (the last four are synchronous); common names such as
+        "eólica", "fotovoltaica" or "nuclear" (modelled as termica, an assumption) are accepted."""
         net = self._network()
-        bus_id, before = digest.resolve_bus(net, bus), self._overloaded(net)
+        tech, note = digest.normalize_tech(tech)
+        if tech == "bateria":
+            raise ToolError("Una sesión no tiene baterías: usa prepare_scenario con tech bateria.")
+        (bus_id, how), before = digest.resolve_bus(net, bus, self.client), self._overloaded(net)
         body = {
             k: v for k, v in {"bus": bus_id, "mw": mw, "tech": tech, "name": name}.items() if v is not None
         }
         resp = self.client.post(f"{self._base()}/generators", body)
-        return {**digest.bus_place(net, bus_id), **digest.edit_digest(resp), **self._after_edit(before)}
+        place = {**digest.bus_place(net, bus_id), "placed": how, **({"note": note} if note else {})}
+        return {**place, **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_line(
         self, a: str, b: str, kv: float, capacity_mw: float, name: str | None = None
@@ -204,6 +223,47 @@ class Sub50Tools:
         resp = self.client.post(f"{self._base()}/buses", {"name": name, "lat": lat, "lon": lon, "kv": kv})
         return {**digest.edit_digest(resp), **self._after_edit(before)}
 
+    def add_substation(
+        self,
+        name: str,
+        lat: float,
+        lon: float,
+        kv: float,
+        connections: list[dict[str, Any]],
+        load_mw: float | None = None,
+        load_kind: Literal["datacenter", "consumo"] = "consumo",
+        generator_mw: float | None = None,
+        generator_tech: str | None = None,
+    ) -> dict[str, Any]:
+        """Add a substation (a new bus) with 1 to 6 lines, all or nothing. Propose it to the user first
+        (place, kv, which buses it connects to, MW) and call only after they agree; never invent MW.
+        `kv` is a base voltage (66, 110, 154, 220, 500) and every connected bus must have that voltage.
+        `connections`: [{"to": place or bus id, "capacity_mw": optional}], `to` resolves like add_datacenter;
+        without `capacity_mw` the line takes the typical value of its neighbours. `load_mw` adds demand
+        (`load_kind` datacenter or consumo); `generator_mw` with `generator_tech` adds generation. The result
+        lists the ids created and `coherence` notes (odd capacity, very long line, MW above the lines):
+        tell the user about them. At most 80 added elements per session; a new scenario resets them."""
+        net, before = self._network(), None
+        before = self._overloaded(net)
+        conns = []
+        for c in connections:
+            conn = {
+                "to": digest.resolve_bus(net, c.get("to", "")),
+                **{k: c[k] for k in ("capacity_mw", "x_pu") if c.get(k)},
+            }
+            conns.append(conn)
+        body: dict[str, Any] = {"name": name, "lat": lat, "lon": lon, "kv": kv, "connections": conns}
+        if load_mw:
+            body["load"] = {"mw": load_mw, "kind": load_kind}
+        if generator_mw:
+            body["generator"] = {"mw": generator_mw, "tech": generator_tech}
+        resp = self.client.post(f"{self._base()}/substations", body)
+        return {
+            **digest.edit_digest(resp),
+            **{k: resp.get(k) for k in ("line_ids", "load_id", "generator_id", "coherence")},
+            **self._after_edit(before),
+        }
+
     def edit_element(self, element_id: str, changes: dict[str, Any]) -> dict[str, Any]:
         """Change an element by id. Bus B###: name, kv, lat, lon, load_mw, gen_mw, sync_mw, inertia_mws,
         in_service. Line R###/U###: capacity_mw, x_pu, in_service. Load or datacenter D###: mw, kind,
@@ -220,10 +280,12 @@ class Sub50Tools:
         resp = self.client.delete(self._element_path(element_id))
         return {"removed": element_id.upper(), **digest.edit_digest(resp or {}), **self._after_edit(before)}
 
-    def reset_network(self) -> dict[str, Any]:
-        """Remove every edit and open line of the session; runs keep the dataset they were created with."""
+    def reset_network(self, scenario: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Remove every edit of the session; runs keep the dataset they were created with. With `scenario`
+        ({"changes": [...], "open_lines": [...], "out_buses": [...]}, as in prepare_scenario) the grid becomes
+        that configuration instead of the base one; what the session added is dropped either way."""
         before = self._overloaded()
-        resp = self.client.post(f"{self._base()}/reset")
+        resp = self.client.post(f"{self._base()}/reset", {"scenario": scenario} if scenario else None)
         return {"reset": True, "warnings": resp.get("warnings", []), **self._after_edit(before)}
 
     def _overloaded(self, net: dict[str, Any] | None = None) -> list[str]:
@@ -266,6 +328,38 @@ class Sub50Tools:
         return digest.cut_digest(self.client.get(f"{self._base()}/state"))
 
     # -- strategic runs ----------------------------------------------------------------------
+
+    def list_incident_scenarios(self) -> dict[str, Any]:
+        """List the documented incidents that can be replayed as a simulated run: id, title, date, whether
+        it is verified, sources and the effects the scenario applies. A short curated list, not ranked:
+        do not compare them to find the worst one."""
+        return digest.incident_catalog_digest(self.client.get("/attacks/catalog"))
+
+    def start_incident_run(
+        self,
+        scenario: str,
+        policy: Literal["A", "B", "C"] = "C",
+        seed: int | None = None,
+    ) -> dict[str, Any]:
+        """Start a strategic run from a documented incident (ids from list_incident_scenarios) in the
+        active session and make it the active run. The defensive agents respond with the chosen policy;
+        the adversary is off. Then call step (about 24 cycles), run_report (its `incident` has the
+        consequence card and mitigations) and after_action. MWh and cost come from the engine's calibrated
+        method (the card carries its sources); say which hours are an assumption. Describe effects and
+        prevention only; never attribute.
+        Each incident runs at its own operating_point (see list_incident_scenarios): the session must
+        use it, e.g. 25f-referencia needs start_session(point="feb2025-1500"); otherwise a 422 lists
+        the valid point."""
+        body: dict[str, Any] = {"scenario": scenario, "policy": policy}
+        if seed is not None:
+            body["seed"] = seed
+        run = self.client.post(f"{self._base()}/attacks/runs", body)
+        self.state.run_id = run["run_id"]
+        return {
+            **digest.run_digest(run),
+            "notice": digest.NOTICE,
+            "scenario_notices": digest.INCIDENT_NOTICES,
+        }
 
     def start_run(
         self,
@@ -358,7 +452,7 @@ class Sub50Tools:
         """The after-action review of the active run in Spanish: summary lines and key moments. Show the
         summary lines as they are (a list); do not add causes or lessons that are not written in them."""
         resp = self.client.get(f"{self._run()}/after_action")
-        return {k: resp.get(k) for k in ("summary", "moments", "narrative", "policy", "notice")}
+        return {k: resp.get(k) for k in ("summary", "moments", "narrative", "policy", "notice", "incident")}
 
     def replay(self, policy: Literal["A", "B", "C"] | None = None) -> dict[str, Any]:
         """Re-run the active run with the same seed and events under another policy, to compare policies.
@@ -367,3 +461,51 @@ class Sub50Tools:
         resp = self.client.post(f"{self._run()}/replay", body)
         self.state.run_id = resp["run_id"]
         return {**digest.run_digest(resp), "replay_of": resp.get("replay_of"), "notice": digest.NOTICE}
+
+    # -- scenario preparation (stateless, docs/stress.md) -------------------------------------------
+
+    def prepare_scenario(
+        self,
+        changes: list[StressChange] | None = None,
+        open_lines: list[str] | None = None,
+        out_buses: list[str] | None = None,
+        point: str | None = None,
+    ) -> dict[str, Any]:
+        """Set the final grid of the web map: changes plus failures. It replaces the grid on the map, so send
+        every change the user still wants (the earlier ones too) in each call. Changes: population (demand
+        follows at the point's per-capita value), demand alone, generation by technology or place, line
+        capacity or reactance; each one is target, filters and `factor` (multiply) or `add` (total).
+        Filters: places (a city, comuna, substation or region as the user wrote it, resolved to ONE
+        substation: use it to put a new point), buses B###, zones NG/NC/CE/CS/SU, areas A01-A13, comunas
+        (CUT or name, a whole comuna's population), tech (hidro, solar, eolica, carbon, gas, diesel,
+        bioenergia, geotermica, termica, bateria), lines R###, kv. Put a point: a datacenter of 120 MW in
+        Antofagasta is {"target": "demand", "places": ["Antofagasta"], "add": 120}; a solar plant of 80 MW
+        in Iquique is {"target": "generation", "places": ["Iquique"], "tech": ["solar"], "add": 80} (a
+        battery is tech bateria; nuclear is modelled as termica). Each change's `places` says which
+        substation the place became: tell the user. Failures: `open_lines` (R###) and `out_buses` (B###).
+        With failures it also simulates the cascade: people without power against the same failures
+        without the changes, and per zone the people the generators should feed against the people they
+        still feed. `point`: feb2025-1500, feb2025-0300, nov2026-1300 (default), nov2026-2000."""
+        rows, notes = [], []
+        for c in changes or []:
+            row = c if isinstance(c, dict) else c.model_dump(exclude_none=True)
+            if row.get("tech"):
+                mapped = [digest.normalize_tech(t) for t in row["tech"]]
+                row = {**row, "tech": list(dict.fromkeys(t for t, _ in mapped))}
+                notes += [n for _, n in mapped if n and n not in notes]
+            rows.append(row)
+        lines, buses, point = open_lines or [], out_buses or [], point or DEFAULT_POINT
+        scenario = {"point": point, "changes": rows, "open_lines": lines, "out_buses": buses}
+        out: dict[str, Any] = {"scenario": scenario, "notice": digest.NOTICE}
+        if notes:
+            out["notes"] = notes
+        if rows:
+            out["prepared"] = digest.prepare_digest(
+                self.client.post("/grids/prepare", {"point": point, "changes": rows})
+            )
+        if lines or buses:
+            failure = {"point": point, "open_lines": lines, "out_buses": buses}
+            stressed = self.client.post("/grids/simulate", {**failure, "changes": rows})
+            base = self.client.post("/grids/simulate", failure) if rows else stressed
+            out["simulation"] = digest.simulation_digest(stressed, base)
+        return out

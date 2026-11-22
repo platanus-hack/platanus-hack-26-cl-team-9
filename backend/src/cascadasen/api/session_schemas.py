@@ -13,9 +13,9 @@ from cascadasen.api.simulation_schemas import TheaterNetworkOut
 Tech = Literal["hidro", "termica", "bioenergia", "geotermica", "solar", "eolica"]
 LoadKind = Literal["datacenter", "consumo"]
 
-_MW = {"gt": 0, "le": 3000}
-_LAT = {"ge": -56, "le": -17}
-_LON = {"ge": -76, "le": -66}
+_MW: dict[str, Any] = {"gt": 0, "le": 3000}
+_LAT: dict[str, Any] = {"ge": -56, "le": -17}
+_LON: dict[str, Any] = {"ge": -76, "le": -66}
 _BUS_MW_MAX = 20000  # coarse schema guard; the overlay checks base value + MAX_ELEMENT_MW
 
 
@@ -222,6 +222,88 @@ class SessionWarningOut(AgentOut):
     message: str = Field(description="Spanish message.")
 
 
+class SubstationLoad(_Body):
+    mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 3000).", examples=[80])
+    kind: LoadKind = Field(description="datacenter or consumo.", examples=["datacenter"])
+
+
+class SubstationGenerator(_Body):
+    mw: float = Field(**_MW, description="Generation in MW (0 < mw ≤ 3000).", examples=[150])
+    tech: Tech = Field(
+        description="Technology; hidro, termica, bioenergia, geotermica are synchronous.", examples=["solar"]
+    )
+    synchronous: bool | None = Field(None, description="Synchronous override.", examples=[False])
+    inertia_h: float | None = Field(None, gt=0, le=10, description="Inertia constant H in s.", examples=[4.0])
+
+
+class SubstationConnection(_Body):
+    to: str = Field(
+        description="Existing bus id (B###) of the same voltage as the substation.", examples=["B010"]
+    )
+    capacity_mw: float | None = Field(
+        None,
+        gt=0,
+        le=5000,
+        description="Line capacity in MW. Default: median of the lines at that bus.",
+        examples=[300],
+    )
+    x_pu: float | None = Field(
+        None, gt=0, le=1.0, description="Reactance in p.u. Default from length and kv.", examples=[0.02]
+    )
+
+
+class SubstationIn(_Body):
+    name: str = Field(
+        max_length=80, description="Display name of the substation.", examples=["SE Norte Nueva"]
+    )
+    lat: float = Field(**_LAT, description="Latitude in degrees (continental Chile).", examples=[-23.7])
+    lon: float = Field(**_LON, description="Longitude in degrees (continental Chile).", examples=[-70.35])
+    kv: float = Field(
+        gt=0,
+        description="Voltage in kV, a base voltage. Every connection must be to a bus of this voltage.",
+        examples=[220],
+    )
+    connections: list[SubstationConnection] = Field(
+        min_length=1, max_length=6, description="1 to 6 lines from the new bus to existing buses."
+    )
+    load: SubstationLoad | None = Field(None, description="Optional demand on the new bus.")
+    generator: SubstationGenerator | None = Field(None, description="Optional generator on the new bus.")
+
+
+class CoherenceNote(AgentOut):
+    """A plausibility note about a substation (not an error)."""
+
+    code: str = Field(
+        description="capacity_out_of_range, long_connection, load_over_connections or generation_over_connections."
+    )
+    message: str = Field(description="Spanish message.")
+    line: str | None = Field(None, description="The line or connection the note is about.")
+
+
+class ScenarioIn(_Body):
+    point: str | None = Field(
+        None, description="Must be the session's point, if sent.", examples=["nov2026-1300"]
+    )
+    changes: list[dict[str, Any]] = Field(
+        default_factory=list, max_length=20, description="Changes of prepare_scenario (docs/stress.md)."
+    )
+    open_lines: list[str] = Field(
+        default_factory=list, max_length=60, description="Base lines (R###) left open.", examples=[["R239"]]
+    )
+    out_buses: list[str] = Field(
+        default_factory=list,
+        max_length=60,
+        description="Base buses (B###) out of service.",
+        examples=[["B062"]],
+    )
+
+
+class ResetIn(_Body):
+    scenario: ScenarioIn | None = Field(
+        None, description="Grid configuration to load. Without it the network returns to the base dataset."
+    )
+
+
 class EditOut(AgentOut):
     """Result of an edit: element id, revisions, warnings and redispatch."""
 
@@ -256,3 +338,14 @@ class CutStateOut(AgentOut):
         description="Cascade timeline with the open lines (the baseline when none)."
     )
     notice: str = Field(description="Every scenario is hypothetical and simulated.")
+
+
+class SubstationOut(EditOut):
+    """Result of add_substation: every id created and the coherence notes."""
+
+    line_ids: list[str] = Field(description="Ids of the lines created, in the order of `connections`.")
+    load_id: str | None = Field(None, description="Id of the load created, if any.")
+    generator_id: str | None = Field(None, description="Id of the generator created, if any.")
+    coherence: list[CoherenceNote] = Field(
+        description="Plausibility notes; empty when everything looks coherent."
+    )

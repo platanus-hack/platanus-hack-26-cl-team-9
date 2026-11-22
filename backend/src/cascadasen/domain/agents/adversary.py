@@ -91,8 +91,8 @@ class AdversaryAgent:
             return []
         probs = self._probs()
         r, acc, arm = self.rng.random(), 0.0, len(probs) - 1
-        for i, p in enumerate(probs):
-            acc += p
+        for i, prob in enumerate(probs):
+            acc += prob
             if r <= acc:
                 arm = i
                 break

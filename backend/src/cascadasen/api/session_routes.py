@@ -9,7 +9,7 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -33,9 +33,12 @@ from cascadasen.api.session_schemas import (
     LoadIn,
     LoadPatch,
     RepairIn,
+    ResetIn,
     SessionCreate,
     SessionDocOut,
     SessionNetworkOut,
+    SubstationIn,
+    SubstationOut,
 )
 from cascadasen.api.simulation_routes import get_simulation, run_call
 from cascadasen.api.simulation_schemas import (
@@ -286,7 +289,10 @@ def delete_session(request: Request, sid: Sid, svc: Sessions) -> Response:
     operation_id="reset_session",
     summary="Drop every network edit of a session",
     description="Replaces the overlay with an empty one, so the network is the base dataset again. "
-    "Runs keep the dataset they were created with; the sandbox cut keeps the lines that still exist. "
+    "With a body {scenario: {point?, changes, open_lines, out_buses}} the network becomes that grid "
+    "configuration instead (changes as overrides, failed buses out of service, open lines cut); a scenario of "
+    "another point is 422. Runs keep the dataset they were created with; without a scenario the sandbox cut "
+    "keeps the lines that still exist. "
     "Bumps revision and dataset_revision; the ETag is the dataset_revision.",
     responses=ok(EditOut) | WRITE_ERRORS,
     openapi_extra=AGENT,
@@ -296,12 +302,14 @@ def reset_session(
     response: Response,
     sid: Sid,
     svc: Sessions,
+    body: ResetIn | None = None,
     if_match: IfMatch = None,
     agent: Agent = "anon",
 ) -> dict[str, Any]:
     limit(request, "write", sid)
+    scenario = body.scenario.model_dump() if body and body.scenario else None
     with serial(request, sid):
-        out = session_call(svc.reset, sid, agent, if_revision(if_match))
+        out = session_call(svc.reset, sid, agent, if_revision(if_match), scenario)
     etag(response, out["dataset_revision"])
     return out
 
@@ -368,7 +376,7 @@ def _element_routes(
         agent: Agent = "anon",
     ) -> dict[str, Any]:
         limit(request, "write", sid)
-        fields = body.model_dump(exclude_unset=True)
+        fields = cast(BaseModel, body).model_dump(exclude_unset=True)
         with serial(request, sid):
             out = session_call(svc.add, sid, kind, fields, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
@@ -394,7 +402,7 @@ def _element_routes(
         agent: Agent = "anon",
     ) -> dict[str, Any]:
         limit(request, "write", sid)
-        fields = body.model_dump(exclude_unset=True)
+        fields = cast(BaseModel, body).model_dump(exclude_unset=True)
         with serial(request, sid):
             out = session_call(svc.patch, sid, kind, element_id, fields, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
@@ -471,6 +479,39 @@ _element_routes(
     "and add inertia (H default 4 s, an assumption).",
     "Changes mw, tech, synchronous, inertia_h, name or in_service of a session generator (G###).",
 )
+
+
+@router.post(
+    "/{sid}/substations",
+    status_code=201,
+    tags=["session-network"],
+    operation_id="add_substation",
+    summary="Add a substation with its lines, all or nothing",
+    description="Adds a bus (B###), 1 to 6 lines (U###) from it to existing buses of the same voltage, and "
+    "optionally a load (D###) and a generator (G###) on it, in one write. If any part is invalid nothing is "
+    "saved. capacity_mw defaults to the median of the lines at the other end. Returns the ids, the usual "
+    "warnings and balance, and `coherence`: plausibility notes (capacity far from the neighbours, a line "
+    "over 300 km, load or generation above the capacity of the lines). Counts 1 + lines + load + generator "
+    "against the 80 added elements of the session. Bumps revision and dataset_revision (the ETag).",
+    responses=ok(SubstationOut, 201) | WRITE_ERRORS,
+    openapi_extra=AGENT,
+)
+def add_substation(
+    request: Request,
+    response: Response,
+    sid: Sid,
+    svc: Sessions,
+    body: SubstationIn,
+    if_match: IfMatch = None,
+    agent: Agent = "anon",
+) -> dict[str, Any]:
+    limit(request, "write", sid)
+    with serial(request, sid):
+        out = session_call(
+            svc.add_substation, sid, body.model_dump(exclude_none=True), agent, if_revision(if_match)
+        )
+    etag(response, out["dataset_revision"])
+    return out
 
 
 # ------------------------------------------------------------------ sandbox

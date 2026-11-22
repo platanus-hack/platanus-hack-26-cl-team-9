@@ -45,10 +45,32 @@ def test_preventive_policy_pays_in_unnecessary_actions(reports):
     assert wrong["B"] > wrong["A"] and wrong["B"] > wrong["C"]
 
 
-def test_adaptive_coordination_keeps_most_of_the_mission(reports):
-    """On the mapa 3 network with crews on the map, adaptive coordination keeps the most continuity."""
-    mc = {p: r["indicators"]["mission_continuity"] for p, r in reports.items()}
-    assert mc["C"] > mc["A"] and mc["C"] > mc["B"]
+def test_adaptive_coordination_keeps_most_of_the_mission_across_seeds():
+    """On the mapa 3 network with crews on the map, adaptive coordination keeps the most continuity on average.
+
+    Checked over 12 seeds, not one (issue #90). The single-seed ordering was fragile: even before #90, C had the best
+    continuity in only 7 of 12 seeds. With the re-split fix (a sub-island no longer fires an EDAC step twice), policy
+    A's seed-7 cascade sheds 123 MW less, A later restores A08, A09 and A11 in full, and A passes C at seed 7
+    (0.951 vs 0.943). Over seeds 1-12 C still has the highest mean continuity (0.942 vs A 0.934 and B 0.936)."""
+    world = ProcessedWorld(PROCESSED)
+    mean = {}
+    for policy in ("A", "B", "C"):
+        values = []
+        for seed in range(1, 13):
+            sim = Simulation(
+                world,
+                RunConfig(
+                    template="flagship_observability",
+                    policy=policy,
+                    seed=seed,
+                    operating_point="nov2026-1300",
+                    adversary=AdversaryConfig(True, "reduce_observability", 8, False),
+                ),
+            )
+            sim.run_to_end()
+            values.append(sim.report()["indicators"]["mission_continuity"])
+        mean[policy] = sum(values) / len(values)
+    assert mean["C"] > mean["A"] and mean["C"] > mean["B"], mean
 
 
 def test_reports_carry_the_notice_and_no_constraint_violation(reports):

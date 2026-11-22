@@ -1,0 +1,91 @@
+# Tests and type checks. Runs on every pull request and is called by deploy.yml, so a deploy needs these jobs to pass.
+# Lint (ruff) and the CHANGELOG.md check live in lint.yml.
+name: checks
+on:
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install dependencies (dev group and the mcp extra, no llm extra)
+        # The mcp extra is installed so tests/unit/test_mcp_tools.py and tests/integration/test_mcp_server.py run instead of skipping.
+        run: uv sync --locked --group dev --extra mcp
+      - name: pytest with coverage floor
+        # test_repo_index.py is not here: the index goes stale with any edit, so it has its own non-blocking job below.
+        # Measured TOTAL is 90.49% (12690 statements, 1207 missed) with the mcp extra and without llm; the floor is just under it.
+        run: uv run pytest -q --cov=cascadasen --cov-report=term --cov-fail-under=90 --ignore=tests/integration/test_repo_index.py
+  # Informational, never blocks the deploy: docs/index/repo-index.json lists line numbers and CHANGELOG headings, so it is
+  # stale after almost any commit. The job turns red as a reminder to run scripts/build_index.py (docs/index/README.md).
+  repo-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked --group dev --extra mcp
+      - name: index is current
+        run: uv run pytest -q tests/integration/test_repo_index.py
+  # A gate: `mypy src` reports 0 errors (backend/README.md, "Type checking"), so any new error blocks the deploy.
+  backend-mypy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked --group dev
+      - name: mypy
+        run: uv run mypy src
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: tsc
+        run: npx tsc --noEmit
+      - name: vitest
+        run: npx vitest run
+      - name: build
+        run: npm run build

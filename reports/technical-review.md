@@ -2,10 +2,92 @@
 
 Equipo 9, Platanus Hack 26. Criterio evaluado: "Aspecto técnico" (25 %), issue #79 "Evaluación técnica de todo el repositorio según los criterios de Platanus Hack 26".
 Commit auditado: `8664add` (rama local `main`, merge del PR #78 "regenerar-cache"). Fecha de la auditoría: 2026-11-21.
-Auditoría de solo lectura: no se editó código, no hubo commits, push, issues ni acceso a AWS o Terraform. Este archivo es el único artefacto creado y queda sin commitear.
+Auditoría de solo lectura: no se editó código ni hubo acceso a AWS o Terraform. Las secciones 1 a 10 son el informe original, sin cambios, y describen el commit `8664add` (21 de noviembre). La sección 0 es la actualización del 22 de noviembre y dice qué cambió desde entonces.
 
-> **Advertencia de alcance (leer primero).** `8664add` no es la punta de `upstream/main`. Con las referencias locales de este clon, `git rev-list --count HEAD..upstream/main` da **32** commits de diferencia (`upstream/main` = `03d2d5b`, 2026-11-21 23:37; `origin/main`, el fork, está en `0158bd5`). Esos commits agregan el chat del asistente en la web (`web/src/assistant/*`), costo e índice de salud, mapas de calor de dependencia y criticidad, regeneran los 1.852 JSON de `web/public/cache` y **eliminan el symlink `web/node_modules`** (`965c0a3`). Tocan además `engine.py`, `test_grid_simulation.py`, `docs/stack.md`, `docs/plan.md` y `web/package.json`. No cambian `.github/`, `scripts/` ni `limits.py`. Los hallazgos marcados "posible corrección upstream" pueden estar resueltos allá. No ejecuté ninguna herramienta sobre `upstream/main`.
+## 0. Estado actual (actualizado el 2026-11-22, commit `05dcf000`)
 
+Esta sección se midió de nuevo sobre `upstream/main` (`05dcf000`). Entre la auditoría y hoy entraron los PR #100 (calidad técnica, merge `159fb92`), #108 (índice para agentes y tests) y #117 (refresco del índice), además del trabajo del resto del equipo (#92 a #116). Las notas son estimaciones del autor con los mismos criterios de la sección 3; no están calibradas contra una revisión externa.
+
+### 0.1 Mediciones, antes y ahora
+
+| Medida | Auditoría (`8664add`) | Ahora (`05dcf000`) |
+|---|---|---|
+| `ruff check` y `ruff format --check` | limpios | limpios (182 archivos) |
+| `mypy src` | 179 errores en 33 archivos, sin configuración ni CI | **0 errores** en 127 archivos, con `[tool.mypy]` y compuerta en CI |
+| `pytest` | 380 pasan, 3 fallan, 4 omitidos | **534 pasan**, 0 fallan, 3 omitidos (extra `llm` y datos externos de V6 y V9) |
+| Cobertura backend | 89 % | **91 %** (13.257 sentencias); `mcp/tools.py` 58 → 92 %, `mcp/digest.py` 57 → 99 % |
+| `tsc --noEmit` | 0 errores | 0 errores |
+| `vitest` | 74 tests en 13 archivos | **210 tests en 35 archivos**, con pruebas de componentes (jsdom) |
+| Build web | correcto | correcto |
+| Qué corre en CI | ruff y changelog | ruff y changelog, más `backend-test` (pytest con piso de cobertura 90), `backend-mypy`, `web` (`tsc`, vitest, build) y el índice del repositorio (informativo). `deploy.yml` depende de esos jobs |
+| `CascadeApp.tsx` | 530 líneas (604 en el archivo) | **874 líneas** (creció) |
+| Funciones de 100 líneas o más en `backend/src` | no medido igual | 13 (la mayor: `validate_snapshot`, 339) |
+| ADRs | no existían | 5 en `docs/adr/` |
+| Ayudas para un revisor o agente | no existían | `llms.txt`, `docs/README.md`, `docs/code-map.md`, `docs/for-reviewers.md`, `docs/index/repo-index.json` |
+
+### 0.2 Estado de los hallazgos
+
+Cerrados o parciales, con evidencia en los PR #100 y #108:
+
+| Id | Estado | Evidencia |
+|---|---|---|
+| R-01, B-02, W-03 (CI sin pruebas) | **cerrado** | `.github/workflows/checks.yml` corre pytest, mypy, `tsc`, vitest y build; `deploy.yml` tiene `needs: checks` |
+| R-02, B-12 (suite en rojo) | **cerrado** | 0 fallos hoy. El test de la caché tolera una unidad de redondeo (ruido de coma flotante entre plataformas); el de Bedrock usa `importorskip`. Los tests de MCP ahora corren en CI (`--extra mcp`) |
+| B-01 (deriva de la caché) | **mitigado** | La tolerancia oculta un cambio real de `ok`/`overload` exactamente en `loading == 1.0`; decidir `>` o `>=` en el motor sigue pendiente |
+| R-03, B-10 (mypy) | **cerrado** | 0 errores; `backend-mypy` bloquea el deploy. Con `cast` documentados donde un chequeo `located` ya protegía |
+| R-14 (README de plantilla) | **cerrado** | `README.md` es el del producto |
+| R-15, B-14, R-19 (docs obsoletas) | **cerrado en lo corregido** | `stack.md`, `plan.md`, `mapa3.md`, `architecture.md`, `datasets.md`, `backend/README.md`, `web/README.md`. Quedan las filas 18, 25 y 26 de la sección 7 (decisiones de producto) |
+| R-04, R-06, R-10, R-11, R-23 | **cerrado** | `lint.sh` y `AGENTS.md` apuntan a `web/`; el hook funciona con bash 3.2; `.gitignore` cubre `.coverage` y la caché del teatro; `scipy` en el grupo `data` |
+| D-01, D-02 (scripts de datos) | **cerrado** | `curl -fsSL` con descarga a `.part`; `data/scripts` pasa ruff en `lint.yml` |
+| B-04 (cuerpo chunked) | **cerrado** | `api/limits.py` cuenta el cuerpo sin `content-length` y responde el mismo 413; hay test |
+| B-11 (excepción silenciosa) | **cerrado** | `application/assistant.py:70` registra a nivel debug |
+| R-16 (docstrings) | **cerrado en las 14 funciones mayores** | docstrings con el porqué, sin cambio de código |
+| R-18 (ADRs) | **cerrado** | 5 ADRs en `docs/adr/` |
+| R-21 (parte de test), B-08 | **parcial** | `tests/unit/test_architecture.py` impone las reglas de capas; las fugas conocidas están listadas como excepciones, no corregidas |
+| W-04 (componentes sin test) | **parcial** | jsdom y testing-library; hay pruebas de `SelectionCard`, `NetworkState` e `IncidentPanel`. `useSession` sigue sin prueba de hook |
+| W-07, W-08 | **parcial** | `ErrorBoundary`, `any` eliminado y `catch` que registran; los mapas 1 y 2 siguen en el árbol |
+| B-13, R-24 (código muerto) | **parcial** | se eliminaron 9 de los 11 métodos sin llamador; `icons.ts` borrado |
+| R-09, W-02, W-11 | **ya resueltos upstream** | el symlink `web/node_modules` ya no está versionado; la UI del asistente existe |
+
+Siguen abiertos (decisiones de producto o refactores fuera del alcance de los PR anteriores):
+
+| Id | Estado | Motivo |
+|---|---|---|
+| B-06 (`voltage_limited` obsoleto) | abierto | decisión de producto |
+| B-07 (`n1_worst` con id de línea) | abierto | decisión sobre `docs/cyber.md` 8.2 |
+| B-17 (asistente sin tope diario de costo ni autenticación) | abierto | decisión de producto; hay límite por IP y por mensaje |
+| B-05 (campañas sin límite de tasa) | abierto | agrega un límite, cambia comportamiento |
+| B-03, R-22 (dos motores de frecuencia; V1 a V10 solo sobre el de 13 áreas) | abierto, **ahora documentado** | ADR 0001 y `README.md` explican qué valida cada motor |
+| B-09, R-20, W-01 (funciones y componentes grandes) | abierto | refactor grande; `CascadeApp.tsx` empeoró (874 líneas) |
+| B-20, B-16, B-18, B-19, W-05, W-06, W-09 | abierto | sin cambios |
+| R-05 (adaptadores de fuentes reales) | abierto | `ide_energia` 28 %, `ine_censo` 30 %, `infotecnica` 30 %, `pypsa_cl` 29 %, `http` 36 %, `arcgis` 16 % |
+| D-03, D-04, D-05, D-06, D-07, R-12, R-13 | abierto | sin cambios (cabeceras de procedencia, licencias de datos, rutas locales en un doc) |
+| R-07, R-08, R-17 | abierto | espera sin plazo y `sleep` en tests de sesiones, V6 y V9 omitidos por falta de datos, changelog sin archivar. El test flaky del asistente (semilla sin fijar) sí se corrigió |
+
+### 0.3 Puntajes actualizados (estimación)
+
+| Área | Antes | Ahora | Qué cambió |
+|---|---|---|---|
+| Backend dominio | 4 | **4** | Sin cambio de fondo: B-03 y B-06 siguen; `cycle.py` tiene `_cycle` de 246 líneas |
+| Backend application / api / infrastructure | 3,5 | **4** | mypy 0, B-04 corregido, cobertura 91 %; sigue B-05 y los adaptadores de fuentes al 16 a 36 % |
+| MCP / asistente | 4 | **4** | Sus tests ya corren en CI y cubren 92 a 99 %; sigue B-17 |
+| Frontend | 3,5 | **3,5** | Más tests y `ErrorBoundary`, pero `CascadeApp.tsx` creció a 874 líneas y no hay eslint |
+| Scripts de datos | 3 | **3,5** | D-01, D-02 y R-23 cerrados; sigue D-03 |
+| Tests y CI | 3 | **4** | CI con pytest, mypy, `tsc`, vitest y build, y el deploy depende de ellos; 534 tests, 91 %; sin cobertura web ni test de hook |
+| Documentación del código | 3,5 | **4** | README, 5 ADRs, `llms.txt`, mapa del código, guía para revisores e índice; quedan las filas 18, 25 y 26 de la sección 7 |
+| Modularidad | 3,5 | **3,5** | Hay test de capas, pero con excepciones; 13 funciones de 100 líneas o más y `CascadeApp.tsx` sigue creciendo |
+
+**Puntaje global estimado para "Aspecto técnico": 4,0 / 5** (rango razonable 3,5 a 4,5), contra 3,5 en la auditoría. Lo que más pesa hacia abajo es lo que sigue abierto: los refactores grandes (`CascadeApp.tsx`, `validate_snapshot`), las decisiones de producto y la cobertura de los adaptadores de fuentes. Un riesgo a conocer: el índice `docs/index/repo-index.json` guarda números de línea, así que queda desactualizado con casi cualquier commit. Por eso su job de CI es informativo y no bloquea el deploy.
+
+### 0.4 Cómo se verificó
+
+Comandos sobre `upstream/main` (`05dcf000`) en un worktree limpio: `uv run ruff check . && uv run ruff format --check .`, `uv run mypy src`, `uv run pytest -q --cov=cascadasen --cov-report=term` (con el extra `mcp`), `npx tsc --noEmit`, `npx vitest run` y `npm run build`; el conteo de funciones largas con `ast`; la cobertura por módulo con `--cov-report=term`. Los hallazgos marcados como cerrados vienen de las descripciones de los PR #100 y #108 y se contrastaron con el código donde se indica la ruta. No se repitió la revisión de seguridad ni la completa de los scripts de datos.
+
+---
+
+# Informe original (commit `8664add`)
+
+> **Nota.** `8664add` no era la punta de `upstream/main` cuando se hizo la auditoría (32 commits de diferencia). Las secciones siguientes no se modificaron; la sección 0 dice qué sigue vigente.
 ---
 
 ## 1. Resumen ejecutivo

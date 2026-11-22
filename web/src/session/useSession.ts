@@ -8,7 +8,7 @@ export type Edit = (fn: (sid: string, revision: number) => Promise<unknown>) => 
 export interface Session {
   sid: string | null; session: SessionDoc | null; network: SessionNetwork | null; state: CutState | null;
   live: LiveMode | null; error: string | null;
-  create(): Promise<void>; join(text: string): void; leave(): void; refresh(): Promise<void>; edit: Edit; clearError(): void;
+  create(opts?: { point?: string; label?: string }): Promise<void>; join(text: string): void; leave(): void; refresh(): Promise<void>; edit: Edit; clearError(): void;
 }
 
 /**
@@ -17,7 +17,8 @@ export interface Session {
  * `createLoader` (loader.ts) decides which of overlapping refetches reaches the screen.
  */
 export function useSession(): Session {
-  const [sid, setSid] = useState(() => sessionIdFrom(location.search));
+  // shortcut: shared sessions are hidden from the web for now (issue #101), so ?sesion= is ignored and none starts
+  const [sid, setSid] = useState<string | null>(null);
   const [session, setSession] = useState<SessionDoc | null>(null);
   const [network, setNetwork] = useState<SessionNetwork | null>(null);
   const [state, setState] = useState<CutState | null>(null);
@@ -68,7 +69,7 @@ export function useSession(): Session {
     } catch (e) {
       if (e instanceof ApiError && e.status === 412) {
         setError("Otro cliente cambió la sesión antes que tú. Se recargó: revisa y vuelve a intentarlo.");
-        await load(sid).catch(() => undefined);
+        await load(sid).catch((e) => { console.warn("session reload after a 412 failed", e); });
       } else setError((e as Error).message);
       return false;
     }
@@ -80,8 +81,8 @@ export function useSession(): Session {
   }, [sid, network, load]);
   return {
     sid, session, network, state, live, error,
-    create: async () => {
-      try { const doc = await createSession(); setError(null); setSid(doc.session_id); } catch (e) { setError((e as Error).message); }
+    create: async (opts = {}) => {
+      try { const doc = await createSession(opts); setError(null); setSid(doc.session_id); } catch (e) { setError((e as Error).message); }
     },
     join: (text) => {
       const id = sessionIdFrom(`?sesion=${encodeURIComponent(text.match(/sesion=([^&\s]+)/)?.[1] ?? text.trim())}`);

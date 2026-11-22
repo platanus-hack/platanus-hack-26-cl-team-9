@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 
-from cascadasen.domain.cascade.engine import CascadeParams, run_cascade_state
+from cascadasen.domain.cascade.engine import CascadeParams, people_out_by_bus, run_cascade_state
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
 from cascadasen.domain.cascade.frequency import F0
 from cascadasen.domain.cascade.frequency import Params as FrequencyParams
@@ -160,14 +160,6 @@ class TheaterGrid:
             + self.battery.get(area, 0.0)
         )
 
-    def island_inertia_mws(self, area: str) -> float:
-        """Kinetic energy of the synchronous units online in the area's island (solar and wind add none)."""
-        mine = set(self.net.areas[area].buses)
-        for isl in self.islands():
-            if mine & set(isl):
-                return float(self.inertia[isl].sum())
-        return 0.0
-
     def settle_frequency(self) -> None:
         """Between operational cycles secondary control brings energized islands back to f0 (assumption,
         docs/agents.md 1.2); dark areas have no frequency."""
@@ -194,8 +186,8 @@ class TheaterGrid:
         return [area]
 
     def people_without_power(self) -> float:
-        served = np.divide(self.load, self.plan_load, out=np.ones_like(self.load), where=self.plan_load > 0)
-        return float((self.people * (1.0 - np.clip(served, 0.0, 1.0))).sum())
+        """Dark buses count all their people, whatever their net load; live buses the share of load shed."""
+        return float(people_out_by_bus(self.people, self.plan_load, self.load, self.dark).sum())
 
     # ------------------------------------------------------- engine view
 
@@ -428,9 +420,6 @@ class TheaterGrid:
         self.open_lines -= set(back)
         self.held_open -= set(back)
         return back
-
-    def release_hold(self, lines: list[str]) -> None:
-        self.held_open -= set(lines)
 
     def restore_step(self, area: str, share: float, gen_share: float | None = None) -> tuple[float, bool]:
         """One cycle of operational restoration: energize the area's buses, bring generation back toward

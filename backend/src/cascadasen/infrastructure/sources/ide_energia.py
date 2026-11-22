@@ -43,6 +43,13 @@ class IdeEnergiaSource:
         return query_layer(self.http, f"{self.base}/{layer}", f"{self.source_id}/{name}.geojson", refresh)
 
     def contribute(self, bundle: SourceBundle, refresh: bool = False) -> SourceInfo:
+        """Read the IDE layers (from the HTTP cache unless `refresh`) and append them to the bundle.
+
+        Layers: 8 substations, 10 transmission lines, 1 to 6 plants (one per technology) and 9 storage. The
+        lines have no end nodes, so the topology is inferred later. A multi-part line keeps its first part in
+        `coords` and all parts in `extra["parts"]`. `operating` is true for both labels the plant layers use for
+        that state. The storage layer ships without geometry, so its position comes from the UTM attributes (zone
+        from `HUSO`, 19 by default). `records` in the returned `SourceInfo` counts everything appended."""
         n = 0
         for f in self._layer(8, "subestaciones", refresh):
             p, g = f["properties"], f.get("geometry")

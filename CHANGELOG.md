@@ -1,6 +1,575 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(review): update the technical review to the state of `main` (05dcf000)
+- **Changed:** `reports/technical-review.md` gets a new section 0 "Estado actual": the measurements again on `main` (mypy 0, 534 tests, 91 % coverage, vitest 210, CI gates), the status of every finding (closed, partial, open) with its evidence, updated scores (global estimate 3.5 → 4.0) and how it was verified. The original report (`8664add`) follows unchanged.
+- **Why:** The review was written before PR #100, #108 and #117; the user asked to update only the report.
+- **Agents:** Do not treat sections 1 to 10 as the current state: read section 0 first. The scores are the author's estimates, not an external review.
+- **Files:** `reports/technical-review.md`.
+## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
+
+- **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`. After merging #117, three more references that #110 had shifted point at the right line again: `ConverseToolChat.turn` (`llm_tools.py:85`), `simulate` (`grid_routes.py:122`), `prepare_workflow` (`grid_stress.py:55`).
+- **Why:** The `repo-index` job of PR #114 failed: the branch was cut before #108, so the merged tree had an index without its changes.
+- **Agents:** Nothing new: regenerate with `cd backend && uv run python ../scripts/build_index.py` after `git add`, as `docs/index/README.md` says.
+- **Files:** `docs/index/repo-index.json`, `docs/{README.md,code-map.md,for-reviewers.md}`, `backend/tests/unit/test_mcp_tools.py` (the exact digest test from #108 now also checks `overloaded_lines_note`).
+
+## 2026-11-22 · docs(index): regenerate the index and re-point 25 references after #106, #111 and #115
+- **Changed:** `docs/index/repo-index.json` is regenerated and 25 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` follow the code that moved (`sessions.py`, `session_routes.py`, `overlay.py`, `cycle.py`, `run_experiment.py`, `simulation_schemas.py`). No code changed.
+- **Why:** #106 (atomic `add_substation`), #111 (cyberattack scenario) and #115 landed while PR #108 was merging; the informational `repo-index` job was red on `main`.
+- **Agents:** After a change that moves a symbol named in those docs, re-point the reference and regenerate the index.
+- **Files:** `docs/code-map.md`, `docs/for-reviewers.md`, `docs/README.md`, `docs/index/repo-index.json`.
+## 2026-11-22 · fix(web): fecha real de los desastres 2011 y 2010 (#115)
+
+- **Changed:** The Desastres entries "Apagón 2011 · Ancoa" and "Terremoto 2010 · Charrúa" show the date of the real event (24 sep 2011 · 20:31, 14 mar 2010 · 20:43) instead of the date of the 2026 hour they run on. `Disaster` gets an optional `date`.
+- **Why:** the small date under each entry read "nov 2026", which looked like the event date. Sources: Transelec (falla en S/E Ancoa a las 20:31 del 24 sep 2011) and BioBioChile (apagón total del SIC a las 20:43 del 14 mar 2010, transformador de Charrúa dañado por el 27F).
+- **Agents:** the analogues still run at `nov2026-2000`; only the label changed. The 25F keeps the date of its own point.
+- **Files:** `web/src/cascade/{Scenarios.tsx,scenarios.test.ts}`.
+
+## 2026-11-22 · chore(web): quitar la vista 3D del mapa, solo 2D (#115)
+
+- **Changed:** The **Vista 2D | 3D** switch of the layers panel is gone and the main map is always 2D. `?vista=3d` is no longer written, and an old link with it opens the 2D map (the param is dropped).
+- **Why:** product decision: only the 2D map.
+- **Agents:** `UrlState` has no `mode`. `CascadeApp` keeps `mode = "2d"` as a constant, so the 3D branches in `map/baseMap.ts` and `cascade/layers.ts` are unreachable; the deprecated `?mapa=1` and `?mapa=2` maps still tilt. `docs/mapa3.md` sections 2, 3, 4 and 11 updated.
+- **Files:** `web/src/cascade/{CascadeApp.tsx,url.ts,url.test.ts}`, `docs/mapa3.md`.
+
+## 2026-11-22 · test(mcp): follow #110 (places, named substations) and re-point the doc references
+- **Changed:** Three tests of `tests/unit/test_mcp_tools.py` that this branch added now match what #110 changed, with no change to `src/`: `prepare_digest` names up to five substations (`at`) and warns when a change touched none, `add_generator` resolves the place through `GET /grids/places`, and the substations of a change are dicts (`id`, `name`). 15 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` moved with `assistant_routes.py`, `llm_tools.py`, `mcp/digest.py` and `mcp/toolbox.py`. The index is regenerated.
+- **Why:** The merge of `main` brought #110. Upstream CI runs without the `mcp` extra, so tests for the MCP tools were skipped there and could not catch the change; this branch installs the extra, so they run.
+- **Agents:** Do not edit `src/` to satisfy these tests: they describe the new behaviour. After any change to a file named in the docs, re-check its `file:line` references (the claims-to-evidence table in `docs/for-reviewers.md` is checked by opening each line).
+- **Files:** `backend/tests/unit/test_mcp_tools.py`, `docs/code-map.md`, `docs/for-reviewers.md`, `docs/README.md`, `docs/index/repo-index.json`.
+## 2026-11-22 · chore(ci): the repo-index drift test runs in its own non-blocking job
+- **Changed:** `checks.yml` runs `backend-test` with `--ignore=tests/integration/test_repo_index.py` and adds a job `repo-index` (`continue-on-error: true`) that runs it. AGENTS.md, `docs/index/README.md`, `backend/README.md` and `docs/for-reviewers.md` say so. The index is regenerated.
+- **Why:** The index holds line numbers and CHANGELOG headings, so it is stale after almost any commit by anyone. As part of `backend-test`, which the deploy needs, it would have blocked deploys of every teammate who did not regenerate it.
+- **Agents:** Regenerate the index before you commit (`cd backend && uv run python ../scripts/build_index.py`); a red `repo-index` job is a reminder, not a gate.
+- **Files:** `.github/workflows/checks.yml`, `AGENTS.md`, `docs/index/README.md`, `backend/README.md`, `docs/for-reviewers.md`, `docs/index/repo-index.json`.
+## 2026-11-22 · fix(tests): pin the seed of the run an assistant event opens, so the deploy gate is not flaky
+- **Changed:** `test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened` patches `cycle.new_seed` to a fixed value.
+- **Why:** The run that `inject_event` opens has no seed, so it draws a fresh one, and about 1 run in 25 a background event (`E1_demand_surge`) landed in the second step and broke the assertion `events_applied == []`. It failed once on CI (and 1 of 25 locally on `main`). Since `deploy.yml` needs the checks, a flaky test could block a deploy for nothing.
+- **Agents:** Any test that opens a run without a seed and asserts on the events of a step must pin `new_seed` (or pass `seed`). 40 consecutive runs of the test pass with the fix.
+- **Files:** `backend/tests/integration/test_assistant_api.py`.
+## 2026-11-22 · docs(agents): llms.txt, docs index and discoverability wiring
+- **Changed:** New `llms.txt` (llmstxt.org format: one-paragraph summary, then links with one line each under Start here, Architecture, Engine and simulation, APIs and contracts, Data, Frontend, Operations, Evaluation, Optional). New `docs/README.md`: every file in `docs/` with purpose, when to read it and status (current, partly stale, historical, generated, team-owned), and a "where is X" table (engines, V1-V10, frequency model, parameters, sessions, MCP, assistant, agent OpenAPI, caches, data pipeline, tests, CI, guardrails). `AGENTS.md` section 1 gets step 0 (navigation: `llms.txt`, `docs/README.md`, `docs/code-map.md`, the index and its regeneration command). `README.md` lists the new files in its documentation table.
+- **Why:** An agent or automated reviewer should find the right file and verify a claim without reading the tree (issue #79).
+- **Agents:** `llms-full.txt` was not written: a concatenation of the docs would be over 4,000 lines, duplicate `docs/code-map.md` and `docs/for-reviewers.md`, and drift. `llms.txt` links are relative to the repository root and all 50 resolve; the 44 `path:line` references in `docs/README.md` were resolved from source and cross-checked with `ast` and `grep -nE` (0 mismatches). Statuses in `docs/README.md` are a spot check: every cited path exists, every `/api/v1/...` path is in the route table, and the main claims were compared with the code. `CLAUDE.md` imports `AGENTS.md` (`@AGENTS.md`), so it needed no edit. `.claude/hooks/session_context.sh` still prints the older read order; not changed.
+- **Files:** `llms.txt`, `docs/README.md`, `AGENTS.md`, `README.md`.
+## 2026-11-22 · docs(review): code map and reviewer guide
+- **Changed:** New `docs/code-map.md`: layering rule, backend (`domain`, `application`, `infrastructure`, `api`, `mcp`) and web (`cascade`, `session`, `incidents`, `assistant`, `map`) module by module with responsibility, entry points as `symbol (path:line)` and covering tests, and the data flow of a line cut, a session edit, an incident run and the assistant tool loop. New `docs/for-reviewers.md`: run commands, 12 claims with the file, test and limit of each, limitations, pending product decisions, history.
+- **Why:** Technical review follow-up (issue #79): a reviewer or agent verifies each claim with a file, a test or a command instead of reading the tree.
+- **Agents:** Every `path:line` was resolved by script from the source and cross-checked with a second method (Python `ast` for `.py`, `grep -nE` for `.ts`/`.tsx`/`.toml`): 280 references, 0 mismatches. Three hand-written line references, used five times (`api/assistant_routes.py:29-32`, `mcp/tools.py:15`, `api/app.py:74`), were opened and read. Lines move with every edit: query `docs/index/repo-index.json` for current ones. Pending decisions are recorded, not decided: `voltage_limited` (the 188-bus engine returns `island_blackout` with `reason: "voltage"`, the theatre branches that read `voltage_limited` are dead), `n1_worst` (the id is already gone from `health.py`), assistant cost cap and authentication, campaigns limit, `>` against `>=` at loading 1.0. Measured on this tree: pytest 487 passed, 3 skipped, 90.49 % coverage; mypy 0 errors in 125 files; web 32 files, 197 tests.
+- **Files:** `docs/code-map.md`, `docs/for-reviewers.md`.
+## 2026-11-22 · docs(assistant): tool count in the labels row, and the checks gate of the deploy workflow
+- **Changed:** `docs/assistant.md` (`labels.ts` row): the file names 23 of the 26 MCP tools; `list_incident_scenarios`, `start_incident_run` and `prepare_scenario` show their id. `docs/infrastructure.md` ("Automatic deploy from GitHub"): the `deploy` job has `needs: checks`.
+- **Why:** `web/src/assistant/labels.ts` `TOOL_NAMES` has 23 entries and `mcp/tools.py` `OPERATIONS` has 26; `.github/workflows/deploy.yml` calls `checks.yml` and the doc did not say so.
+- **Agents:** Found while cross-checking the docs for `docs/README.md`. Doc only.
+- **Files:** `docs/assistant.md`, `docs/infrastructure.md`.
+## 2026-11-22 · docs(code): one-line docstrings with the why for the most complex undocumented symbols
+- **Changed:** Docstrings on `Simulation` (class, `step`, `run_to_end`, `recipe`, `trace`, `report`, `_snapshot`), `RunConfig` and `AdversaryConfig` in `domain/theater/cycle.py`; `theater_config` in `domain/theater/config.py`; `CascadeParams` and `zone_load` in `domain/cascade/engine.py`; `Applied`, `empty_overlay`, `is_empty` in `domain/cascade/overlay.py`; `Executor`; `GridUnifier` and `UnifyConfig`; `GridQueryService`; `SessionService`. Prop comments on `SelectionCard`, `SimulationPanel`, `NetworkState` and `IncidentPanel`.
+- **Why:** `docs/index/repo-index.json` flagged these as undocumented public symbols in the largest modules (`counts.undocumented_public_symbols` drops accordingly).
+- **Agents:** No code change: `ast.dump` of every changed `backend/src` file, docstrings removed, equals the `upstream/main` version (8 files). Web: comments only.
+- **Files:** `backend/src/cascadasen/{domain/theater/{cycle,config,execution}.py,domain/cascade/{engine,overlay}.py,domain/unify.py,application/{grid_queries,sessions}.py}`, `web/src/{cascade/{SelectionCard,SimulationPanel,NetworkState}.tsx,incidents/IncidentPanel.tsx}`.
+## 2026-11-22 · docs(sessions): sessions are hidden in the web; fix stale lines found while indexing
+- **Changed:** `docs/mapa3.md` section 11 ("Entering and sharing", the sources table, two other lines), `web/README.md`, `docs/assistant.md` (which session, restore) and `docs/sessions-api.md` no longer describe the **Sesión compartida** rail item or `?sesion=` opening a session. `docs/agents.md` 1.3 and the alarm table no longer say the 188-bus engine returns `voltage_limited`. `docs/architecture.md` lists `src/incidents/` and `src/assistant/` and the sessions routes. `docs/stack.md` layout lists `checks.yml` and `deploy.yml`.
+- **Why:** Commit `778e545f` (#101) removed the rail item, `useSession` starts with no session and `useAssistant` sends no `session_id`. The 188-bus engine returns `island_blackout` with `reason: "voltage"` (`engine.py` `_settle_island`; `docs/engine.md` item 6, ADR 0003).
+- **Agents:** Verified against `CascadeApp.tsx` (rail at `<nav className="rail">`, no `setView("session")`), `useSession.ts`, `useIncident.ts` (`createSession` + `join`: the only web path into a session) and `useAssistant.ts`. A page reload with `?sesion=<sid>` starts without a session. The `voltage_limited` readers in the theatre (`execution.py`, `digital.py`, `isr.py`, `stabilization.py`) are dead for the 188-bus engine; removal is a pending product decision. No code changed.
+- **Files:** `docs/{mapa3,assistant,sessions-api,agents,architecture,stack}.md`, `web/README.md`.
+## 2026-11-22 · docs(index): document the index regeneration command and the CI check
+- **Changed:** `AGENTS.md` (section 2 bullet and a row in the tooling map in section 5), `backend/README.md` and a comment in `.github/workflows/checks.yml` give the regeneration command for `docs/index/repo-index.json`. No new workflow: `tests/integration/test_repo_index.py` already runs in the `pytest` step of the `backend-test` job (`checks.yml`, also called by `deploy.yml`).
+- **Why:** The drift test fails CI on a stale index, so every agent must know the command before committing.
+- **Agents:** `cd backend && uv run python ../scripts/build_index.py`, after `git add` of any new file. Edits to `AGENTS.md` and `backend/README.md` change their line counts in the index, so regenerate after them too.
+- **Files:** `AGENTS.md`, `backend/README.md`, `.github/workflows/checks.yml`.
+## 2026-11-22 · feat(index): generated repository index with a drift test
+- **Changed:** New `scripts/build_index.py` (standard library plus the real FastAPI app for the route table) writes `docs/index/repo-index.json`: every tracked source, test, doc, script and config file (language, line count, purpose, public symbols with line numbers, backend layer, covering tests), the route table (method, path, operation id, summary, `in_agent_spec`, handler file and line), doc headings, `data/processed` and `data/scenarios` sizes and the CHANGELOG headings. `docs/index/README.md` documents the schema and `jq` queries. New `backend/tests/integration/test_repo_index.py` fails while the committed file differs from the generated one.
+- **Why:** Technical-review follow-up (issue #79): an agent or reviewer finds a file, a symbol, a route or a test with one query instead of reading the tree.
+- **Agents:** Regenerate with `cd backend && uv run python ../scripts/build_index.py` (`--check` verifies) before every commit that adds, removes or edits a source, doc or test file, a route or this file, and `git add` new files first (the builder reads `git ls-files`). The index does not list itself, holds no timestamp or hash, and is byte-identical across runs. Python symbols with no docstring carry `"undocumented": true`. No product code changed.
+- **Files:** `scripts/build_index.py`, `docs/index/{README.md,repo-index.json}`, `backend/tests/integration/test_repo_index.py`.
+
+## 2026-11-22 · fix(assistant): no session for map changes, no comparison the result does not give
+
+- **Changed:** `SessionTools.defers_session`: a first `start_session` at the default point answers `deferred: true` and opens nothing (another point still opens one). The prepared summary carries `overloaded_lines_note`. The system prompt says prepare_scenario needs no session.
+- **Why:** Checked on sub50.cl with the real model after #110: points land right, but the model opened a session before every map change (each counts against the per-IP creation limit), and it said "8 líneas sobrecargadas, las mismas que en la base" when the base had 1.
+- **Agents:** `test_the_conversation_continues_and_can_be_read_and_deleted` now opens its session through `describe_network`.
+- **Files:** `backend/src/cascadasen/mcp/{toolbox,digest}.py`, `backend/src/cascadasen/api/assistant_routes.py`, `backend/tests/{unit/test_assistant.py,integration/test_assistant_api.py}`, `docs/assistant.md`.
+
+## 2026-11-22 · chore(web): quitar el ítem Validación del menú lateral (#112)
+
+- **Changed:** The disabled "Validación" item of the nav rail and its unused `SOON` tip are gone.
+- **Why:** it did nothing (a placeholder with "Todavía no está en la app") and confused users.
+- **Agents:** the "Validación" tab inside the panel was already hidden; nothing else references it. `docs/mapa3.md` 4 item 2 updated.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `docs/mapa3.md`.
+
+## 2026-11-22 · feat(web): pins for placed points, Markdown replies, the chat stays open on a scenario
+
+- **Changed:**
+  - `cascade/placed.ts` + `MapOverlays`: each change that adds demand or generation at one to five substations gets a pin with "+120 MW de demanda · S/E ANTOFAGASTA" (plant: disc in its technology color; load: white ring). "Estado de la red" shows "en S/E …" for changes with places.
+  - `assistant/markdown.tsx`: replies and step texts render paragraphs, lists, bold, code and headings, as text nodes only.
+  - `labels.ts`: the `prepare_scenario` card reads "Preparar el mapa" with the changes in words and where each place went (it read "[object Object]"); names for the incident tools.
+  - `applyScenario` keeps the chat open instead of jumping to the tabs, so the reply stays visible beside the map.
+- **Why:** Found testing sub50.cl: with changes and no failure the map draws the base case, so a placed point was invisible; the replies showed `**`; the chat closed when the scenario arrived.
+- **Agents:** `StressChange` and `PreparedChange` carry `places`. Checked in headless Chromium against a local backend with a scripted stand-in model: three pins across two messages, the place error keeps the map, no console errors. `tsc`, 178 web tests and `npm run build` pass.
+- **Files:** `web/src/cascade/{placed.ts,placed.test.ts,MapOverlays.tsx,CascadeApp.tsx,NetworkState.tsx,edits.ts,gridsApi.ts,cascade.css}`, `web/src/assistant/{markdown.tsx,markdown.test.tsx,AssistantPanel.tsx,assistant.css,labels.ts,labels.test.ts}`.
+
+## 2026-11-22 · fix(assistant): place points through prepare_scenario, strip reasoning, answer JSON errors
+
+- **Changed:**
+  - The in-app assistant no longer offers the session edits and cuts (`EXCLUDED` in `mcp/toolbox.py`: `add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network`, `cut_lines`, `repair_lines`, `get_grid_state`, `join_session`). It puts points through `prepare_scenario` with `places`; the system prompt and the tool description say so, with examples. `invented_adds` refuses an `add` the user never wrote.
+  - `prepare_scenario` maps technology names ("eólica", "BESS", "nuclear" as `termica` with a note); its summary says where small changes went (`at`) and warns on `matched: 0`.
+  - MCP session tools resolve places through `GET /grids/places` (`digest.resolve_bus` returns `(bus, how)`; results carry `placed`); redispatch carries `meaning`.
+  - `clean_text` drops `<thinking>…</thinking>`; a Converse answer without content is a 502; `/chat` answers other failures as JSON 500 and both routes log the traceback.
+- **Why:** Found testing sub50.cl: the web draws only prepare_scenario's grid (#101), so datacenters the assistant added with `add_datacenter` never reached the map; the reply showed the model's `<thinking>`; `/chat` answered plain-text 500s for some minutes with no traceback in the logs.
+- **Agents:** The MCP server keeps every tool. Integration tests now drive the assistant with `describe_network`, `start_run`, `inject_event` and `prepare_scenario` (`test_a_point_lands_at_the_substation_that_serves_the_place` runs on the real grid). The real model's use of `places` was not checked against Bedrock (no credentials here).
+- **Files:** `backend/src/cascadasen/mcp/{tools,toolbox,digest}.py`, `backend/src/cascadasen/api/assistant_routes.py`, `backend/src/cascadasen/infrastructure/llm_tools.py`, `backend/tests/{unit/test_assistant.py,unit/test_llm_tools.py,unit/test_mcp_tools.py,unit/test_prepare_scenario_tool.py,integration/test_assistant_api.py,integration/test_mcp_server.py}`, `docs/{assistant.md,mcp.md}`.
+
+## 2026-11-22 · feat(stress): resolve places to the substation that serves them and build new plants
+
+- **Changed:**
+  - New `application/places.py`: a place (bus id, area id, substation name, comuna, region or province, area name, part of a name) resolves to one bus and says how. A comuna goes to the substation that serves most of its people (`served_by`); comunas off the SEN answer 404.
+  - A change takes `places` (population, demand, generation), resolved into `buses`; the report carries `places: [{place, bus, bus_name, area, area_name, how}]`. New agent route `GET /api/v1/grids/places?q=` (`resolve_place`).
+  - `add` of generation where the picked buses lack the technology builds a new plant (`new_plant`, H = 4 s if synchronous, assumption `new_plant`); new technology `bateria` (new capacity only, no inertia). No `tech`, or mixed synchronous and not, is a 422.
+- **Why:** Found testing sub50.cl: "Antofagasta" went to S/E ESCONDIDA (140 km) and "Arica"/"Iquique" to S/E COLLAHUASI, because area names matched first. And `/grids/prepare` answered 200 with `matched: 0` for a solar plant at any substation without solar (Antofagasta, Santiago, Concepción, Iquique, Puerto Montt), so a new plant was never built.
+- **Agents:** `stress.md` section 3.1 has the resolution order. The snapshot assigns Isla de Pascua and Juan Fernández to mainland substations; `MAX_SERVING_KM` (300) treats them as off the SEN. `TECH_ORDER` now ends with `bateria`. `agents.openapi.json` regenerated (route `resolve_place`, `places`, `PlaceOut`).
+- **Files:** `backend/src/cascadasen/application/{places.py,grid_stress.py}`, `backend/src/cascadasen/api/{grid_routes.py,stress_schemas.py}`, `backend/tests/unit/test_places.py`, `docs/{stress.md,openapi/agents.openapi.json}`.
+## 2026-11-22 · feat(theater): escenario Ciberataque con propagación entre áreas (#109)
+
+- **Changed:** New adversary mode `propagation` (`domain/agents/propagation.py`) and template `ciberataque`: a seeded intrusion that jumps between neighbouring operating areas, strikes (C5 + C1, real cascade), is stopped by segmentation and eradicated by clean-up with a probability. Runs end early with `attack` (80 % demand lost) or `defense` (no intrusion, everything repaired). Parameters in `theater.yaml` → `cyber_attack`, overridable per run within bounds.
+- **Changed:** `GET /sim/catalog` adds `cyber_attack`; `AdversaryIn` adds `mode` and `propagation`; snapshots add `cyber`, the report adds `cyber_attack`. Operations and C2 get a containment rule that applies only to propagation runs (`AgentView.containment`).
+- **Changed:** Web view **Ciberataque** (`web/src/cyber/`): form from the catalog, defence A/B/C or LLM commander, run on a fresh base session, playback of area states and cascades on the map.
+- **Why:** issue #109. Area level keeps `cyber.md` section 8: no buses or lines as targets, no ranking.
+- **Agents:** no new route: use `POST /sessions/{sid}/runs` with `template: "ciberataque"`. The LLM defence is the existing `llm_commander`. `Simulation.finished` is now also true when a propagation run has an `outcome`. Other templates behave as before.
+- **Files:** `domain/agents/{propagation,operations,commander,base}.py`, `domain/theater/{cycle,config}.py`, `domain/theater/params/{theater,templates,narrative_es}.yaml`, `application/run_experiment.py`, `api/simulation_schemas.py`, `web/src/cyber/*`, `web/src/cascade/CascadeApp.tsx`, `web/src/session/sessionApi.ts`, `docs/attack-sim.md`, `docs/openapi/agents.openapi.json`, `backend/tests/unit/test_cyber_attack.py`.
+## 2026-11-22 · feat(sessions): add_substation and reset with a scenario (#105)
+
+- **Changed:** `POST /sessions/{sid}/substations` creates a bus, 1 to 6 lines to existing buses of the same voltage and an optional load and generator in one write (all or nothing, one revision). Missing `capacity_mw` takes the median of the lines at the other end; `coherence` reports odd capacity, lines over 300 km and MW above the lines. `POST /sessions/{sid}/reset` takes an optional `scenario` (the `prepare_scenario` shape) and replaces the overlay with that configuration, its failed buses and its open lines. `MAX_ADDED` goes from 50 to 80. New agent tool `add_substation`; `reset_network` takes `scenario`.
+- **Why:** the agent needs to build a substation without leaving an orphan bus when a line fails, and a loaded configuration must drop what a previous scenario added while plain edits keep it.
+- **Agents:** `add_substation` refuses `load_mw`, `generator_mw` and `capacity_mw` the user never wrote, like `add_datacenter`. `people` changes of a scenario are not stored (the overlay has no people field): only their demand. A scenario `point` that differs from the session's is 422; create another session.
+- **Files:** `domain/cascade/overlay.py`, `application/sessions.py`, `api/session_routes.py`, `api/session_schemas.py`, `mcp/tools.py`, `mcp/toolbox.py`, `web/src/assistant/labels.ts`, `docs/sessions-api.md`, `docs/mcp.md`, `docs/openapi/agents.openapi.json`, tests.
+
+## 2026-11-22 · ops(infra): serve www.sub50.cl next to the apex (#101)
+
+- **Changed:** CloudFront alias `www.sub50.cl` and Route 53 `www` A and AAAA aliases to the distribution, applied by hand with the AWS CLI. `cloudfront.tf` and `route53.tf` have the same change.
+- **Why:** `www.sub50.cl` had no DNS record, so the browser said "This site can't be reached".
+- **Agents:** verified `https://www.sub50.cl/` and `/api/v1/health` answer 200 with a valid certificate. Import the www records before the next `terraform apply` (`docs/infrastructure.md`, "www subdomain").
+- **Files:** `infrastructure/cloudfront.tf`, `infrastructure/route53.tf`, `docs/infrastructure.md`.
+
+## 2026-11-22 · test(web): render and interaction tests for SelectionCard, NetworkState and IncidentPanel
+- **Changed:** Three new component test files (26 tests): `web/src/cascade/SelectionCard.test.tsx` (11), `web/src/cascade/NetworkState.test.tsx` (6), `web/src/incidents/IncidentPanel.test.tsx` (9). New dev dependencies in `web/package.json` and `web/package-lock.json`: `jsdom`, `@testing-library/react`, `@testing-library/dom`.
+- **Why:** These components only had pure-helper tests. The setup adds no config: each `.test.tsx` starts with `// @vitest-environment jsdom`, so the 29 existing tests keep running in node and `vite.config.ts` is untouched. The production bundle is unchanged (`index-*.js` 3,094.12 kB before and after).
+- **Agents:** Write a component test as `*.test.tsx` with the jsdom docblock and call `cleanup` in `afterEach` (vitest globals are off). Use `fireEvent`, not `user-event`. In a jsdom `type="number"` input a comma value is dropped to `""`, so type `1.5`. `jsdom` 31 declares Node `^22.22.2 || ^24.15.0 || >=26`; CI (Node 22) and `web/Dockerfile` (`node:22-alpine`) satisfy it. `npm audit` still reports its earlier notice.
+- **Files:** `web/package.json`, `web/package-lock.json`, `web/README.md`, `web/src/cascade/{SelectionCard,NetworkState}.test.tsx`, `web/src/incidents/IncidentPanel.test.tsx`.
+## 2026-11-22 · test(mcp): run the MCP tests in CI and cover digest.py and tools.py
+- **Changed:** The `backend-test` job now runs `uv sync --locked --group dev --extra mcp`, so `tests/unit/test_mcp_tools.py` and `tests/integration/test_mcp_server.py` run instead of skipping. 10 new tests in `test_mcp_tools.py` cover the branches left: `focus_digest` by bus id and name, `events_applied`, the incident section of `report_digest`, `prepare_digest`, `simulation_digest`, `add_generator`, `add_line`, `add_bus`, `start_run` with adversary, `inject_event` with `share`, `run_status`, `list_options` and `prepare_scenario` (the three call patterns). The coverage floor goes from 87 to 90.
+- **Why:** Without the extra, `mcp/tools.py` sat at 58 % and `mcp/digest.py` at 57 %. Measured with the extra: 484 passed, 3 skipped, TOTAL 90.49 % (12690 statements, 1207 missed), `tools.py` 100 %, `digest.py` 100 %.
+- **Agents:** Run the MCP tests locally with `cd backend && uv sync --locked --group dev --extra mcp`; plain `uv sync` skips them. The `llm` extra is still not installed in CI (1 skipped test). The mypy job does not need the extra (`ignore_missing_imports`); `mypy src` is also clean with it installed. No product code changed.
+- **Files:** `.github/workflows/checks.yml`, `backend/tests/unit/test_mcp_tools.py`, `backend/README.md`.
+## 2026-11-22 · Merge origin/main (#101, #102) into feature/90-cascada-tiempos
+
+- **Changed:** Integrates the in-place component editing, the prepared scenarios on the map and the context layers of main with issue #90. Conflicts only in `CascadeApp.tsx` (the `live` ref and the `setLayers` call) and this file. Both sides were kept: `warp`, `recent` and the pulse from #90, `pointId`, `changes` and `contextLayers` from main. The context layers are drawn under the cascade layers.
+- **Why:** PR #104 was in conflict with main.
+- **Agents:** Main did not touch the engine or the cache, so the cache is still current. Checked on the merged tree: `mypy src` clean, `pytest` 453 passed / 5 skipped at 89 % coverage, web 171 tests, `tsc` and `npm run build` clean.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+
+## 2026-11-22 · Merge origin/main into feature/90-cascada-tiempos
+
+- **Changed:** Integrates `origin/main` (technical-quality: mypy gate, architecture test, ADRs, CI checks, #98) with issue #90. No conflicts. Two `assert s.reserve_used is not None` in `engine.py` (`_island_input`, `_share_reserve`) because the mypy gate flagged the optional field that `_start` always sets.
+- **Why:** Main now runs `mypy src` and a coverage floor in CI, and the engine had 3 mypy errors from the re-split memory.
+- **Agents:**
+  - Checked on the merged tree: `mypy src` clean, `ruff` clean, `pytest` 451 passed / 5 skipped at 89 % coverage (floor 87 %), cache-vs-engine test passes (the cache needs no regeneration), causality scan 0 of 1,848 timelines, web 164 tests, `npm run build` and `tsc` clean.
+  - Not run in a real browser with a GPU.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`.
+
+## 2026-11-22 · chore(cache): regenerate cascade cache with realistic defaults
+
+- **Changed:** `web/public/cache/` regenerated (`uv run cascadasen-cache`) after merging `origin/main` (#82 cost, #92 select-then-cut) and turning on `resplit_memory` and the whole-people rule.
+- **Why:** The merged cost fields and both modelling decisions change the timelines.
+- **Agents:**
+  - Against the cache before issue #90: 219 of the 1,848 timelines change people, 52 change MW and 8 change their stage count.
+  - The causality scan finds 0 violations.
+  - Settled live islands stay within 4.4 % of balance.
+  - R239 is 18.16 M people at Feb 2025 15:00 and at Nov 2026 13:00, 0.31 M at Feb 2025 03:00, and 15.40 M at Nov 2026 20:00.
+- **Files:** `web/public/cache/`.
+
+## 2026-11-22 · fix(web): count every person in a dark substation
+
+- **Changed:** In `impactAt` (`web/src/cascade/simulation.ts`), the people of dark substations count whole whatever their net load (`sumPeople`). Lost load still adds only positive load (`sumLoad`).
+- **Why:** The web must follow the engine rule of the previous commit, so the figures during playback match `summary.people_without_power` at the end.
+- **Agents:** Test "people in dark substations" in `simulation.test.ts`.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts}`.
+
+## 2026-11-22 · feat(cascade): re-split memory on and people of dark buses counted whole
+
+- **Changed:** `CascadeParams.resplit_memory` now defaults to `True`: a re-split island keeps its parent's fired EDAC steps and deployed reserve. The `ASSUMPTIONS` line now only says the sub-island starts at 50 Hz.
+- **Changed:** New `people_out_by_bus` in `engine.py`: a dark bus counts all its people whatever its net load, and a live bus counts the shed share of its positive load. `_timeline`, the theatre (`TheaterGrid.people_without_power`) and `criticality.collateral_people` use it.
+- **Changed:** `test_flagship.py::test_adaptive_coordination_keeps_most_of_the_mission` became `..._across_seeds`: policy C must have the highest **mean** mission continuity over seeds 1-12.
+  - Why the change: the old one-seed ordering (seed 7) no longer holds. With the re-split fix, policy A's cycle-10 cascade sheds 123 MW less, because the cut-off 172-bus island no longer re-fires EDAC steps 1 and 3.
+  - With that, A later restores A08, A09 and A11 in full (after rearming the centro-sur EDAC at cycle 16), reaching 0.951 vs C 0.943. C's restorations in A08/A09 stay limited by headroom and are blocked 5 times.
+  - Neither A3 nor the theatre has a bug: C's runs are identical with the flag on or off.
+  - Over 12 seeds C still leads: mean 0.942 vs A 0.934 and B 0.936, the best worst case (0.910), the lowest peak of people without power and the fewest wrong decisions. The one-seed claim was already fragile: C was best in only 7 of 12 seeds before #90.
+- **Why:** User decision (2026-11-22): the model must be as realistic as possible. Closes `plan.md` §9 items 15 and 16.
+- **Agents:**
+  - Results that moved: 25F 15:00 16.8 → 18.2 M people; Nov 2026 13:00 17.0 → 18.2 M; Nov 2026 20:00 3.9 → 15.4 M people and 1,825 → 6,738 MW (`docs/engine.md` "Results so far" explains why it is real physics, with the same collapse at 25.6 s for 20/30/60/120 s horizons).
+  - `minimum-dataset.md`'s 25F regression anchor is now about 18.2 M.
+  - `resplit_memory=False` exists only for comparison.
+  - The cache is stale until the cache commit below.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine,criticality}.py`, `backend/src/cascadasen/domain/theater/grid.py`, `backend/tests/unit/test_cascade.py`, `backend/tests/validation/{test_flagship,test_results_so_far}.py`, `docs/{engine,plan,minimum-dataset,mapa3}.md`.
+
+## 2026-11-22 · feat(map): pulse buses that just lost power
+
+- **Changed:** New `recentDarkAt(timeline, t, warp)` in `simulation.ts` returns the buses of `island_blackout` events from the last 1.5 s of track time (`RECENT_WINDOW_VIEW_S`), and at most 3 simulated s ago (`RECENT_MAX_SIM_S`), so the squeezed tail does not keep pulsing. If a blackout has no ids it falls back to the `darkAt` difference.
+- **Changed:** `buildCascadeLayers` (`layers.ts`) takes `recent` and `pulse` and draws `nodes-just-dark`, a `FAULT` (#FF5A48) ring that grows from 5 to 14 px and fades. Radius and opacity are layer props, so the attributes are not rebuilt each tick. `CascadeApp` passes the set and a 0.9 s pulse phase. `MapLegend` shows "recién sin suministro" while a cut plays.
+- **Why:** Issue #90 part B: on the map, the buses of the current blackout must stand apart from those that went dark before.
+- **Agents:** Already-dark buses keep the red dot with a dark outline (`docs/mapa3.md` §5). Checked in headless Chrome on `nov2026-1300/R026` at 6.7 s: the ring marks only the 45 buses of the 6.59 s blackout.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,layers.ts,MapLegend.tsx,CascadeApp.tsx,cascade.css}`, `docs/mapa3.md`.
+
+## 2026-11-22 · feat(timeline): non-linear track scale and warped playback
+
+- **Changed:** New `timeWarp(timeline, trackWidth)` in `simulation.ts` returns `{toView, toSim, viewDuration}`, piecewise linear and increasing. Its nodes are the instants of `line_cut`, `line_overload_open`, `island_formed` and `island_blackout`, plus the last `load_shed`.
+  - Each gap between nodes gets at least `MIN_GAP_VIEW_S` (1.5 s) and enough room for `MARKER_GAP_PX` (30 px).
+  - Long gaps keep their length.
+  - The tail after the last event with an effect is squeezed to about `TAIL_SHARE` (15 %), with at least 1.5 s.
+- **Changed:** `groupEvents(events, warp, width)` groups same-instant events. A cut, an opening, a new island or a blackout never joins an earlier marker; load shed and stable islands may. `Timeline.tsx` draws markers, curves and the played rail, and handles dragging and arrow keys, through the warp. The `CascadeApp` loop advances in view time (`v + dt x speed`, `t = toSim(v)`), so playback slows near each failure and runs fast through the tail.
+- **Why:** Issue #90 part B, user decision: a non-linear track with playback in view time; the clock keeps simulated seconds. Before, a cascade sat in the first few pixels and markers merged ("1–11").
+- **Agents:**
+  - Marker numbering still runs over `timeline.events`, the same list as "Historial de eventos" (test "numbers markers over the same event list as the history").
+  - With 9 or more nodes (5 cached cuts) the 30 px rule cannot hold and markers are packed side by side.
+  - `docs/design.md` §7 no longer lists the "1–11" deviation.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,Timeline.tsx,CascadeApp.tsx}`, `docs/{mapa3,design}.md`.
+
+## 2026-11-22 · feat(timeline): exact darkAt and truncated notice
+
+- **Changed:** `darkAt` (`web/src/cascade/simulation.ts`) builds the dark set from the `ids` of every `island_blackout` with `e.t <= t`. Buses in the last frame's `dark` that no blackout lists (substations out of service from `/grids/simulate`) are dark from t = 0. Timelines whose blackouts have no ids fall back to the old frame rule (`frameDarkAt`).
+- **Changed:** The impact card in `SimulationPanel.tsx` says "La cascada se cortó en N etapas (límite del motor); podría seguir." when `timeline.truncated`.
+- **Why:** Issue #90. The old `darkAt` darkened a whole frame at its first blackout, even when islands of one stage go dark seconds apart. `truncated` was in the contract but no UI showed it.
+- **Agents:** `eventLocation` and the map pins compare `darkAt` before and after an event, so they now place each blackout on its own buses. Test: "dark substations at the blackout's own time" in `simulation.test.ts`.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,SimulationPanel.tsx,cascade.css}`, `docs/mapa3.md`.
+
+## 2026-11-22 · chore(cache): regenerate cascade cache
+
+- **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache` after the issue #90 engine changes. That is 1,851 files: 4 hours x (273 lines + 188 substations + baseline + buses + health).
+- **Why:** The timelines change with the causal stages, `island_blackout.ids`, `params.stage`, no stage-0 `island_formed`, and the new `ASSUMPTIONS` line. `resplit_memory` stays off.
+- **Agents:**
+  - The causality scan finds 0 timelines with a stage-k `load_shed` or `island_blackout` after a later opening (98 before).
+  - Settled live islands stay within 3.3 % of balance.
+  - People and MW per cut are unchanged; only times after a waiting stage moved (for example `nov2026-1300/R026` openings at 7.59 and 8.59 s).
+  - `test_the_committed_cache_matches_the_engine_for_a_single_cut` passes.
+- **Files:** `web/public/cache/`.
+
+## 2026-11-22 · test(cascade): cascade invariants and hand-checked cuts
+
+- **Changed:** `tests/unit/test_cascade.py` adds `_assert_invariants`, run on toy grids and on four real cuts. It checks:
+  - time order and causality by `params.stage`;
+  - settled islands balanced within 5 % of load;
+  - `dark` never shrinking, and blackout `ids` equal to the final `dark`;
+  - `people_without_power` rebuilt from the dark buses plus the EDAC share.
+
+  Other new tests: one opening per stage (the rest re-evaluated), `truncated`, the waiting stage, a no-effect cut having only `line_cut`, and `resplit_memory` off and on.
+- **Changed:** `tests/validation/test_results_so_far.py` pins the four R239 rows of `docs/engine.md`. People and MW did not move with the causal stages; only times after a waiting stage did (Nov 2026 20:00: stage 3 at 6.48 s, was 3.0 s). `docs/engine.md` gets a "Hand-checked cuts" table (25F, `nov2026-1300/R026`, `feb2025-1500/R090`, `feb2025-1500/R000`) and the review findings.
+- **Why:** Issue #90 part A: fix the engine's behaviour with tests and a manual stage-by-stage review.
+- **Agents:**
+  - The toys skip the balance check: their EDAC fires late and the 20 s horizon ends before they settle.
+  - Finding, not changed: dark buses with zero or negative net load count no people (engine, theatre and web agree). That is why the 25F full blackout gives 16.8 M of the model's 18.16 M people. The old explanation in `engine.md` ("23 substations with 0 people") was wrong. Open decision: `plan.md` §9 item 15.
+  - Causality scan before the fix: 98 of 1,844 cuts (10 counting only blackouts).
+- **Files:** `backend/tests/unit/test_cascade.py`, `backend/tests/validation/test_results_so_far.py`, `docs/{engine,plan}.md`.
+
+## 2026-11-22 · feat(cascade): optional re-split memory for EDAC steps and reserve
+
+- **Changed:** `_State` keeps `edac_fired` (the `(zone, step index)` that fired, per bus) and `reserve_used` (primary reserve deployed, MW per bus). With `CascadeParams(resplit_memory=True)`, `_island_input` passes the fired steps with fraction 0 (indices and step numbers stay). It also gives `sync_mw` without the deployed reserve (same governor gain) and lowers the reserve cap by the reserve already deployed (`extra_reserve_mw - used`). `frequency.py` is unchanged.
+- **Changed:** The flag is **off by default**. The default behaviour (a sub-island runs the full EDAC table again and counts its parent's deployed reserve as headroom) is a new line in `ASSUMPTIONS`, `docs/engine.md` item 5 "re-split islands", and `plan.md` §9 item 16.
+- **Why:** Issue #90 plan step A3, with the fallback the user approved: "if it turns out to be a large change, document it as an assumption". The code is small, but turning it on changes `nov2026-2000/R239` from 3.9 M to 14.7 M people. It also breaks `test_flagship.py::test_adaptive_coordination_keeps_most_of_the_mission` (policy C 0.9425 < A 0.9508 at seed 7).
+- **Agents:** Islands only split (lines only open), so a new island's buses all share one parent's fired steps. Turning the flag on is a team decision (`plan.md` §9 item 16). It needs a cache regeneration and a look at the flagship scenario.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`, `docs/{engine,plan}.md`.
+
+## 2026-11-22 · feat(cascade): list dark bus ids on island_blackout
+
+- **Changed:** `_lose_island` fills `island_blackout.ids` with the island's buses (`B###`). `_settle_islands` emits no `island_formed` when nothing split (stage 0 with one island), and the `load_mw` of `island_formed` and `island_blackout` is clamped at 0 (a lone bus with net negative load).
+- **Changed:** The web reads "there is a cut timeline" as `events.length > 0` (was `> 1`) in `CascadeApp.tsx` (`markers`, `hasCascade`), `Timeline.tsx` and `impactAt`, because a cut with no effect now has only its `line_cut` event.
+- **Why:** Issue #90. Without bus ids the web could not darken each island at its own blackout time, and the 188-bus `island_formed` at t=0 was noise in every cut.
+- **Agents:** `stack.md` §6 documents the `ids` and the stage-0 rule. The union of `island_blackout.ids` equals `frames[-1].dark`. Baseline timelines now have no events.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`, `web/src/cascade/{CascadeApp,Timeline}.tsx`, `web/src/cascade/simulation.ts`, `docs/{engine,stack}.md`.
+
+## 2026-11-22 · fix(cascade): wait for island settling before the next stage
+
+- **Changed:** `_cascade` (`domain/cascade/engine.py`) carries `t` as state. After settling the islands of stage k, stage k+1 opens at `max(t, last load_shed or island_blackout of stage k) + stage_spacing_s`, not at `(k+1) x stage_spacing_s`. `island_stable` (the 20 s horizon) does not hold it back.
+- **Changed:** `island_formed`, `load_shed`, `island_blackout` and `island_stable` carry `params.stage`, the stage that formed the island. The `ASSUMPTIONS` text and the `stage_spacing_s` note in `cascade.yaml` say the next stage waits.
+- **Why:** Issue #90. The flow of stage k+1 is computed with the gen and load left after stage k's islands shed or went dark, but those events were stamped later than the stage k+1 opening in 9 cached cuts (for example `nov2026-1300/R026`: blackout at 6.59 s, openings at 3.0 and 4.0 s, now at 7.59 and 8.59 s).
+- **Agents:** Frame and opening times are no longer integers. Causality now holds: every load_shed or island_blackout of stage k comes before the stage k+1 `line_overload_open`. The committed cache is stale until the cache commit later in this branch. `docs/engine.md` item 4 and `stack.md` 4.3 item 5 describe the rule.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine.py,params/cascade.yaml}`, `docs/{engine,stack}.md`.
+
+## 2026-11-22 · docs(stress): guide to the batch endpoints for MCP clients (#101)
+
+- **Changed:** `docs/stress.md` is now the guide for the batch endpoints: flow (prepare never simulates), endpoints and agent operations, every field of a change with its rules, the vocabulary (zones, areas A01-A13, technologies, kV), what each target does, recipes with real outputs, responses, the `prepare_scenario` tool with example calls, errors and guardrails. `docs/mcp.md` and `docs/assistant.md` list the tool and link to it.
+- **Why:** the batch changes exist for the model. An MCP client needs to know exactly how to write them.
+- **Agents:** the recipe numbers in `docs/stress.md` section 5 were run on 2026-11-22 against `data/processed`. They change when the data does.
+- **Files:** `docs/stress.md`, `docs/mcp.md`, `docs/assistant.md`.
+## 2026-11-22 · feat(web): edit components in place, prepared scenarios on the map, the assistant sets the grid; sessions hidden (#101)
+
+- **Changed:** the card of a substation edits Personas, Demanda and Generación by factor, and the card of a line edits Capacidad. They are kept in `Edits.changes` and sent as `changes` to `/grids/simulate`, `/dependency` and `/cost`. "Estado de la red" lists them with "Quitar", plus the prepared grid (`/grids/prepare`). "Simulación" shows supply per zone, and a generator's card shows its own.
+  - The assistant's `prepare_scenario` takes `open_lines` and `out_buses`. With failures it simulates (`simulate_grid`, now an agent route) against the base. The web loads its `scenario` as the final grid, paused at 0.
+  - "Fuentes de la grilla" uses checkboxes again: with Chile ticked, the other countries are drawn around it as context; without Chile they are shown together, view only. This reverses the radio of the #49 merge, by user decision.
+  - Every scenario starts on Carga: the tab no longer switches the colour mode.
+  - Shared sessions are hidden from the web: no rail button, `?sesion=` ignored, the assistant does not join sessions.
+- **Why:** user decisions on 2026-11-22. A person edits one component at a time and batch changes by filters are for the model only. The assistant decides the final grid before a simulation. The cascade still runs only in the existing processes.
+- **Agents:** `prepare_scenario` needs no session (`NO_SESSION_NEEDED`). `useAssistant(s, onScenario)` and `scenarioOf()` read the tool result. `useSession` starts with no session (shortcut comment, #101). `Edits.changes` is optional: old saved edits still load. A prepared scenario never uses the cache. Context layers are drawn under Chile's (`contextLayers`) but are not clickable yet.
+- **Files:** `web/src/cascade/{edits.ts,gridsApi.ts,CascadeApp.tsx,SelectionCard.tsx,NetworkState.tsx,SimulationPanel.tsx,GridSources.tsx,cascade.css,stressEdits.test.ts}`, `web/src/assistant/{useAssistant.ts,scenario.test.ts}`, `web/src/session/useSession.ts`, `backend/src/cascadasen/mcp/{tools.py,digest.py,toolbox.py}`, `backend/src/cascadasen/api/{grid_routes.py,stress_schemas.py}`, `backend/tests/unit/test_prepare_scenario_tool.py`, `docs/{stress.md,openapi/agents.openapi.json}`.
+
+## 2026-11-22 · Merge origin/main into feat/incident-scenarios
+
+- **Changed:** Integrates main after #98 (the incident scenarios) was merged, with the technical-quality work (mypy gate, CI checks, architecture tests, 64 KB body limit). The only conflict was `domain/theater/cycle.py`: main added `cast(...)` to two lines that the calibrated-cost commit removes, so they stay removed.
+- **Why:** #98 went into main before the calibrated-cost commit (US$ 984 M for the 25F), which needs its own pull request.
+- **Agents:** Checked with CI's own commands: `mypy src` 0 errors, `pytest --cov-fail-under=87` gives 456 passed at 90.27 %, web `tsc`, `vitest` (155 tests) and build. The two `test_the_committed_cache_matches_the_engine_for_a_single_cut` failures are gone on main.
+- **Files:** `backend/src/cascadasen/domain/theater/cycle.py`, `CHANGELOG.md`.
+
+## 2026-11-22 · fix(incidents): cost from the calibrated cascade method, no editable duration
+
+- **Changed:** The incident card takes `unserved_energy_mwh`, `failure_cost_usd`, `cost_per_hour_usd`, `outage_duration_h` and `cost_breakdown` from the most expensive cascade of the run (`transient.summary`, `blackout_cost` of #82) and adds `cost_basis` (the calibrated terms with their source or `is_assumption`, also in the catalog). The 25F now gives US$ 984.3 M and 81,443 MWh, as "Estado de la red".
+  - Removed the editable duration: `duration_h` in `RunConfig`, the API body, the MCP tool and the web field, `default_duration_h` in the catalog and `incidents.yaml` `defaults`. The web tips say the dark load pays a 7.34 h black start (calibrated, [44]) and load shed pays 1 h (assumption).
+- **Why:** The card used the flat 4 h x 8.79 US$/kWh over the peak power (US$ 390 M for the 25F) while Estado de la red used #82's calibrated cost (US$ 984 M): two figures for the same event. Decision by Ricardo, 2026-11-22: use the calibrated one.
+- **Agents:** `POST /attacks/runs` no longer takes `duration_h` and an old recipe that has it is read without it. Shed-only incidents (Polonia: US$ 17.8 M) pay 1 h flagged `is_assumption`; an absorbed one (Huatacondo) costs 0. Only the 25F is checked against a real figure. `agents.openapi.json` regenerated.
+- **Files:** `backend/src/cascadasen/domain/theater/{incident,cycle,config,narrative}.py`, `domain/theater/params/incidents.yaml`, `api/incident_routes.py`, `mcp/{tools,digest}.py`, `application/run_experiment.py`, tests, `web/src/incidents/*`, `web/src/session/sessionApi*.ts`, `docs/{attack-sim,mapa3,mcp,sessions-api}.md`, `docs/openapi/agents.openapi.json`.
+
+## 2026-11-22 · Merge origin/main into feat/incident-scenarios
+
+- **Changed:** Integrates #92 (select on the first click, switch off on the second) and #97/#99 (prepared scenarios, `prepare_scenario`) with the incident scenarios.
+  - `mcp/tools.py` `INSTRUCTIONS` keeps both paragraphs (incidents and `prepare_scenario`); `mcp/digest.py` keeps `_incident_digest` and `prepare_digest`.
+  - `CascadeApp.tsx`: `edited` still counts an incident cascade (`!!incidentTl || ...`) and sits before main's `offState`; `canPower` still counts `inc.playing`, and `shutDown` uses main's `isSwitchedOff`. `inc.stop()` stays in `cutLine`, `outBus` and `powerAllOn`, which main's second-click path also goes through.
+- **Why:** The branch conflicted with main in four files.
+- **Agents:** Checked after the merge: web `tsc`, tests and build, the backend suite, and the browser flow with main's new click behaviour (see the PR for counts). The two `test_the_committed_cache_matches_the_engine_for_a_single_cut` failures are the same as on a clean `origin/main`.
+- **Files:** `backend/src/cascadasen/mcp/{tools,digest}.py`, `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+
+## 2026-11-22 · fix(web): show the clamped duration in the incident field
+
+- **Changed:** `IncidentPanel.tsx` rewrites the duration field with the value that is actually sent when it loses focus (`parseDuration` clamps to 0.25-720 h).
+- **Why:** Found in a browser test: typing 1000 left "1000" in the field while the run used 720 h.
+- **Agents:** `parseDuration` is unchanged; only the text shown changed.
+- **Files:** `web/src/incidents/IncidentPanel.tsx`.
+
+## 2026-11-22 · fix(incidents): scripted by default so the card is the incident's own
+
+- **Changed:** `POST /sessions/{sid}/attacks/runs` now defaults `stochastic` to `false`; the web and the MCP tool did not send it, so they follow. `test_incidents.py` runs scripted by default, checks V10 on seeds 1-8 and a new test checks that scripted Huatacondo and UK runs have only `scenario` events and L0 on seeds 1-8.
+- **Why:** Found testing everything end to end. With the theatre's chance on (the old default), unplanned `E1_demand_surge`/`E2_renewable_drop` events landed in the card as if the incident had caused them: the 40 MW UK counter-example gave L1 on seed 7 and L2 on seed 6, and Huatacondo L1 and L2 on those seeds. V10 only passed because the tests looked at seeds 1-3.
+- **Agents:** `stochastic: true` is still allowed and then the card includes the unplanned events; the card does not say which events were the incident's. The policy does not change the peak card (the effect lands at cycle 2, before defence acts) but it does change `indicators` (continuity, TTU, wrong decisions, reserve). `agents.openapi.json` regenerated (the field description changed).
+- **Files:** `backend/src/cascadasen/api/incident_routes.py`, `backend/tests/unit/test_incidents.py`, `docs/attack-sim.md`, `docs/openapi/agents.openapi.json`.
+
+## 2026-11-22 · Merge origin/main into feat/incident-scenarios
+
+- **Changed:** Integrates #95/#96 (a new scenario stops and restarts the timeline) and #82/#94 (blackout cost) with the incident scenarios.
+  - Only conflict in code: `CascadeApp.tsx`. `timeline` is `incidentTl ?? (loadedReady ? loaded.timeline : null)`, so main's rule that a timeline of another scenario never drives the map still holds and an incident cascade still plays over it.
+- **Why:** The branch conflicted with main in `CascadeApp.tsx` and this file.
+- **Agents:** After the merge `tsc`, the 143 web tests and the build pass; the backend has 435 passed and 2 failed: `test_the_committed_cache_matches_the_engine_for_a_single_cut[feb2025-1500-R239]` and `[nov2026-2000-R001]`. They fail the same way on a clean `origin/main` (checked in a temporary worktree), so they are not from this branch: the committed cache probably needs `uv run cascadasen-cache` after #82 changed the engine's cost.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+
+## 2026-11-22 · docs(web): document the Incidentes view
+
+- **Changed:** `mapa3.md` has a new section 4.2 (catalog, options, own session per incident, result, cascade on the map, what is not built) and a `web/src/incidents/` row in section 8; section 10 says the Incidentes view is the only part of the theatre the web uses. `web/README.md` gains the view's paragraph and the `src/incidents/` row. `attack-sim.md` section 3.1 and `sessions-api.md` section 4 record the 422 when the session point differs from the incident's, and that the web consumes the API.
+- **Why:** AGENTS.md: behaviour changes are documented in the same delivery.
+- **Agents:** The "web has no run viewer" comment in `assistant/useAssistant.ts` is still true for generic runs; only incident cascades are played. Still open (`plan.md` section 9 item 10): team confirmation of the reversal and whether to expose the API.
+- **Files:** `docs/{mapa3,attack-sim,sessions-api}.md`, `web/README.md`.
+
+## 2026-11-22 · feat(web): Incidentes view with consequence card and cascade on the map
+
+- **Changed:**
+  - New rail view **Incidentes** (`IncidentPanel.tsx`, `incidents.css`): catalog cards in file order (title, date, hour, effects in text, `no verificado` / `referencia, no es ciber` tags, sources), policy A/B/C, outage hours (assumption, 0.25-720) and **Simular incidente**. The result shows the consequence card (level, people, MW, MWh and cost with their source and assumption tips), the agentic response (`report.indicators`, labelled experimental), "Qué lo habría evitado", the cycles (`after_action.timeline`), notes, sources and both notices. **Cerrar incidente** clears it.
+  - `useIncident.ts` (owned by `CascadeApp`, like `useAssistant`): creates a session at the incident's `operating_point` when there is none or its hour differs (confirm before leaving one), joins it, starts the run, steps it to its horizon, reads report and after-action. Errors (422, 429 with `Retry-After`, 503, no backend) are Spanish texts (`incidentError`); `ApiError` now carries `retryAfter`.
+  - **Ver cascada en el mapa** plays that cycle's `transient` with the cut player: `CascadeApp` uses it as `timeline` ahead of the session's, with the Carga colours. A cut by double click, Prender todo, Cerrar incidente or leaving the session remove it.
+- **Why:** Continuation of issue #74: a user can pick a documented incident in the web, simulate it and see consequence, response, prevention and cascade (user decisions 2026-11-22: own session per incident; panel and cascade only).
+- **Agents:** Only cycles whose `transient` shed load, darkened buses or opened lines get the button (`cascadeCycles`); a stable island alone is not shown. Changing the duration needs a new run (another run in the same session). No viewer of `snapshot.grid`, areas or crews yet (`mapa3.md` section 10). Checked in Chrome (Playwright) against a local API: Huatacondo L0 with no cascade, 25F asks to replace the session, gives L3 and plays its blackout; with the backend off the view shows the error and the map keeps working.
+- **Files:** `web/src/incidents/{IncidentPanel.tsx,useIncident.ts,incidents.ts,incidents.test.ts,incidents.css}`, `web/src/cascade/CascadeApp.tsx`, `web/src/session/sessionApi.ts`.
+
+## 2026-11-22 · feat(web): incident catalog client and pure helpers
+
+- **Changed:** `sessionApi.ts` gains `getIncidentCatalog()` (`GET /api/v1/attacks/catalog`, through a new `callAt(base, ...)` that shares `call`'s busy-409 retries) and `startIncidentRun(sid, {scenario, policy, seed?, duration_h?})`. `useSession().create` accepts `{point, label}`. New `web/src/incidents/incidents.ts`: catalog, card and after-action types, `sessionPlan` (create/reuse/replace by the session hour), `cascadeCycles` (snapshots whose `transient` is a Timeline), `cycleMinutes`, `effectText`, `cardFigures` and `responseFigures` (each figure with its source; duration, MWh and cost flagged as assumptions), `parseDuration` (0.25-720 h).
+- **Why:** First half of the Incidentes view (continuation of issue #74): the logic is pure and tested before the panel uses it.
+- **Agents:** `EVENT_LABELS` in `incidents.ts` copies the five event labels of `narrative_es.yaml`; add a label there when the catalog uses a new event type. Tests: `incidents.test.ts`, `sessionApi.test.ts`.
+- **Files:** `web/src/session/{sessionApi,sessionApi.test,useSession}.ts`, `web/src/incidents/{incidents,incidents.test}.ts`.
+
+## 2026-11-22 · fix(incidents): require the session point to match the incident
+
+- **Changed:** `POST /api/v1/sessions/{sid}/attacks/runs` answers 422 `{field: "scenario", message, valid: [<point>]}` when the session's `point` differs from the incident's `operating_point`. The catalog and route descriptions name `operating_point`; the MCP `start_incident_run` docstring says 25F needs `start_session(point="feb2025-1500")`. `agents.openapi.json` regenerated.
+- **Why:** `SessionService.create_run` forces the session point, so `25f-referencia` in a `nov2026-1300` session silently ran at the wrong hour.
+- **Agents:** To replay an incident, create (or join) a session at its `operating_point` (in the catalog). Today three incidents use `nov2026-1300` and `25f-referencia` uses `feb2025-1500`.
+- **Files:** `backend/src/cascadasen/api/incident_routes.py`, `backend/src/cascadasen/mcp/tools.py`, `backend/tests/unit/test_incidents.py`, `docs/openapi/agents.openapi.json`.
+
+## 2026-11-22 · docs(incidents): attack-sim is implemented, with its API and tools
+
+- **Changed:** `attack-sim.md` has a new section 3.1 (catalog, results, API, card, tools) and a new status line; `strategy.md` section 6, `mcp.md` section 3, `sessions-api.md` section 4 and `plan.md` section 9 item 10 point to it.
+- **Why:** AGENTS.md: behaviour changes are documented in the same delivery (issue #74).
+- **Agents:** `attack-sim.md` sections 3 and 5 are the first proposal and are partly wrong now (no `plant_out`, `fleet_out` or `/attacks/simulate`; the API is not local-only, it follows the session rules). Still open (`plan.md` section 9 item 10): team confirmation of the reversal, whether to expose the API, and the Huatacondo battery in the dataset.
+- **Files:** `docs/{attack-sim,strategy,mcp,sessions-api,plan}.md`.
+
+## 2026-11-22 · feat(mcp): incident scenario tools
+
+- **Changed:** `list_incident_scenarios` and `start_incident_run(scenario, policy, seed, duration_h)` in `mcp/tools.py` (and so in the assistant, which shares the specs). `run_report` and `after_action` digests carry the `incident` block. The server `INSTRUCTIONS` mention them.
+- **Why:** Issue #74: an MCP client or the assistant must be able to replay a documented incident in natural language.
+- **Agents:** `OPERATIONS` maps them to `get_attack_catalog` and `start_incident_run`. `start_incident_run` sets the active run, like `start_run`. No tool takes free effects or lists targets.
+- **Files:** `backend/src/cascadasen/mcp/{tools,digest}.py`, `backend/tests/unit/test_mcp_tools.py`.
+
+## 2026-11-22 · feat(incidents): documented-incident scenarios as agentic runs
+
+- **Changed:**
+  - New catalog `domain/theater/params/incidents.yaml` (`huatacondo-2026`, `polonia-2025`, `reino-unido-2026`, `25f-referencia`): each is a theatre template (events C1/C2/C3/C5/D4, adversary off) plus sources, `verified`, notes and mitigations. `theater_config().incidents` has the metadata and `.templates` also contains them.
+  - Runs from an incident add `incident` to `report()`: public metadata and a `consequence_card` (level, people, MW shed, MWh and cost over `duration_h`, an assumption, default 4 h). `RunConfig.duration_h` is new and travels in the recipe. The after-action adds an `incident` section (effect and prevention, Spanish).
+  - API: `GET /api/v1/attacks/catalog` and `POST /api/v1/sessions/{sid}/attacks/runs` (`start_incident_run`). Step, report, after_action and replay use the existing routes. `agents.openapi.json` regenerated.
+- **Why:** Issue #74: launch a documented incident and see the defensive agents respond, as a thin layer over the theatre, not a second engine.
+- **Agents:**
+  - V10 holds: Huatacondo gives L0 in the seeds tried. Polonia gives L1-L2, UK L0, 25F L3 (`tests/unit/test_incidents.py`, uses real data, skipped without `data/processed`).
+  - Guardrails are tests: no technique words, no named plants (areas and zones only), file order not damage order, adversary off, both notices on every card.
+  - Effect sizes for Polonia and UK are replay assumptions. Huatacondo uses the dataset's 88.1 MW and no battery (not in `storage.geojson`).
+  - Not built from the first proposal: `plant_out`/`fleet_out`, free `effects` in a request, `/attacks/simulate`.
+  - The MCP extra is needed to run its tests: `uv sync --all-extras`.
+- **Files:** `backend/src/cascadasen/domain/theater/{incident,config,cycle,narrative}.py`, `domain/theater/params/{incidents,narrative_es}.yaml`, `api/{incident_routes,app,simulation_schemas}.py`, `application/run_experiment.py`, `backend/tests/unit/test_incidents.py`, `backend/tests/integration/test_sessions_api.py`, `docs/openapi/agents.openapi.json`.
+## 2026-11-22 · fix(types): mypy reports 0 errors and becomes a CI gate
+- **Changed:** The 56 remaining `mypy src` errors are fixed with annotations and `typing.cast`, with no change at run time: `float | None` coordinates guarded by `located` (`domain/unify.py`, `validation.py`, `simulation/network.py`, `regional_reduction.py`, `regional_network.py`, `application/grid_queries.py`), two casts in the incident fields of `domain/theater/cycle.py` (code that came with #98), `SimulationService.world` (the API always passes a world), a renamed loop variable in `unify.py`, the typed bus row of `grid_stress.py`. In `regional_network.py` the all-or-nothing check on `r_pu` became `len(rs) == len(group)` over the non-None values, which gives the same result.
+- **Changed:** The `backend-mypy` job of `checks.yml` no longer has `continue-on-error`, so a new type error blocks the deploy. README and `backend/README.md` say so.
+- **Why:** The check was red on PR #100 because the baseline (52) was below the real count (56 after `main` added code), and the user asked to fix mypy first.
+- **Agents:** Run `cd backend && uv run mypy src` before pushing Python changes; it must say "no issues found". Do not raise a baseline: fix the error or add a justified `cast`.
+- **Files:** `backend/src/cascadasen/{domain,application}/*`, `.github/workflows/checks.yml`, `README.md`, `backend/README.md`.
+## 2026-11-22 · docs(quality): fix the BodyLimitMiddleware docstring and the scipy row in stack.md
+
+- **Changed:** the `BodyLimitMiddleware` docstring says the limit covers declared and chunked bodies. `docs/stack.md` no longer lists scipy in the simulation engine row (only `data/scripts/build_baseline_opf.py` imports it, via the `data` dependency group).
+- **Why:** Two stale statements the final review found after the chunked-limit fix and the scipy group.
+- **Agents:** Docstring and docs only, no behaviour change.
+- **Files:** `backend/src/cascadasen/api/limits.py`, `docs/stack.md`.
+
+## 2026-11-22 · chore(ci): run tests, mypy baseline and web checks in CI, and make deploy need them
+- **Changed:** new `.github/workflows/checks.yml` (runs on `pull_request` and `workflow_call`) with jobs `backend-test` (`uv sync --locked --group dev`, `pytest --cov=cascadasen --cov-fail-under=87`), `backend-mypy` (`mypy src`, `continue-on-error: true`, baseline of 52 errors) and `web` (`npm ci`, `tsc --noEmit`, `vitest run`, `npm run build`). `deploy.yml` gets a `checks` job (`uses: ./.github/workflows/checks.yml`) and `needs: checks` on `deploy`; nothing else in it changed. `lint.yml` also runs `ruff check` and `ruff format --check` on `../data/scripts` (backend config).
+- **Why:** Review R-01, B-02, W-03: no test ran in CI and a broken main could deploy. Coverage measured 89% (12147 statements, 1311 missed) without the mcp/llm extras; the floor is 87.
+- **Agents:** a failing `backend-test` or `web` job now blocks the deploy; `backend-mypy` never does. Raise the floor when coverage rises; the README "Checks (CI)" wording matches. `test_the_committed_cache_matches_the_engine_for_a_single_cut` compares the cache with the live engine exactly (except `status` at loading 1.0) and is tolerant of one rounding unit of platform float noise (fix(tests) commit just before this one). This commit is the only one that touches `.github/workflows/`: pushing it needs a token with the `workflow` scope.
+- **Files:** `.github/workflows/{checks,deploy,lint}.yml`, `CHANGELOG.md`.
+
+## 2026-11-22 · fix(tests): cache-vs-engine test tolerates one rounding unit of platform float noise
+- **Changed:** in `backend/tests/unit/test_grid_simulation.py` the helper `_without_boundary_status` is now `_without_rounding_noise`: an edge `flow_mw` (whole MW) or `loading` (3 decimals) that differs from the committed cache by at most one unit of its last rounded digit is taken from the cache, and the existing `status` tolerance at loading 1.0 is kept. Everything else must still be equal.
+- **Why:** the cache was written on another machine. On macOS arm64 nov2026-2000-R001 gave R113 `flow_mw` -40 vs -39 cached; on linux/amd64 feb2025-1500-R239 gave R091 `loading` 0.314 vs 0.313. Float noise at a rounding boundary, so the test would fail the CI `backend-test` job and block deploys.
+- **Agents:** test only. The engine and `web/public/cache/**` are unchanged and the cache is not regenerated. The test passes on macOS arm64 and linux/amd64 (QEMU).
+- **Files:** `backend/tests/unit/test_grid_simulation.py`, `CHANGELOG.md`.
+## 2026-11-22 · feat(grids): prepared scenarios for population, demand, generation and lines, and supply per source (#97)
+
+- **Changed:** new `POST /api/v1/grids/prepare` (agent route `prepare_scenario`, tool `prepare_scenario`). It resolves filters (buses, zones, areas, comunas, tech, lines, kv) into a prepared grid. It does not simulate: it returns what each change touches, lines already over their limit and whom each generator should feed.
+  - `/grids/simulate`, `/grids/dependency` and `/grids/cost` take the same `changes`. The failure runs in the existing cascade on the prepared grid. `/grids/simulate` adds `supply`: `should_feed`, `feeds` and `pct_fed` per generating substation, by id, and per zone.
+  - Population drives demand at `stress.regulated_share` (0.389) x demand / people of the point: 187 to 238 W per person.
+  - Thermal splits into `carbon`, `gas`, `diesel`, with `termica` as a tag for the three.
+- **Why:** the team prepares stress scenarios (more people, less hydro) and simulates failures on them with the processes it already uses. Demand per bus is not proportional to people (mines), so only the regulated share grows with population.
+- **Agents:** the cascade only runs in the existing processes. `/prepare` never simulates. Nothing is stored and there is no cooldown. `prepare_edits` now takes `changes` and returns the prepared `Applied` first, not the base point. The overlay accepts `load_mw` down to `min(0, base)`, because 28 base buses at feb2025-1500 are negative. Sources are listed by id, never ranked by damage (cyber.md 8.2). Assumptions: same per-capita value everywhere, tech split by installed MW x national dispatch factor, redispatch with no upward limit. The web does not send `changes` yet (pending).
+- **Files:** `backend/src/cascadasen/application/{grid_stress.py,grid_simulation.py,grid_dependency.py}`, `backend/src/cascadasen/api/{stress_schemas.py,grid_routes.py,agent_openapi.py}`, `backend/src/cascadasen/mcp/{tools.py,digest.py}`, `backend/src/cascadasen/domain/cascade/{overlay.py,params/cascade.yaml}`, `backend/tests/unit/test_grid_stress.py`, `docs/{stress.md,grids.md,openapi/agents.openapi.json}`.
+## 2026-11-21 · fix(web): unique keys for the simulation warnings in Estado de la red
+
+- **Changed:** `NetworkState.tsx` keys each warning of `POST /grids/simulate` by code and position instead of code plus message.
+- **Why:** Taking a substation out of service can leave several buses isolated, and the API sends one `isolated_bus` warning per bus with the same message, so React logged "Encountered two children with the same key" on every render (seen in the browser check of #42).
+- **Agents:** Warnings from the API are not unique by code or message; never key them by text.
+- **Files:** `web/src/cascade/NetworkState.tsx`.
+
+## 2026-11-21 · fix(web): help text and styles after merging the substation shutdown
+
+- **Changed:** Ayuda (`Legend.tsx`) no longer says substations can only be switched off in a session: the second click or **Apagar subestación** works with and without one, and it says what switching off does (out of service with its demand and generation; in a session, all its lines open). `cascade.css` drops the disabled-button style and a stray comment left from the session-only button. The substation card reads "apagada" instead of "sin suministro" while the user has it off.
+- **Why:** Leftovers from rebasing the select-then-cut branch onto #67 and #70, which already take substations out of service.
+- **Agents:** No disabled primary buttons remain in the cascade cards.
+- **Files:** `web/src/cascade/{Legend.tsx,SelectionCard.tsx,cascade.css}`.
+
+## 2026-11-21 · docs(mapa3): document the select-then-cut flow and substation off
+
+- **Changed:** `docs/mapa3.md` sections 1.1 (A9), 1.2 (A9), 4 items 4 and 9 (two clicks on top of the substation outage of #67 and #70, buttons renamed), 8 (`clicks.ts`, new `outage.ts`), 9 (troubleshooting rows "Click does nothing", "Double click does not cut") and 11 ("Cuts in a session": substation off in batches of 3, on). `web/README.md` usage line.
+- **Why:** The docs still described the double-click cut removed in the previous commit, and the one-call session shutdown.
+- **Agents:** Seen in a browser: after a cut, the event pin (`MapOverlays`, `button.pin`) covers a short cut line, so the line cannot be clicked again; the impact card's **Volver a conectar** still works. Not changed here.
+- **Files:** `docs/mapa3.md`, `web/README.md`.
+
+## 2026-11-21 · feat(web): select on the first click, switch off on the second
+
+- **Changed:** Mapa 3 map clicks (`clicks.ts`): the first click selects a line or substation, a second click on the selected one switches it off (`toggle`), and a fast double click (tapCount >= 2 or two clicks on the same element within 400 ms) does nothing, not even re-selecting after a cut. The double-click cut (lines and, since #70, substations) is gone. `interpretClick` takes the current selection, so a selection made from a card is switched off by one map click.
+- **Changed:** The second click runs the existing actions: `cutLine` for a line, `outBus` for a substation (one more change on the local list without a session, `POST /{sid}/cut` of its lines in a session). In a session the lines now go in batches of 3: `CutIn` allows at most 3 per call, so the one-call version answered 422 for any substation with more than 3 lines (Charrúa has 16). New pure `outage.ts`: `isSwitchedOff(pick, network, edits, session)` and `batches`.
+- **Changed:** Buttons follow the issue: **Volver a conectar** (line card, impact card; **Volver a conectar todas** for several lines), **Apagar subestación** / **Volver a encender** (substation card, impact card). Map tooltips: "Clic para ver el detalle", then "Clic otra vez para cortarla" / "Clic otra vez para apagarla" on the selected element. Copy that told users to double click (Simulación empty card, Estado de la red, timeline, Ayuda) now describes the two clicks.
+- **Why:** Issue #42 phase A: a line could be cut before its data was seen. User decision: phase A only, values stay plain text.
+- **Agents:** Switching back on is only from the card; a second click on something already off does nothing. Without a session a substation is off when it is in `edits.buses` (its lines are not off by themselves); in a session when all its lines are open. A double click on an element that is already selected switches it off on its first click (that click is a second click on the selection). Open: phase B (editing generation, demand, people). `docs/plan-2.0.md`, cited by the issue, does not exist.
+- **Files:** `web/src/cascade/{clicks.ts,clicks.test.ts,outage.ts,outage.test.ts,CascadeApp.tsx,SelectionCard.tsx,SimulationPanel.tsx,NetworkState.tsx,Timeline.tsx,Legend.tsx}`.
+
+
+## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
+
+- **Changed:** `_loadTimeline` (`web/src/cascade/CascadeApp.tsx`) calls `setPlaying(false); seek(0)` before it asks for the new timeline, and `timeline` is only set when `loaded.key === timelineKey`. A new scenario or cut loads paused at 0.
+- **Why:** the old run kept playing and its cascade stayed on the map until the new timeline arrived (seconds for `POST /grids/simulate`).
+- **Agents:** the cut-then-autoplay behaviour is gone for hand cuts too, they share this path. Session timelines are unchanged.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+
+## 2026-11-22 · feat(grids): failure cost that tells a total blackout from a slow grid, per hour, at POST /grids/cost (#82)
+
+- **Changed:** `blackout_cost` (`domain/simulation/consequence.py`) values dark demand with 7.34 h of black start and a total-blackout premium (k = 1.375, scaled by the dark share), and EDAC load shedding with 1 h and no premium; it also gives `cost_per_hour_usd`. The cascade summary adds `dark_load_mw`, `cost_per_hour_usd` and `cost_breakdown`; substations out of service count as dark. New `POST /api/v1/grids/cost` (`cost_workflow`), read by Estado de la red (total, per hour, MWh and "apagón total / parcial / corte parcial de carga"). Cache regenerated.
+- **Why:** #81's flat 4 h x 8.79 US$/kWh gave US$ 390 M for the 25F; the ISCI study for Enel Foundation [44] gives US$ 984 M and 81,430 MWh, and a blackout costs more per hour than load shedding. Now the 25F gives US$ 984.3 M and 81,443 MWh.
+- **Agents:** the two calibrated terms come from [44] (`cascade.yaml` `cost`), not from tuning the engine; only the 25F is checked against a real figure. `failure_cost(shed)` without the dark split counts everything as dark with no premium (N-1 money at risk). The 13-area engine's consequence card (`outage_cost`) is unchanged.
+- **Files:** `backend/src/cascadasen/{domain/simulation/consequence.py,domain/cascade/engine.py,domain/cascade/health.py,domain/cascade/params/cascade.yaml,application/grid_simulation.py,api/grid_routes.py}`, tests, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,gridsApi.ts}`, `docs/{engine,datasets}.md`.
+## 2026-11-22 · docs(readme): product README and stale docs
+- **Changed:** `README.md` is now the Sub50 product README (what it is and simulates, `docker compose up --build`, honest validation scope, CI checks, names, repo map, doc links); the hackathon template text is gone, team list and logo stay at the end. `docs/stack.md`: status, section 0 (now history), decision rows (React hooks, custom charts, engine, API, precompute, tests, CI), `cascadasen-cache`, `sen_network.json`, section 7.1 with `GET /sim/runs/{id}/snapshots` (14 operations). `docs/plan.md`: built state, CI and `cascadasen-cache` lines, V6 marked skipped, duplicate decision 14 renumbered to 15. `docs/mapa3.md`: Glossary moved to section 12 (no duplicate `## 10`), missing `web/src/cascade` modules in the section 8 table, theatre-cache git-ignore wording, deleted `icons.ts` sentence dropped. `web/README.md`, `docs/architecture.md` (`built_at` exception), `docs/datasets.md` (no personal path, 188 buses, appendices not in repo) and `backend/README.md` (endpoint list) corrected.
+- **Why:** Review R-14, R-15 and section 7 rows 2-17. Docs only: no code, cache or OpenAPI change.
+- **Agents:** The CI wording lives in `README.md` section "Checks (CI)"; `stack.md` and `plan.md` point to it. Update it there when the workflows change. `mapa3.md` section 10 is still the operation mode; the Glossary is section 12. Left for the team: voltage_limited (B-06) and the idea/cyber text conflicts (review rows 18, 25, 26).
+- **Files:** `README.md`, `docs/{stack,plan,mapa3,architecture,datasets}.md`, `web/README.md`, `backend/README.md`.
+## 2026-11-22 · refactor(web): error boundary, typed tooltip, logged catches, helper tests
+- **Changed:** New `web/src/ErrorBoundary.tsx` wraps only `<CascadeApp />` in `main.tsx` (error shows `Algo salió mal al mostrar el mapa.` and a `Recargar` button; without an error it renders children unchanged). `_tooltip` in `map/mapboxMap.ts` no longer uses `any`. Five silent catch sites now `console.warn` (sessionApi poll, CascadeApp uploads list and delete, NetworkPanel summary, useSession 412 reload, baseMap picking). Deleted unused `web/src/cascade/icons.ts`. New tests `map/iso3.test.ts` and `map/shapes.test.ts`.
+- **Why:** Review W-07 and W-08. No behaviour, API or cache change.
+- **Agents:** `docs/mapa3.md` line 130 still names `web/src/cascade/icons.ts` (deleted): the docs commit must drop that sentence. `useSession` stays untested (no jsdom or testing-library). Legacy maps 1 and 2 and unused `sessionApi` run helpers were left in place on purpose.
+- **Files:** `web/src/ErrorBoundary.tsx`, `web/src/main.tsx`, `web/src/map/mapboxMap.ts`, `web/src/map/baseMap.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/NetworkPanel.tsx`, `web/src/session/*`, `web/src/map/*.test.ts`.
+## 2026-11-22 · docs(adr): add architecture decision records
+- **Changed:** New `docs/adr/` with `README.md` (index and format) and five records: 0001 two engines, 0002 reduced 188-bus network, 0003 DC power flow with the voltage rule, 0004 sessions on S3 with the session id as capability, 0005 hexagonal layering and its test. `docs/architecture.md` links the folder.
+- **Why:** Review R-18. The reasons behind these decisions were spread over `plan.md` section 9, `engine.md` and `sessions-api.md`. Each record cites its source doc and holds no new facts.
+- **Agents:** Add a record when a decision is expensive to reverse. Keep records under 40 lines, number them in order and mark replaced ones `superseded by NNNN`. The root README is owned by the docs commit, so it does not link the folder yet.
+- **Files:** `docs/adr/*`, `docs/architecture.md`.
+## 2026-11-22 · docs(backend): explain the why of the 14 largest undocumented functions
+- **Changed:** Docstrings only, no code line changed. Functions: `validate_snapshot`, `_cycle` and `__post_init__` (theatre `Simulation`), `infer_line_topology`, `GridUnifier.unify`, `_reconcile_cen_sections`, `_plants`, `_electrical`, `run_transient`, `simulate_island` (simulation), `ISRAgent.step`, `IdeEnergiaSource.contribute`, `create_app`, `PhysicsSimulator.simulate`.
+- **Why:** Review R-16. These were the largest functions without a docstring (40 to 325 lines). Each docstring gives the order of the steps and why, thresholds and what a caller may assume, checked against the code.
+- **Agents:** Check that a docstring-only commit leaves the code unchanged by comparing `ast.dump` of each changed file before and after with docstrings removed (done here: 10 files, 0 differences).
+- **Files:** `backend/src/cascadasen/{api/app.py,application/simulate.py,domain/{validation,unify,topology_inference}.py,domain/agents/isr.py,domain/simulation/{engine,frequency}.py,domain/theater/cycle.py,infrastructure/sources/ide_energia.py}`.
+## 2026-11-22 · test(architecture): enforce the layer import rules
+- **Changed:** New `backend/tests/unit/test_architecture.py` parses `src/cascadasen` with `ast` (stdlib only, no package import) and asserts: `domain` imports no outer layer (api, application, infrastructure, mcp, cli, sim_fixtures); `application` and `infrastructure` import neither `api` nor `mcp`; no module cycle among top-level imports; the application to infrastructure imports equal the set `KNOWN_EXCEPTIONS`.
+- **Why:** Review R-21. The hexagonal rule in `docs/architecture.md` had no check. Measured on this base: 0 violations for the first four rules. A temporary `from cascadasen.api import app` in a domain module made 2 tests fail.
+- **Agents:** The 6 `KNOWN_EXCEPTIONS` (CLI entry points in `application/{build_regional,grid_health,grids}.py` and the default document store of `run_experiment.py`) are listed in the test. A new application to infrastructure import fails the test. The 4 api to mcp imports are not asserted (review B-08 is a larger refactor).
+- **Files:** `backend/tests/unit/test_architecture.py`.
+## 2026-11-22 · chore(types): fix plain mypy annotation errors
+- **Changed:** `uv run mypy src` goes from 153 to 52 errors (179 before the config). Only annotations, `cast`, two `assert x is not None` that cannot fail (`execution.py` C3, `cycle.py` LLM answer) and renames of shadowed loop variables (`r` to `ramp`, `p` to `prob`, `k` to `nearest`, `c` to `comuna`, `z` to `zone`, `a, b` to `src, dst`). No runtime behaviour changed. `backend/README.md` gets a `Type checking` section.
+- **Why:** Review R-03/B-10.
+- **Agents:** Left on purpose (need a behaviour or model change): `float | None` coordinates guarded by `located`, and `TheaterWorld | None` passed where it is required. mypy is still not a CI gate.
+- **Files:** `backend/src/cascadasen/{api,application,domain,infrastructure,mcp}/*` (21 files), `backend/README.md`.
+## 2026-11-22 · chore(types): add a mypy baseline configuration
+- **Changed:** `backend/pyproject.toml` gets `[tool.mypy]` (`python_version = "3.12"`, `files = ["src"]`, `ignore_missing_imports = true`, `plugins = ["pydantic.mypy"]`). `uv run mypy src` goes from 179 to 153 errors.
+- **Why:** Review R-03/B-10. Without a config, mypy reported 16 errors for libraries without stubs (networkx, yaml, boto3, openpyxl, anthropic, mcp) and did not understand pydantic models.
+- **Agents:** Run `cd backend && uv run mypy src`. The count is a baseline, not a gate. Annotation fixes follow in later commits.
+- **Files:** `backend/pyproject.toml`.
+## 2026-11-22 · chore(backend): remove nine unreferenced methods
+- **Changed:** Removed `ProcessedWorld.labels`, `LogisticsAgent.freedom`, `Grid.add_inertia`, `Grid.totals` (simulation grid), `Decision.param`, `Belief.trust_of`, `Action.param` (execution), `TheaterGrid.island_inertia_mws` and `TheaterGrid.release_hold`. 40 lines deleted, none added.
+- **Why:** Review B-13. `vulture` flags them, and `git grep` finds no caller in `backend/src`, `backend/tests`, `web/src`, `docs` or the OpenAPI specs (only CHANGELOG history mentions `island_inertia_mws`). None is reached through `getattr` (the `getattr` sites use fixed names or tool/route names).
+- **Agents:** `api/static/map.html` stays: it serves `/map`. Only these nine locations were re-checked on this base (the review counted 11).
+- **Files:** `backend/src/cascadasen/{application/theater_world.py,domain/agents/logistics.py,domain/simulation/grid.py,domain/theater/{decisions,execution,grid}.py}`.
+## 2026-11-22 · chore(deps): add a `data` dependency group with scipy
+- **Changed:** `backend/pyproject.toml` gets `[dependency-groups] data = ["scipy"]` and `backend/uv.lock` adds scipy 1.18.1 (75 added lines, no other package changed). `docs/mapa3.md` now says `cd backend && uv sync --group data`.
+- **Why:** Review R-23: `data/scripts/build_baseline_opf.py` imports scipy, which was in no dependency list. openpyxl is already a main dependency.
+- **Agents:** The Dockerfiles use `uv sync --locked --no-dev`, so the image does not get scipy. Run data scripts with `uv sync --group dev --group data` first. A later plain `uv sync --group dev` removes scipy again.
+- **Files:** `backend/pyproject.toml`, `backend/uv.lock`, `docs/mapa3.md`.
+## 2026-11-22 · fix(data): safer PyPSA-CL download in build_operating_points.py
+- **Changed:** `_ensure_loads_file` returns before the SharePoint cookie request when the four files already exist in `data/raw/pypsa_cl/`, uses `curl -fsSL` (an HTTP error fails instead of saving HTML as `.xlsx`), and downloads to `<name>.part` then renames.
+- **Why:** Review D-01. An offline rebuild needed the network, and an error page or an interrupted download left a corrupt `.xlsx` that later runs trusted.
+- **Agents:** If an old run left a corrupt `.xlsx` in `data/raw/pypsa_cl/`, delete it by hand. The script was not re-run, so `data/processed/*` is unchanged. Provenance headers in the generated JSON (review D-03) were skipped because they change data outputs.
+- **Files:** `data/scripts/build_operating_points.py`, `docs/datasets.md`.
+## 2026-11-22 · chore(data): ruff-clean data/scripts
+- **Changed:** `zip()` calls in `build_baseline_opf.py` and `build_operating_points.py` get `strict=False` (same behaviour). The deliberate import after the `sys.path` insert in `build_baseline_opf.py` gets `# noqa: E402` with the reason. The three scripts are reformatted with `ruff format` (mechanical). `scripts/lint.sh` now runs ruff from `backend/`, so files outside it (`data/scripts`) use `backend/pyproject.toml` instead of ruff defaults (88 columns, no `B`/`RUF` rules).
+- **Why:** Review D-02: `ruff check ../data/scripts` reported 5 errors and 3 files were unformatted.
+- **Agents:** Run `cd backend && uv run ruff check . ../data/scripts && uv run ruff format --check . ../data/scripts`. The scripts were not re-run, so `data/processed/*` is byte-identical.
+- **Files:** `data/scripts/{build_baseline_opf,build_operating_points,build_node_index}.py`, `scripts/lint.sh`.
+## 2026-11-22 · chore(repo): bash 3.2 pre-commit hook, lint.sh checks web/, ignore coverage output
+- **Changed:**
+  - `scripts/hooks/pre-commit` no longer uses `mapfile` (bash 4 only), so it runs on macOS bash 3.2. Same checks.
+  - `scripts/lint.sh` and `AGENTS.md` point at `web/` (the `frontend/` directory does not exist). For `web/**/*.ts|tsx` it runs `tsc --noEmit` on the whole project once per run when `web/node_modules/.bin/tsc` exists. eslint and prettier branches stay, but only run if installed there.
+  - `.gitignore` adds `.coverage`, `htmlcov/`, `web/coverage/` and `web/public/cache/theater/` (docs already say that directory is git-ignored).
+- **Why:** Review R-04, R-06, R-10, R-11. The hook failed on macOS, the lint script linted a directory that does not exist, and `.coverage` showed up as untracked.
+- **Agents:** Decision: no eslint or prettier dependency is added, because they would reformat the app. `scripts/lint.sh --check web/src/foo.ts` fails on any type error in the web project, not only in that file. You no longer need `--no-verify` on macOS.
+- **Files:** `.gitignore`, `scripts/lint.sh`, `scripts/hooks/pre-commit`, `AGENTS.md`.
+## 2026-11-22 · fix(api): enforce the 64 KB body limit on chunked requests
+- **Changed:** `BodyLimitMiddleware` now counts the body of a request without `content-length` (chunked) on the limited prefixes. Over `MAX_BODY_BYTES` it sends the same 413 JSON (`Cuerpo demasiado grande (máximo 64 KB).`). Otherwise it replays the buffered messages to the app. Requests with `content-length` keep the same path and the prefixes are unchanged.
+- **Why:** A chunked request skipped the limit entirely (review B-04).
+- **Agents:** The 413 body is built in `BodyLimitMiddleware._too_large`. New test `test_a_chunked_body_over_64_kb_gives_413_and_a_small_one_passes` in `tests/integration/test_sessions_api.py`.
+- **Files:** `backend/src/cascadasen/api/limits.py`, `backend/tests/integration/test_sessions_api.py`.
+## 2026-11-22 · chore(api): log a dropped assistant stream callback at debug level
+- **Changed:** `Emitter.__call__` in `application/assistant.py` logs `stream callback dropped` with `log.debug(..., exc_info=True)` before it sets `callback = None`.
+- **Why:** The `except Exception` swallowed the cause silently. Behaviour is the same.
+- **Agents:** Set the `cascadasen.application.assistant` logger to DEBUG to see why a stream client was dropped.
+- **Files:** `backend/src/cascadasen/application/assistant.py`.
+## 2026-11-22 · fix(tests): green suite on a clean checkout
+- **Changed:** `test_bedrock_adapters_use_the_aws_profile` now skips with `pytest.importorskip("anthropic")` when the `llm` extra is not installed. `test_the_committed_cache_matches_the_engine_for_a_single_cut` treats `status` as equal when both edges have `loading == 1.0` and the statuses are `ok`/`overload`; everything else is still compared exactly.
+- **Why:** The engine decides `overload` with `ratio > 1.0` (`domain/cascade/engine.py` `_frame`), so last-bit BLAS/platform float noise flips the status of edges at exactly 100% (`feb2025-1500/R239`: R183, R206, R045, R099; `nov2026-2000/R001`: R206). The cache and the engine did not change, so regenerating would only move the drift to another machine.
+- **Agents:** `web/public/cache/**` is untouched on purpose. Do not regenerate it to fix this test. After this commit: 405 passed, 5 skipped (anthropic, 2 mcp extras, V6, V9), 0 failed.
+- **Files:** `backend/tests/unit/test_llm_commander.py`, `backend/tests/unit/test_grid_simulation.py`.
 ## 2026-11-22 · docs(review): technical review of the repository (issue #79)
 - **Changed:** New `reports/technical-review.md`: scores from 1 to 5 per area (backend, MCP and assistant, frontend, data scripts, tests and CI, documentation of the code, modularity), tool results (ruff, mypy, pytest with coverage, tsc, vitest, build), findings with file and line, stale docs and a prioritised fix list.
 - **Why:** Issue #79 asks for a technical evaluation of the repository against the Platanus Hack 26 criteria, with a report in `reports/`.
@@ -174,6 +743,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** the scenario plan (PR #33) had both events; the user asked for them in Desastres.
 - **Agents:** 2011 gives 3.2 M people (real 9.8 M) and 2010 gives 4.1 M (real more than 13 M): analogues, not reproductions (docs/mapa3.md, issue #35). Adding a disaster is one entry in `DISASTERS`.
 - **Files:** `web/src/cascade/{Scenarios.tsx,scenarios.test.ts,CascadeApp.tsx}`, `docs/mapa3.md`.
+
 ## 2026-11-21 · docs(assistant): document the web chat
 
 - **Changed:** `docs/assistant.md` gets section 2c "Web client" (files, which session a message uses, refresh rules, persistence key, rehydration limits, error texts, what was checked) and §5 drops "The web UI" in favour of the pending Bedrock check. `web/README.md` adds a paragraph on the **Asistente** rail item and a row for `src/assistant/`. `docs/mapa3.md` §8 and §11 mention the new rail item and folder.
@@ -281,7 +851,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Changed:** `powerAllOn()`. Without a session it applies `powerAll(...)`: no cut, no selection, no notice, timeline at 0 and paused, same point. In a session it asks `confirm(...)` first, then calls the existing `restore()` (`repairLines(sid, { all: true }, rev)` via `s.edit`) and clears the selection and the timeline. Tab, colour mode and view never change. Session dataset edits are kept.
 - **Why:** Before this, "Reponer línea" in the selection or impact card was the only way back to the base case, and it repaired a single cut. With several elements switched off (#42, PR #67) the user needs one always-visible way back to the starting point that keeps the chosen operating point.
 - **Agents:** Disabled is `aria-disabled` with a guarded click, not `disabled`, so `TipLayer` still shows "No hay nada apagado ni editado." (same pattern as the placeholder tabs). `.power-all` has z-index 2, below `.map-controls` (3), so the layers popover covers it while open. No red: red is reserved for failure. Open PR #67 (`sub-<bus>` cut ids) needs no special handling: `cut: null` clears it too, but expect a textual merge conflict in the same area of `CascadeApp.tsx`. When #42 phase B adds local edits, pass them as `edited`. Known nit: after a click the tooltip keeps its old text until the pointer leaves the button (TipLayer reads `data-tip` only on `pointerover`).
-- **Files:** `web/src/cascade/{CascadeApp.tsx,cascade.css}`.
+- **Files:** `web/src/cascade/{CascadeApp.tsx}`.
 
 ## 2026-11-21 · feat(web): add pure powerAll helpers for mapa 3
 
@@ -295,6 +865,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The user asked for a bigger task. The Fargate On-Demand vCPU quota is 30, so two 4 vCPU tasks fit during a blue/green rollout.
 - **Agents:** The service has `ignore_changes = [task_definition]`, so the new size only reaches it after a one-time `aws ecs update-service --task-definition cascadasen:<revision>` that points at the revision Terraform registers; CI deploys copy that revision and keep the size.
 - **Files:** `infrastructure/ecs.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · feat(web): shut down a substation from its card
 
 - **Changed:** The substation card has **Apagar esta subestación** ("Abre sus N líneas en t = 0.") and, while it is shut down, **Encender subestación**. Without a session it sets the cut to `sub-B###` and plays `<point>/sub-B###.json`; in a session it opens the substation's closed lines in one `POST /{sid}/cut` and repairs exactly those lines to power it on.
@@ -416,6 +987,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The code reads `CASCADASEN_DATA_DIR/processed/grid_snapshot.json`, so with the old layout production answered 503 "No hay snapshot de la red" on `/api/v1/nodes`, `/sim/*` and `/sessions` (health said `sin snapshot`). Local compose mounts `./data` at `/data`, so it never showed. Mapa 3 reads the static cache and was not affected.
 - **Agents:** Any endpoint that needs the grid snapshot only works in the deployed image from this commit on. Check `GET /api/v1/health`: `status` must be `ok`.
 - **Files:** `infrastructure/docker/backend.Dockerfile`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · fix(assistant): guard the tool loop against lost events, invented MW and unkept promises
 
 - **Changed:** `SessionTools` opens an `open_field` run when `inject_event` or `submit_action` arrive with no active run, and refuses `add_datacenter`/`add_generator` with MW the user never wrote (`numbers`, `stated`). `Assistant.loop` adds one hidden nudge when the model promises an action and stops (`announces`, `NUDGE`; hidden turns are left out of `view`), predicts the deadline with the mean call duration, and the trace carries each call's `arguments`. The factory is now `toolbox_for(session_id, run_id, said)`, where `said` is everything the user wrote in the conversation.
@@ -451,28 +1023,33 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The cap of 10 is a user decision (entry "retry the busy 409 in the web client and raise the waiter cap to 10"); review pass 3 allowed keeping it if the trade-off is written down.
 - **Agents:** Do not change the cap without asking the user. If the pool fills in production, lower `CASCADASEN_SESSION_LOCK_MAX_WAITERS` or raise the AnyIO thread limit.
 - **Files:** `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`, `CHANGELOG.md`.
+
 ## 2026-11-21 · fix(api): lower the per-session waiter cap to 5
 - **Changed:** `SessionLocks` and `session_lock_max_waiters` (`CASCADASEN_SESSION_LOCK_MAX_WAITERS`) default to 5 waiters instead of 10. The 409 text in `session_routes.ERRORS`, the agent spec description, `docs/sessions-api.md` and `docs/stack.md` say 5; the spec is regenerated.
 - **Why:** Review pass 3: each waiter blocks one of AnyIO's 40 sync workers for up to 10 s, so with 10 four busy sessions could stall every sync route, including the health check. The web and MCP clients now retry the busy 409, so a small cap no longer leaves a browser on a stale network.
 - **Agents:** One busy session holds at most 6 workers. Raise the cap only together with the AnyIO thread limit.
 - **Files:** `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · feat(web): session mode with select and double-click cut after merging PR #60
 - **Changed:** Merged upstream/main at e0c3088 (PR #60: click selects, double click cuts, `SelectionCard`, "Reponer línea", keyed timeline loads). Session mode is re-applied on main's shell: a double click or **Sacar de servicio** calls `POST /{sid}/cut`; `restore(lines?)` repairs through `POST /{sid}/repair` in a session (the selection card repairs the selected open line, the impact card and **Reparar todo** repair every open line).
 - **Changed:** `SimulationPanel` takes `cuts: string[]` again ("Corte:" lists every open line; the button reads "Reponer líneas" when more than one is open). The session timeline is stored as `loaded = {key: "session"}` and a session state cancels a pending cache load. The map `onClick` calls `live.current.cutLine`, and the Datos pick mode runs before click interpretation.
 - **Why:** PR #60 rewrote the click and cut flow in `CascadeApp.tsx`; session mode has to keep cutting and repairing through the session API.
 - **Agents:** Without `?sesion=` the app is main's PR #60 behaviour (same single-cut output). `SelectionCard` in a session gets `cut` = the selected line when it is open.
 - **Files:** `web/src/cascade/{CascadeApp,SimulationPanel}.tsx`, `docs/mapa3.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(web): lock the Escenarios tree in a session after merging PR #57
 - **Changed:** Merged upstream/main at f16cb09 (PR #57: line colors, `ScenarioTree` in the rail, time pill removed). `ScenarioTree` takes `cuts: string[]` instead of `cut` and an optional `locked` tip. Outside a session `CascadeApp` passes `cuts={cut ? [cut] : []}` and no `locked`, so the rail behaves as on main.
 - **Changed:** In a session `locked` is the PINNED tip: scenario rows only fold and unfold, every condition except the session's point is `aria-disabled` with the tip, and no click calls `open`. "Corte ..." names every open line of the session. The dead `.time-pill` and `.scenario[aria-disabled]` rules in `web/src/session/session.css` became a `.condition[aria-disabled]` rule.
 - **Why:** PR #57 removed the time pill and scenario buttons that pinned the operating point in a session; the user's rule is that a session fixes its point.
 - **Agents:** Do not reintroduce a point switcher in session mode; `docs/mapa3.md` section 11 describes the locked tree. The `TimelineCard` clock now uses `clock(point?.snapshot, t).tenths` as on main.
 - **Files:** `web/src/cascade/{CascadeApp,Scenarios}.tsx`, `web/src/session/session.css`, `docs/mapa3.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(infra): sessions bucket policy
 - **Changed:** `infrastructure/s3.tf` adds `aws_s3_bucket_policy.sessions`: any principal of this AWS account (`aws:PrincipalAccount` condition) may Get/Put/Delete objects under `sessions/*` and `runs/*` and list the bucket. It depends on the public access block, which stays on.
 - **Why:** The user wants the policy in PR #50 as written; it lets the task role, CI and admins read and write session documents without a per-role grant.
 - **Agents:** Never applied here (no plan/apply in this work). The grant is account-wide, not scoped to the ECS task role; narrowing it is a separate decision.
 - **Files:** `infrastructure/s3.tf`.
+
 ## 2026-11-21 · fix(web): retry the busy 409 in the web client and raise the waiter cap to 10
 - **Changed:** `call()` in `web/src/session/sessionApi.ts` retries a 409 that carries `Retry-After` up to 2 times, after that wait (capped at 10 s), with the same method, headers and body. A 409 without `Retry-After` (another instance won the write) is not retried.
 - **Changed:** `useSession` keeps the session when the first load still gets a busy 409 and retries it every 3 s with the note "La sesión está ocupada con otra solicitud. Se reintenta la carga en unos segundos."; network errors and 5xx still fall back to the base case.
@@ -480,6 +1057,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Review of PR #50 pass 2: each browser sends 3 parallel GETs per refresh, so 2-3 browsers on one session went past the cap of 5 and got the busy 409 at once; the web client never retried it and a first load dropped the visitor to the base case. User decision: cap 10, web client honours `Retry-After`.
 - **Agents:** Every web session request now absorbs up to 2 busy 409s (about 2 s). `loader.ts` still sends its 3 reads in parallel (running them one after another would change the loader's tested overlap rules). Docs: `docs/sessions-api.md` sections 7-9, `docs/stack.md`, `docs/mapa3.md` section 11; agent spec regenerated (`DESCRIPTION`, `ERRORS[409]`).
 - **Files:** `web/src/session/{sessionApi,sessionApi.test,useSession}.ts`, `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack,mapa3}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · fix(web): open a session only from ?sesion=, keep a landed edit, neutral overlay warnings
 - **Changed:** `useSession` no longer reads or writes `localStorage.sub50_session`; `sessionIdFrom(search)` takes the id only from `?sesion=`, so a bare `/` never calls `/api` (the URL still keeps `?sesion=` while in a session).
 - **Changed:** `edit()` returns true once the write succeeded; a failed reload after it (for example a busy 409) shows "El cambio se guardó, pero no se pudo recargar la sesión: …" instead of failing the edit, so a form is not resubmitted into a duplicate element.
@@ -500,6 +1078,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Review finding (PR #50, user task 3): a run event (`loadDoc`) during a dataset refresh made `load` return early and drop the new network and state, so the screen kept the old dataset.
 - **Agents:** `web/src/session/loader.test.ts` covers the race with deferred promises (document read during a full load, two overlapping loads, cancel). Verification: `npx vitest run` 31 passed (8 files); `npm run build` ok.
 - **Files:** `web/src/session/{loader,loader.test,useSession}.ts`, `docs/mapa3.md`.
+
 ## 2026-11-21 · feat(web): session mode in the Design v5 shell
 - **Changed:** Session mode is wired into main's Design v5 `CascadeApp.tsx`: a rail item **Sesión compartida** (view with **Crear sesión** / **Unirse**, or the id, **Copiar enlace** and **Salir**), a panel-head strip in a session (`Sesión <id>`, `rev. N`, **en vivo** / **sondeo**, **Copiar enlace**), tabs **Red**, **Simulación**, **Datos** in a session (placeholder tabs hidden), line clicks through `POST /{sid}/cut`, and **Elegir en el mapa** pick mode.
 - **Changed:** New `web/src/session/SessionCut.tsx` (**Líneas abiertas en la sesión · N**, **Reparar**, **Reparar todo**) above `SimulationPanel`, whose prop `cut` became `cuts: string[]`. In a session the time pill select and the rail scenarios are disabled with a tooltip and the URL drops `cut`.
@@ -507,6 +1086,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** User task 1 (PR #50 brief): PR #45 rebuilt the shell, so session mode goes into the new one instead of restoring the old shell. Without `?sesion=` the app is main's plus one rail item and makes no `/api` request.
 - **Agents:** Never use `.badge` for session labels (`.shell .badge` is the event marker). `web/src/styles.css` holds no session rules. Docs: `docs/mapa3.md` section 11 and `web/README.md` describe the new labels. Verification: `npx vitest run` 28 passed (7 files); `npm run build` ok; Vite proxy smoke test (backend on :18731, `VITE_API_TARGET`, vite on :15731): `POST /api/v1/sessions` 201 with `session_id`, `/network` 200, `/cut` and `/repair` ok, `/` serves the app; both processes stopped.
 - **Files:** `web/src/cascade/{CascadeApp,SimulationPanel}.tsx`, `web/src/session/{SessionBar,SessionCut,DataPanel}.tsx`, `web/src/session/session.css`, `docs/mapa3.md`, `web/README.md`.
+
 ## 2026-11-21 · feat(api): typed response models in the agent spec
 
 - **Changed:** `api/agent_openapi.py` adds `AgentOut` (`extra="allow"`), `ok(model, code=200)` (a `responses=` entry whose description is the model's first docstring line) and a pass in `agent_openapi()` that keeps only the `$ref` of every 2xx JSON schema.
@@ -522,6 +1102,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** User rule (PR #50 brief, task 2): a session handles only one request at a time. The wait plus 409 is the orchestrator's default. Store conditional writes and `If-Match` stay the guard across processes.
 - **Agents:** The lock is per process; with several instances two requests on one session can still run at once on different instances. Routes are sync `def`, so a waiting request blocks a threadpool worker, not the event loop. New tests: `tests/unit/test_session_locks.py`, and three tests at the end of `tests/integration/test_sessions_api.py` (same session serial, two sessions parallel, held lock gives 409). Verification: `uv run pytest` 282 passed, 2 skipped, 1 failed (only the Bedrock test); `ruff check` and `ruff format --check` clean; agent spec regenerated.
 - **Files:** `backend/src/cascadasen/api/{limits,app,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/{unit/test_session_locks.py,integration/test_sessions_api.py}`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · fix(assistant): open a session on first use and stop asking the user to call tools
 
 - **Changed:** `SessionTools.run` (`mcp/toolbox.py`) opens a session the first time a tool that needs one is called with none active (all but `start_session`, `join_session`, `list_options`) and adds `nota` to that result. The assistant's system prompt says the user cannot run tools, so the model must call them itself.
@@ -679,6 +1260,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Runs and sessions must survive restarts and be shared across instances (shared-sessions plan item 1).
 - **Agents:** Keys are `runs/<run_id>.json`, `sessions/<sid>.json` and `sessions/<sid>/runs/<rid>.json`. Memory and file stores take `ttl_s` and a `clock`; the file store stamps mtime with its clock and raises `ValueError` on keys with `..`, a leading `/` or a backslash. S3 `PreconditionFailed`/`ConditionalRequestConflict`/412/409 → `ConflictError`, `NoSuchKey`/404 → `None` (a 404 on an `if_match` put is also a conflict). `data/sessions/` is git-ignored. Nothing uses the store yet; the rate and SSE settings are unused until the session API lands.
 - **Files:** `backend/src/cascadasen/domain/ports.py`, `backend/src/cascadasen/infrastructure/{document_store,settings,container}.py`, `backend/tests/unit/test_document_store.py`, `backend/pyproject.toml`, `backend/uv.lock`, `.gitignore`, `docs/architecture.md`.
+
 ## 2026-11-21 · feat(api): agent-only OpenAPI spec for external agents
 
 - **Changed:** New `api/agent_openapi.py`: `AGENT` marker (`openapi_extra={"x-sub50-agent": True}`), shared `ErrorResponse {detail}` with `errors({code: text})`, and a spec built from the marked routes, served at `GET /api/v1/agents/openapi.json` with a Swagger page at `/api/v1/agents/docs`. Marked and documented in English (operationId, summary, description, error responses, param and body field descriptions with examples): `/sim/catalog` (`get_catalog`, tag `catalog`), `/sim/network` (`global_get_network`) and every `/sim/runs*` route (`global_*`, tag `global-runs`).
@@ -686,6 +1268,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Agents (and a later MCP wrapper) need a small public spec with only the CRUD, run and catalog endpoints, separate from the full `/docs`.
 - **Agents:** Follow `docs/openapi.md` for every agent route: mark it, set `operation_id` from its list, English summary/description, `responses=errors(...)`, tags. Regenerate with `cd backend && uv run python -m cascadasen.api.agent_openapi` in the same commit, or the test fails. Session routes (`/sessions/*`) still need marking when they land. Tags and English summaries of the marked routes also changed in the full `/docs` (were `experimentos`, Spanish). `ErrorResponse.detail` is `str | object | list` because simulator input errors return `{field, message, valid}`.
 - **Files:** `backend/src/cascadasen/api/{agent_openapi,app,simulation_routes,simulation_schemas}.py`, `backend/tests/integration/test_agent_openapi.py`, `docs/openapi.md`, `docs/openapi/agents.openapi.json`, `docs/{stack,architecture,agents}.md`, `backend/README.md`.
+
 ## 2026-11-21 · feat(web): click selects a line, double click cuts it
 
 - **Changed:** A single click on a line or substation now selects it (white halo, card at the top of the panel in both tabs, no tab or colour switch); a double click on a line, or the card's "Sacar de servicio" button, cuts it; "Reponer línea" (line card and impact card) returns to the base case. A cut clears the selection so the impact card stays at the top. The line card shows voltage, model branches, capacity, flow with direction, loading bar and status at the current second, with info icons. Built on the Design v6 rail and colours (entry below): the conditions tree already keeps the cut across hours; if a cut's timeline is missing at the chosen condition the app now falls back to the base case with a note. The event history scrolls inside its own card (it used to scroll the whole panel), a new selection scrolls the panel back to the top, and the map tooltip sits beside the pointer and flips near the right and bottom edges. Plain-language result when a cut leaves nobody without supply, a hint in the timeline with no cut, loading cards, pointer cursor over clickable map elements, Space play/pause, Escape (closes the layers panel, else clears the selection), outside click closes the layers panel, "Ver todo Chile" control, focus-visible outlines.
@@ -721,6 +1304,8 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The team needs material for the pitch.
 - **Agents:** `docs/pitch_idea.md` is pitch material, in Spanish. Costs of the measures (e.g. US$ per MW of battery) are assumed values, not sourced data. The note in the doc says no user has been interviewed yet; do not turn the benefits into claims of validated demand.
 - **Files:** `docs/pitch_idea.md`, `CHANGELOG.md`.
+
+
 ## 2026-11-21 · fix(web): the event callout is docked in a quiet corner (#52)
 
 - **Changed:** The callout of the current event (time, event number, title, people without supply, lost load) no longer sits next to its pin in the middle of the network. It is docked at the top left of the map, under the time pill and clear of the panel, with an opaque background and a smaller size, so no line crosses it. The pin stays on the map, still marked as the current one. Code: `MapOverlays.tsx` (`docked`) and `.callout.docked` in `cascade.css`.
@@ -824,11 +1409,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The site had no favicon; the full "sub50" wordmark from the Paper "Logo" page is unreadable at tab size.
 - **Agents:** The "5" is Geist Variable at `wght` 800 (the `geist` npm package) outlined with fontTools, so the SVG needs no font. To regenerate it, outline the glyph again rather than adding a `<text>` element. No PNG or `.ico` fallback exists yet; add one only if a target browser lacks SVG favicon support.
 - **Files:** `web/public/favicon.svg`, `web/index.html`, `docs/design.md`.
+
 ## 2026-11-21 · feat(web): keep the mapa 3 camera over land
 - **Changed:** New `web/src/map/regionLimit.ts` (point in polygon, `nearLand`, viewport radius) with tests. `baseMap.ts` loads the land outlines in `LAND_URLS` (today `chile.geojson`) and, after every `moveend`, snaps the camera back to the last valid center when the center is farther from land than a quarter of the shorter viewport side.
 - **Why:** The sea (and Argentina's interior) could be zoomed into. A `maxBounds` rectangle cannot follow Chile's long, thin shape: a tight one forces a high minimum zoom on wide screens and hides the country.
 - **Agents:** To add countries, put their land GeoJSON URL in `LAND_URLS` and widen `MAX_BOUNDS`. Only the Mapbox map snaps back; the offline deck.gl fallback keeps the zoom limits only. `?limite=0` disables it. Checked in headless Chrome: Pacific at zoom 9 returns to Santiago, Santiago at zoom 10 stays.
 - **Files:** `web/src/map/baseMap.ts`, `web/src/map/regionLimit.ts`, `web/src/map/regionLimit.test.ts`, `web/README.md`.
+
 ## 2026-11-21 · docs(architecture): document the system as built
 
 - **Changed:** New `docs/architecture.md`: system overview (sources → `data/processed` → API and static cache → web), backend ports and adapters with the dependency rule, the five ports and their adapters, domain modules (two engines, theatre, agents), use cases and CLI commands, the cut and theatre-cycle flows, frontend, data and parameters, deployment and tooling. `stack.md` sections 2-3 point to it and drop the stale `network.json`/`engine/` backlog entries; `AGENTS.md` and `backend/README.md` link it.
@@ -841,11 +1428,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The project is called Sub50; the site still showed the old name.
 - **Agents:** The backend package is still `cascadasen` (`backend/src/cascadasen/`); it was not renamed because users never see it and renaming it touches every import.
 - **Files:** `web/index.html`, `web/src/App.tsx`.
+
 ## 2026-11-21 · fix(backend): make ruff check and format pass in CI
 - **Changed:** `zip(..., strict=True)` for flows and lines in `engine.py` (B905), unquoted type annotation in `scenario.py` (UP037), sorted imports in `test_cascade.py` (I001), and `ruff format` on 7 cascade files (`cache_builder.py`, `engine.py`, `flow.py`, `frequency.py`, `network.py`, `scenario.py`, `test_cascade.py`). No behaviour change; 41 tests pass.
 - **Why:** The lint workflow failed on 4 ruff errors and the format check on 7 files.
 - **Agents:** CI runs `ruff check .` and `ruff format --check .` (ruff 0.17.6). Run `scripts/lint.sh --fix <files>` on every Python file you touch. The cache in `web/public/cache/` needs no regeneration.
 - **Files:** `backend/src/cascadasen/application/cache_builder.py`, `backend/src/cascadasen/domain/cascade/*.py`, `backend/tests/unit/test_cascade.py`.
+
 ## 2026-11-21 · perf(web): limit the mapa 3 camera to Chile and lighten the Mapbox style
 - **Changed:** `baseMap.ts` sets `maxBounds` (lon -85 to -55, lat -60 to -10), `minZoom` 4 and `maxZoom` 13 on the Mapbox map and the same zoom limits on the offline deck.gl map. The Standard style config turns off `show3dObjects`, `showPointOfInterestLabels`, `showTransitLabels` and `showPedestrianRoads`.
 - **Why:** The whole world was reachable although the data covers only Chile; the team wants to cut rendering cost. Effect not measured yet.
@@ -1149,21 +1738,25 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Ricardo reframed CascadaSEN: it simulates whether a utility keeps its mission when it loses the capacity to understand its own state, not attacks. The task is backend only; another teammate builds the frontend against this API.
 - **Agents:** Read `strategy.md` after `cyber.md`. The adversary acts only through abstract events at area or function level, and no output ranks elements or areas. The LLM never decides or plays the adversary. Primary user: utility operations and continuity teams, with Mode II (adaptive adversary) first. The framing, item 7 and the node list are pending team confirmation. The implementation lands on branch `feat/strategic-sim-api`.
 - **Files:** `docs/strategy.md`, `docs/cyber.md`, `docs/stack.md`, `docs/plan.md`.
+
 ## 2026-11-21 · feat(infra): CLI-only deploy workflow with CloudFront invalidation
 - **Changed:** `.github/workflows/deploy.yml` no longer runs Terraform: it builds and pushes both images, registers a new task definition revision, updates the ECS service, waits for stable, and invalidates CloudFront. The role ARN is hardcoded (`IAM-Role-ECS-Deploy`). New `infrastructure/deploy-role-policy.json` (minimal permissions for that role). `aws_ecs_service.app` gets `ignore_changes = [task_definition]`.
 - **Why:** The deploy only needs a new image tag; Terraform needed broad IAM permissions and a state bucket. Repository variables cannot be edited, so the ARN cannot come from `AWS_DEPLOY_ROLE_ARN`.
 - **Agents:** The previous entry's `AWS_DEPLOY_ROLE_ARN` requirement is obsolete. The workflow does not apply infrastructure changes: run `infrastructure/deploy.sh` by hand for those. Apply the `ecs.tf` lifecycle change once with `deploy.sh`. The role trust `sub` uses owner and repository IDs; fall back to the classic `sub` if the role cannot be assumed. Pushing the workflow file needs the `workflow` token scope.
 - **Files:** `.github/workflows/deploy.yml`, `infrastructure/deploy-role-policy.json`, `infrastructure/ecs.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · fix(web): commit the mapa 3 cache so the deployed site loads
 - **Changed:** `web/public/cache/` (23 MB, 1103 files, 4 points x 273 cuts) is now versioned; removed it from `web/.gitignore`. nginx answers a missing `/cache/*` file with 404 instead of the SPA `index.html`. `cascade/api.ts` shows "Falta la caché (...)" when the response is not JSON.
 - **Why:** sub50.cl showed `Unexpected token '<', "<!doctype "...`: the cache was git-ignored, so the web image had none and nginx returned `index.html` with 200.
 - **Agents:** Regenerate (`cd backend && uv run cascadasen-cache`) and commit the cache whenever the engine or `data/processed` change, or the deployed site serves stale results. Older docs that say the cache is git-ignored are fixed in `web/README.md` and `docs/mapa3.md`.
 - **Files:** `web/public/cache/`, `web/.gitignore`, `infrastructure/docker/nginx.conf`, `web/src/cascade/api.ts`, `web/README.md`, `docs/mapa3.md`.
+
 ## 2026-11-21 · feat(infra): Mapbox token in the web image and deploy-on-main workflow
 - **Changed:** `web.Dockerfile` takes the build argument `VITE_MAPBOX_TOKEN`; `deploy.sh` passes it (public `pk.*` default, overridable). New `deploy.sh deploy` command (no plan step). New `.github/workflows/deploy.yml` runs it on every push to `main` through GitHub OIDC.
 - **Why:** The deployed map showed the offline fallback because Vite inlines the token at build time. The team wants every commit on main deployed.
 - **Agents:** The workflow needs the repository variable `AWS_DEPLOY_ROLE_ARN` and an IAM role plus OIDC provider created by hand; trust policy in `docs/infrastructure.md`. Until then it fails at the credentials step.
 - **Files:** `infrastructure/docker/web.Dockerfile`, `infrastructure/deploy.sh`, `.github/workflows/deploy.yml`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · feat(web): mapa 3 interface following the Paper design (#28)
 
 - **Changed:** New layout (`.shell` in `styles.css`): a collapsible rail on the left (Sub50, Mapa, Supuestos; the collapsed state is saved in localStorage), a floating panel with the tabs Red, Simulación, Leyenda and Supuestos (the last two used to sit at the bottom of the old right panel), a timeline card at the bottom of the panel (play, scrubber, stage and seconds), the case selector as a pill at the top center of the map, and the 2D/3D toggle plus zoom buttons at the top right. The camera now leaves room on the left, and the Mapbox logo moved to the bottom right. Neutral charcoal colors instead of navy.
@@ -1281,53 +1874,63 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Serve the app on `https://sub50.cl` through CloudFront.
 - **Agents:** `aws_acm_certificate_validation` needs `sub50.cl` delegated to the Route 53 name servers (done by the user). Apply with `infrastructure/deploy.sh apply`, which sets `image_tag`. Origin HTTPS stays off; it needs an `alb.sub50.cl` record first (see backlog in `docs/infrastructure.md`).
 - **Files:** `infrastructure/*.tf`, `infrastructure/terraform.tfvars.example`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · docs(infra): marker line for second deploy
 
 - **Changed:** One marker line in `docs/infrastructure.md`.
 - **Why:** New commit gives a new image tag, so the second deploy proves the blue/green swap.
 - **Agents:** Previous deploy: task definition `cascadasen:2`, tag `aade205`.
 - **Files:** `docs/infrastructure.md`.
+
 ## 2026-11-21 · feat(infra): add ACM certificate for sub50.cl (not applied)
 - **Changed:** `infrastructure/acm.tf` adds `aws_acm_certificate` (`sub50.cl` + `*.sub50.cl`, DNS), the validation records in the Route 53 zone and `aws_acm_certificate_validation`. Output `acm_certificate_arn`. Docs updated.
 - **Why:** A certificate is needed for CloudFront and the ALB HTTPS listener before the domain goes live.
 - **Agents:** Plan: 4 to add. Not applied; needs user approval. Apply only works once the registrar delegates `sub50.cl` to the zone's name servers, else validation waits and times out. The stack is deployed: CloudFront `https://d2bc0ohphbh56u.cloudfront.net`, image tag `aade205`, task definition `cascadasen:2`. Not attached to CloudFront yet.
 - **Files:** `infrastructure/acm.tf`, `infrastructure/outputs.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · fix(infra): build images with buildx as Docker-format gzip layers
 - **Changed:** `push_image` in `deploy.sh` uses `docker buildx build --provenance=false --sbom=false --output type=image,push=true,compression=gzip,force-compression=true,oci-mediatypes=false`.
 - **Why:** Fargate failed with `CannotPullContainerError: wrong diff id` on images pushed with plain `docker build` + `docker push` from Colima (containerd image store, OCI manifest).
 - **Agents:** `docker-buildx` is required (`brew install docker-buildx`, plugin linked in `~/.docker/cli-plugins`). ECR tag `probe1` in `cascadasen/backend` is a test push; ignore it. Images pushed under the old tag format are not usable.
 - **Files:** `infrastructure/deploy.sh`.
+
 ## 2026-11-21 · fix(infra): auto-approve the targeted ECR apply in deploy.sh
 - **Changed:** The ECR-only `terraform apply -target` in `deploy.sh apply` now passes `-auto-approve`.
 - **Why:** The step prompted for `yes`, so a non-interactive `apply` hung. The user already approved the plan that includes the ECR repos.
 - **Agents:** The full apply still uses the saved `tfplan` and needs no prompt. Run `plan` and get approval before `apply`.
 - **Files:** `infrastructure/deploy.sh`.
+
 ## 2026-11-21 · docs(tasks): add animation, city and adversarial agent tasks
 
 - **Changed:** `docs/tasks.md` gains animations with audio on attacked infrastructure, an affected people counter, city lights, a clickable city component (population, % dependent on electricity, deaths rising with blackout time) and an adversarial agents backlog item (attacker and resilience agents plus APIs, owner Ricardo).
 - **Why:** The team refined the task list. The adversarial agents spec is backlog and is not written yet.
 - **Agents:** Open questions are listed in each task (animation and sound mapping, death-rate model and its source, attacker objective and limits). The "% dependent on electricity" value needs a source or `is_assumption: true`. No code or contract changed.
 - **Files:** `docs/tasks.md`.
+
 ## 2026-11-21 · feat(infra): add Route 53 hosted zone for sub50.cl
 - **Changed:** `infrastructure/route53.tf` adds `aws_route53_zone.main` (`sub50.cl`). New output `route53_name_servers`. `docs/infrastructure.md` documents the zone and the NS delegation step.
 - **Why:** The team will serve the app from sub50.cl; the zone must exist first so its name servers can be delegated at the .cl registrar.
 - **Agents:** Zone only: no records, no ACM certificate, no CloudFront alias. The domain is not registered by Terraform. Plan is now 39 to add. `apply` still needs explicit user approval.
 - **Files:** `infrastructure/route53.tf`, `infrastructure/outputs.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · docs(infra): document the AWS deployment
 - **Changed:** `docs/infrastructure.md` covers architecture, sizing, blue/green, `deploy.sh plan|apply`, tag scheme, Route 53 + ACM variables and the backlog. `docs/docker.md` links to it.
 - **Why:** AGENTS.md requires docs with each behavior change.
 - **Agents:** Backlog items have no issue numbers: `scripts/issue.sh` is missing and the fork has issues disabled. Create them upstream when the team agrees. The two-target-group blue/green setup is validated by Terraform only; the ECS API confirms it at first apply.
 - **Files:** `docs/infrastructure.md`, `docs/docker.md`.
+
 ## 2026-11-21 · feat(infra): add deploy.sh with plan and apply phases
 - **Changed:** `infrastructure/deploy.sh plan` checks the AWS account (402909940511), creates the versioned, encrypted state bucket `cascadasen-tfstate-402909940511` if missing, runs init/fmt/validate/plan and writes `infrastructure/.deploy-tag`. `apply` creates ECR, builds and pushes both images (`linux/amd64`), then applies a fresh plan and prints the CloudFront URL. `terraform.tfvars.example` lists the optional variables.
 - **Why:** The user runs deploys with their own credentials; plan and apply are split so the plan is reviewed first.
 - **Agents:** Credentials come from the environment, else the keys file (never printed, no `AWS_PROFILE`). Image tag is the short commit, plus `-dirty-<UTC time>` when `backend`, `web`, `data` or `infrastructure/docker` have uncommitted changes. ECR is immutable, so `apply` skips a build when the tag already exists. `apply` aborts if the tree changed since `plan`. Only run `apply` after the user approves the plan.
 - **Files:** `infrastructure/deploy.sh`, `infrastructure/terraform.tfvars.example`.
+
 ## 2026-11-21 · feat(infra): add Terraform stack for ECS Fargate behind ALB and CloudFront
 - **Changed:** `infrastructure/*.tf` defines a VPC with 2 public subnets, an ALB (production listener :80, test listener :8080, 4 target groups), one ECS Fargate service (1 task, 2 vCPU / 4 GB, containers `backend` :8000 and `web` :80) with native ECS blue/green on two `load_balancer` blocks, two immutable ECR repos, CloudWatch logs, and a CloudFront proxy (no cache, redirect to HTTPS). State uses an S3 backend with `use_lockfile`.
 - **Why:** POC deployment requested by the team. An ALB cannot hold an Elastic IP, so CloudFront points to the ALB DNS name.
 - **Agents:** Variables: `image_tag` (required, set by deploy.sh), `domain_name`, `cloudfront_certificate_arn`, `origin_https`, `alb_certificate_arn` (all optional). ECS rewrites the listener-rule forward actions on each deployment, so those rules use `ignore_changes = [action]`. No Route 53 resources yet. Never run `terraform apply` by hand; `infrastructure/deploy.sh` comes in the next commit.
 - **Files:** `infrastructure/*.tf`, `infrastructure/.terraform.lock.hcl`.
+
 ## 2026-11-21 · feat(docker): add docker compose stack for backend and web
 - **Changed:** `docker-compose.yml` runs `backend` (FastAPI, :8000) and `web` (Vite dev server with npm, :5173). `backend/Dockerfile` installs from `uv.lock`. `web/Dockerfile` uses `npm ci`; compose bind-mounts `./web` and `./data` because the app imports `../data/processed`. Optional `data-build` profile rebuilds `data/processed`. Host ports are configurable with `WEB_PORT` and `BACKEND_PORT`. Root `.gitignore` also ignores `node_modules/`, `dist/`, `.env.local`, `.DS_Store` and `.playwright-mcp/`.
 - **Why:** Run and simulate the whole project locally with only Docker installed.

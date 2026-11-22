@@ -40,11 +40,18 @@ SYSTEM = (
     "nacional de Chile. Respondes en español, de forma breve (pocas líneas, sin repetir datos que el "
     "usuario no pidió), y haces las simulaciones llamando a las herramientas.\n"
     "- El usuario no ve ni puede ejecutar las herramientas: nunca le pidas que las llame, hazlo tú. La "
-    "sesión se crea sola cuando hace falta; para una corrida estratégica llama tú a start_run.\n"
+    "sesión se crea sola cuando hace falta (prepare_scenario no la usa: no abras una para el mapa); para "
+    "una corrida estratégica llama tú a start_run.\n"
     "- No anuncies acciones para después: si el usuario pidió algo, ejecútalo en este mismo turno y "
     "recién entonces informa el resultado.\n"
     "- Llama solo a las herramientas necesarias. Si falta un dato imprescindible (por ejemplo cuántos MW), "
-    "pregúntalo antes de actuar.\n"
+    "pregúntalo antes de actuar. Si el mensaje pide varias cosas, hazlas todas en el mismo turno.\n"
+    "- El mapa muestra solo lo que fija prepare_scenario. Para poner un punto (datacenter, central, parque, "
+    "batería) o cortar líneas usa prepare_scenario: el lugar va tal como lo escribió el usuario en `places` "
+    "(una ciudad o «cerca de X» basta; nunca pidas área, barra ni subestación) y la potencia en `add`. Cada "
+    "llamada reemplaza lo que había en el mapa: incluye también los cambios anteriores que el usuario no "
+    "pidió quitar. Di en qué subestación quedó cada punto (`places` del resultado). Una tecnología que no "
+    "existe en la lista (por ejemplo fusión) se pregunta; nuclear se modela como térmica y se dice.\n"
     "- Cifras, ids, causas y conclusiones salen solo de los resultados: cópialos tal cual, no inventes y "
     "no atribuyas efectos que el resultado no relaciona. Si citas la revisión posterior (after_action), "
     "usa sus frases.\n"
@@ -132,6 +139,9 @@ def chat(request: Request, body: ChatIn) -> dict[str, Any]:
         raise conversation_error(exc) from exc
     except ToolChatError as exc:
         raise HTTPException(502, str(exc)) from exc
+    except Exception as exc:  # JSON like the other errors, and the traceback in the log (it carries no ids)
+        log.exception("assistant chat failed (%s)", type(exc).__name__)
+        raise HTTPException(500, "El asistente falló; reintenta.") from exc
 
 
 def admit(request: Request) -> tuple[Assistant, str]:
@@ -208,7 +218,7 @@ async def chat_stream(request: Request, body: ChatIn) -> StreamingResponse:
         except ToolChatError as exc:
             emit("error", {"status": 502, "detail": str(exc)})
         except Exception as exc:
-            log.warning("assistant stream failed (%s)", type(exc).__name__)
+            log.exception("assistant stream failed (%s)", type(exc).__name__)
             emit("error", {"status": 500, "detail": "El asistente falló; reintenta."})
         finally:
             emit("", {})  # end of stream

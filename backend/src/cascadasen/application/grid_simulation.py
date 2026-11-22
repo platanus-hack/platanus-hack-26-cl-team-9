@@ -7,10 +7,15 @@ the path for two or more changes. Nothing is stored: the same request gives the 
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+from cascadasen.application.grid_stress import scenario_overrides, supply_workflow
 from cascadasen.application.grids import GridError
-from cascadasen.domain.cascade.engine import failure_cost, run_cascade_workflow
+from cascadasen.domain.cascade.engine import failure_cost, run_cascade_state
+from cascadasen.domain.cascade.frequency import cascade_params
 from cascadasen.domain.cascade.health import with_event_health
 from cascadasen.domain.cascade.overlay import OverlayError, apply_overlay, empty_overlay
+from cascadasen.domain.simulation.params import load_params, value
 from cascadasen.domain.theater.world import TheaterWorld
 
 MAX_EDITS = 50  # lines plus substations in one request
@@ -20,10 +25,16 @@ class GridSimulator:
     def __init__(self, world: TheaterWorld) -> None:
         self.world = world
 
-    def simulate_workflow(self, point: str, open_lines: list[str], out_buses: list[str]) -> dict:
-        op, edited, kept, dropped = prepare_edits(self.world, point, open_lines, out_buses)
-        timeline = run_cascade_workflow(edited.net, edited.point, kept)
-        direct = _direct_loss(op, out_buses)
+    def simulate_workflow(
+        self, point: str, open_lines: list[str], out_buses: list[str], changes: list[dict] | None = None
+    ) -> dict:
+        """`changes`: a scenario prepared with `/grids/prepare` (docs/stress.md); the failure runs on it."""
+        prepared, edited, kept, dropped = prepare_edits(
+            self.world, point, open_lines, out_buses, changes=changes
+        )
+        timeline, state = run_cascade_state(edited.net, edited.point, kept)
+        supply = supply_workflow(self.world, point, prepared, edited, state)
+        direct = _direct_loss(prepared.point, out_buses)
         return {
             "point": point,
             "open_lines": kept,
@@ -32,23 +43,87 @@ class GridSimulator:
             "direct": direct,
             "warnings": edited.warnings,
             "timeline": with_event_health(_mark_out_of_service(timeline, out_buses, direct)),
+            "supply": supply,
         }
 
 
+def cost_workflow(
+    simulator: GridSimulator,
+    point: str,
+    open_lines: list[str],
+    out_buses: list[str],
+    changes: list[dict] | None = None,
+) -> dict:
+    """Failure cost of the user's changes, total and per hour of outage (docs/engine.md, "Cost"). No change: no cost."""
+    if not (open_lines or out_buses):
+        _load(simulator.world, point)  # still 404 for an unknown point
+        return _cost_view(point, failure_cost(0.0, 0.0, 0.0), 0.0)
+    summary = simulator.simulate_workflow(point, open_lines, out_buses, changes)["timeline"]["summary"]
+    return _cost_view(point, {k: summary[k] for k in COST_KEYS}, summary["people_without_power"])
+
+
+COST_KEYS = (
+    "failure_cost_usd",
+    "cost_per_hour_usd",
+    "unserved_energy_mwh",
+    "outage_duration_h",
+    "cost_breakdown",
+)
+
+
+def _cost_view(point: str, cost: dict, people: float) -> dict:
+    params = cascade_params()["cost"]
+    voll = load_params("physics")["voll_usd_per_kwh"]
+    return {
+        "point": point,
+        "cost_usd": cost["failure_cost_usd"],
+        "cost_per_hour_usd": cost["cost_per_hour_usd"],
+        "energy_not_served_mwh": cost["unserved_energy_mwh"],
+        "outage_hours": {
+            **cost["outage_duration_h"],
+            "note": "black start" if cost["cost_breakdown"]["dark_mw"] > 0 else "EDAC",
+        },
+        "unserved_cost_usd_per_mwh": {
+            "value": round(float(value(voll)) * 1000.0),
+            "source": voll.get("source"),
+        },
+        "breakdown": cost["cost_breakdown"],
+        "people_without_power": people,
+        "assumptions": [str(params[k].get("note") or params[k].get("source")).strip() for k in params],
+    }
+
+
 def prepare_edits(
-    world: TheaterWorld, point: str, open_lines: list[str], out_buses: list[str], allow_empty: bool = False
+    world: TheaterWorld,
+    point: str,
+    open_lines: list[str],
+    out_buses: list[str],
+    allow_empty: bool = False,
+    changes: list[dict] | None = None,
 ):
-    """The base point, the network with the substations out of service, the lines to open on it and the lines that went
-    with their substation. Shared by every use case that works on the user's changes (simulate, dependency)."""
+    """The prepared grid before any failure (`Applied`: the base one without `changes`), the network with the
+    substations out of service, the lines to open on it and the lines that went with their substation. Shared by
+    every use case that works on the user's changes (simulate, dependency, prepare)."""
     if not allow_empty:
         _check_size(open_lines, out_buses)
     elif len(set(open_lines)) + len(set(out_buses)) > MAX_EDITS:
         raise GridError("invalid", f"Máximo {MAX_EDITS} cambios por simulación")
     net, op = _load(world, point)
     _check_known(net.buses, open_lines, out_buses)
-    edited = _apply(net.buses, op, out_buses)
+    prepared = _prepared(world, point, net.buses, op, changes)
+    edited = _apply(prepared.net, prepared.point, out_buses, {}) if out_buses else prepared
     live = {ln.id for ln in edited.net.lines}
-    return op, edited, sorted(set(open_lines) & live), sorted(set(open_lines) - live)
+    return prepared, edited, sorted(set(open_lines) & live), sorted(set(open_lines) - live)
+
+
+def _prepared(world, point: str, net, op, changes: list[dict] | None):
+    """The grid of a scenario prepared with `/grids/prepare` (docs/stress.md), before any failure; without changes,
+    the base grid."""
+    if not changes:
+        return _apply(net, op, [], {})
+    overrides, people = scenario_overrides(world, point, changes)
+    applied = _apply(net, op, [], overrides)
+    return replace(applied, point=replace(applied.point, people=people))
 
 
 def _load(world: TheaterWorld, point: str):
@@ -74,9 +149,13 @@ def _check_known(net, open_lines: list[str], out_buses: list[str]) -> None:
             raise GridError("not_found", f"No existen estas {kind} en este punto: {', '.join(unknown)}")
 
 
-def _apply(net, op, out_buses: list[str]):
+def _apply(net, op, out_buses: list[str], overrides: dict):
+    """`overrides`: extra `bus_overrides` and `line_overrides` of the overlay (application/grid_stress.py)."""
     overlay = empty_overlay()
-    overlay["bus_overrides"] = {b: {"in_service": False} for b in set(out_buses)}
+    overlay["bus_overrides"] = {b: dict(r) for b, r in overrides.get("bus_overrides", {}).items()}
+    for b in set(out_buses):
+        overlay["bus_overrides"].setdefault(b, {})["in_service"] = False
+    overlay["line_overrides"] = dict(overrides.get("line_overrides", {}))
     try:
         return apply_overlay(net, op, overlay)
     except OverlayError as exc:
@@ -109,7 +188,9 @@ def _mark_out_of_service(timeline: dict, out_buses: list[str], direct: dict) -> 
             summary["load_total_mw"] + direct["load_mw"], 1
         )  # the demand of the hour
         summary["dark_buses"] += len(set(out_buses))
+        summary["dark_load_mw"] = round(summary.get("dark_load_mw", 0.0) + direct["load_mw"], 1)
+        # the cost follows the MW lost, direct loss included: a substation out of service is dark demand
         summary.update(
-            failure_cost(summary["load_shed_mw"])
-        )  # the cost follows the MW lost, direct loss included
+            failure_cost(summary["load_shed_mw"], summary["dark_load_mw"], summary["load_total_mw"])
+        )
     return timeline
