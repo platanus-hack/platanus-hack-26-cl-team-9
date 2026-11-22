@@ -41,7 +41,8 @@ import { AssistantPanel } from "../assistant/AssistantPanel";
 import { useAssistant } from "../assistant/useAssistant";
 import { IncidentPanel } from "../incidents/IncidentPanel";
 import { useIncident } from "../incidents/useIncident";
-import { CyberPanel } from "../cyber/CyberPanel";
+import { CyberMapTags, CyberPanel } from "../cyber/CyberPanel";
+import { layoutTags } from "../cyber/cyber";
 import { useCyber } from "../cyber/useCyber";
 import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
@@ -501,9 +502,12 @@ export function CascadeApp() {
       root.querySelectorAll<HTMLElement>("[data-lon]").forEach((el) => {
         const [x, y] = map.project(Number(el.dataset.lon), Number(el.dataset.lat));
         el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+        el.dataset.px = x.toFixed(1);
+        el.dataset.py = y.toFixed(1);
         el.classList.toggle("flip", x > width - 340);
         el.classList.toggle("up", y > height - 300);
       });
+      layoutTags(root, width - 230); // the Ciberataque monitor's area labels, in a column right of the network
       // The first event keeps a short label, unless it would sit under the current event's callout.
       const label = root.querySelector<HTMLElement>(".pin-label");
       const callout = root.querySelector<HTMLElement>(".callout");
@@ -700,6 +704,7 @@ export function CascadeApp() {
       <div className="map" ref={mapRef} />
       <div className="map-overlays" ref={overlayRef}>
         {isChile && network && <MapOverlays markers={located} states={mapStates} visible={visible} network={network} impact={impact} showCities={!hasLabels} placed={placed} select={seek} />}
+        {isChile && view === "cyber" && <CyberMapTags c={cyb} />}
       </div>
 
       <nav className="rail" aria-label="Navegación">

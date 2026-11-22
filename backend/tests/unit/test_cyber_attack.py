@@ -26,26 +26,28 @@ def _worm(**params):
     return PropagatingAdversary(LINE, {**P, **params}, random.Random(1))
 
 
-def test_the_start_has_at_least_two_neighbours():
+def test_the_start_has_at_least_two_neighbours_and_is_latent():
     worm = _worm()
-    [req] = worm.act(_view(0))
-    assert worm.start == "B" and req.type == "D4_comms_loss" and req.target == "B"
+    assert worm.act(_view(0)) == []  # nothing visible until it strikes
+    assert worm.start == "B" and worm.snapshot()["areas"]["B"] == "compromised"
 
 
-def test_it_spreads_to_neighbours_and_strikes_after_the_delay():
+def test_it_spreads_silently_and_strikes_after_the_delay():
     worm = _worm(strike_delay=2, spread_cooldown=1)
     worm.act(_view(0))
-    kinds = [(r.type, r.target) for r in worm.act(_view(1))]
-    assert ("D4_comms_loss", "A") in kinds and ("D4_comms_loss", "C") in kinds
+    assert worm.act(_view(1)) == []
+    assert worm.snapshot()["areas"] == {"A": "compromised", "B": "compromised", "C": "compromised"}
     struck = [(r.type, r.target) for r in worm.act(_view(2))]
-    assert ("C5_remote_dispatch_loss", "B") in struck and ("C1_generation_loss", "B") in struck
+    assert {("D4_comms_loss", "B"), ("C5_remote_dispatch_loss", "B"), ("C1_generation_loss", "B")} <= set(
+        struck
+    )
 
 
 def test_a_segmented_area_stops_the_jump():
     worm = _worm(spread_cooldown=1)
     worm.act(_view(0))
-    reqs = worm.act(_view(1, {"B": "segmented"}))
-    assert not [r for r in reqs if r.type == "D4_comms_loss"]
+    worm.act(_view(1, {"B": "segmented"}))
+    assert worm.snapshot()["areas"]["A"] == "clean"
     assert {e["kind"] for e in worm.events} >= {"blocked"}
 
 
@@ -136,3 +138,34 @@ def test_the_api_runs_it_in_a_session_and_reports_it(toy_world, toy_spec):
     assert report["cyber_attack"]["params"]["spread_p"] == 0.6
     bad = {**body, "adversary": {**body["adversary"], "propagation": {"spread_p": 3}}}
     assert client.post(f"/api/v1/sessions/{sid}/runs", json=bad).status_code == 422
+
+
+def test_a_manual_defense_runs_only_the_queued_actions(toy_world):
+    adv = AdversaryConfig(enabled=True, mode="propagation", adaptive=False, budget=0)
+    sim = Simulation(toy_world, RunConfig(template="ciberataque", seed=3, adversary=adv, manual_defense=True))
+    sim.step(3)
+    assert all(not s["cyber"]["defense_actions"] for s in sim.snapshots)  # nobody defends by itself
+    start = sim.adversary.start
+    sim.submit_action("digital_segmentation", start, "operations", agent="usuario")
+    [snap] = sim.step(1)
+    done = snap["cyber"]["defense_actions"]
+    assert [(d["action"], d["target"]) for d in done] == [("digital_segmentation", start)]
+    assert set(snap["cyber"]["people_out"]) == set(toy_world.load("nov2026-1300")[0].areas)
+    assert RunConfig.from_dict(sim.config.as_dict()).manual_defense is True
+
+
+def test_the_catalog_gives_the_monitor_areas_and_user_actions(toy_world):
+    from cascadasen.application.run_experiment import catalog
+
+    cyber = catalog(toy_world)["cyber_attack"]
+    assert {"population", "lon", "lat"} <= set(cyber["areas"][0])
+    assert next(a["action"] for a in cyber["defense_actions"]) == "digital_segmentation"
+
+
+def test_every_difficulty_preset_is_within_bounds(toy_world):
+    from cascadasen.application.run_experiment import catalog
+
+    presets = catalog(toy_world)["cyber_attack"]["presets"]
+    assert [p["id"] for p in presets] == ["facil", "normal", "dificil", "extremo"]
+    for p in presets:
+        propagation_params(P, p["params"])  # raises when a value is out of bounds

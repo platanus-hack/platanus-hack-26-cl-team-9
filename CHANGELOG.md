@@ -1,6 +1,16 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cyber): monitor del ciberataque con defensa por algoritmo, LLM o usuario, y dificultades (#121)
+
+- **Changed:** Runs play turn by turn: with an algorithm or the LLM one cycle every 1.2 s (pause and continue), with the user one cycle per **Terminar turno**; before, the monitor showed only the final state.
+- **Changed:** One monitor for every defender (the reference design): attack and defence counters, operating areas with people and state, Territorio / Jugadas / Reglas, cycle bar, area labels with leader lines on the map (`web/src/cyber/`, `layoutTags` in the overlay loop).
+- **Changed:** `manual_defense` on runs: the staff proposes nothing and only actions from `POST .../actions` run (Usuario mode, turn by turn). Snapshots' `cyber` adds `people_out` per area, `segmented`, `dark` and `defense_actions`; the catalog adds area population and anchor coordinates, `defense_actions` and `presets`.
+- **Changed:** The intrusion is latent until it strikes; the defence wins when no intrusion is left and at most 5 % of the demand is lost; Operations re-segments when a clean-up did not hold and no longer holds a crew in local control while repairing. New defaults = Normal.
+- **Why:** issue #121, and runs ended in a few cycles: the defence saw the intrusion at once and contained it before it moved.
+- **Agents:** difficulty presets and their measured outcomes are in `theater.yaml` → `cyber_attack_presets`. A user defending sees what supervision sees (latent areas hidden until the end).
+- **Files:** `domain/agents/{propagation,operations}.py`, `domain/theater/{cycle,grid,config}.py`, `domain/theater/params/theater.yaml`, `application/run_experiment.py`, `api/simulation_schemas.py`, `web/src/cyber/*`, `web/src/cascade/CascadeApp.tsx`, `docs/attack-sim.md`, tests.
+
 ## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
 
 - **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`. After merging #117, three more references that #110 had shifted point at the right line again: `ConverseToolChat.turn` (`llm_tools.py:85`), `simulate` (`grid_routes.py:122`), `prepare_workflow` (`grid_stress.py:55`).

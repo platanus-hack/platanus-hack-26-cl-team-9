@@ -1,22 +1,82 @@
-/* Ciberataque view in the Design v5 shell: radius 0, cascade.css tokens (docs/design.md section 2). Only --fault is red,
-   for areas the intrusion has hit; compromised areas use a dashed fault outline, recovered ones a neutral rule. */
+/* Ciberataque monitor in the Design v5 shell: radius 0, cascade.css tokens (docs/design.md section 2). The attack's side
+   is the fault red (solid when the area is dark or hit, dashed while it is in dispute); the defence's side is a blue
+   that only this view uses (--defense), so the two sides read apart; untouched areas stay grey. */
+.shell { --defense: #5b9cf5; }
 .shell .cyber { display: flex; flex-direction: column; gap: 10px; }
 .shell .cy-fields { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .shell .cy-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--fg-3); font-size: 12px; }
 .shell .cy-input { display: flex; align-items: center; gap: 4px; }
 .shell .cy-input input { width: 72px; background: var(--surface); color: var(--fg); border: 1px solid var(--border-strong); padding: 2px 6px; font: inherit; }
 .shell .cy-go { align-self: flex-start; }
-.shell .cy-controls { display: flex; align-items: center; gap: 8px; }
-.shell .cy-controls input[type="range"] { flex: 1; }
-.shell .mini-figures.cy-figures { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
-.shell .cy-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 6px; }
-.shell .cy-area { display: flex; flex-direction: column; gap: 1px; padding: 5px 7px; border: 1px solid var(--border-strong); background: var(--surface); font-size: 11px; line-height: 14px; color: var(--fg-3); }
-.shell .cy-area b { color: var(--fg); font-size: 12px; }
-.shell .cy-area span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.shell .cy-area em { font-style: normal; color: var(--muted); }
-.shell .cy-area.compromised { border: 1px dashed var(--fault); }
-.shell .cy-area.struck { border-color: var(--fault); background: color-mix(in srgb, var(--fault) 22%, var(--surface)); }
-.shell .cy-area.struck em { color: var(--fg); }
-.shell .cy-area.eradicated { border-color: var(--fg-2); background: var(--selected); }
-.shell .cy-legend { display: flex; flex-wrap: wrap; gap: 6px; }
-.shell .cy-events { margin: 0; padding-left: 16px; color: var(--fg-3); font-size: 12px; line-height: 17px; }
+
+.shell .cy-head { display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border); }
+.shell .cy-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.shell .cy-title h3 { margin: 0; color: var(--fg); font-size: 15px; font-weight: 600; }
+.shell .cy-title h3 span { margin-left: 6px; color: var(--muted); font-weight: 400; font-size: 13px; }
+.shell .cy-subtabs { display: flex; gap: 16px; }
+.shell .cy-subtabs button { padding: 6px 2px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.shell .cy-subtabs button.on { color: var(--fg); border-bottom-color: var(--fg); }
+.shell .cy-outcome { padding: 6px 10px; font-size: 12px; border-left: 2px solid var(--fg-2); background: var(--selected); color: var(--fg); }
+.shell .cy-outcome.attack { border-left-color: var(--fault); }
+.shell .cy-outcome.defense { border-left-color: var(--defense); }
+
+.shell .cy-score { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.shell .cy-side { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: var(--card); }
+.shell .cy-who { display: flex; align-items: center; gap: 6px; color: var(--fg-3); font-size: 12px; }
+.shell .cy-who i { width: 7px; height: 7px; display: inline-block; }
+.shell .cy-side.attack .cy-who i { background: var(--fault); }
+.shell .cy-side.defense .cy-who i { background: var(--defense); }
+.shell .cy-side b { color: var(--fg); font-size: 28px; line-height: 32px; font-weight: 600; }
+.shell .cy-side b small { color: var(--muted); font-size: 12px; font-weight: 400; }
+
+.shell .cy-regions ul { margin: 0; padding: 0; list-style: none; }
+.shell .cy-regions li { border-top: 1px solid var(--border); }
+.shell .cy-regions li:first-child { border-top: 0; }
+.shell .cy-row { display: grid; grid-template-columns: 12px 1fr auto 82px; align-items: center; gap: 8px; width: 100%; padding: 5px 0; border: 0; background: none; color: var(--fg-2); font: inherit; font-size: 13px; text-align: left; }
+.shell .cy-row:not(:disabled) { cursor: pointer; }
+.shell .cy-row:not(:disabled):hover .cy-name { text-decoration: underline; text-underline-offset: 2px; }
+.shell .cy-row:disabled { opacity: 1; cursor: default; }
+.shell .cy-pop { color: var(--fg-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.shell .cy-st { text-align: right; color: var(--muted); font-size: 12px; }
+.shell .cy-st.compromised { color: var(--fault); }
+.shell .cy-st.dark, .shell .cy-st.struck, .shell .cy-st.shielded, .shell .cy-st.recovered { color: var(--fg-2); }
+.shell .cy-sw { width: 10px; height: 10px; background: #5b5c61; }
+.shell .cy-sw.dark, .shell .cy-sw.struck { background: var(--fault); }
+.shell .cy-sw.compromised { background: none; border: 1.5px solid var(--fault); }
+.shell .cy-sw.shielded { background: var(--defense); }
+.shell .cy-sw.recovered { background: none; border: 1.5px solid var(--defense); }
+.shell .cy-acts { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 8px 20px; }
+
+.shell .cy-plays { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.shell .cy-plays > li { padding: 6px 0; border-top: 1px solid var(--border); color: var(--fg); font-size: 13px; }
+.shell .cy-plays ul { margin: 4px 0 0; padding-left: 16px; font-size: 12px; line-height: 17px; }
+.shell .cy-plays .atk { color: var(--fg-3); }
+.shell .cy-plays .def { color: var(--defense); }
+.shell .cy-plays .def.failed { color: var(--muted); }
+.shell .cy-rules { margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.shell .cy-rules li { display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px solid var(--border); color: var(--fg-3); }
+.shell .cy-rules b { color: var(--fg); font-weight: 500; }
+
+.shell .cy-turn { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 4px 10px; padding: 10px 12px; background: var(--card); }
+.shell .cy-shield { display: grid; place-items: center; width: 32px; height: 32px; background: var(--selected); color: var(--defense); }
+.shell .cy-turn-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shell .cy-turn-text b { color: var(--fg); font-size: 13px; font-weight: 600; }
+.shell .cy-range { grid-column: 1 / -1; width: 100%; }
+.shell .cy-turn .text-btn { grid-column: 1 / -1; justify-self: start; }
+
+/* labels on the map: a dot at the area's anchor substation, a leader line and the label in a column (layoutTags) */
+.shell .cy-tag-anchor { pointer-events: none; }
+.shell .cy-dot { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: #9a9ba0; }
+.shell .cy-lead { position: absolute; left: 0; top: 0; overflow: visible; }
+.shell .cy-lead line { stroke: #9a9ba066; stroke-width: 1; }
+.shell .cy-tag { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 5px; padding: 3px 8px; white-space: nowrap; background: #3a3b3f; color: var(--fg-2); font-size: 12px; line-height: 18px; }
+.shell .cy-tag em { font-style: normal; color: var(--fault); font-size: 11px; }
+.shell .cy-tag-anchor.attack .cy-dot { background: var(--fault); }
+.shell .cy-tag-anchor.attack .cy-lead line { stroke: var(--fault); }
+.shell .cy-tag-anchor.attack .cy-tag { background: var(--fault); color: #fff; }
+.shell .cy-tag-anchor.compromised .cy-tag { background: var(--bg); border: 1px dashed var(--fault); color: var(--fg); }
+.shell .cy-tag-anchor.defense .cy-dot { background: var(--defense); }
+.shell .cy-tag-anchor.defense .cy-lead line { stroke: var(--defense); }
+.shell .cy-tag-anchor.defense .cy-tag { background: var(--defense); color: #0e1a2b; }
+.shell .cy-tag-anchor.recovered .cy-tag { background: var(--bg); border: 1px solid var(--defense); color: var(--fg); }
+.shell .cy-tag-shield { width: 8px; height: 9px; background: currentColor; clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%); }
