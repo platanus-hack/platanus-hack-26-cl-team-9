@@ -38,6 +38,13 @@ def get_service(request: Request) -> GridQueryService:
 
 
 Svc = Annotated[GridQueryService, Depends(get_service)]
+Limit = Annotated[int, Query(ge=1, le=5000)]
+Offset = Annotated[int, Query(ge=0)]
+
+
+def page(result: tuple[int, list[dict[str, Any]]]) -> dict[str, Any]:
+    total, items = result
+    return {"total": total, "items": items}
 
 
 def create_app(
@@ -159,25 +166,26 @@ def create_app(
         delivers: bool | None = None,
         located: bool | None = None,
         main_grid: bool | None = None,
-        limit: int = Query(100, ge=1, le=5000),
-        offset: int = Query(0, ge=0),
+        limit: Limit = 100,
+        offset: Offset = 0,
     ) -> dict[str, Any]:
-        total, items = s.list_nodes(
-            q,
-            kind,
-            kv_min,
-            kv_max,
-            segment,
-            region,
-            macro_zone,
-            system,
-            delivers,
-            located,
-            main_grid,
-            limit,
-            offset,
+        return page(
+            s.list_nodes(
+                q,
+                kind,
+                kv_min,
+                kv_max,
+                segment,
+                region,
+                macro_zone,
+                system,
+                delivers,
+                located,
+                main_grid,
+                limit,
+                offset,
+            )
         )
-        return {"total": total, "items": items}
 
     @app.get(
         "/api/v1/nodes/{node_id}",
@@ -202,13 +210,14 @@ def create_app(
         topology_source: str | None = Query(None, description="'inferida' o 'CEN'"),
         with_electrical: bool | None = None,
         node: str | None = None,
-        limit: int = Query(100, ge=1, le=5000),
-        offset: int = Query(0, ge=0),
+        limit: Limit = 100,
+        offset: Offset = 0,
     ) -> dict[str, Any]:
-        total, items = s.list_edges(
-            kind, kv_min, kv_max, segment, topology_source, with_electrical, node, q, limit, offset
+        return page(
+            s.list_edges(
+                kind, kv_min, kv_max, segment, topology_source, with_electrical, node, q, limit, offset
+            )
         )
-        return {"total": total, "items": items}
 
     @app.get(
         "/api/v1/edges/{edge_id}", tags=["red"], summary="Detalle de una línea con geometría y parámetros"
@@ -224,16 +233,14 @@ def create_app(
         operating: bool | None = None,
         system: str | None = None,
         node: str | None = None,
-        limit: int = Query(2000, ge=1, le=5000),
-        offset: int = Query(0, ge=0),
+        limit: Limit = 2000,
+        offset: Offset = 0,
     ) -> dict[str, Any]:
-        total, items = s.list_plants(tech, min_mw, operating, system, node, limit, offset)
-        return {"total": total, "items": items}
+        return page(s.list_plants(tech, min_mw, operating, system, node, limit, offset))
 
     @app.get("/api/v1/storage", response_model=Page, tags=["activos"])
     def storage(s: Svc, source: str | None = None, existing_only: bool = False) -> dict[str, Any]:
-        total, items = s.list_storage(source, existing_only)
-        return {"total": total, "items": items}
+        return page(s.list_storage(source, existing_only))
 
     @app.get(
         "/api/v1/comunas",

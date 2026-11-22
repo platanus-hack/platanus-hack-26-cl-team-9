@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(api): page() helper and shared Limit/Offset query types in app.py
+
+- **Changed:** `api/app.py` gets `page((total, items))` for the four `{"total", "items"}` responses and `Limit = Annotated[int, Query(ge=1, le=5000)]`, `Offset = Annotated[int, Query(ge=0)]` for the three list routes (defaults stay 100 for nodes/edges and 2000 for plants).
+- **Why:** F17 of the duplication report. `app.openapi()` of the whole app is byte-identical before and after (dumped with sorted keys), and `docs/openapi/agents.openapi.json` is unchanged.
+- **Agents:** Use `Limit`/`Offset`/`page` for a new paginated route. Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/api/app.py`.
 ## 2026-11-22 · refactor(agents): one add_unless_active helper builds the COA and checks its key
 
 - **Changed:** New `theater/decisions.py::add_unless_active(coas, active, proposer, action, target, rationale_key, benefit, risk=0.0)`. It builds the `COA` and skips it when `coa.key` is in `active`, instead of rebuilding `f"{action}:{target}"`. `OperationsAgent.propose` uses it through `functools.partial`; `StabilizationAgent.propose` keeps its own one-line `add` (extra rule: one COA per action) that calls it.
