@@ -56,3 +56,11 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "RUF"]
 ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+# networkx, yaml, boto3, openpyxl, anthropic and mcp ship no stubs (or are optional extras not installed in dev).
+ignore_missing_imports = true
+# Understands pydantic models (Field(...) kwargs, model_dump, validators).
+plugins = ["pydantic.mypy"]

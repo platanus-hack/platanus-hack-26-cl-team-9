@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(types): add a mypy baseline configuration
+- **Changed:** `backend/pyproject.toml` gets `[tool.mypy]` (`python_version = "3.12"`, `files = ["src"]`, `ignore_missing_imports = true`, `plugins = ["pydantic.mypy"]`). `uv run mypy src` goes from 179 to 153 errors.
+- **Why:** Review R-03/B-10. Without a config, mypy reported 16 errors for libraries without stubs (networkx, yaml, boto3, openpyxl, anthropic, mcp) and did not understand pydantic models.
+- **Agents:** Run `cd backend && uv run mypy src`. The count is a baseline, not a gate. Annotation fixes follow in later commits.
+- **Files:** `backend/pyproject.toml`.
 ## 2026-11-22 · chore(backend): remove nine unreferenced methods
 - **Changed:** Removed `ProcessedWorld.labels`, `LogisticsAgent.freedom`, `Grid.add_inertia`, `Grid.totals` (simulation grid), `Decision.param`, `Belief.trust_of`, `Action.param` (execution), `TheaterGrid.island_inertia_mws` and `TheaterGrid.release_hold`. 40 lines deleted, none added.
 - **Why:** Review B-13. `vulture` flags them, and `git grep` finds no caller in `backend/src`, `backend/tests`, `web/src`, `docs` or the OpenAPI specs (only CHANGELOG history mentions `island_inertia_mws`). None is reached through `getattr` (the `getattr` sites use fixed names or tool/route names).
