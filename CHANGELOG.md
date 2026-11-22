@@ -23,6 +23,40 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** A selection or a timeline position alone does not enable the button. `edited` is always `false` for now; #42 phase B (local value edits) plugs in there. Tests are in `web/src/cascade/powerAll.test.ts`.
 - **Files:** `web/src/cascade/{powerAll.ts,powerAll.test.ts}`.
 
+## 2026-11-22 · feat(infra): ECS task of 4 vCPU and 8 GB
+- **Changed:** `aws_ecs_task_definition.app` goes from 2 vCPU / 4 GB to 4 vCPU / 8 GB (`cpu = 4096`, `memory = 8192`, a valid Fargate pair). `docs/infrastructure.md` says so.
+- **Why:** The user asked for a bigger task. The Fargate On-Demand vCPU quota is 30, so two 4 vCPU tasks fit during a blue/green rollout.
+- **Agents:** The service has `ignore_changes = [task_definition]`, so the new size only reaches it after a one-time `aws ecs update-service --task-definition cascadasen:<revision>` that points at the revision Terraform registers; CI deploys copy that revision and keep the size.
+- **Files:** `infrastructure/ecs.tf`, `docs/infrastructure.md`.
+## 2026-11-21 · feat(web): shut down a substation from its card
+
+- **Changed:** The substation card has **Apagar esta subestación** ("Abre sus N líneas en t = 0.") and, while it is shut down, **Encender subestación**. Without a session it sets the cut to `sub-B###` and plays `<point>/sub-B###.json`; in a session it opens the substation's closed lines in one `POST /{sid}/cut` and repairs exactly those lines to power it on.
+- **Changed:** `text.ts` adds `SUBSTATION_PREFIX`, `shutdownNode`, `substationLines`, `cutName` ("Subestación Polpaico" or the line name) and a plural `line_cut` narration ("Salen de servicio las líneas A, B y C."). The impact card (`Corte: Subestación ...`, button **Encender subestación**) and the Escenarios row use `cutName`.
+- **Why:** Second kind of scenario asked by the user: shutting down a substation = opening every line of it at t = 0.
+- **Agents:** A static `cut` is `R###` or `sub-B###`, and `?cut=sub-B012` works; the hour change in Escenarios and the missing-file fallback are unchanged. Sessions have no `sub-` id, only open lines. Verification: `npm test` 55 passed, `npm run build` ok. "Bloquear" is still out of scope.
+- **Files:** `web/src/cascade/{text.ts,text.test.ts,SelectionCard.tsx,CascadeApp.tsx,SimulationPanel.tsx,Scenarios.tsx}`, `docs/mapa3.md`.
+
+## 2026-11-21 · chore(cache): regenerate the cache with substation cuts
+
+- **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache`: 752 new `sub-B###.json` (188 per point) and the 1,097 existing files rewritten. Size went from 23 MB to 42 MB (`du -sh`); the docs say so.
+- **Why:** The web reads substation shutdowns from the cache. The existing files were stale: they lacked the newer summary fields (`final_hz`, `rocof_hz_s`, `inertia_mws`, `shed_mw`, `battery_mw`, `uncertain`, `prefault_boundary_mw`) and the current assumption texts, so line cuts now match the engine too.
+- **Agents:** Checked: `nov2026-1300/sub-B012.json` has `failed_elements` = `["R042","R043"]`, the two lines of B012, and its first event is `line_cut` with both ids at t = 0. A full run takes about a minute.
+- **Files:** `web/public/cache/`, `docs/mapa3.md`, `docs/engine.md`, `web/README.md`.
+
+## 2026-11-21 · fix(hooks): find a staged CHANGELOG.md in commits with many files
+
+- **Changed:** `scripts/hooks/pre-commit` pipes the staged list into `grep -x ... >/dev/null` instead of `grep -qx`.
+- **Why:** With `pipefail`, `grep -q` exits at the first match, `printf` dies of SIGPIPE and the check reported "CHANGELOG.md is not staged" on a commit of ~1,850 files (the cache regeneration) even though it was staged.
+- **Agents:** Large commits such as a regenerated `web/public/cache/` now pass the hook without `SKIP_CHANGELOG`.
+- **Files:** `scripts/hooks/pre-commit`.
+
+## 2026-11-21 · feat(cache): precompute a cut per substation
+
+- **Changed:** `cascadasen-cache` also writes `<point>/sub-B###.json` for each of the 188 substations: the cascade for opening every line of that bus at t = 0 (`run_cascade_workflow(net, op, ids)`). Buses without lines are skipped (none today). The printed count per point is now `{"lines": 273, "substations": 188}`.
+- **Why:** The map gets a second kind of scenario, "Apagar esta subestación" (user decision: shutting down = opening all its lines at t = 0). Without a session the web only reads precomputed files.
+- **Agents:** A scenario id in the cache is now either a line id `R###` or `sub-B###`; both files share the timeline format. The cache is regenerated in the next commit. "Bloquear" (loss of control) is not modelled.
+- **Files:** `backend/src/cascadasen/application/cache_builder.py`, `docs/mapa3.md`, `docs/engine.md`, `web/README.md`.
+
 ## 2026-11-21 · docs(mapa3): document the clean default URL
 
 - **Changed:** `docs/mapa3.md` §2: the URL carries only values that differ from the defaults, a bare `/` is the default view, and `?point=nov2026-1300` is normalised away. §11: a session URL drops `point` as well as `cut`.

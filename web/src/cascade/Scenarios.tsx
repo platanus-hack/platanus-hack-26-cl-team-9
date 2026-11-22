@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { conditionDate, conditionName, lineName } from "./text";
+import { conditionDate, conditionName, cutName as nameOfCut } from "./text";
 import type { Network, PointInfo } from "./types";
 import { Chevron } from "./ui";
 
@@ -26,7 +26,7 @@ export function ScenarioTree({ points, pointId, cuts, network, open, locked }: {
   // A scenario that becomes active (from the rail, a map click or the URL) opens; collapsing it again is up to the user.
   useEffect(() => { setExpanded((s) => (s.has(active) ? s : new Set(s).add(active))); }, [active]);
 
-  const names = cuts.map((id) => (network ? lineName(network, id) : id));
+  const names = cuts.map((id) => (network ? nameOfCut(network, id) : id));
   const cutName = names.join(", ");
   const rows: Row[] = [
     { key: "25f", name: "Apagón 25F", cut: CASE_25F.cut, year: active === "25f" ? year : 2025 },

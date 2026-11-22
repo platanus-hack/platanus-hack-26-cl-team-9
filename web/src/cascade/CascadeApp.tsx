@@ -13,7 +13,7 @@ import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
-import { clock, formatPeople, lineName, pct, placeName, zoneName } from "./text";
+import { clock, formatPeople, lineName, pct, placeName, SUBSTATION_PREFIX, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
 import type { BusState, Index, Network, Timeline } from "./types";
 import { Icon, TipLayer, Wordmark } from "./ui";
@@ -47,7 +47,7 @@ export function CascadeApp() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const scaleRef = useRef<HTMLDivElement>(null);
   const baseMap = useRef<BaseMap | null>(null);
-  // ?point=<id>&cut=<line id>&vista=3d&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
+  // ?point=<id>&cut=<line id | sub-<bus id>>&vista=3d&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
   const params = useMemo(() => new URLSearchParams(location.search), []);
   const s = useSession();
   const startCut = s.sid ? null : params.get("cut"); // a session owns its cut
@@ -314,6 +314,29 @@ export function CascadeApp() {
   }
 
   /**
+   * Shutting down a substation opens every one of its lines at t = 0. Without a session the cache holds that timeline as
+   * `<point>/sub-<bus id>.json`; in a session its lines that are still closed open for everyone through `POST /{sid}/cut`.
+   */
+  function shutdownSubstation(id: string) {
+    setSelection(null);
+    setNotice(null);
+    if (!s.sid) setCut(`${SUBSTATION_PREFIX}${id}`);
+    else if (network) {
+      const closed = substationLines(network, id).filter((l) => !s.state?.open_lines.includes(l));
+      if (closed.length) s.edit((sid, rev) => cutLines(sid, closed, rev));
+    }
+    setView("tabs");
+    setTab("sim");
+    setColorMode("load");
+  }
+
+  /** "Encender subestación": back to the base case without a session; in a session it repairs that substation's lines. */
+  function powerOn(id: string) {
+    if (!s.sid) restore();
+    else if (network) restore(substationLines(network, id));
+  }
+
+  /**
    * Back to the base case at the same operating point; the tab and the selection stay. In a session it repairs `lines`
    * (every open line when omitted) for everyone through `POST /{sid}/repair`.
    */
@@ -377,6 +400,10 @@ export function CascadeApp() {
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
   const selectedCut = s.sid ? (selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null) : cut;
   const canPower = canPowerAll({ cuts, edited: false }); // edited: #42 phase B
+  const selectedNodeLines = selection?.kind === "node" && network ? substationLines(network, selection.id) : [];
+  const shutDown = selection?.kind === "node" && (s.sid
+    ? selectedNodeLines.length > 0 && selectedNodeLines.every((l) => cuts.includes(l))
+    : cut === `${SUBSTATION_PREFIX}${selection.id}`);
   const sourceNote = hasLabels ? "Mapa base: Mapbox" : "Contorno: data/processed/chile.geojson";
 
   return (
@@ -438,7 +465,8 @@ export function CascadeApp() {
           {view === "tabs" && !network && !error && <Loading text="Cargando la red" />}
           {view === "tabs" && network && selection && (
             <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year}
-              select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut && s.sid ? [selectedCut] : undefined)} />
+              select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut && s.sid ? [selectedCut] : undefined)}
+              shutDown={shutDown} shutdown={shutdownSubstation} powerOn={powerOn} />
           )}
           {view === "tabs" && tab === "red" && network && <NetworkPanel source={sourceNote} />}
           {view === "tabs" && tab === "sim" && s.sid && s.state && network && (

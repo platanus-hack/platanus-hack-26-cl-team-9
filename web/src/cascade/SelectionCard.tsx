@@ -7,7 +7,9 @@ import { Info } from "./ui";
 
 interface Props {
   network: Network; buses: Record<string, BusState>; frame: Frame | undefined; selection: Pick; cut: string | null; year: number | undefined;
-  select(pick: Pick): void; clear(): void; cutLine(id: string): void; restore(): void;
+  /** True when the selected substation is shut down (every one of its lines open). */
+  shutDown: boolean;
+  select(pick: Pick): void; clear(): void; cutLine(id: string): void; restore(): void; shutdown(nodeId: string): void; powerOn(nodeId: string): void;
 }
 
 const TOPOLOGY_TIP = (year: number | undefined) =>
@@ -105,6 +107,14 @@ function NodeCard(p: Props & { node: string }) {
         );
       })}
       <p className="meta">Clic en una línea de la lista para ver su detalle. Carga: flujo DC del motor Sub50 en el segundo actual.</p>
+      {lines.length > 0 && (
+        <div className="actions">
+          {p.shutDown
+            ? <button className="primary-btn" onClick={() => p.powerOn(n.id)}>Encender subestación</button>
+            : <button className="primary-btn" onClick={() => p.shutdown(n.id)}>Apagar esta subestación</button>}
+          <span className="meta">{p.shutDown ? "Vuelve al caso base en este punto de operación." : `Abre ${lines.length === 1 ? "su línea" : `sus ${lines.length} líneas`} en t = 0.`}</span>
+        </div>
+      )}
     </div>
   );
 }
