@@ -1,5 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · chore(index): move doc line references and regenerate the index after the 25F and assistant fixes
+
+- **Changed:** 17 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` follow the lines that moved in `api/assistant_routes.py`, `api/grid_routes.py`, `application/grid_stress.py`, `mcp/tools.py` and `mcp/toolbox.py`. `docs/index/repo-index.json` regenerated.
+- **Why:** The previous commits inserted lines above the referenced symbols.
+- **Agents:** References were mapped from `origin/main` with a line diff, so they keep the docs' existing convention (several point one line above the `def`, as before). New files `application/line_lookup.py` and `tests/unit/test_line_lookup.py` are in the index.
+- **Files:** `docs/{code-map,for-reviewers,README}.md`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · fix(assistant): no session for prepare_scenario, and a named line goes through find_line
 
 - **Changed:** The assistant's `SYSTEM` (`api/assistant_routes.py`) says prepare_scenario and find_line use no session (never open one for them), to call find_line once for a line named by its substations and put the id in `open_lines`, and never to send a lines change with factor 0. The shared MCP `INSTRUCTIONS` (`mcp/tools.py`) no longer start with "start_session first": map work goes straight to prepare_scenario, session work is the second path. `start_session` and `prepare_scenario` descriptions say the same.
