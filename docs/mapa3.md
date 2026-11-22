@@ -111,7 +111,7 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder   # 
 cd ../web && npm install && npm run dev
 ```
 
-The cache (about 23 MB, 4 hours x 273 cuts) is committed, because the deployed web image has no Python. Regenerate it with `cascadasen-cache` and commit it whenever the engine or `data/processed` change. If a file is missing the page shows "Falta la caché (...)".
+The cache (about 23 MB, 4 hours x (273 line cuts + 188 substation shutdowns)) is committed, because the deployed web image has no Python. Regenerate it with `cascadasen-cache` and commit it whenever the engine or `data/processed` change. If a file is missing the page shows "Falta la caché (...)".
 
 | URL | Opens |
 |---|---|
@@ -212,6 +212,7 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/public/cache/network-<year>.json` | The 188 substations and 273 lines |
 | `web/public/cache/<point>/buses.json` | Generation, demand, people per substation |
 | `web/public/cache/<point>/baseline.json` and `<line id>.json` | One timeline per cut: events, frames, frequency curves, summary |
+| `web/public/cache/<point>/sub-<bus id>.json` | One timeline per substation shutdown (`sub-B012`): every line of that bus opens at t = 0, same format as a line cut |
 | `web/src/cascade/Scenarios.tsx` | Escenarios tree in the rail (Design v6): scenarios by cut, operating conditions under each |
 | `web/src/cascade/CascadeApp.tsx` | Design v5 shell: state (selection, cut, point), animation loop (clock, layers, HTML overlays), keyboard, rail, panel, controls |
 | `web/src/cascade/clicks.ts` | Pure click interpreter: single click selects, double click on a line cuts once on both basemaps |

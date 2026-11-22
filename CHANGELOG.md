@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(cache): precompute a cut per substation
+
+- **Changed:** `cascadasen-cache` also writes `<point>/sub-B###.json` for each of the 188 substations: the cascade for opening every line of that bus at t = 0 (`run_cascade_workflow(net, op, ids)`). Buses without lines are skipped (none today). The printed count per point is now `{"lines": 273, "substations": 188}`.
+- **Why:** The map gets a second kind of scenario, "Apagar esta subestación" (user decision: shutting down = opening all its lines at t = 0). Without a session the web only reads precomputed files.
+- **Agents:** A scenario id in the cache is now either a line id `R###` or `sub-B###`; both files share the timeline format. The cache is regenerated in the next commit. "Bloquear" (loss of control) is not modelled.
+- **Files:** `backend/src/cascadasen/application/cache_builder.py`, `docs/mapa3.md`, `docs/engine.md`, `web/README.md`.
+
 ## 2026-11-21 · docs(assistant): document the step stream for map clients
 
 - **Changed:** `docs/assistant.md` section 2b: the events of `POST /chat/stream` with examples, which session routes to fetch after each tool to draw, pings and the 90 s stream deadline, disconnect behaviour, a `fetch` reader for browsers (`EventSource` only does GET) and a `curl -N` example. `docs/stack.md` 7.3 lists the route.

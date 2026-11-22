@@ -31,7 +31,7 @@ Click a line, get the consequences: islands, load shed, people in the dark and t
 
 ```bash
 cd backend
-uv run cascadasen-cache            # writes web/public/cache/ (about 23 MB, 4 hours x 273 cuts)
+uv run cascadasen-cache            # writes web/public/cache/ (about 23 MB, 4 hours x (273 line cuts + 188 substation shutdowns `sub-B###`))
 uv run pytest tests/unit/test_cascade.py
 ```
 
