@@ -51,6 +51,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** Regenerate with `cd backend && uv run python ../scripts/build_index.py` (`--check` verifies) before every commit that adds, removes or edits a source, doc or test file, a route or this file, and `git add` new files first (the builder reads `git ls-files`). The index does not list itself, holds no timestamp or hash, and is byte-identical across runs. Python symbols with no docstring carry `"undocumented": true`. No product code changed.
 - **Files:** `scripts/build_index.py`, `docs/index/{README.md,repo-index.json}`, `backend/tests/integration/test_repo_index.py`.
 
+## 2026-11-22 · chore(web): quitar el ítem Validación del menú lateral (#112)
+
+- **Changed:** The disabled "Validación" item of the nav rail and its unused `SOON` tip are gone.
+- **Why:** it did nothing (a placeholder with "Todavía no está en la app") and confused users.
+- **Agents:** the "Validación" tab inside the panel was already hidden; nothing else references it. `docs/mapa3.md` 4 item 2 updated.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `docs/mapa3.md`.
+
 ## 2026-11-22 · feat(web): pins for placed points, Markdown replies, the chat stays open on a scenario
 
 - **Changed:**
