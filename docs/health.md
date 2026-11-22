@@ -39,7 +39,7 @@ Reference for "healthy": `feb2025-0300`, the same 2025 network and month as the 
 |---|---|---|
 | Pre-fault index | **0.00**, limited by `transfer_25f` (2,209 MW N→S, limit 1,600; raw -0.38) | **0.35**, limited by `transfer_25f` (653 MW S→N, limit 1,000) |
 | Other pre-fault margins | inertia 0.50 (36.7 GVAs), `frequency_n1` 1.00, `n1_security` 0.80 (218/273) | inertia 1.00 (49.3 GVAs), `frequency_n1` 0.93, `n1_security` 0.85 (231/273) |
-| After cutting R239 | **0.00**, uncertain (`voltage_limited`; 1,972 of 11,096 MW lost) | **0.67**, limited by `frequency_islands` (48.5 Hz; 631 of 8,719 MW lost) |
+| After cutting R239 | **0.00**, uncertain (collapse by voltage, a rule; 11,096 of 11,096 MW lost) | **0.67**, limited by `frequency_islands` (48.5 Hz; 631 of 8,719 MW lost) |
 
 Reading: the index separates the two cases mainly through the corridor transfer, which is the documented cause of the 25F. Inertia and the frequency after losing the largest unit do not limit either case. The reference is not "fully healthy" (0.35) because its corridor already carries 65% of its south-to-north limit.
 

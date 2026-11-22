@@ -68,6 +68,19 @@ async function _loadCountry(iso: string): Promise<RegionalGrid> {
   };
 }
 
+/** The same grid from the context documents the backend composed (docs/grids.md): already in this shape, only joined. */
+/** Documents built before the `country` field was added per element take the document's country (`countryOf` rule). */
+type DocElement<T> = Omit<T, "country"> & { country?: string };
+export function regionalFromDocuments(docs: { meta: RegionalCountry; lines: DocElement<RegionalLine>[]; substations: DocElement<RegionalSubstation>[]; plants: DocElement<RegionalPlant>[] }[]): RegionalGrid {
+  const tag = <T,>(d: { meta: RegionalCountry }, x: DocElement<T>) => ({ ...x, country: x.country || d.meta.country }) as T;
+  return {
+    countries: docs.map((d) => d.meta),
+    lines: docs.flatMap((d) => d.lines.map((x) => tag<RegionalLine>(d, x))),
+    substations: docs.flatMap((d) => d.substations.map((x) => tag<RegionalSubstation>(d, x))),
+    plants: docs.flatMap((d) => d.plants.map((x) => tag<RegionalPlant>(d, x))),
+  };
+}
+
 const withAlpha = (c: Rgb, a: number): [number, number, number, number] => [c[0], c[1], c[2], a];
 const OTHER_TECH: Rgb = [200, 200, 200];
 /** Not part of the load ramp (green to red), so it reads as "no data" in the Simulación view. */

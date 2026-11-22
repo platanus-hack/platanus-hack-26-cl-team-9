@@ -48,7 +48,7 @@ export function loadColor(state: EdgeState | undefined): string {
 export interface Toggles { flow: boolean; demand: boolean }
 export interface View {
   network: Network; buses: Record<string, BusState>; frame: Frame; time: number; colorMode: ColorMode;
-  selectedNode: string | null; selectedLine: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[];
+  selectedNode: string | null; selectedLine: string | null; mode: ViewMode; zoom: number; toggles: Toggles; regional?: Layer[]; heat?: Layer[];
 }
 
 /** Flat network on the basemap; optional moving dots for the flow and demand as columns (3D) or discs (2D). */
@@ -79,6 +79,7 @@ export function buildCascadeLayers(v: View): Layer[] {
   const selected = v.selectedLine ? v.network.lines.find((l) => l.id === v.selectedLine) : undefined;
   return [
     ...(v.regional ?? []),
+    ...(v.heat ?? []), // under the lines and substations, over the context countries
     // Selected line: a white halo under the line, so its own colour (voltage, load or dashed) still reads inside.
     ...(selected ? [new PathLayer<NetLine>({
       id: "selection", data: selectionData(selected), widthUnits: "pixels", getPath: (l) => [pos(l.a), pos(l.b)], capRounded: true,

@@ -1,6 +1,19 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · Merge origin/main into feat/network-selector
+
+- **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.
+  - `CascadeApp.tsx` was rebuilt on main's version, and the network selector, the per-country camera, the view-only networks and the upload were applied again on top.
+  - **"Fuentes de la grilla" (`GridSources.tsx`) is now one choice (radio), not checkboxes** (user decision 2026-11-22: one network at a time wins). Choosing Chile composes it with no context; choosing another country composes only that country's context document and shows it alone. The marked row is the network on the map, synced with the panel header; choosing in the header returns to the app files.
+  - The backend `regional_document` (`domain/grids.py`) writes `country` on every line, substation and plant. `regionalFromDocuments` fills a missing one from the document's country.
+- **Why:** The merge conflicted in `CascadeApp.tsx`, `docs/mapa3.md` and this file, and main's multi-country composition contradicted issue #49 ("nunca hay más de una red dibujada").
+- **Agents:**
+  - On a network other than Chile's, the Estado de la red and Simulación tabs are disabled, and Prender todo, the timeline, the legend and the pins are hidden. Chile's changes (`edits`) are kept and come back with Chile, and the URL drops `cut` meanwhile.
+  - `test_the_committed_cache_matches_the_engine_for_a_single_cut` (2 cases) already fails on main itself (cache not regenerated after an engine change); it is not caused by this merge.
+  - The 404 on `/api/v1/grids/cost` is expected until issue #82.
+- **Files:** `web/src/cascade/{CascadeApp,GridSources}.tsx`, `web/src/map/regional.ts`, `backend/src/cascadasen/domain/grids.py`, `backend/tests/unit/{test_grids,test_cascade}.py`, `docs/{grids,mapa3}.md`.
+
 ## 2026-11-22 · fix(map): never set the new country's limits mid-flight
 
 - **Changed:** In `baseMap.ts` the Mapbox `setTarget` fallback timer now lands the camera only when `!map.isMoving()`. `moveend` lands it otherwise. Also replaced a `return void fit()` flagged by the IDE linter.
@@ -70,6 +83,128 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Issue #49 part A: every substation, line and plant says which country it belongs to, with the same field the regional layer (`data/processed/latam/`) already has.
 - **Agents:** `country` is the network-level ISO3 of a `ReducedNetwork`; a reduced network never spans two countries. New constructors may omit it (default `CHL`). Tests: `test_network_json_carries_country_on_every_node_and_line`, plus asserts in `test_geojson_layers` and `test_theater_network_is_the_mapa3_network`.
 - **Files:** `backend/src/cascadasen/domain/cascade/network.py`, `backend/src/cascadasen/application/{cache_builder,simulation_service,grid_queries}.py`, `data/scripts/build_node_index.py`, `backend/tests/`.
+
+## 2026-11-22 · feat(web): Desastres adds the 2011 Ancoa blackout and the 2010 earthquake (S/E Charrúa) (#88)
+
+- **Changed:** `DISASTERS` in `Scenarios.tsx` lists Apagón 25F, Apagón 2011 · Ancoa (cut `R006` at `nov2026-2000`) and Terremoto 2010 · Charrúa (S/E Charrúa `B043` out of service at `nov2026-2000`). A scenario is now `{point, edits}`: a disaster replaces the changes of Estado de la red, a Benchmark condition keeps them. `activeDisaster` marks the entry whose hour and changes match exactly. The 25F tooltip named the wrong corridor (Alto Jahuel–Ancoa); it now says Nueva Maitencillo – Nueva Pan de Azúcar.
+- **Why:** the scenario plan (PR #33) had both events; the user asked for them in Desastres.
+- **Agents:** 2011 gives 3.2 M people (real 9.8 M) and 2010 gives 4.1 M (real more than 13 M): analogues, not reproductions (docs/mapa3.md, issue #35). Adding a disaster is one entry in `DISASTERS`.
+- **Files:** `web/src/cascade/{Scenarios.tsx,scenarios.test.ts,CascadeApp.tsx}`, `docs/mapa3.md`.
+## 2026-11-21 · docs(assistant): document the web chat
+
+- **Changed:** `docs/assistant.md` gets section 2c "Web client" (files, which session a message uses, refresh rules, persistence key, rehydration limits, error texts, what was checked) and §5 drops "The web UI" in favour of the pending Bedrock check. `web/README.md` adds a paragraph on the **Asistente** rail item and a row for `src/assistant/`. `docs/mapa3.md` §8 and §11 mention the new rail item and folder.
+- **Why:** The docs must match the chat added in the previous commits (#73).
+- **Agents:** The web chat was only checked against a scripted stand-in model, not Bedrock. `GET /conversations/{cid}` has no per-turn tool mapping and no `notice`, so a restored chat shows the tools as one collapsed list; adding a `turn` index to `tool_calls` in the backend would let the web place them.
+- **Files:** `docs/assistant.md`, `docs/mapa3.md`, `web/README.md`.
+
+## 2026-11-21 · feat(web): assistant chat panel in mapa 3
+
+- **Changed:** New rail item **Asistente** (below Sesión compartida) opens the view `"assistant"` with `AssistantPanel`: history with the user bubble, the text the model writes before acting, tool cards (Spanish name, readable arguments, spinner "ejecutando…" → ✓ listo / ✗ falló, short summary, "Ver resultado" with the JSON), the final reply with the scenario `notice`, a truncation notice with **Continuar** (sends "continúa"), errors per status, and a message box (1-2000 characters with counter, Enter sends, Shift+Enter new line) plus **Nueva conversación**.
+- **Changed:** `CascadeApp.tsx` calls `useAssistant(s)` once, so the chat survives view changes; the map stays beside the panel and follows the session the assistant edits. `labels.resultText` adds the bus name of an edit (`en S/E ESCONDIDA`).
+- **Why:** Issue #73: the user sees the assistant's steps live while it builds the simulation.
+- **Agents:** Styles in `web/src/assistant/assistant.css` (cascade.css tokens, radius 0, red only for a failed tool). Checked with a local backend whose model was a scripted stand-in (not Bedrock) and headless Chromium: the first message joins the new session (`?sesion=`), the datacenter shows in Datos and the cascade plays; a second message stays on the same session; reload restores the chat; Nueva conversación clears it and the stored id. Not checked against Bedrock.
+- **Files:** `web/src/assistant/{AssistantPanel.tsx,assistant.css,labels.ts,labels.test.ts}`, `web/src/cascade/CascadeApp.tsx`.
+
+## 2026-11-21 · feat(web): assistant API client and hook
+
+- **Changed:** New `web/src/assistant/assistantApi.ts`: `streamChat(body, onEvent, signal)` reads `POST /api/v1/assistant/chat/stream` with `fetch` and the SSE parser and resolves whether the stream ended with `done`/`error`; `getConversation`, `deleteConversation`; `AssistantError(status, retryAfter, detail)` (status 0 = network) whose message is the Spanish text.
+- **Changed:** New `web/src/assistant/useAssistant.ts`: `useAssistant(session)` → `{state, busy, enabled, restoring, send, reset}`. Sends `session_id: s.sid` with every message, joins the `session_id` of `start`/`tool_result`/`done` when it differs from the one on screen, reloads the session 300 ms after each successful edit/cut/repair, and after `step` fetches the run snapshots and annotates the card. The conversation id lives in `localStorage` (`sub50.assistant.cid`) and is rebuilt on mount (404 forgets it).
+- **Why:** The chat panel (#73) needs the stream, persistence and the map following the assistant.
+- **Agents:** A 503 disables the chat (`enabled = false`). A stream that drops before `done` marks the turn interrupted and re-reads the conversation up to 5 times, 3 s apart. `reset()` aborts the stream, clears the chat and DELETEs the conversation (the session stays). `errorText` in `sessionApi.ts` was not exported: all assistant texts come from `labels.ts`. Tests: `assistantApi.test.ts`.
+- **Files:** `web/src/assistant/{assistantApi.ts,assistantApi.test.ts,useAssistant.ts}`.
+
+## 2026-11-21 · feat(web): reduce assistant events to steps
+
+- **Changed:** New `web/src/assistant/steps.ts`: pure chat state (`ChatState`, turns, steps, `ToolCard`) with `begin`, `reduce(state, event)`, `interrupt`, `fail`, `annotate` and `fromConversation(view)`.
+- **Changed:** New `web/src/assistant/labels.ts`: Spanish tool names for the 23 MCP tools (`toolName`), readable arguments (`argsText`), short result summaries (`resultText`), `refreshFor(tool)` → `"network" | "state" | "snapshots" | null`, and error texts per status (`errorMessage`, `truncatedText`).
+- **Why:** The chat panel (#73) shows each step live, grouped by `step`, with tool cards that go from running to ok or failed.
+- **Agents:** A result pairs with its call by `id`; `done` and `error` turn cards still running into failed. `GET /conversations/{cid}` does not say which turn ran each tool, so `fromConversation` merges the assistant texts of one user message into one turn (last text = reply) and puts the tool trace in `restoredTools`. Summaries only repeat fields the tool returned. Tests: `steps.test.ts`, `labels.test.ts`.
+- **Files:** `web/src/assistant/{steps.ts,labels.ts,steps.test.ts,labels.test.ts}`.
+
+## 2026-11-21 · feat(web): parse the assistant event stream
+
+- **Changed:** New `web/src/assistant/sse.ts` with `createSseParser(onEvent)`: `push(chunk)` parses `text/event-stream` chunks cut anywhere into `{event, data}`; `flush()` parses a last block left without a blank line.
+- **Why:** First piece of the assistant chat in the web (#73). `EventSource` only does GET, so the POST `/api/v1/assistant/chat/stream` is read with `fetch` and this parser.
+- **Agents:** It skips `: ping` comments and blocks without `event:`, accepts `\r\n` (also split between chunks), joins multi-line `data:` with `\n`, and passes non-JSON data as a string. Tests in `sse.test.ts`.
+- **Files:** `web/src/assistant/{sse.ts,sse.test.ts}`.
+
+## 2026-11-22 · feat(grids): heat maps of dependency and criticality through the API, on the grid after the changes (#54)
+
+- **Changed:** `domain/cascade/tracing.py` and `criticality.py` (from PR #55) take the lines already open. New use case `GridDependency` (`application/grid_dependency.py`) and `POST /api/v1/grids/dependency` (`{point, open_lines, out_buses}`) measure who feeds whom and how critical each substation is after the user's changes and their cascade; `prepare_edits` in `grid_simulation.py` is shared with `/grids/simulate`. Web: "Mapa de calor" in the Capas menu (Población from the loaded buses; Dependencia and Criticidad from the API). The changes of Estado de la red are saved in localStorage (`sub50.edits.v1`) and come back after a refresh; a link with `?cut=` wins.
+- **Why:** PR #55 precomputed `dependency.json` in the cache for the base case only and was written against the old mapa 3; the new backend serves everything through the API, and the heat maps must describe the grid the user edited.
+- **Agents:** no `dependency.json`, no `population.json` and no `cascadasen-cache --only dependency`. Criticality costs about 2 s per new set of changes (32 results kept per process). New dependency `@deck.gl/aggregation-layers`.
+- **Files:** `backend/src/cascadasen/{domain/cascade/tracing.py,domain/cascade/criticality.py,application/grid_dependency.py,application/grid_simulation.py,api/grid_routes.py,api/app.py}`, `backend/tests/unit/{test_tracing,test_criticality,test_grid_dependency}.py`, `web/src/cascade/{heat.ts,heat.test.ts,edits.ts,edits.test.ts,gridsApi.ts,types.ts,layers.ts,CascadeApp.tsx,cascade.css}`, `web/package.json`, `docs/dependency.md`.
+
+## 2026-11-22 · feat(web): outage result and cost in Estado de la red; Chile alone by default (#83)
+
+- **Changed:** Estado de la red opens with "Resultado de la caída": people without power and % of the country, MW lost of the hour's demand, generation lost and islands that went dark, read with the same `impactAt` that Simulación uses at its last second. Cost of the outage comes from `POST /api/v1/grids/cost` (issue #82, not built yet): the card says "pendiente" on 404. `/grids/simulate` now adds the demand of substations out of service to `load_total_mw`. The map opens with Chile alone (no context countries until ticked in Fuentes de la grilla) at Mediodía solar; Desastres open on Carga and Benchmark on Tensión.
+- **Why:** the user wants the cost of the fall and the share of people without power next to the list of changes, with one set of figures for both tabs.
+- **Agents:** the cost contract is in issue #82; `loadOutageCost` in `gridsApi.ts` returns null on 404. `loadRegionalGrid` in `map/regional.ts` is no longer called by the app.
+- **Files:** `web/src/cascade/{NetworkState.tsx,gridsApi.ts,CascadeApp.tsx,GridSources.tsx}`, `backend/src/cascadasen/application/grid_simulation.py`, `backend/tests/unit/test_grid_simulation.py`, `docs/mapa3.md`, `docs/grids.md`.
+
+## 2026-11-22 · fix(web): drop the committed node_modules symlink
+
+- **Changed:** removes `web/node_modules`, a symlink to a local path that merge `cf013db` committed by mistake, and makes `web/.gitignore` ignore `node_modules` as a file too, not only as a directory.
+- **Why:** `web.Dockerfile` runs `npm ci` and then `COPY web/ ./`, so the symlink could replace the installed packages in the image and break the build.
+- **Agents:** never symlink `node_modules` into a worktree and then `git add -A` there.
+- **Files:** `web/node_modules` (removed), `web/.gitignore`.
+
+## 2026-11-22 · fix(cascade): voltage collapse brings the 25F down again; drop the extreme-contingency EDAC (#76)
+
+- **Changed:** the extreme-contingency EDAC (671.55 MW by df/dt) is removed from `frequency.py` and `cascade.yaml`. The voltage rule no longer marks islands `voltage_limited`/`uncertain`: when the 25F corridor separates with a pre-fault flow beyond 1,600 MW N→S or 1,000 MW S→N, both end islands collapse (`island_blackout`, `reason: "voltage"`); islands in `summary.islands` that went dark carry `reason`. `summary.uncertain` and `CascadeState.uncertain` are gone. Cache regenerated. Web: Estado de la red lists the consequences (lines opened by overload, islands that went dark, with their second) apart from the user's cuts.
+- **Why:** the extreme EDAC alone kept the centro-sur island above 47.5 Hz (48.49 Hz), so the 25F fell from 15.2 M to 3.8 M people; the real 25F left about 19 M (98.5 %) without power. Measured by switching each change of 58f8b74 off one at a time: the voltage verdict changed no number.
+- **Agents:** 25F at `feb2025-1500` now gives 11,096 of 11,096 MW and 16.8 M people (the model only assigns 18.16 M). `test_the_committed_cache_matches_the_engine_for_a_single_cut` fails if the engine changes without `cascadasen-cache`. The strategic theatre's `voltage_limited` branches (`domain/theater`, `domain/agents`) no longer fire from this engine; the 13-area engine in `domain/simulation` is untouched.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine.py,frequency.py,health.py,params/cascade.yaml}`, `backend/tests/unit/{test_cascade.py,test_health.py,test_grid_simulation.py}`, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,text.ts,CascadeApp.tsx}`, `docs/{engine,stack,mapa3,health,minimum-dataset,grids}.md`.
+
+## 2026-11-22 · feat(grids): "Estado de la red" tab, several cuts and substations together through the API (#70)
+
+- **Changed:** new `GridSimulator` use case and `POST /api/v1/grids/simulate` (`{point, open_lines, out_buses}`) that runs the cascade with all changes at once and returns a cache-shaped timeline. Web: first tab "Estado de la red" lists every change with Reponer and Reponer todo (`edits.ts`, `NetworkState.tsx`); a double click on a substation takes it out of service; a new cut adds to the list instead of replacing the last one; the rail's Escenarios no longer gets a "Corte ..." row. The two placeholder tabs are hidden to fit the panel.
+- **Why:** outside a session only the last single cut was shown, because the cache has single cuts only.
+- **Agents:** with zero or one line the web still reads `web/public/cache`; two or more changes, or any substation, go to the API. The cache predates engine commit `58f8b74`, so a single cut from the cache and the same cut from the API can differ (25F: 15.2 M vs 3.8 M people); regenerate with `cascadasen-cache` to align them. Changes are not persisted: a refresh keeps only a single cut in the URL. In a shared session the old behavior stays (Datos).
+- **Files:** `backend/src/cascadasen/{application/grid_simulation.py,api/grid_routes.py}`, `web/src/cascade/{edits.ts,NetworkState.tsx,CascadeApp.tsx,Scenarios.tsx,SelectionCard.tsx,SimulationPanel.tsx,clicks.ts,gridsApi.ts}`, `docs/grids.md`, `docs/mapa3.md`.
+
+## 2026-11-22 · fix(web): Benchmark conditions open on the Red tab (#66)
+
+- **Changed:** `openScenario` in `CascadeApp.tsx` opens the Red tab when the chosen scenario has no cut (Benchmark) and Simulación when it has one (Desastres).
+- **Why:** a Benchmark condition has no cascade to play, so Simulación only showed an empty timeline.
+- **Agents:** the tab after a rail choice is Red without a cut, Simulación with one.
+- **Files:** `web/src/cascade/CascadeApp.tsx`.
+
+## 2026-11-22 · feat(grids): "Fuentes de la grilla" tab and app-ready documents per country (#66)
+
+- **Changed:** `publish` now builds the documents the app reads (`CHL/network-<year>.json`, `CHL/operating/<point>.json`, `<ISO>/grid.json`) and keeps the raw files under `<ISO>/source/`; compose only joins them (no engine, no snapshot). Compose takes `context` (which countries) and `GET /api/v1/grids/documents/<key>` serves a context document. Web: rail item "Fuentes de la grilla" (`GridSources.tsx`, `gridsApi.ts`, `regionalFromDocuments`) that opens downward in the rail with a checkbox and a Complete or Partial status per network (all can be unticked); ticking one composes the grid. The rail's "Escenarios" are now two folders, Desastres (Apagón 25F) and Benchmark (the other three conditions), and recompose once a grid is composed. `GET /sources` adds `grids` with the status.
+- **Why:** the user must choose, from the stored documents, which ones make up the grid on the map, and edit elements by id; whole documents per country keep their references together.
+- **Agents:** default prefix is now `grids/v2` (layout `cascadasen.grid/2`); `grids/v1` is superseded. The cascade timelines still come from `web/public/cache`; only network, buses and context come from the composed grid. Compose does not apply `overlay` yet. Only the first of several `open_lines` is simulated in the web. See `docs/grids.md`.
+- **Files:** `backend/src/cascadasen/{domain/grids.py,application/grids.py,api/grid_routes.py}`, `web/src/cascade/{GridSources.tsx,gridsApi.ts,CascadeApp.tsx}`, `web/src/map/regional.ts`, `docs/grids.md`.
+
+## 2026-11-21 · feat(grids): grids as documents per country, published to S3 and composed by the backend (#63)
+
+- **Changed:** new port `GridStore` with `LocalGridStore` and `S3GridStore` (never overwrite), pure layout in `domain/grids.py`, use cases in `application/grids.py` (publish, verify, catalogue, `GridComposer`), routes `GET /api/v1/grids/sources`, `GET /api/v1/grids/scenarios`, `POST /api/v1/grids/compose`, CLI `cascadasen-grids publish|verify|list`, seed scenarios in `data/scenarios/*.json`.
+- **Why:** a grid is a JSON document the browser keeps and edits. The backend reads the documents the user picks (by country) from S3 and composes one grid; scenarios are preset grids (point, open lines, edits).
+- **Agents:** documents live under `grids/v1/` of the session bucket (the lifecycle rules only expire `sessions/` and `runs/`). Settings `CASCADASEN_GRIDS_STORE` (`local` default, `s3`), `_GRIDS_BUCKET`, `_GRIDS_PREFIX`. The prod task role `cascadasen-task` cannot read `grids/*` until IAM allows it (no Terraform yet). `operating_point_from_docs` and `network_json` are now public. Compose does not apply `overlay` yet; the simulator will. Details in `docs/grids.md`.
+- **Files:** `backend/src/cascadasen/{domain,application,infrastructure,api}/*grid*`, `domain/cascade/scenario.py`, `application/cache_builder.py`, `data/scenarios/`, `docs/grids.md`.
+
+## 2026-11-21 · docs(mapa3): document Prender todo
+
+- **Changed:** `docs/mapa3.md`. §3 places the control next to the layers button. §4 gets new item 9, **Prender todo**: what it clears, what it keeps, when it is disabled. The placeholder tabs become item 10. §8 adds `powerAll.ts` to the file table. §11 adds the session behaviour: confirm, repair every open line for everyone, dataset edits kept.
+- **Why:** The docs have to match the button from the previous commit.
+- **Agents:** No new rules beyond the previous two entries.
+- **Files:** `docs/mapa3.md`.
+
+## 2026-11-21 · feat(web): add Prender todo button to mapa 3
+
+- **Changed:** `CascadeApp.tsx` renders a labelled button **Prender todo** (bolt icon) at the top right, left of the `.map-controls` column, on the layers button's row. It sits outside every tab/view branch, so it shows from Red, Simulación, Datos, Ayuda, Fuentes and Sesión. It is enabled when `canPowerAll({ cuts, edited: false })` holds, i.e. while any cut is in force (local cut or the session's open lines).
+- **Changed:** `powerAllOn()`. Without a session it applies `powerAll(...)`: no cut, no selection, no notice, timeline at 0 and paused, same point. In a session it asks `confirm(...)` first, then calls the existing `restore()` (`repairLines(sid, { all: true }, rev)` via `s.edit`) and clears the selection and the timeline. Tab, colour mode and view never change. Session dataset edits are kept.
+- **Why:** Before this, "Reponer línea" in the selection or impact card was the only way back to the base case, and it repaired a single cut. With several elements switched off (#42, PR #67) the user needs one always-visible way back to the starting point that keeps the chosen operating point.
+- **Agents:** Disabled is `aria-disabled` with a guarded click, not `disabled`, so `TipLayer` still shows "No hay nada apagado ni editado." (same pattern as the placeholder tabs). `.power-all` has z-index 2, below `.map-controls` (3), so the layers popover covers it while open. No red: red is reserved for failure. Open PR #67 (`sub-<bus>` cut ids) needs no special handling: `cut: null` clears it too, but expect a textual merge conflict in the same area of `CascadeApp.tsx`. When #42 phase B adds local edits, pass them as `edited`. Known nit: after a click the tooltip keeps its old text until the pointer leaves the button (TipLayer reads `data-tip` only on `pointerover`).
+- **Files:** `web/src/cascade/{CascadeApp.tsx,cascade.css}`.
+
+## 2026-11-21 · feat(web): add pure powerAll helpers for mapa 3
+
+- **Changed:** New `web/src/cascade/powerAll.ts` with `canPowerAll({ cuts, edited })` (true when there is at least one cut or `edited`) and `powerAll(view)`, which keeps `pointId` and returns `cut: null`, `selection: null`, `t: 0`, `playing: false`.
+- **Why:** The "Prender todo" button (next commit) needs a tested rule for when it is enabled and for what it resets.
+- **Agents:** A selection or a timeline position alone does not enable the button. `edited` is always `false` for now; #42 phase B (local value edits) plugs in there. Tests are in `web/src/cascade/powerAll.test.ts`.
+- **Files:** `web/src/cascade/{powerAll.ts,powerAll.test.ts}`.
 
 ## 2026-11-22 · feat(infra): ECS task of 4 vCPU and 8 GB
 - **Changed:** `aws_ecs_task_definition.app` goes from 2 vCPU / 4 GB to 4 vCPU / 8 GB (`cpu = 4096`, `memory = 8192`, a valid Fargate pair). `docs/infrastructure.md` says so.
