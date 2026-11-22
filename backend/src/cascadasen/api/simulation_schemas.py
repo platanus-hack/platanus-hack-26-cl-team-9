@@ -172,6 +172,12 @@ class RunCreate(BaseModel):
         description="C2 picks among validated actions with the server's LLM (rules if none is configured)",
         examples=[False],
     )
+    manual_defense: bool = Field(
+        False,
+        description="The defensive staff proposes nothing: only actions sent to POST .../actions run, validated and "
+        "paid for as usual (a user defends by hand, e.g. in the Ciberataque monitor)",
+        examples=[False],
+    )
     stochastic: bool = Field(
         True,
         description="Chance in the world: event sizes, unplanned events, action and defence failures",
