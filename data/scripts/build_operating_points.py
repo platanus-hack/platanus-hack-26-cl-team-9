@@ -130,12 +130,17 @@ def _read_demand() -> dict:
 
 def _ensure_loads_file() -> None:
     RAW.mkdir(parents=True, exist_ok=True)
+    missing = [name for name in FILES if not (RAW / name).exists()]
+    if not missing:
+        return  # offline rebuild: no cookie request when every file is already there
     jar = Path(tempfile.gettempdir()) / "pypsa_cookies.txt"
-    subprocess.run(["curl", "-sL", "-c", str(jar), "-o", "/dev/null", SHARE_URL], check=True)
-    for name in FILES:
-        if not (RAW / name).exists():
-            url = FILE_URL.replace("Loads.xlsx", name)
-            subprocess.run(["curl", "-sL", "-b", str(jar), "-o", str(RAW / name), url], check=True)
+    # -f: an HTTP error fails instead of saving an HTML page as .xlsx
+    subprocess.run(["curl", "-fsSL", "-c", str(jar), "-o", "/dev/null", SHARE_URL], check=True)
+    for name in missing:
+        url = FILE_URL.replace("Loads.xlsx", name)
+        part = RAW / f"{name}.part"  # an interrupted download never leaves a corrupt .xlsx
+        subprocess.run(["curl", "-fsSL", "-b", str(jar), "-o", str(part), url], check=True)
+        part.rename(RAW / name)
 
 
 def _read_generation() -> dict:

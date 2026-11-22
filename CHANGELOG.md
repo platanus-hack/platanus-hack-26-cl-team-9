@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(data): safer PyPSA-CL download in build_operating_points.py
+- **Changed:** `_ensure_loads_file` returns before the SharePoint cookie request when the four files already exist in `data/raw/pypsa_cl/`, uses `curl -fsSL` (an HTTP error fails instead of saving HTML as `.xlsx`), and downloads to `<name>.part` then renames.
+- **Why:** Review D-01. An offline rebuild needed the network, and an error page or an interrupted download left a corrupt `.xlsx` that later runs trusted.
+- **Agents:** If an old run left a corrupt `.xlsx` in `data/raw/pypsa_cl/`, delete it by hand. The script was not re-run, so `data/processed/*` is unchanged. Provenance headers in the generated JSON (review D-03) were skipped because they change data outputs.
+- **Files:** `data/scripts/build_operating_points.py`, `docs/datasets.md`.
 ## 2026-11-22 · chore(data): ruff-clean data/scripts
 - **Changed:** `zip()` calls in `build_baseline_opf.py` and `build_operating_points.py` get `strict=False` (same behaviour). The deliberate import after the `sys.path` insert in `build_baseline_opf.py` gets `# noqa: E402` with the reason. The three scripts are reformatted with `ruff format` (mechanical). `scripts/lint.sh` now runs ruff from `backend/`, so files outside it (`data/scripts`) use `backend/pyproject.toml` instead of ruff defaults (88 columns, no `B`/`RUF` rules).
 - **Why:** Review D-02: `ruff check ../data/scripts` reported 5 errors and 3 files were unformatted.
