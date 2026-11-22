@@ -1,6 +1,17 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(assistant): place points through prepare_scenario, strip reasoning, answer JSON errors
+
+- **Changed:**
+  - The in-app assistant no longer offers the session edits and cuts (`EXCLUDED` in `mcp/toolbox.py`: `add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network`, `cut_lines`, `repair_lines`, `get_grid_state`, `join_session`). It puts points through `prepare_scenario` with `places`; the system prompt and the tool description say so, with examples. `invented_adds` refuses an `add` the user never wrote.
+  - `prepare_scenario` maps technology names ("eólica", "BESS", "nuclear" as `termica` with a note); its summary says where small changes went (`at`) and warns on `matched: 0`.
+  - MCP session tools resolve places through `GET /grids/places` (`digest.resolve_bus` returns `(bus, how)`; results carry `placed`); redispatch carries `meaning`.
+  - `clean_text` drops `<thinking>…</thinking>`; a Converse answer without content is a 502; `/chat` answers other failures as JSON 500 and both routes log the traceback.
+- **Why:** Found testing sub50.cl: the web draws only prepare_scenario's grid (#101), so datacenters the assistant added with `add_datacenter` never reached the map; the reply showed the model's `<thinking>`; `/chat` answered plain-text 500s for some minutes with no traceback in the logs.
+- **Agents:** The MCP server keeps every tool. Integration tests now drive the assistant with `describe_network`, `start_run`, `inject_event` and `prepare_scenario` (`test_a_point_lands_at_the_substation_that_serves_the_place` runs on the real grid). The real model's use of `places` was not checked against Bedrock (no credentials here).
+- **Files:** `backend/src/cascadasen/mcp/{tools,toolbox,digest}.py`, `backend/src/cascadasen/api/assistant_routes.py`, `backend/src/cascadasen/infrastructure/llm_tools.py`, `backend/tests/{unit/test_assistant.py,unit/test_llm_tools.py,unit/test_mcp_tools.py,unit/test_prepare_scenario_tool.py,integration/test_assistant_api.py,integration/test_mcp_server.py}`, `docs/{assistant.md,mcp.md}`.
+
 ## 2026-11-22 · feat(stress): resolve places to the substation that serves them and build new plants
 
 - **Changed:**
