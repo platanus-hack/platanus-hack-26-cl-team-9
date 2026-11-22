@@ -2,6 +2,13 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(dead-code): remove unreferenced backend symbols and unused arguments
+
+- **Changed:** Deleted `geo.polyline_km`, `theater.catalog.DEFENDERS`, `TheaterGrid.island_inertia_mws`, `TheaterGrid.release_hold`, `ISRReport.trust_of`, `simulation.grid.RENEWABLE`, `GridState.add_inertia` and `simulation.engine.CHANGE_KINDS` (each had zero references in src, tests, scripts, docs and YAML outside its definition).
+- **Changed:** Dropped unused arguments: `network` from `digital.corridor_status` and `validator.restorable`, `by_id` from `Unifier._electrical` and `_plants` (callers updated). The `lambda o, net, point` in `sessions.reset` stays: it must match the `_edit` callback signature.
+- **Why:** F15 of the duplication report. No behavior change. The web dead code of F15 (`CITIES`, 11 `sessionApi.ts` wrappers) is kept pending a product decision.
+- **Agents:** Verification: backend ruff check pass, ruff format --check pass, mypy src 147 errors (baseline 148), pytest 268 passed 2 skipped. Older CHANGELOG entries still name `release_hold` and the others; they are gone.
+- **Files:** `backend/src/cascadasen/domain/{geo,unify}.py`, `domain/simulation/{engine,grid}.py`, `domain/theater/{catalog,decisions,digital,grid,validator}.py`.
 ## 2026-11-22 · refactor(mapa3): one network builder for the web cache and GET /sim/network
 - **Changed:** New `domain/cascade/network_json.py::mapa3_network(net, op)` returning `{nodes, lines, buses}`. `simulation_service.theater_network_view` extends it (adds `area` to nodes, `corridor` to lines, then `areas`, `corridors`, `defenses`, `zones`); `cache_builder` writes `network-<year>.json` (`nodes`, `lines`) and `<point>/buses.json` from it. `cache_builder._network_json` and its inline buses dict are gone.
 - **Changed:** `cache_builder` loads through `ProcessedWorld` (new `ProcessedWorld.records()` for the raw point entries) instead of `load_network_and_point`. That function stays, used only by `tests/unit/test_cascade.py`.

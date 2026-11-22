@@ -27,10 +27,6 @@ def haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     return 2 * EARTH_R * math.asin(math.sqrt(a)) / 1000
 
 
-def polyline_km(coords: Sequence[tuple[float, float]]) -> float:
-    return sum(haversine_km(*coords[i], *coords[i + 1]) for i in range(len(coords) - 1))
-
-
 def seg_distance(p: np.ndarray, a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
     """Distance from p to segment ab and the fraction t along it."""
     ab = b - a

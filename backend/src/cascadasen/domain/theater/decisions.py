@@ -82,9 +82,6 @@ class ISRReport:
     def suspicion_of(self, area: str) -> float:
         return dict(self.suspicion).get(area, 0.0)
 
-    def trust_of(self, area: str) -> float:
-        return dict(self.data_trust).get(area, 1.0)
-
     def as_dict(self) -> dict[str, Any]:
         return {
             "p_intentional": round(self.p_intentional, 3),

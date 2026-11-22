@@ -14,7 +14,6 @@ from typing import Any
 from cascadasen.domain.simulation.network import ReducedNetwork
 from cascadasen.domain.simulation.params import Provenance, collect_provenance, load_params, value
 
-RENEWABLE = ("solar", "eolica")
 MIN_SYNC_SHARE = 0.35  # floor of synchronous dispatch as a share of load, keeps islands with inertia
 
 
@@ -124,10 +123,6 @@ class GridState:
             self.kinetic_mws[area] = max(
                 0.0, self.kinetic_mws.get(area, 0.0) - self.h_phys.get(tech, 0.0) * mw
             )
-
-    def add_inertia(self, area: str, tech: str, mw: float) -> None:
-        if tech in self.sync_techs:
-            self.kinetic_mws[area] = self.kinetic_mws.get(area, 0.0) + self.h_phys.get(tech, 0.0) * mw
 
     def reserve_mw(self, area: str) -> float:
         if area in self.no_reserve_areas or area in self.blackout_areas:

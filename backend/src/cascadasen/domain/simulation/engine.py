@@ -31,18 +31,6 @@ from cascadasen.domain.simulation.grid import GridState, Physics
 from cascadasen.domain.simulation.network import ReducedNetwork
 from cascadasen.domain.simulation.powerflow import dc_flow, islands
 
-CHANGE_KINDS = (
-    "open_corridor",
-    "lines_out",
-    "node_out",
-    "trip_gen",
-    "group_out",
-    "renewable_drop",
-    "disable_defense",
-    "no_reserve",
-    "load_step",
-)
-
 
 class ChangeError(ValueError):
     """A change cannot be applied to this network (unknown target, bad parameters)."""
