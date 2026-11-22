@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · fix(hooks): find a staged CHANGELOG.md in commits with many files
+
+- **Changed:** `scripts/hooks/pre-commit` pipes the staged list into `grep -x ... >/dev/null` instead of `grep -qx`.
+- **Why:** With `pipefail`, `grep -q` exits at the first match, `printf` dies of SIGPIPE and the check reported "CHANGELOG.md is not staged" on a commit of ~1,850 files (the cache regeneration) even though it was staged.
+- **Agents:** Large commits such as a regenerated `web/public/cache/` now pass the hook without `SKIP_CHANGELOG`.
+- **Files:** `scripts/hooks/pre-commit`.
+
 ## 2026-11-21 · feat(cache): precompute a cut per substation
 
 - **Changed:** `cascadasen-cache` also writes `<point>/sub-B###.json` for each of the 188 substations: the cascade for opening every line of that bus at t = 0 (`run_cascade_workflow(net, op, ids)`). Buses without lines are skipped (none today). The printed count per point is now `{"lines": 273, "substations": 188}`.
