@@ -4,8 +4,7 @@ import { incidentError } from "../incidents/incidents";
 import { ApiError, createRun, createSession, getRunReport, getSimCatalog, stepRun, submitRunAction } from "../session/sessionApi";
 import { frames as toFrames, invalidFields, runBody, type CyberCatalog, type CyberFrame, type CyberReport, type Defense } from "./cyber";
 
-const TURN_MS = 700; // one cycle per turn on screen when an algorithm or the LLM defends
-const PLAY_MS = 700; // replay speed of a finished run
+const CYCLE_MS = 1400; // one cycle on screen at 1×; the timeline card's speed (2×, 4×) divides it
 const BASE_POINT = "nov2026-1300"; // the standard grid: the original nodes at the default hour
 
 export interface Queued { action: string; target: string; label: string }
@@ -31,11 +30,11 @@ export interface Cyber {
 /**
  * State of the Ciberataque monitor, owned by CascadeApp so it survives view changes. `launch` always opens a fresh session
  * at the base point (original nodes, no edits) and creates the run with the form's values. The run is played turn by
- * turn: with an algorithm or the LLM one cycle every TURN_MS (pause and resume with `pause`/`play`); with the user
+ * turn: with an algorithm or the LLM one cycle every CYCLE_MS / speed (the timeline card's speed); with the user
  * defending, `queue` sends an action through `POST .../actions` (validated and paid for by the backend) and `endTurn`
  * plays the cycle. A finished run can be replayed with the slider.
  */
-export function useCyber(): Cyber {
+export function useCyber(speed = 1): Cyber {
   const [catalog, setCatalog] = useState<CyberCatalog | null>(null);
   const [llmAvailable, setLlm] = useState(false);
   const [params, setParams] = useState<Record<string, number>>({});
@@ -64,7 +63,7 @@ export function useCyber(): Cyber {
     }).catch((e) => setError(errorOf(e)));
   }, []);
 
-  // Live turns (algorithm or LLM, run still on): one cycle per TURN_MS. Replay (run finished): one frame per PLAY_MS.
+  // Live turns (algorithm or LLM, run still on) and the replay of a finished run: one cycle per CYCLE_MS / speed.
   useEffect(() => {
     if (!playing || !run) return;
     if (!run.finished && run.defense !== "user") {
@@ -72,13 +71,13 @@ export function useCyber(): Cyber {
       const t = setTimeout(() => {
         stepping.current = true;
         advanceRef.current(run, 1).catch((e) => { setError(errorOf(e)); setPlaying(false); }).finally(() => { stepping.current = false; });
-      }, TURN_MS);
+      }, CYCLE_MS / speed);
       return () => clearTimeout(t);
     }
     if (at >= run.frames.length - 1) { setPlaying(false); return; }
-    const t = setTimeout(() => setAt((i) => i + 1), PLAY_MS);
+    const t = setTimeout(() => setAt((i) => i + 1), CYCLE_MS / speed);
     return () => clearTimeout(t);
-  }, [playing, at, run]);
+  }, [playing, at, run, speed]);
 
   /** Steps `cycles`, appends the frames and, once the backend says the run finished, reads the report. */
   const advance = useCallback(async (base: CyberRun, cycles: number): Promise<CyberRun> => {

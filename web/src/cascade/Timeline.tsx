@@ -36,7 +36,7 @@ export interface CycleRun {
  * uses the warped time (each failure gets room, the quiet tail is short); the clock and the position read simulated s.
  */
 export function TimelineCard(p: Props) {
-  if (p.cycles) return <CycleCard c={p.cycles} />;
+  if (p.cycles) return <CycleCard c={p.cycles} speed={p.speed} setSpeed={p.setSpeed} />;
   const duration = p.timeline?.duration_s ?? 0;
   const hasCascade = !!p.timeline && p.timeline.events.length > 0;
   const view = p.warp.viewDuration;
@@ -58,12 +58,7 @@ export function TimelineCard(p: Props) {
         <span className="clock">{p.clock}</span>
         <div className="timeline-tools">
           <Readout islands={p.islands} />
-          <label className="speed">
-            <span>{p.speed}×</span><Chevron />
-            <select aria-label="Velocidad" value={p.speed} onChange={(e) => p.setSpeed(Number(e.target.value))}>
-              {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
-            </select>
-          </label>
+          <Speed speed={p.speed} setSpeed={p.setSpeed} />
         </div>
       </div>
       {!p.timeline ? (
@@ -150,7 +145,7 @@ function Readout({ islands }: { islands: IslandFrequency[] }) {
  * cycles are played over the horizon, with a mark where the attack hit or the defence cleaned an area. Clicking a played
  * part shows that cycle; the part not played yet cannot be chosen.
  */
-function CycleCard({ c }: { c: CycleRun }) {
+function CycleCard({ c, speed, setSpeed }: { c: CycleRun; speed: number; setSpeed(s: number): void }) {
   const total = Math.max(1, c.total);
   const xOf = (cycle: number) => ((cycle + 0.5) / total) * TRACK_W;
   const pick = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -162,7 +157,7 @@ function CycleCard({ c }: { c: CycleRun }) {
     <section className="timeline cycles" aria-label="Línea de tiempo del ciberataque">
       <div className="timeline-head">
         <span className="clock">{c.clock}</span>
-        <div className="timeline-tools"><span className="cycle-status">{c.status}</span>{c.action}</div>
+        <div className="timeline-tools"><span className="cycle-status">{c.status}</span>{c.action}<Speed speed={speed} setSpeed={setSpeed} /></div>
       </div>
       <div className="timeline-row">
         <button className="play" aria-label={c.playing ? "Pausa" : c.finished ? "Repetir" : "Continuar"} onClick={c.togglePlay}>
@@ -191,5 +186,17 @@ function CycleCard({ c }: { c: CycleRun }) {
         </div>
       </div>
     </section>
+  );
+}
+
+/** Playback speed, shared by the cascade (seconds) and the cycle mode (5-minute cycles). */
+function Speed({ speed, setSpeed }: { speed: number; setSpeed(s: number): void }) {
+  return (
+    <label className="speed">
+      <span>{speed}×</span><Chevron />
+      <select aria-label="Velocidad" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+        {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
+      </select>
+    </label>
   );
 }

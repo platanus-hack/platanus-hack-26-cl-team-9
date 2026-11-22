@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cyber): la velocidad del timeline controla el ciberataque (#121)
+
+- **Changed:** The Ciberataque uses the timeline card's own speed selector (1×, 2×, 4×): one cycle every 1.4 s at 1×, divided by the speed, live and in the replay. The selector is one shared component (`Speed` in `Timeline.tsx`) and the `speed` state lives once in `CascadeApp`.
+- **Why:** the user wants to set the speed, and the attack had its own fixed pace next to the timeline's.
+- **Agents:** `useCyber(speed)` takes the speed. At 4× the backend step time limits the pace (11 cycles in 6 s measured, not 17).
+- **Files:** `web/src/cascade/{Timeline.tsx,CascadeApp.tsx}`, `web/src/cyber/useCyber.ts`, `docs/attack-sim.md`.
+
 ## 2026-11-22 · feat(cyber): tabs Componente y Salud de la red, y la línea de tiempo inferior maneja el ciberataque (#121)
 
 - **Changed:** The monitor adds **Componente** (the card of a clicked line or substation at the cycle on screen, read only; a click on the map no longer leaves the view) and **Salud de la red** (served demand, dark substations, open and overloaded lines, islands, observability, level, resources left, pre-fault health).

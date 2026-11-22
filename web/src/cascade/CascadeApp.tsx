@@ -82,7 +82,8 @@ export function CascadeApp() {
   const s = useSession();
   const a = useAssistant(s, (sc) => applyScenario(sc)); // owned here so the chat survives view changes
   const inc = useIncident(s); // likewise for the incident result and the cascade it plays
-  const cyb = useCyber(); // and for the Ciberataque run
+  const [speed, setSpeed] = useState(1); // the timeline card's speed: cascade seconds and Ciberataque cycles alike
+  const cyb = useCyber(speed); // and for the Ciberataque run
   // ?pais=<ISO3> opens that country's network; a session is always Chile's (its API is Chile-only).
   const startNetwork = s.sid ? DEFAULT_COUNTRY : networkFromParam(params.get("pais"), AVAILABLE.map((n) => n.id));
   const startCut = s.sid || startNetwork !== DEFAULT_COUNTRY ? null : params.get("cut"); // a session owns its cut
@@ -102,7 +103,6 @@ export function CascadeApp() {
   const [prepared, setPrepared] = useState<{ key: string; value: Prepared } | null>(null);
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1);
   const [tab, setTab] = useState<Tab>(startCut ? "sim" : "red");
   const [view, setView] = useState<View>("tabs");
   // Desastres (a cut) open on Carga, Benchmark (no cut) on Tensión, also when the rail picks them (chooseTab).
