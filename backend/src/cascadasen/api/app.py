@@ -84,6 +84,7 @@ def create_app(
         settings.session_lock_timeout_s, settings.session_lock_max_waiters
     )
     app.state.grids = None  # GridComposer, built lazily on the first /grids request
+    app.state.grid_sim = None  # GridSimulator, built lazily on the first /grids/simulate request
     app.include_router(grid_router)
     app.include_router(simulation_router)
     app.include_router(session_router)

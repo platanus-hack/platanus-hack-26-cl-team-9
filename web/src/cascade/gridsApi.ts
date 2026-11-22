@@ -1,5 +1,5 @@
 import type { RegionalCountry, RegionalLine, RegionalPlant, RegionalSubstation } from "../map/regional";
-import type { BusState, Network } from "./types";
+import type { BusState, Network, Timeline } from "./types";
 
 /** Grid documents served by the backend from S3 (docs/grids.md): catalogue, compose and the context documents. */
 export interface CatalogPoint { key: string; point: string; label: string; year: number; snapshot: string }
@@ -28,3 +28,13 @@ export const loadCatalog = () => request<Catalog>("sources");
 export const composeGrid = (body: ComposeRequest) =>
   request<ComposedGrid>("compose", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 export const loadContextDocument = (key: string) => request<ContextDocument>(`documents/${key}`);
+
+/** What the outages themselves take away, before any cascade. */
+export interface DirectLoss { load_mw: number; gen_mw: number; people: number }
+export interface SimulationResult {
+  point: string; open_lines: string[]; out_buses: string[]; dropped_lines: string[]; direct: DirectLoss;
+  warnings: { code: string; message: string }[]; timeline: Timeline;
+}
+/** The cascade with several changes applied together (`POST /grids/simulate`): the cache only has single cuts. */
+export const simulateGrid = (body: { point: string; open_lines: string[]; out_buses: string[] }) =>
+  request<SimulationResult>("simulate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

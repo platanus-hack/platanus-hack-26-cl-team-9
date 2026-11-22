@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(grids): "Estado de la red" tab, several cuts and substations together through the API (#70)
+
+- **Changed:** new `GridSimulator` use case and `POST /api/v1/grids/simulate` (`{point, open_lines, out_buses}`) that runs the cascade with all changes at once and returns a cache-shaped timeline. Web: first tab "Estado de la red" lists every change with Reponer and Reponer todo (`edits.ts`, `NetworkState.tsx`); a double click on a substation takes it out of service; a new cut adds to the list instead of replacing the last one; the rail's Escenarios no longer gets a "Corte ..." row. The two placeholder tabs are hidden to fit the panel.
+- **Why:** outside a session only the last single cut was shown, because the cache has single cuts only.
+- **Agents:** with zero or one line the web still reads `web/public/cache`; two or more changes, or any substation, go to the API. The cache predates engine commit `58f8b74`, so a single cut from the cache and the same cut from the API can differ (25F: 15.2 M vs 3.8 M people); regenerate with `cascadasen-cache` to align them. Changes are not persisted: a refresh keeps only a single cut in the URL. In a shared session the old behavior stays (Datos).
+- **Files:** `backend/src/cascadasen/{application/grid_simulation.py,api/grid_routes.py}`, `web/src/cascade/{edits.ts,NetworkState.tsx,CascadeApp.tsx,Scenarios.tsx,SelectionCard.tsx,SimulationPanel.tsx,clicks.ts,gridsApi.ts}`, `docs/grids.md`, `docs/mapa3.md`.
+
 ## 2026-11-22 · fix(web): Benchmark conditions open on the Red tab (#66)
 
 - **Changed:** `openScenario` in `CascadeApp.tsx` opens the Red tab when the chosen scenario has no cut (Benchmark) and Simulación when it has one (Desastres).

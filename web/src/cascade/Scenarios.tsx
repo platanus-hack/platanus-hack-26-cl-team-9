@@ -1,29 +1,26 @@
 import { useState } from "react";
-import { conditionDate, conditionName, lineName } from "./text";
-import type { Network, PointInfo } from "./types";
+import { conditionDate, conditionName } from "./text";
+import type { PointInfo } from "./types";
 import { Chevron } from "./ui";
 
 /** The 25F reference case: the 500 kV corridor cut, opened at the February 2025 15:00 operating point. */
 export const CASE_25F = { point: "feb2025-1500", cut: "R239" };
 
 type Folder = "desastres" | "benchmark";
+/** `cut` is the line the scenario opens with; a Benchmark condition has none and keeps the user's changes. */
 export interface ScenarioChoice { point: string; cut: string | null }
 
 /**
- * "Escenarios" in the nav rail as two folders. Desastres holds the cuts (the 25F, and the cut the user makes on the map);
- * Benchmark holds the operating conditions with no cut, which are the base cases to compare against. The 25F's own
- * operating point is the Desastres entry, so Benchmark lists the other conditions. `cuts` holds the open lines (one
- * outside a session, any number in one). `locked` (the tip text) is set in a shared session, which pins its operating
- * point: folders only expand and collapse, and the entries are disabled.
+ * "Escenarios" in the nav rail as two folders. Desastres holds the 25F; Benchmark holds the operating conditions, which
+ * are the base cases the user edits. The cuts the user makes are not scenarios: they live in "Estado de la red".
+ * The 25F's own operating point is the Desastres entry, so Benchmark lists the other conditions. `is25f` is set when the
+ * only change is the 25F cut. `locked` (the tip text) is set in a shared session, which pins its operating point: the
+ * folders only expand and collapse, and the entries are disabled.
  */
-export function ScenarioTree({ points, pointId, cuts, network, open, locked }: {
-  points: PointInfo[]; pointId: string; cuts: string[]; network: Network | null; open(next: ScenarioChoice): void; locked?: string;
+export function ScenarioTree({ points, pointId, is25f, open, locked }: {
+  points: PointInfo[]; pointId: string; is25f: boolean; open(next: ScenarioChoice): void; locked?: string;
 }) {
   const [expanded, setExpanded] = useState<Set<Folder>>(new Set(["desastres", "benchmark"]));
-  const current = points.find((p) => p.id === pointId);
-  const is25f = cuts.length === 1 && cuts[0] === CASE_25F.cut;
-  const custom = cuts.length > 0 && !is25f;
-  const customName = network ? cuts.map((id) => lineName(network, id).replace(/ \(.*\)$/, "")).join(", ") : cuts.join(", ");
   const benchmark = points.filter((p) => p.id !== CASE_25F.point);
 
   const toggle = (f: Folder) => setExpanded((s) => { const next = new Set(s); if (next.has(f)) next.delete(f); else next.add(f); return next; });
@@ -51,10 +48,9 @@ export function ScenarioTree({ points, pointId, cuts, network, open, locked }: {
     <div className="scenarios">
       {folder("desastres", "Desastres", <>
         {entry("25f", "Apagón 25F", conditionDate(points.find((p) => p.id === CASE_25F.point)?.snapshot), is25f, CASE_25F, "Corte del corredor de 500 kV Alto Jahuel–Ancoa")}
-        {custom && entry("custom", `Corte ${customName}`, conditionDate(current?.snapshot), true, null, customName)}
       </>)}
       {folder("benchmark", "Benchmark", benchmark.map((p) =>
-        entry(p.id, conditionName(p.label), conditionDate(p.snapshot), cuts.length === 0 && p.id === pointId, { point: p.id, cut: null }, p.label)))}
+        entry(p.id, conditionName(p.label), conditionDate(p.snapshot), !is25f && p.id === pointId, { point: p.id, cut: null }, p.label)))}
     </div>
   );
 }

@@ -1,21 +1,22 @@
 import { useEffect, useRef } from "react";
 import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
-import { hz, int, lineName, narrate, pct, secs } from "./text";
+import { hz, int, lineName, narrate, pct, placeName, secs } from "./text";
 import type { Network, Timeline } from "./types";
 import { Chevron, Info } from "./ui";
 
 interface Props {
-  network: Network; timeline: Timeline; cuts: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
+  network: Network; timeline: Timeline; cuts: string[]; outBuses: string[]; t: number; impact: Impact; islands: IslandFrequency[]; totalPeople: number;
   seek(t: number): void; openSources(): void; restore(): void; source: string;
 }
 
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
 export function SimulationPanel(p: Props) {
   const assumptions = p.timeline.assumptions.length;
+  const edited = p.cuts.length + p.outBuses.length > 0;
   return (
     <>
-      {p.cuts.length > 0 ? <ImpactCard {...p} /> : <EmptyCard />}
-      {p.cuts.length > 0 && <History {...p} />}
+      {edited ? <ImpactCard {...p} /> : <EmptyCard />}
+      {edited && <History {...p} />}
       {p.timeline.truncated && <p className="note">La cascada llegó al tope de 20 etapas: el resultado puede ser mayor.</p>}
       <button className="assumptions-row" onClick={p.openSources}>
         <Info tip="Supuestos del motor que afectan esta simulación. Ábrelos para ver cada uno." />
@@ -69,8 +70,8 @@ function ImpactCard(p: Props) {
         </div>
       </div>
       <div className="cut-row">
-        <p className="meta cut-name">Corte: {p.cuts.map((id) => lineName(p.network, id)).join(", ")}</p>
-        <button className="secondary-btn" onClick={() => p.restore()}>{p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea"}</button>
+        <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => lineName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>
+        <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Reponer líneas" : "Reponer línea") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Reponer subestación"}</button>
       </div>
     </div>
   );

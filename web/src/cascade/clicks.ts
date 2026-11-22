@@ -1,5 +1,5 @@
 /**
- * Map clicks: a single click selects, a double click on a line cuts it. Pure, so it can be tested without a map.
+ * Map clicks: a single click selects, a double click on a line cuts it and on a substation takes it out of service. Pure, so it can be tested without a map.
  *
  * The two basemaps deliver a double click differently (see baseMap.ts):
  * - Mapbox (`MapboxOverlay`): three callbacks, `click` (tapCount 1), `click` (tapCount 1), then the DOM `dblclick`
@@ -9,8 +9,8 @@
  */
 
 export type Pick = { kind: "line" | "node"; id: string };
-export type ClickAction = { type: "select"; target: Pick } | { type: "cut"; id: string } | { type: "clear" } | { type: "none" };
-/** The last line click: which line, when (ms), whether it cut, and which line the click before it hit. */
+export type ClickAction = { type: "select"; target: Pick } | { type: "cut"; id: string; kind: "line" | "node" } | { type: "clear" } | { type: "none" };
+/** The last line or substation click: which one, when (ms), whether it cut, and which line the click before it hit. */
 export interface ClickMemory { id: string | null; at: number; cut: boolean; prevId: string | null }
 
 /** Two clicks on the same line closer than this count as a double click, even without tapCount 2 (touch on Mapbox). */
@@ -21,10 +21,9 @@ export const NO_CLICK: ClickMemory = { id: null, at: -Infinity, cut: false, prev
 
 export function interpretClick(target: Pick | null, tapCount: number, at: number, memory: ClickMemory): { action: ClickAction; memory: ClickMemory } {
   if (!target) return { action: { type: "clear" }, memory: NO_CLICK };
-  if (target.kind === "node") return { action: { type: "select", target }, memory: NO_CLICK };
   const id = target.id;
   const none = { action: { type: "none" } as const, memory };
-  const cut = { action: { type: "cut", id } as const, memory: { id, at, cut: true, prevId: memory.id } };
+  const cut = { action: { type: "cut", id, kind: target.kind } as const, memory: { id, at, cut: true, prevId: memory.id } };
   if (tapCount >= 2 && at - memory.at < TRAILER_MS) {
     // Mapbox: the click itself was already handled; cut only if both physical clicks hit this line and none has cut yet.
     return !memory.cut && memory.id === id && memory.prevId === id ? cut : none;

@@ -6,12 +6,14 @@ import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourceSelection } from "./GridSources";
-import { composeGrid, loadContextDocument } from "./gridsApi";
+import { addBus, addLine, dropBus, dropLine, editKey, fromCache, NO_EDITS, type Edits } from "./edits";
+import { composeGrid, loadContextDocument, simulateGrid, type SimulationResult } from "./gridsApi";
 import { HelpPanel, SourcesPanel } from "./Legend";
 import { MapLegend } from "./MapLegend";
 import { MapOverlays, type LocatedMarker } from "./MapOverlays";
 import { NetworkPanel } from "./NetworkPanel";
-import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
+import { NetworkState } from "./NetworkState";
+import { CASE_25F, ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
@@ -27,10 +29,11 @@ import { useSession } from "../session/useSession";
 import "./cascade.css";
 import "../session/session.css";
 
-type Tab = "red" | "sim" | "datos";
+type Tab = "estado" | "red" | "sim" | "datos";
 type View = "tabs" | "sources" | "help" | "session";
-const TABS: [Tab | "avoid" | "validation", string][] = [["red", "Red"], ["sim", "Simulación"], ["avoid", "Qué lo habría evitado"], ["validation", "Validación"]];
-// In a session the two placeholder tabs are left out so Datos fits the 440 px panel.
+// "Qué lo habría evitado" and "Validación" are not built yet and left out so the four tabs fit the 440 px panel.
+const TABS: [Tab, string][] = [["estado", "Estado de la red"], ["red", "Red"], ["sim", "Simulación"]];
+// In a session Datos replaces Estado de la red: the session owns its changes.
 const SESSION_TABS: [Tab, string][] = [["red", "Red"], ["sim", "Simulación"], ["datos", "Datos"]];
 const SOON = "Todavía no está en la app: el motor aún no calcula esta vista.";
 const PINNED = "En una sesión el punto está fijo; corta y repara líneas en el mapa y en Simulación.";
@@ -56,7 +59,9 @@ export function CascadeApp() {
   const [buses, setBuses] = useState<Record<string, BusState>>({});
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
-  const [cut, setCut] = useState<string | null>(startCut);
+  // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
+  const [edits, setEdits] = useState<Edits>(startCut ? addLine(NO_EDITS, startCut) : NO_EDITS);
+  const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -80,8 +85,13 @@ export function CascadeApp() {
   const point = index?.points.find((p) => p.id === pointId);
   const timeline = loaded?.timeline ?? null;
   // In a session the timeline is the session state's, keyed "session".
-  const timelineReady = loaded?.key === (s.sid ? "session" : `${pointId}/${cut ?? "baseline"}`);
-  const cuts = s.sid ? s.state?.open_lines ?? [] : cut ? [cut] : [];
+  const cached = fromCache(edits); // zero or one line: the precalculated cascade; more changes: the server simulates them together
+  const cut = cached ? edits.lines[0] ?? null : null;
+  const timelineKey = s.sid ? "session" : cached ? `${pointId}/${cut ?? "baseline"}` : editKey(pointId, edits);
+  const timelineReady = loaded?.key === timelineKey;
+  const cuts = s.sid ? s.state?.open_lines ?? [] : edits.lines;
+  const outBuses = s.sid ? [] : edits.buses;
+  const edited = cuts.length + outBuses.length > 0;
   const duration = timeline?.duration_s ?? 0;
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
   const darkCount = timeline ? darkAt(timeline, t).size : 0;
@@ -104,9 +114,9 @@ export function CascadeApp() {
   const [regional, setRegional] = useState<RegionalGrid | null>(null);
   const regionalLayers = useMemo<Layer[]>(() => (regional ? buildRegionalLayers(regional, colorMode) : []), [regional, colorMode]);
 
-  const hasCascade = cuts.length > 0 && !!timeline && timelineReady && timeline.events.length > 1;
-  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine });
-  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine };
+  const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 1;
+  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine, outBus });
+  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, layersOpen, hasCascade, cutLine, outBus };
   const prevSid = useRef(s.sid);
   const clickMemory = useRef(NO_CLICK);
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -116,14 +126,14 @@ export function CascadeApp() {
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
   useEffect(() => { loadRegionalGrid().then(setRegional).catch((e) => console.error("No se pudo cargar la red regional", e)); }, []);
   useEffect(() => { if (!s.sid && !composed) _loadPoint(); }, [pointId, index, s.sid, composed]);
-  useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, cut, network, s.sid]);
+  useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
   useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
   useEffect(() => { if (s.state) { timelineRequest.current = "session"; setLoaded({ key: "session", timeline: s.state.timeline }); setT(0); setPlaying(s.state.open_lines.length > 0); } }, [s.state]);
   useEffect(() => _onSessionChange(), [s.sid]);
   useEffect(() => _mountMap(), []);
   useEffect(() => { baseMap.current?.setMode(mode); }, [mode]);
   useEffect(() => _animate(), []);
-  useEffect(() => { _syncUrl(); }, [pointId, cut, mode, s.sid]);
+  useEffect(() => { _syncUrl(); }, [pointId, edits, mode, s.sid]);
   useEffect(() => _keyboard(), []);
   // A new selection opens at the top of the panel, so bring the top back into view if the panel was scrolled.
   useEffect(() => { if (selection) panelBodyRef.current?.scrollTo({ top: 0 }); }, [selection]);
@@ -154,7 +164,7 @@ export function CascadeApp() {
       setNetwork(picked.chile ? grid.network : { nodes: [], lines: [] }); setBuses(picked.chile ? grid.operating : {});
       setRegional(regionalFromDocuments(docs));
       setError(null); setSelection(null);
-      if (!picked.chile) { setCut(null); setLoaded(null); setTab("red"); }
+      if (!picked.chile) { setEdits(NO_EDITS); setLoaded(null); setTab("red"); }
       setComposed(`${picked.chile ? grid.label : "sin Chile"}, ${docs.length} ${docs.length === 1 ? "país" : "países"} de contexto`);
     } catch (e) {
       setError(String((e as Error).message));
@@ -169,8 +179,10 @@ export function CascadeApp() {
 
   function _loadTimeline() {
     if (!network) return;
-    const key = `${pointId}/${cut ?? "baseline"}`;
-    timelineRequest.current = key;
+    timelineRequest.current = timelineKey;
+    const key = timelineKey;
+    if (!cached) return _simulateEdits(key);
+    setSimResult(null);
     loadTimeline(pointId, cut ?? "baseline").then((tl) => {
       if (timelineRequest.current !== key) return; // a newer point or cut was asked for meanwhile
       setLoaded({ key, timeline: tl }); setT(0); setPlaying(!!cut);
@@ -179,7 +191,18 @@ export function CascadeApp() {
       if (!cut) return setError(String(e.message));
       // A cut kept across a change of hour can lack its file at the new point: fall back to the base case and say so.
       setNotice(`No hay simulación de este corte para ${index?.points.find((x) => x.id === pointId)?.label ?? pointId}. Se muestra el caso base.`);
-      setCut(null);
+      setEdits(NO_EDITS);
+    });
+  }
+
+  /** Why: the cache has single cuts only; two or more changes are simulated together by the backend. */
+  function _simulateEdits(key: string) {
+    simulateGrid({ point: pointId, open_lines: edits.lines, out_buses: edits.buses }).then((r) => {
+      if (timelineRequest.current !== key) return;
+      setError(null); setSimResult(r); setLoaded({ key, timeline: r.timeline }); setT(0); setPlaying(true);
+    }).catch((e) => {
+      if (timelineRequest.current !== key) return;
+      setError(`${String(e.message)} Repón un cambio en Estado de la red.`);
     });
   }
 
@@ -188,12 +211,12 @@ export function CascadeApp() {
     const was = prevSid.current;
     prevSid.current = s.sid;
     if (!was && s.sid && view === "session") { setView("tabs"); setTab("datos"); setColorMode("voltage"); }
-    else if (was && !s.sid) { setCut(null); setLoaded(null); setTab((x) => (x === "datos" ? "red" : x)); }
+    else if (was && !s.sid) { setEdits(NO_EDITS); setLoaded(null); setTab((x) => (x === "datos" ? "red" : x)); }
   }
   function _syncUrl() {
     const q = new URLSearchParams(location.search);
     q.set("point", pointId);
-    if (cut && !s.sid) q.set("cut", cut); else q.delete("cut");
+    if (cut && !s.sid) q.set("cut", cut); else q.delete("cut"); // the URL keeps a single cut; more changes live in the page
     if (mode === "3d") q.set("vista", "3d"); else q.delete("vista");
     history.replaceState(null, "", `${location.pathname}?${q}`);
   }
@@ -210,7 +233,7 @@ export function CascadeApp() {
         const { action, memory } = interpretClick(pickOf(info.layer?.id ?? "", info.object), tapCount, performance.now(), clickMemory.current);
         clickMemory.current = memory;
         if (action.type === "select") select(action.target);
-        else if (action.type === "cut") live.current.cutLine(action.id);
+        else if (action.type === "cut") (action.kind === "line" ? live.current.cutLine : live.current.outBus)(action.id);
         else if (action.type === "clear") setSelection(null);
       },
       getTooltip: (info: PickingInfo) => _tooltip(info),
@@ -331,26 +354,38 @@ export function CascadeApp() {
     setView("tabs");
   }
 
-  /** Without a session the cut is local; in a session the line opens for everyone through `POST /{sid}/cut`. */
+  /** Without a session the cut adds to the list of changes; in a session the line opens for everyone through `POST /{sid}/cut`. */
   function cutLine(id: string) {
     setSelection(null); // the impact card names the cut and stays at the top of the panel
     setNotice(null);
-    if (!s.sid) setCut(id);
+    if (!s.sid) setEdits((e) => addLine(e, id));
     else if (!s.state?.open_lines.includes(id)) s.edit((sid, rev) => cutLines(sid, [id], rev));
     setView("tabs");
     setTab("sim");
     setColorMode("load");
   }
 
+  /** A substation out of service is one more change on the list. Not in a session: its overlay has its own edits (Datos). */
+  function outBus(id: string) {
+    if (s.sid) return;
+    setSelection(null);
+    setNotice(null);
+    setEdits((e) => addBus(e, id));
+    setView("tabs");
+    setTab("sim");
+    setColorMode("load");
+  }
+
   /**
-   * Back to the base case at the same operating point; the tab and the selection stay. In a session it repairs `lines`
-   * (every open line when omitted) for everyone through `POST /{sid}/repair`.
+   * Back to the base case at the same operating point; the tab and the selection stay. With `lines` only those are put back
+   * (every change when omitted). In a session it repairs them for everyone through `POST /{sid}/repair`.
    */
   function restore(lines?: string[]) {
     setNotice(null);
-    if (!s.sid) setCut(null);
+    if (!s.sid) setEdits((e) => (lines ? lines.reduce(dropLine, e) : NO_EDITS));
     else s.edit((sid, rev) => repairLines(sid, lines ? { lines } : { all: true }, rev));
   }
+  function restoreBus(id: string) { setEdits((e) => dropBus(e, id)); }
 
   function togglePlay() {
     const v = live.current;
@@ -376,14 +411,15 @@ export function CascadeApp() {
     setSelection(null);
     setNotice(null);
     setPointId(next.point);
-    setCut(next.cut);
+    if (next.cut) setEdits(addLine(NO_EDITS, next.cut)); // the 25F replaces the changes; a Benchmark condition keeps them
     if (composed) void composeFromSources(next.point, sourcesRef.current); // the composed grid follows the chosen hour
     chooseTab(next.cut ? "sim" : "red"); // a Benchmark condition has no cut: it opens on Red
   }
 
-  const tabs: [Tab | "avoid" | "validation", string][] = s.sid ? SESSION_TABS : TABS;
+  const tabs: [Tab, string][] = s.sid ? SESSION_TABS : TABS;
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
-  const selectedCut = s.sid ? (selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null) : cut;
+  const selectedCut = selection?.kind === "line" && cuts.includes(selection.id) ? selection.id : null;
+  const only25f = s.sid ? cuts.length === 1 && cuts[0] === CASE_25F.cut : edits.buses.length === 0 && edits.lines.length === 1 && edits.lines[0] === CASE_25F.cut;
   const sourceNote = hasLabels ? "Mapa base: Mapbox" : "Contorno: data/processed/chile.geojson";
 
   return (
@@ -399,7 +435,7 @@ export function CascadeApp() {
           <Icon><path d="M1.5 3.5l4-1.5 5 2 4-1.5v10l-4 1.5-5-2-4 1.5z M5.5 2v10 M10.5 4v10" /></Icon><span>Mapa</span>
         </button>
         <div className="rail-item static"><Icon><path d="M2 13.5h12M4 11V7M8 11V3M12 11V8" /></Icon><span>Escenarios</span></div>
-        <ScenarioTree points={index?.points ?? []} pointId={pointId} cuts={cuts} network={network} open={openScenario} locked={s.sid ? PINNED : undefined} />
+        <ScenarioTree points={index?.points ?? []} pointId={pointId} is25f={only25f && pointId === CASE_25F.point} open={openScenario} locked={s.sid ? PINNED : undefined} />
         <button className="rail-item" aria-disabled="true" data-tip={SOON}><Icon><path d="M3 8.5l3 3 7-7" /></Icon><span>Validación</span></button>
         <button className={view === "sources" ? "rail-item on" : "rail-item"} onClick={() => setView(view === "sources" ? "tabs" : "sources")}>
           <Icon><ellipse cx="8" cy="4" rx="5.5" ry="2" /><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" /></Icon><span>Fuentes y supuestos</span>
@@ -422,10 +458,8 @@ export function CascadeApp() {
               {s.sid && <SessionBar s={s} compact />}
               <div className="tabs" role="tablist">
                 {tabs.map(([k, label]) => {
-                  const soon = k === "avoid" || k === "validation";
                   return (
-                    <button key={k} role="tab" aria-selected={tab === k} aria-disabled={soon || undefined} className={tab === k ? "on" : ""}
-                      data-tip={soon ? SOON : undefined} onClick={() => !soon && chooseTab(k as Tab)}>{label}</button>
+                    <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => chooseTab(k)}>{label}</button>
                   );
                 })}
               </div>
@@ -445,15 +479,18 @@ export function CascadeApp() {
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={regional} />}
           {view === "tabs" && !network && !error && <Loading text="Cargando la red" />}
           {view === "tabs" && network && selection && (
-            <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year}
-              select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut && s.sid ? [selectedCut] : undefined)} />
+            <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year} outBuses={outBuses}
+              select={select} clear={() => setSelection(null)} cutLine={cutLine} restore={() => restore(selectedCut ? [selectedCut] : undefined)} outBus={outBus} restoreBus={restoreBus} />
           )}
+          {view === "tabs" && tab === "estado" && network && (s.sid
+            ? <p className="meta">En una sesión compartida los cambios están en Simulación y Datos.</p>
+            : <NetworkState network={network} edits={edits} result={simResult} restoreLine={(id) => restore([id])} restoreBus={restoreBus} restoreAll={() => restore()} />)}
           {view === "tabs" && tab === "red" && network && <NetworkPanel source={sourceNote} />}
           {view === "tabs" && tab === "sim" && s.sid && s.state && network && (
             <SessionCut network={network} open={s.state.open_lines} notice={s.state.notice} repair={(lines) => restore(lines)} />
           )}
           {view === "tabs" && tab === "sim" && network && (timeline && timelineReady ? (
-            <SimulationPanel network={network} timeline={timeline} cuts={cuts} t={t} impact={impact} islands={islands} totalPeople={totalPeople}
+            <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} totalPeople={totalPeople}
               seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} />
           ) : !error && <Loading text="Cargando la simulación" />)}
           {view === "tabs" && tab === "datos" && (s.network
@@ -462,7 +499,7 @@ export function CascadeApp() {
         </div>
       </section>
 
-      <TimelineCard timeline={cuts.length && timelineReady ? timeline : null} loading={cuts.length > 0 && !timelineReady} markers={markers} t={t} clock={clock(point?.snapshot, t).tenths} islands={cuts.length ? islands : []} playing={playing} speed={speed}
+      <TimelineCard timeline={edited && timelineReady ? timeline : null} loading={edited && !timelineReady} markers={markers} t={t} clock={clock(point?.snapshot, t).tenths} islands={edited ? islands : []} playing={playing} speed={speed}
         setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />
 
       <div className="map-controls" ref={controlsRef}>

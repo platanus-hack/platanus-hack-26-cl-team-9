@@ -6,8 +6,8 @@ import type { BusState, Frame, NetLine, Network } from "./types";
 import { Info } from "./ui";
 
 interface Props {
-  network: Network; buses: Record<string, BusState>; frame: Frame | undefined; selection: Pick; cut: string | null; year: number | undefined;
-  select(pick: Pick): void; clear(): void; cutLine(id: string): void; restore(): void;
+  network: Network; buses: Record<string, BusState>; frame: Frame | undefined; selection: Pick; cut: string | null; year: number | undefined; outBuses: string[];
+  select(pick: Pick): void; clear(): void; cutLine(id: string): void; restore(): void; outBus(id: string): void; restoreBus(id: string): void;
 }
 
 const TOPOLOGY_TIP = (year: number | undefined) =>
@@ -81,6 +81,7 @@ function NodeCard(p: Props & { node: string }) {
   if (!n) return null;
   const b = p.buses[n.id];
   const dark = p.frame?.dark.includes(n.id);
+  const isOut = p.outBuses.includes(n.id);
   const lines = p.network.lines.filter((l) => l.a === n.id || l.b === n.id);
   const opTip = (what: string) => `${what} de la subestación en el punto de operación del motor Sub50 (web/public/cache/<punto>/buses.json).`;
   return (
@@ -105,6 +106,12 @@ function NodeCard(p: Props & { node: string }) {
         );
       })}
       <p className="meta">Clic en una línea de la lista para ver su detalle. Carga: flujo DC del motor Sub50 en el segundo actual.</p>
+      <div className="actions">
+        {isOut
+          ? <button className="primary-btn" onClick={() => p.restoreBus(n.id)}>Reponer subestación</button>
+          : <button className="primary-btn" onClick={() => p.outBus(n.id)}>Sacar de servicio</button>}
+        <span className="meta">{isOut ? "Vuelve a operar con sus líneas." : "O doble clic en la subestación del mapa."}</span>
+      </div>
     </div>
   );
 }

@@ -25,11 +25,19 @@ Only CHL is simulable. The other countries are display-only context. `atlas_sen.
 - Errors: 404 unknown point, scenario or document; 422 bad body, unknown context key, or network and point that do not fit; 503 no catalogue or a document that does not match its checksum.
 - `overlay` is returned as stored. The simulator applies it (`domain/cascade/overlay.py`); compose does not.
 
+## Simulate with several changes (`POST /api/v1/grids/simulate`)
+
+Body `{point, open_lines: [R###], out_buses: [B###]}`, at most 50 changes in all, rate-limited like the session cuts. Stateless: the same request gives the same timeline. `application/grid_simulation.py` (`GridSimulator`) takes the operating point from the processed world (the same one the sessions use, not from the grid documents), takes the substations out of service with the overlay (`in_service: false`), and runs the cascade with all the open lines at once.
+
+Response: `timeline` (same shape as `web/public/cache/<point>/<cut>.json`), `open_lines`, `out_buses`, `dropped_lines` (lines that went with their substation: they are out already), `direct` (the load, generation and people the outage itself removes) and `warnings`. A substation out of service is dark in every frame, and its people and load are added to the summary. ASSUMPTION: the engine drops that bus before the cascade, so the cascade does not count it twice. Errors: 404 unknown point, line or substation; 422 no changes, more than 50, or an invalid overlay; 429 rate limit.
+
+The web (docs/mapa3.md, tab "Estado de la red") calls it only for two or more changes. **Known gap:** the cache was built before engine commit `58f8b74`, so a single cut read from the cache and the same cut simulated here can differ (the 25F: 15.2 M people in the cache, 3.8 M from the current engine, docs/escenarios.md section 6). Regenerate the cache with `cascadasen-cache` to make both agree.
+
 ## Web: "Fuentes de la grilla"
 
 Rail item in mapa 3 (`web/src/cascade/GridSources.tsx`) that opens downward under itself, not in a panel. One row per network in the catalogue (`grids` in `GET /sources`) with a checkbox and its status. **Complete**: the store has its network and operating points, so it can be simulated (Chile). **Partial**: only context to draw (ARG, BOL, BRA, PER). Everything can be unticked, Chile included (the map then draws nothing of it). Ticking one composes the grid at once for the current operating point.
 
-The scenario and the hour are chosen in the rail's "Escenarios", in two folders: **Desastres** (Apagón 25F, plus the cut the user makes on the map) and **Benchmark** (the other operating conditions with no cut: demanda mínima, mediodía solar, punta nocturna). Once a grid is composed, picking one there composes again with the ticked networks.
+The scenario and the hour are chosen in the rail's "Escenarios", in two folders: **Desastres** (Apagón 25F) and **Benchmark** (the other operating conditions: demanda mínima, mediodía solar, punta nocturna). The cuts the user makes are not scenarios: they go to the tab "Estado de la red". A Benchmark entry keeps those changes at the new hour; Apagón 25F replaces them with its cut. Once a grid is composed, picking one there composes again with the ticked networks.
 
 The map shows the composed network, buses and context; the cascade timelines still come from the app cache for the same point and cut (`web/public/cache`). "Volver a la caché" returns to the cache. Locked inside a shared session.
 

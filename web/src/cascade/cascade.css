@@ -290,3 +290,8 @@
 .shell .source-status.complete { color: var(--fg-3); }
 .shell .source-note { margin: 4px 4px; color: var(--muted); font-size: 12px; line-height: 16px; }
 .shell .source-reset { padding: 4px; text-align: left; }
+
+/* Estado de la red */
+.shell .state-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; color: var(--fg-2); font-size: 13px; line-height: 16px; }
+.shell .state-row .ellipsis { flex: 1 1 0; min-width: 0; }
+.shell .state-list .list-head { margin-top: 8px; }
