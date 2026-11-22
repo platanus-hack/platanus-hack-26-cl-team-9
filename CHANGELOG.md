@@ -1,6 +1,15 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(grids): prepared scenarios for population, demand, generation and lines, and supply per source (#97)
+
+- **Changed:** new `POST /api/v1/grids/prepare` (agent route `prepare_scenario`, tool `prepare_scenario`). It resolves filters (buses, zones, areas, comunas, tech, lines, kv) into a prepared grid. It does not simulate: it returns what each change touches, lines already over their limit and whom each generator should feed.
+  - `/grids/simulate`, `/grids/dependency` and `/grids/cost` take the same `changes`. The failure runs in the existing cascade on the prepared grid. `/grids/simulate` adds `supply`: `should_feed`, `feeds` and `pct_fed` per generating substation, by id, and per zone.
+  - Population drives demand at `stress.regulated_share` (0.389) x demand / people of the point: 187 to 238 W per person.
+  - Thermal splits into `carbon`, `gas`, `diesel`, with `termica` as a tag for the three.
+- **Why:** the team prepares stress scenarios (more people, less hydro) and simulates failures on them with the processes it already uses. Demand per bus is not proportional to people (mines), so only the regulated share grows with population.
+- **Agents:** the cascade only runs in the existing processes. `/prepare` never simulates. Nothing is stored and there is no cooldown. `prepare_edits` now takes `changes` and returns the prepared `Applied` first, not the base point. The overlay accepts `load_mw` down to `min(0, base)`, because 28 base buses at feb2025-1500 are negative. Sources are listed by id, never ranked by damage (cyber.md 8.2). Assumptions: same per-capita value everywhere, tech split by installed MW x national dispatch factor, redispatch with no upward limit. The web does not send `changes` yet (pending).
+- **Files:** `backend/src/cascadasen/application/{grid_stress.py,grid_simulation.py,grid_dependency.py}`, `backend/src/cascadasen/api/{stress_schemas.py,grid_routes.py,agent_openapi.py}`, `backend/src/cascadasen/mcp/{tools.py,digest.py}`, `backend/src/cascadasen/domain/cascade/{overlay.py,params/cascade.yaml}`, `backend/tests/unit/test_grid_stress.py`, `docs/{stress.md,grids.md,openapi/agents.openapi.json}`.
 ## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
 
 - **Changed:** `_loadTimeline` (`web/src/cascade/CascadeApp.tsx`) calls `setPlaying(false); seek(0)` before it asks for the new timeline, and `timeline` is only set when `loaded.key === timelineKey`. A new scenario or cut loads paused at 0.
