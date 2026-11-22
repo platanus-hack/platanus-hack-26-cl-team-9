@@ -12,10 +12,7 @@
 .shell .session-join input { flex: 1; }
 .shell .session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 
-/* ---- Square secondary button and tags ---- */
-.shell .btn { padding: 5px 10px; background: var(--selected); border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font-size: 12px; line-height: 16px; cursor: pointer; }
-.shell .btn:hover:not(:disabled) { color: var(--fg); border-color: var(--muted); }
-.shell .btn:disabled { color: var(--faint); cursor: default; }
+/* ---- Tags ---- */
 .shell .tag { display: inline-block; padding: 1px 6px; border: 1px solid var(--border-strong); border-radius: 0; color: var(--muted); font-size: 11px; line-height: 14px; font-weight: 400; white-space: nowrap; }
 .shell .tag.live, .shell .tag.session { color: var(--fg-2); }
 .shell .tag.poll, .shell .tag.assumption { color: var(--muted); }
@@ -54,7 +51,7 @@
 .shell .data-form label.bad input, .shell .data-form label.bad select { border-color: var(--fault); }
 .shell .data-error { color: #e8b4a6; font-size: 11px; line-height: 14px; }
 .shell .data-actions .primary-btn { height: 28px; padding: 0 12px; font-size: 12px; }
-.shell .data-panel .primary-btn:disabled, .shell .data-panel .secondary-btn:disabled, .shell .data-panel .text-btn:disabled { opacity: 0.6; cursor: default; }
+.shell .data-panel .text-btn:disabled { opacity: 0.6; cursor: default; } /* primary and secondary: the shared disabled look in cascade.css */
 
 /* ---- Controls a session pins ---- */
 .shell .condition[aria-disabled="true"] { cursor: default; }

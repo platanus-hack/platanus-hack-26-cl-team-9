@@ -11,6 +11,7 @@
   font: 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
 .shell *, .shell *::before, .shell *::after { box-sizing: border-box; }
+.shell { color-scheme: dark; } /* native controls, scrollbars and the date and file pickers follow the dark shell (D16, G-11) */
 .shell button, .shell select { font-family: inherit; }
 .shell .map { position: absolute; inset: 0; background: var(--bg); }
 .shell .fault { color: var(--fault); }
@@ -57,6 +58,12 @@
 .shell .cond-note { color: var(--fg-3); font: 12px/16px var(--font-condensed); }
 .shell .scenario:focus-visible, .shell .condition:focus-visible { outline: 1px solid var(--fg-3); outline-offset: -1px; }
 .shell .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A two-part name ("Apagón 2011 · Ancoa") wraps between its parts. Every part carries its separator in front; the row is
+   shifted left by the separator's width and clipped, so a separator that starts a line is cut off (no lone dot). */
+.shell .cond-name { overflow: hidden; }
+.shell .name-parts { display: flex; flex-wrap: wrap; margin-left: -1.1em; }
+.shell .name-part { white-space: nowrap; }
+.shell .name-part::before { content: "·"; display: inline-block; width: 1.1em; text-align: center; }
 
 /* ---- Panel ---- */
 .shell .panel { position: absolute; z-index: 2; left: var(--panel-x); top: var(--gap); width: var(--panel-w); max-height: min(742px, calc(100% - var(--timeline-h) - 3 * var(--gap))); display: flex; flex-direction: column; background: var(--glass); border: 1px solid var(--border); }
@@ -73,12 +80,18 @@
 .shell .picker-btn { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 0; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
 .shell .picker-btn[aria-disabled] { cursor: default; }
 .shell .picker-btn:hover:not([aria-disabled]) { color: var(--fg-2); }
-.shell .picker-pop { position: absolute; z-index: 5; top: 32px; left: 4px; width: 300px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid var(--border-strong); }
+/* On the card colour with a plain shadow, its edge on the panel content edge, the network on the map in white (E-23). */
+.shell .picker-pop { position: absolute; z-index: 5; top: 32px; left: 12px; width: min(300px, calc(100vw - 24px)); max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px; background: var(--card); border: 1px solid var(--border-strong); box-shadow: 0 8px 24px #0000008c; }
 .shell .picker-pop h3 { margin: 6px 6px 2px; color: var(--muted); font-size: 12px; font-weight: 600; line-height: 16px; }
 .shell .picker-pop h3:first-child { margin-top: 0; }
 .shell .picker-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; flex: 1; height: 30px; padding: 0 8px; background: none; border: 0; color: var(--fg-2); font-size: 13px; line-height: 16px; text-align: left; cursor: pointer; }
-.shell .picker-item:hover { background: var(--selected); }
-.shell .picker-item.on { background: var(--selected); color: var(--fg); font-weight: 500; }
+.shell .picker-item:hover { background: #ffffff0f; }
+.shell .picker-item.on { background: var(--fg); color: #18191b; font-weight: 500; }
+.shell .picker-pop > .picker-item { flex: none; }
+/* The header's ".crumbs span" rule must not reach the list: its rows keep their own size and colour. */
+.shell .picker-pop .picker-item span { color: inherit; font-size: inherit; }
+.shell .picker-pop .picker-item .picker-meta { color: var(--faint); font-size: 11px; }
+.shell .picker-pop .picker-item.on .picker-meta { color: #4a4b50; }
 .shell .picker-item.upload { margin-top: 6px; border-top: 1px solid var(--border); color: var(--muted); }
 .shell .picker-meta { flex-shrink: 0; color: var(--faint); font-size: 11px; font-weight: 400; }
 .shell .picker-row { display: flex; align-items: center; gap: 8px; padding-right: 6px; }
@@ -106,12 +119,14 @@
 .shell .note { margin: 0; padding: 8px 12px; background: #ff5a481a; color: #e8b4a6; font-size: 12px; line-height: 16px; flex-shrink: 0; }
 .shell .info { display: inline-flex; flex-shrink: 0; cursor: help; }
 .shell .info:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
-.shell .tip { position: fixed; z-index: 50; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border-strong); color: var(--fg-2); font-size: 12px; line-height: 16px; pointer-events: none; box-shadow: 0 6px 20px #0006; }
+.shell .tip { position: fixed; z-index: 50; width: max-content; max-width: 280px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border-strong); color: var(--fg-2); font-size: 12px; line-height: 16px; pointer-events: none; box-shadow: 0 6px 20px #0006; }
 .shell .text-btn { padding: 0; background: none; border: 0; color: var(--muted); font-size: 12px; line-height: 16px; cursor: pointer; }
 .shell .text-btn:hover { color: var(--fg); }
 .shell .text-btn.strong { color: var(--fg); font-weight: 500; }
 .shell .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .shell .field-error { margin: 0; color: #e8b4a6; font-size: 12px; line-height: 16px; }
+.shell div.field-error p { margin: 0; }
+.shell div.field-error ul { margin: 2px 0 0; padding-left: 16px; }
 .shell .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; background: none; border: 0; color: var(--muted); cursor: pointer; }
 .shell .icon-btn:hover { color: var(--fg); }
 .shell .copy-link { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; }
@@ -142,10 +157,11 @@
 .shell .mini-figures b { color: var(--fg); font-size: 16px; font-weight: 600; line-height: 20px; white-space: nowrap; }
 .shell .mini-figures.prepared b { color: var(--place); }
 /* ---- Edit a component in place (prepared scenario, docs/stress.md) ---- */
-.shell .edit-block { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+.shell .edit-block summary .unit { margin-left: auto; }
+.shell .edit-fields { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .shell .factor-input { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--fg-3); }
-.shell .factor-input input { width: 64px; margin-left: 4px; padding: 3px 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg); font: inherit; text-align: right; }
-.shell .factor-input input:focus { outline: 1px solid var(--place); }
+.shell .factor-input input { width: 64px; margin-left: 4px; padding: 3px 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg); font: inherit; text-align: right; }
+.shell .factor-input input:focus { outline: 1px solid var(--fg-3); outline-offset: 0; }
 .shell .mini-figures b.fault { color: var(--fault); }
 .shell .mini-figures small { color: var(--muted); font-size: 12px; font-weight: 400; }
 .shell .mini-figures > div > span { color: var(--muted); font-size: 12px; line-height: 16px; }
@@ -196,6 +212,27 @@
 .shell .legend-row .dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); }
 .shell .legend-row .dot.big { width: 10px; height: 10px; }
 .shell .legend-row .col { display: block; width: 10px; height: 16px; }
+.shell .prose .steps { padding-left: 20px; }
+.shell .prose .steps li { margin-bottom: 4px; color: var(--fg-2); }
+.shell .prose .plain-lines { margin: 4px 0 12px; padding: 0; list-style: none; color: var(--fg-2); }
+.shell .prose .plain-lines li { margin-bottom: 4px; }
+.shell .glossary { margin: 0 0 8px; }
+.shell .glossary div { padding: 6px 0; border-top: 1px solid var(--border); }
+.shell .glossary dt { color: var(--fg); font-weight: 600; }
+.shell .glossary dd { margin: 0; }
+.shell .prose .source-list { padding: 0; list-style: none; }
+.shell .prose .source-list li { display: flex; flex-direction: column; margin: 0; padding: 6px 0; border-top: 1px solid var(--border); }
+.shell .prose a { color: var(--fg); text-decoration: underline; text-decoration-color: #ffffff59; text-underline-offset: 2px; }
+.shell .prose a:hover { text-decoration-color: var(--fg); }
+.shell .prose a:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+.shell .assumption-list { display: flex; flex-direction: column; margin-bottom: 8px; }
+.shell .assumption { margin: 0; padding: 6px 0; border-top: 1px solid var(--border); }
+.shell details.assumption summary { display: block; cursor: pointer; color: var(--fg-2); font-size: 13px; font-weight: 400; line-height: 20px; list-style: none; }
+.shell details.assumption summary::-webkit-details-marker { display: none; }
+.shell details.assumption summary::after { content: " Ver más"; color: var(--muted); font-size: 12px; }
+.shell details.assumption[open] summary::after { content: ""; }
+.shell details.assumption p { margin: 4px 0 0; color: var(--fg-3); }
+.shell details.assumption summary:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
 
 /* ---- Timeline card ---- */
 .shell .timeline { position: absolute; z-index: 2; left: var(--panel-x); bottom: var(--gap); width: var(--panel-w); height: var(--timeline-h); margin: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 24px; background: var(--glass); border: 1px solid var(--border); }
@@ -211,8 +248,7 @@
 /* Three or more islands: two short lines, each island by its stroke swatch (A2-08). */
 .shell .readout.many { font-size: 12px; line-height: 14px; }
 .shell .readout.many .readout-list { max-width: 150px; }
-.shell .speed { position: relative; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; flex-shrink: 0; background: #2e2f33; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
-.shell .speed select, .shell .legend-mode select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
 .shell .timeline-row { display: flex; align-items: flex-end; gap: 10px; margin: 0; }
 .shell .play { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; padding: 0; margin-bottom: 10px; background: var(--fg); border: 0; border-radius: 0; cursor: pointer; }
 .shell .play:disabled { opacity: 0.35; cursor: default; }
@@ -254,7 +290,22 @@
 .shell .seg button { flex: 1; padding: 6px 0; background: none; border: 0; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
 .shell .seg button.on { background: var(--fg-2); color: #18191b; }
 .shell .check { display: flex; align-items: center; gap: 8px; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
-.shell .check input { margin: 0; accent-color: var(--fg-2); }
+/* Checkboxes, radios and ranges drawn with the tokens: square, no browser blue (D16, G-11). A radio is a square with a
+   filled square inside, a checkbox a white square with a dark tick. */
+.shell input[type="checkbox"], .shell input[type="radio"] { appearance: none; -webkit-appearance: none; display: inline-grid; place-content: center; width: 14px; height: 14px; flex-shrink: 0; margin: 0; background: var(--surface); border: 1px solid var(--muted); border-radius: 0; cursor: pointer; }
+.shell input[type="checkbox"]:checked { background: var(--fg); border-color: var(--fg); }
+.shell input[type="checkbox"]:checked::after { content: ""; width: 8px; height: 5px; margin-top: -2px; border: solid #18191b; border-width: 0 0 2px 2px; transform: rotate(-45deg); }
+.shell input[type="radio"]:checked { border-color: var(--fg); }
+.shell input[type="radio"]:checked::after { content: ""; width: 6px; height: 6px; background: var(--fg); }
+.shell input[type="checkbox"]:disabled, .shell input[type="radio"]:disabled { opacity: 0.45; cursor: default; }
+.shell input[type="checkbox"]:focus-visible, .shell input[type="radio"]:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+.shell input[type="range"] { appearance: none; -webkit-appearance: none; height: 16px; background: transparent; cursor: pointer; }
+.shell input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: #3a3b3f; border: 0; border-radius: 0; }
+.shell input[type="range"]::-moz-range-track { height: 4px; background: #3a3b3f; border: 0; border-radius: 0; }
+.shell input[type="range"]::-moz-range-progress { height: 4px; background: var(--fg); }
+.shell input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; background: var(--fg); border: 0; border-radius: 0; }
+.shell input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: var(--fg); border: 0; border-radius: 0; }
+.shell input[type="range"]:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
 .shell .map-foot { position: absolute; z-index: 2; right: var(--gap); bottom: var(--gap); width: 300px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; pointer-events: none; }
 .shell .map-foot > * { pointer-events: auto; }
 .shell .scale { display: flex; align-items: center; gap: 8px; pointer-events: none; }
@@ -264,17 +315,26 @@
 .shell .legend-card { width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--border-strong); }
 .shell .legend-head { display: flex; align-items: center; justify-content: space-between; }
 .shell .legend-head h3 { margin: 0; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 18px; }
-.shell .legend-mode { position: relative; display: flex; align-items: center; gap: 4px; color: var(--fg-2); font-size: 13px; line-height: 16px; cursor: pointer; }
+.shell .seg.legend-seg button, .shell .seg.speed-seg button { padding: 3px 8px; font-weight: 500; line-height: 16px; }
+.shell .seg.speed-seg { flex-shrink: 0; }
+.shell .seg button:not(.on):hover { color: var(--fg); }
 .shell .samples { display: flex; flex-wrap: wrap; gap: 10px; }
 .shell .sample { display: flex; flex-direction: column; gap: 8px; width: 82px; flex-shrink: 0; color: var(--fg-2); font-size: 12px; line-height: 16px; }
-.shell .sample .swatch-slot { display: flex; align-items: center; height: 6px; }
+.shell .sample .swatch-slot { display: flex; align-items: center; height: 10px; }
 .shell .sample .swatch { display: block; width: 28px; height: 3px; flex: none; }
 .shell .sample.absent .swatch, .shell .sample.absent svg { opacity: 0.4; }
+/* "sin tensión" is near-black: its outline carries it, so an absent sample keeps the outline at full strength (E-14). */
+.shell .sample .swatch.outlined { outline: 1px solid #ffffff40; }
+.shell .sample.absent .swatch.outlined { opacity: 1; }
 .shell .sample.absent > span:last-child { color: var(--muted); }
 .shell .sample.fault > span:last-child { color: var(--fault); }
-.shell .samples.just-dark { margin-top: 10px; }
-.shell .samples.just-dark .sample { width: auto; }
 .shell .impact .notice.truncated { margin: 12px 0 0; }
+/* A view-only network's legend: its voltage tiers and plant technologies, compact (E-28). Plant discs are round map symbols. */
+.shell .legend-card.compact { width: auto; max-width: 300px; gap: 8px; }
+.shell .legend-card.compact .legend-head { gap: 12px; }
+.shell .samples.techs { gap: 6px 12px; }
+.shell .sample.tech { flex-direction: row; align-items: center; gap: 6px; width: auto; }
+.shell .tech-dot { width: 10px; height: 10px; flex-shrink: 0; border-radius: 50%; box-shadow: 0 0 0 1px #18191b; }
 .shell .legend-foot { margin: 0; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 16px; }
 /* Key of the active heat map, kept in the legend once the layers popover closes (A2-07). */
 .shell .heat-key { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border); }
@@ -301,8 +361,12 @@
 .shell .map-event.past { z-index: 1; }
 .shell .map-event.current { z-index: 2; }
 .shell .callout { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border-strong); pointer-events: auto; }
-/* Docked: top left of the map, under the time pill and clear of the panel, where there is only sea. */
-.shell .callout.docked { position: absolute; z-index: 4; left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); top: calc(var(--gap) + 70px); width: 260px; box-sizing: border-box; }
+/* Docked: top left of the map, on the top gap like the panel and clear of it, where there is mostly sea. A 1 px leader
+   (.leader, placed by CascadeApp _placeOverlays) joins it to its pin. Hidden while the layers popover would cover it. */
+.shell .callout.docked { position: absolute; z-index: 4; left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); top: var(--gap); width: min(300px, calc(100% - var(--panel-x) - var(--panel-w) - 3 * var(--gap))); box-sizing: border-box; }
+.shell .callout.covered, .shell .leader.covered { visibility: hidden; }
+.shell .leader { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.shell .leader line { stroke: var(--fg-3); stroke-width: 1; }
 .shell .callout-head { display: flex; justify-content: space-between; gap: 8px; color: var(--faint); font-size: 12px; line-height: 16px; }
 .shell .callout-head > span:nth-child(2) { margin-left: auto; }
 .shell .callout-close { margin-left: 4px; }
@@ -312,20 +376,28 @@
 .shell .callout-figures b { color: var(--fg); font-size: 14px; font-weight: 600; line-height: 18px; }
 .shell .callout-figures b.cream { color: var(--place); }
 .shell .callout-figures span { color: var(--muted); font-size: 12px; line-height: 16px; }
-.shell .pin-label { position: absolute; left: 28px; top: -20px; display: flex; flex-direction: column; padding: 4px 10px; background: var(--surface); white-space: nowrap; }
-.shell .pin-label b { color: var(--fg); font-size: 13px; font-weight: 600; line-height: 18px; }
-.shell .pin-label span { color: var(--muted); font-size: 12px; line-height: 16px; }
-.shell .flip .pin-label { left: auto; right: 28px; }
+/* The first event's label shows only once another event is current, so it stays small: one 12 px line (E-13). */
+.shell .pin-label { position: absolute; left: 16px; top: -10px; display: flex; align-items: baseline; gap: 6px; padding: 2px 8px; background: var(--surface); white-space: nowrap; }
+.shell .pin-label b { min-width: 0; color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 16px; }
+.shell .pin-label span { flex-shrink: 0; color: var(--muted); font-size: 12px; line-height: 16px; }
+.shell .flip .pin-label { left: auto; right: 16px; }
 
-/* Mapbox logo and attribution: bottom-left of the visible map, right of the timeline card. */
-.shell .mapboxgl-ctrl-bottom-left { left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); }
-.shell .mapboxgl-ctrl-attrib.mapboxgl-compact { background: #1e1f21cc; color: var(--muted); }
+/* Mapbox logo and attribution: bottom-left of the visible map, right of the panel, on the same bottom gap as the timeline
+   and the legend, and quieter than the legend (E-04). Mapbox requires both to stay visible. */
+.shell .mapboxgl-ctrl-bottom-left { left: calc(var(--panel-x) + var(--panel-w) + var(--gap)); bottom: var(--gap); display: flex; align-items: flex-end; gap: 6px; }
+.shell .mapboxgl-ctrl-bottom-left .mapboxgl-ctrl { float: none; margin: 0; }
+.shell .mapboxgl-ctrl-logo { opacity: 0.55; }
+.shell .mapboxgl-ctrl-attrib.mapboxgl-compact { min-height: 20px; margin: 0; background: #1e1f21cc; color: var(--muted); opacity: 0.7; }
+.shell .mapboxgl-ctrl-attrib.mapboxgl-compact:hover, .shell .mapboxgl-ctrl-attrib.mapboxgl-compact-show { opacity: 1; }
 .shell .mapboxgl-ctrl-attrib a { color: var(--muted); }
 
 /* The event history scrolls inside its card, so the people card above it stays in view (Design v5, V2). */
-.shell .history { flex-shrink: 1; min-height: 150px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
-.shell .history .card-head { position: sticky; top: -14px; z-index: 1; margin-top: -14px; padding-top: 14px; background: var(--card); }
-.shell .pin-label { max-width: 280px; }
+/* It keeps 150 px when squeezed only once it holds more than three events: one event never leaves an empty block (E-29). The
+   sticky head has a solid mask under it, so a row scrolling past never peeks out (G-25). */
+.shell .history { flex-shrink: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
+.shell .history.tall { min-height: 150px; }
+.shell .history .card-head { position: sticky; top: -14px; z-index: 1; margin-top: -14px; padding-top: 14px; background: var(--card); box-shadow: 0 4px 0 var(--card); }
+.shell .pin-label { max-width: 200px; }
 .shell .pin-label b, .shell .pin-label span { overflow: hidden; text-overflow: ellipsis; }
 .shell .up .callout { top: auto; bottom: -20px; }
 .shell .up .callout::before { top: auto; bottom: 19px; }
@@ -341,11 +413,16 @@
 .shell .actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 /* Primary action: white fill like the play button. Red stays reserved for faults and overloads. */
 .shell .primary-btn { height: 32px; flex-shrink: 0; padding: 0 14px; background: var(--fg); border: 0; border-radius: 0; color: #18191b; font-size: 13px; font-weight: 600; line-height: 16px; cursor: pointer; }
-.shell .primary-btn:hover { background: var(--fg-2); }
+.shell .primary-btn:hover:not(:disabled) { background: var(--fg-2); }
 .shell .secondary-btn { height: 28px; flex-shrink: 0; padding: 0 10px; background: none; border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 16px; cursor: pointer; }
-.shell .secondary-btn:hover { border-color: #ffffff40; color: var(--fg); }
+.shell .secondary-btn:hover:not(:disabled) { border-color: #ffffff40; color: var(--fg); }
+/* One disabled look for every primary and secondary button of the app (incidents, cyber, assistant and session use it). */
+.shell .primary-btn:disabled { background: var(--selected); color: var(--faint); cursor: default; }
+.shell .secondary-btn:disabled { border-color: var(--border); color: var(--faint); cursor: default; }
 .shell .cut-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .shell .cut-row .cut-name { min-width: 0; }
+/* An incident or cyber cascade: whose it is on one line, the way back and "Quitar del mapa" under it. */
+.shell .cut-row.external { flex-direction: column; align-items: flex-start; gap: 8px; }
 .shell .withstands { display: flex; flex-direction: column; gap: 6px; }
 .shell .withstands p { margin: 0; color: var(--fg-3); font-size: 13px; line-height: 20px; }
 .shell .notice { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 12px; background: var(--card); border-left: 2px solid var(--fg-3); color: var(--fg-3); font-size: 12px; line-height: 16px; flex-shrink: 0; }
@@ -359,7 +436,7 @@
 
 /* Keyboard focus on the shell's controls. */
 .shell button:focus-visible, .shell .row-btn:focus-visible, .shell .check input:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
-.shell .speed:has(select:focus-visible), .shell .legend-mode:has(select:focus-visible) { outline: 1px solid var(--fg-3); outline-offset: 2px; }
+
 
 /* Fuentes de la grilla: opens downward in the rail, under the item */
 .shell .rail-label { white-space: nowrap; }
@@ -368,7 +445,7 @@
 .shell .sources { margin-top: 2px; }
 .shell .source-row { display: flex; align-items: center; gap: 8px; height: 28px; flex-shrink: 0; padding: 0 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 16px; cursor: pointer; }
 .shell .source-row:hover { color: var(--fg); }
-.shell .source-row input { margin: 0; accent-color: var(--fg-2); flex-shrink: 0; }
+
 .shell .source-row .ellipsis { flex: 1 1 0; }
 .shell .source-status { font-size: 11px; line-height: 16px; flex-shrink: 0; color: var(--faint); }
 .shell .source-status.complete { color: var(--fg-3); }

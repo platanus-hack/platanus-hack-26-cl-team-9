@@ -32,10 +32,11 @@ describe("regional layers", () => {
     expect(line).toContain("500 kV");
     expect(line).toContain("2 circuitos");
     expect(line).toContain("120 km");
-    expect(line).toContain("EPE WebMap capa 23");
+    expect(line).toContain("Fuente: EPE WebMap");
+    expect(line).not.toContain("capa");
     expect(line).toContain("no se simula");
     expect(regionalTooltip("regional-plants", GRID.plants[0])).toContain("3 centrales");
-    expect(regionalTooltip("regional-plants", GRID.plants[0])).toContain("14000 MW");
+    expect(regionalTooltip("regional-plants", GRID.plants[0])).toContain("14.000 MW");
     expect(regionalTooltip("lines", GRID.lines[0])).toBeNull();
   });
 });

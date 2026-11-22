@@ -1,6 +1,18 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · style(web): no developer text, dark controls, tidier cards and other countries in voltage colours
+
+- **Changed:** Fixes from the UI audit, work package 3 of 4 (content and visual polish).
+  - **Text:** no file paths, commands, routes, HTTP codes or JSON field names reach the screen (`errorText` in `text.ts` strips them from server messages; the missing-cache file name goes to the console). 23 place names get their accents back on screen only ("Azúcar"). Ayuda is four numbered steps, "En el mapa" and a glossary; Fuentes y supuestos is three plain lines, the sources as links (only URLs from `docs/datasets.md` section 7) and the assumptions as rows that open.
+  - **Controls:** `color-scheme: dark` on the shell; Tensión/Carga and 1x/2x/4x are segmented controls instead of native selects; checkboxes, radios and ranges are drawn square without browser blue; one shared disabled style for `.primary-btn` and `.secondary-btn`.
+  - **Cards and map:** the selection card reads figures, load bar, action, lists, then a closed "Modificar valores"; the callout sits on the top gap with a 1 px leader to its pin and hides under the layers popover; the history card has no half row under its header; the network picker and info tips stay inside the panel (tips close with Escape); "recién sin suministro" is a regular legend cell.
+  - **Other countries:** lines in voltage colours, a compact legend (tiers and plant technologies), no red plant disc (thermal is `#9C8068`), "Volver a Chile" next to the view-only note.
+  - **Handover fixes:** a cut removes a cyber cascade from the map and an incident and a cyber cascade no longer mask each other; the map keeps its last frame while a simulation loads or fails; Simulación shows the impact of an incident or cyber cascade with "Volver al incidente"; upload errors sit under their own field.
+- **Why:** The audit found developer text in seven places, native light controls where unchecked boxes looked checked, a callout floating 300 px from its pin, and Peru drawn in gray with red plant discs (red is reserved for failures).
+- **Agents:** The Mapbox basemap is unchanged: with the night preset the Standard style darkens every colour and the monochrome theme ignores `colorLand`; `docs/design.md` section 7 records what was tried. Segmented controls are pressed buttons in a group; their arrow-key pattern, the tabs' and the info icons' semantics come with the next package. `nodeDetail.ts` (deprecated mapa 2) still prints coordinates with a decimal point. The `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` are still not re-pointed (next package).
+- **Files:** `web/src/cascade/*`, `web/src/map/{layers,regional,upload}.ts`, CSS in `web/src/{incidents,cyber,assistant,session}`, `docs/{mapa3,design,regional}.md`, `web/README.md`.
+
 ## 2026-11-22 · feat(web): autoplay, colour by tab, a cold start card and honest readouts in the map shell
 
 - **Changed:** Fixes from the UI audit, work package 1 of 4 (the map shell, `web/src/cascade` and `web/src/map`).

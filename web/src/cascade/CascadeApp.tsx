@@ -14,7 +14,7 @@ import { addBus, changesOf, countEdits, countFailures, dropBus, dropChange, drop
 import { composeGrid, loadContextDocument, loadDependency, prepareScenario, simulateGrid, type Prepared, type SimulationResult } from "./gridsApi";
 import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
-import { MapLegend } from "./MapLegend";
+import { MapLegend, RegionalMapLegend } from "./MapLegend";
 import { MapOverlays, type LocatedMarker } from "./MapOverlays";
 import { placedPoints } from "./placed";
 import { NetworkPanel, type Origin } from "./NetworkPanel";
@@ -29,7 +29,7 @@ import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, recentDarkAt, timeWarp, type Marker } from "./simulation";
 import { clock, conditionName, errorText, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
-import type { BusState, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
+import type { BusState, DependencyNode, Frame, HealthReport, Index, Network, Timeline } from "./types";
 import { Icon, TipLayer, Wordmark } from "./ui";
 import { DataPanel } from "../session/DataPanel";
 import { SessionBar } from "../session/SessionBar";
@@ -168,6 +168,11 @@ export function CascadeApp() {
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
   const darkCount = timeline ? darkAt(timeline, t).size : 0;
   const frame = useMemo(() => (timeline ? frameAt(timeline, t) : undefined), [timeline, fi, darkCount]);
+  // While a new simulation loads or after it failed there is no frame: the map keeps the last one it drew, so the lines
+  // never vanish (the base case on first load comes from the baseline timeline).
+  const lastFrame = useRef<Frame | undefined>(undefined);
+  if (frame) lastFrame.current = frame;
+  const drawnFrame = frame ?? lastFrame.current;
   const impact = useMemo(() => (timeline ? impactAt(timeline, buses, t) : { people: 0, lostLoadMw: 0, lostGenMw: 0, share: 0 }), [timeline, buses, t]);
   const islands = useMemo(() => (timeline ? frequencyAt(timeline, t) : []), [timeline, t]);
   const totalPeople = useMemo(() => Object.values(buses).reduce((s, b) => s + b.people, 0), [buses]);
@@ -196,8 +201,8 @@ export function CascadeApp() {
   const contextLayers = useMemo<Layer[]>(() => (isChile && contextGrid ? buildRegionalLayers(contextGrid, colorMode) : []), [isChile, contextGrid, colorMode]);
 
   const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 0;
-  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile, pointId, changes, contextLayers, warp, recent });
-  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile, pointId, changes, contextLayers, warp, recent };
+  const live = useRef({ network, buses, frame: drawnFrame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile, pointId, changes, contextLayers, warp, recent });
+  live.current = { network, buses, frame: drawnFrame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile, pointId, changes, contextLayers, warp, recent };
   const fitted = useRef<string | null>(null); // the network the camera last flew to
   const prevSid = useRef(s.sid);
   const clickMemory = useRef(NO_CLICK);
@@ -234,12 +239,22 @@ export function CascadeApp() {
     if (incidentTl) { incidentOn.current = true; seek(0); setPlaying(!reducedMotion()); setColorMode("load"); }
     else if (incidentOn.current) { incidentOn.current = false; seek(0); setPlaying(false); }
   }, [incidentTl]);
+  // An incident cascade and a cyber cascade never mask each other: the one that starts last takes the map.
+  const lastCascade = useRef({ inc: inc.playing, cyb: cyb.mapCycle });
+  useEffect(() => {
+    const was = lastCascade.current;
+    if (inc.playing != null && inc.playing !== was.inc && cyb.mapCycle != null) cyb.showOnMap(null);
+    else if (cyb.mapCycle != null && cyb.mapCycle !== was.cyb && inc.playing != null) inc.stop();
+    lastCascade.current = { inc: inc.playing, cyb: cyb.mapCycle };
+  }, [inc.playing, cyb.mapCycle]);
   useEffect(() => _mountMap(), []);
   useEffect(() => _animate(), []);
   useEffect(() => { _syncUrl(); }, [pointId, edits, s.sid, networkId]);
   useEffect(() => _keyboard(), []);
   // A new selection opens at the top of the panel, so bring the top back into view if the panel was scrolled.
   useEffect(() => { if (selection) panelBodyRef.current?.scrollTo({ top: 0 }); }, [selection]);
+  // Another view or tab opens at its top, not where the previous one was scrolled.
+  useEffect(() => { panelBodyRef.current?.scrollTo({ top: 0 }); }, [view, tab]);
   useEffect(() => {
     if (!layersOpen) return;
     const close = (e: PointerEvent) => { if (!controlsRef.current?.contains(e.target as Node)) setLayersOpen(false); };
@@ -313,7 +328,7 @@ export function CascadeApp() {
         _showNetwork(others[0].country);
       }
     } catch (e) {
-      setError(String((e as Error).message));
+      setError(errorText(e));
     } finally {
       setComposing(false);
     }
@@ -336,7 +351,7 @@ export function CascadeApp() {
     }
     let stale = false;
     loadCountryGrid(networkId).then((grid) => { if (!stale) setShown({ id: networkId, grid, from: "file" }); })
-      .catch((e) => { if (!stale) setError(`No se pudo cargar la red de ${current.name}: ${e.message}`); });
+      .catch((e) => { console.warn("country grid failed to load", e); if (!stale) setError(`No se pudo cargar la red de ${current.name}.`); });
     return () => { stale = true; };
   }
 
@@ -617,6 +632,7 @@ export function CascadeApp() {
       // The first event keeps a short label, unless it would sit under the current event's callout.
       const label = root.querySelector<HTMLElement>(".pin-label");
       const callout = root.querySelector<HTMLElement>(".callout");
+      _placeLeader(root, callout);
       // It also hides when it would cover another pin, now that colliding pins are spread apart beside each other.
       if (label) {
         label.style.visibility = "";
@@ -636,6 +652,31 @@ export function CascadeApp() {
       (scale.lastElementChild as HTMLElement).textContent = `${km.toLocaleString("es-CL")} km`;
       scale.classList.add("ready"); // nothing is drawn before the camera exists (G-27)
     }
+  }
+
+  /**
+   * The docked callout's leader: a 1 px line from the callout's nearest edge to its pin. The callout and its leader hide
+   * while the layers popover would cover them (B3-04).
+   */
+  function _placeLeader(root: HTMLElement, callout: HTMLElement | null) {
+    const leader = root.querySelector<SVGSVGElement>(".leader");
+    const pin = root.querySelector<HTMLElement>(".map-event.current .pin");
+    if (!callout || !leader) return;
+    const pop = controlsRef.current?.querySelector(".layers-pop")?.getBoundingClientRect();
+    const c = callout.getBoundingClientRect();
+    const covered = !!pop && pop.left < c.right && c.left < pop.right && pop.top < c.bottom && c.top < pop.bottom;
+    callout.classList.toggle("covered", covered);
+    leader.classList.toggle("covered", covered || !pin);
+    if (!pin || covered) return;
+    const o = root.getBoundingClientRect(), p = pin.getBoundingClientRect();
+    const px = p.left + p.width / 2 - o.left, py = p.top + p.height / 2 - o.top;
+    // Nearest point of the callout's box to the pin, and the pin's edge on the way there.
+    const cx = Math.max(c.left - o.left, Math.min(px, c.right - o.left)), cy = Math.max(c.top - o.top, Math.min(py, c.bottom - o.top));
+    const len = Math.hypot(px - cx, py - cy), r = p.width / 2;
+    const line = leader.firstElementChild as SVGLineElement;
+    const end = len > r ? 1 - r / len : 0;
+    line.setAttribute("x1", cx.toFixed(1)); line.setAttribute("y1", cy.toFixed(1));
+    line.setAttribute("x2", (cx + (px - cx) * end).toFixed(1)); line.setAttribute("y2", (cy + (py - cy) * end).toFixed(1));
   }
 
   /** Space plays or pauses (not while a control has focus); Escape closes the layers popover, else clears the selection. */
@@ -666,6 +707,7 @@ export function CascadeApp() {
     setSelection(null); // the impact card names the cut and stays at the top of the panel
     setNotice(null);
     inc.stop();
+    cyb.showOnMap(null); // a cut replaces any incident or cyber cascade on the map
     if (!s.sid) { autoplay.current = true; setEdits((e) => addLine(e, id)); }
     else if (!s.state?.open_lines.includes(id)) s.edit((sid, rev) => cutLines(sid, [id], rev));
     chooseTab("sim");
@@ -680,6 +722,7 @@ export function CascadeApp() {
     setSelection(null);
     setNotice(null);
     inc.stop();
+    cyb.showOnMap(null);
     if (!s.sid) { autoplay.current = true; setEdits((e) => addBus(e, id)); }
     else if (network) {
       const closed = substationLines(network, id).filter((l) => !s.state?.open_lines.includes(l));
@@ -826,7 +869,11 @@ export function CascadeApp() {
   const changeCount = countEdits(edits);
   const tabLabel = (k: Tab) => (k === "estado" && changeCount > 0 ? `${TAB_NAME[k]} · ${changeCount}` : TAB_NAME[k]);
   const disaster = !s.sid && isChile ? activeDisaster(pointId, edits) : null;
-  const shareable = !s.sid && isChile && urlCutOf(edits) !== null;
+  // An incident or cyber cascade on the map with no cut of its own: Simulación shows its impact and says whose it is (WP2 hand-over).
+  const external = inc.playing != null && inc.result
+    ? { label: `El mapa muestra la cascada del incidente «${inc.result.incident.title}», ciclo ${inc.playing}.`, back: "Volver al incidente", open: () => setView("incidents"), remove: inc.stop }
+    : cyb.mapCycle != null ? { label: `El mapa muestra la cascada del escenario de ciberataque, ciclo ${cyb.mapCycle}.`, back: "Volver al escenario", open: () => setView("cyber"), remove: () => cyb.showOnMap(null) } : null;
+  const shareable = !s.sid && isChile && !external && urlCutOf(edits) !== null;
   const failed = simError?.key === timelineKey ? simError.message : null;
   const showTimeline = isChile && edited; // nothing to play: no card (D9)
   const darkNow = timeline ? frame?.dark.length ?? 0 : 0;
@@ -836,7 +883,8 @@ export function CascadeApp() {
   // A cyber cascade on the map counts too (D10, G-23): powerAllOn already takes it off.
   const canPower = canPowerAll({ cuts, edited: outBuses.length + changes.length > 0 || inc.playing != null || cyb.mapCycle != null });
   const shutDown = selection?.kind === "node" && !!network && isSwitchedOff(selection, network, offState, !!s.sid);
-  const sourceNote = hasLabels ? "Mapa base: Mapbox" : isChile ? "Contorno: data/processed/chile.geojson" : "Contornos: data/processed/latam/outlines.geojson (geoBoundaries)";
+  // Named for people (D11): the outlines come from the BCN regional map of Chile and from geoBoundaries (docs/regional.md).
+  const sourceNote = hasLabels ? "Mapa base: Mapbox." : isChile ? "Contorno: mapa regional de la BCN." : "Contornos: geoBoundaries.";
   const shownSummary = shownGrid ? (shownGrid.countries[0] ? summaryFromManifest(shownGrid.countries[0]) : summaryFromGrid(shownGrid)) : null;
   const shownOrigin = shownGrid ? originOf(current, shownGrid) : undefined;
 
@@ -904,12 +952,13 @@ export function CascadeApp() {
           {view === "tabs" && isChile && failed && (
             <p className="note" role="alert">{failed} <button className="text-btn" onClick={retrySimulation}>Reintentar</button></p>
           )}
-          {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
+          {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index}
+            basemap={hasLabels ? { name: "Mapbox", url: "https://www.mapbox.com/" } : isChile ? { name: "contorno de Chile de los mapas de la BCN" } : { name: "contornos de geoBoundaries" }} />}
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={shownGrid} />}
           {view === "upload" && <UploadNetwork add={addUpload} cancel={() => setView("tabs")} />}
           {view === "tabs" && !(isChile ? network : shownGrid) && !error && <Loading text="Cargando la red" />}
           {view === "tabs" && !isChile && tab === "red" && shownGrid && (
-            <NetworkPanel source={sourceNote} summary={shownSummary} origin={shownOrigin} viewOnly={VIEW_ONLY} />
+            <NetworkPanel source={sourceNote} summary={shownSummary} origin={shownOrigin} viewOnly={VIEW_ONLY} backToChile={() => chooseNetwork(DEFAULT_COUNTRY)} />
           )}
           {view === "tabs" && isChile && network && selection && (
             <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={selectedCut} year={point?.year}
@@ -928,7 +977,7 @@ export function CascadeApp() {
           {view === "tabs" && isChile && tab === "sim" && network && (timeline && timelineReady ? (
             <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} darkCount={darkNow} totalPeople={totalPeople}
               seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} health={s.sid || composed ? null : health}
-              supply={simResult?.supply ?? null} disaster={disaster} shareable={shareable} select={select} open25F={open25F} />
+              supply={simResult?.supply ?? null} disaster={external ? null : disaster} shareable={shareable} select={select} open25F={open25F} external={external} />
           ) : !edited ? <ColdStartCard network={network} health={s.sid || composed ? null : health} select={select} open25F={open25F} />
             : !error && !failed && <Loading text="Cargando la simulación" />)}
           {view === "tabs" && tab === "datos" && (s.network
@@ -974,8 +1023,9 @@ export function CascadeApp() {
 
       <div className="map-foot">
         <div className="scale" ref={scaleRef}><span className="scale-bar" /><span className="scale-label" /></div>
-        {isChile && network && <MapLegend mode={colorMode} setMode={setColorMode} network={network} frame={frame} cascade={hasCascade} justDark={recent.size > 0}
+        {isChile && network && <MapLegend mode={colorMode} setMode={setColorMode} network={network} frame={drawnFrame} cascade={hasCascade} justDark={recent.size > 0}
           heat={heat === "none" ? null : { kind: heat, pending: needsDependency(heat) && !heatData && !heatError, error: heatError }} />}
+        {!isChile && shownGrid && <RegionalMapLegend grid={shownGrid} />}
       </div>
       <TipLayer />
     </div>
@@ -1000,8 +1050,8 @@ function originOf(n: NetworkInfo, grid: RegionalGrid): Origin {
       substations: `Subestaciones ${what}.`, mw: `Potencia de las centrales ${what}.`, bands: `Largo de las líneas ${what} por nivel de tensión.` };
   }
   const sources = entry.sources.map((x) => x.name).join("; ");
-  const reduced = "de la capa reducida (una barra por subestación, líneas paralelas plegadas; docs/regional.md sección 2), en data/processed/latam/manifest.json";
-  return { source: `${sources} (data/processed/latam/manifest.json)`, km: `Largo de las líneas ${reduced}. Cuenta el circuito más largo de cada corredor, así que subestima.`,
+  const reduced = "de la red resumida (una barra por subestación, líneas paralelas fundidas en una)";
+  return { source: sources, km: `Largo de las líneas ${reduced}. Cuenta el circuito más largo de cada corredor, así que subestima.`,
     substations: `Subestaciones ${reduced}.`, mw: `Potencia instalada de las centrales asignadas a una subestación ${reduced}.`, bands: `Largo de las líneas ${reduced}, por nivel de tensión.` };
 }
 

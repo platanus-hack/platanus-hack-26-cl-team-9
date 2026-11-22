@@ -4,7 +4,7 @@ import type { Supply } from "./gridsApi";
 import type { Disaster } from "./Scenarios";
 import { findOption, matches, searchOptions } from "./search";
 import { systemFrequency, voltageCollapse, withstandsAt, type Impact, type IslandFrequency } from "./simulation";
-import { cutName, hoursText, hz, index2, int, narrate, pct, placeName, secs, usdM } from "./text";
+import { cutName, hoursText, hz, index2, int, narrate, pct, pct2, placeName, secs, usdM } from "./text";
 import type { Assumed, EventCost, HealthReport, N1Cost, Network, Timeline } from "./types";
 import { Chevron, CopyLink, Info } from "./ui";
 
@@ -25,12 +25,16 @@ interface Props {
   shareable: boolean;
   /** Cold start card: select a line or substation from the search field, open the 25F. */
   select(pick: Pick): void; open25F(): void;
+  /** An incident or cyber cascade on the map: whose it is, the way back to its run and how to take it off the map. */
+  external?: ExternalCascade | null;
 }
+
+export interface ExternalCascade { label: string; back: string; open(): void; remove(): void }
 
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
 export function SimulationPanel(p: Props) {
   const assumptions = p.timeline.assumptions.length;
-  const edited = p.cuts.length + p.outBuses.length > 0;
+  const edited = p.cuts.length + p.outBuses.length > 0 || !!p.external;
   return (
     <>
       {edited ? <ImpactCard {...p} /> : <ColdStartCard network={p.network} health={p.health} select={p.select} open25F={p.open25F} />}
@@ -172,7 +176,7 @@ function ImpactCard(p: Props) {
       {p.disaster?.real && <div className="value-row real-row"><span>{p.disaster.real.text}</span><Info tip={p.disaster.real.tip} /></div>}
       </>}
       <div className="mini-figures ruled">
-        <div><div className="value-row"><b>{int(p.impact.lostLoadMw)} <small>MW</small></b><Info tip="Demanda desconectada: islas apagadas y cortes automáticos de carga (EDAC). Flujo DC del motor Sub50." /></div><span>carga perdida</span></div>
+        <div><div className="value-row"><b>{int(p.impact.lostLoadMw)} <small>MW</small></b><Info tip="Demanda desconectada: islas apagadas y cortes automáticos de carga (EDAC), según el motor Sub50." /></div><span>carga perdida</span></div>
         <div><div className="value-row"><b>{int(p.impact.lostGenMw)} <small>MW</small></b><Info tip="Generación en las subestaciones que quedaron sin tensión. El motor no modela desconexiones de centrales por frecuencia o tensión." /></div><span>generación perdida</span></div>
         <div>
           <div className="value-row">
@@ -188,10 +192,15 @@ function ImpactCard(p: Props) {
         <p className="notice truncated" role="note">{`La cascada se cortó en ${p.timeline.summary.stages} etapas (límite del motor); podría seguir.`}</p>
       )}
       <EndOfRun timeline={p.timeline} />
-      <div className="cut-row">
+      {p.external ? (
+        <div className="cut-row external">
+          <p className="meta cut-name">{p.external.label}</p>
+          <span className="row-btns"><button className="secondary-btn" onClick={p.external.open}>{p.external.back}</button><button className="text-btn" onClick={p.external.remove}>Quitar del mapa</button></span>
+        </div>
+      ) : <div className="cut-row">
         <p className="meta cut-name">{[p.cuts.length > 0 && `Corte: ${p.cuts.map((id) => cutName(p.network, id)).join(", ")}`, p.outBuses.length > 0 && `Subestaciones fuera de servicio: ${p.outBuses.map((id) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id)).join(", ")}`].filter(Boolean).join(". ")}</p>
         <button className="secondary-btn" onClick={() => p.restore()}>{p.outBuses.length === 0 ? (p.cuts.length > 1 ? "Volver a conectar todas" : "Volver a conectar") : p.cuts.length + p.outBuses.length > 1 ? "Reponer todo" : "Volver a encender"}</button>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -212,17 +221,30 @@ function History(p: Props) {
     const card = ref.current, row = card?.querySelector(".event.current");
     if (!card || !row) return;
     const c = card.getBoundingClientRect(), r = row.getBoundingClientRect();
-    const head = 40; // the sticky card head covers the top of the list
+    // The sticky head and its 4 px mask cover the top of the list: rows count as visible below that edge.
+    const headEl = card.querySelector<HTMLElement>(".card-head");
+    const edge = () => (headEl?.getBoundingClientRect().bottom ?? c.top + 40) + 4;
     if (r.bottom > c.bottom) card.scrollTop += r.bottom - c.bottom + 8;
-    else if (r.top < c.top + head) card.scrollTop -= c.top + head - r.top;
+    else if (r.top < edge()) card.scrollTop -= edge() - r.top;
+    // A row cut in half under the sticky head reads as a stray line (G-25): scroll it fully under the head. The current
+    // row moves up by as much, so it stays in view.
+    hideHalfRow(card);
     // The card can itself end below the panel: then move the panel just enough for the row to be whole.
     const body = card.closest(".panel-body");
     if (!body) return;
     const b = body.getBoundingClientRect(), r2 = row.getBoundingClientRect();
     if (r2.bottom > b.bottom - 12) body.scrollTop += r2.bottom - b.bottom + 12;
   }, [current]);
+  // The card changes height as the cards above it grow at the end of the run: check the half row again then.
+  useEffect(() => {
+    const card = ref.current;
+    if (!card || typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(() => hideHalfRow(card));
+    watch.observe(card);
+    return () => watch.disconnect();
+  }, []);
   return (
-    <div className="card history" ref={ref}>
+    <div className={visible > 3 ? "card history tall" : "card history"} ref={ref}>
       <div className="card-head pad"><div className="title"><h3>Historial de eventos</h3></div><span className="unit">{visible} de {events.length}</span></div>
       {events.slice(0, visible).map((e, i) => (
         <button key={i} className={i === current ? "event current" : "event"} aria-current={i === current || undefined} onClick={() => { setChosen({ i, t: e.t }); p.seek(e.t); }}>
@@ -235,8 +257,27 @@ function History(p: Props) {
   );
 }
 
+/**
+ * A row cut in half under the sticky head reads as a stray line (G-25): scroll it fully under the head (the head's real
+ * edge plus its 4 px mask). The rows below move up by as much, so the current row stays in view.
+ */
+function hideHalfRow(card: HTMLElement) {
+  card.style.paddingBottom = "";
+  const top = (card.querySelector(".card-head")?.getBoundingClientRect().bottom ?? card.getBoundingClientRect().top + 40) + 4;
+  const rows = [...card.querySelectorAll<HTMLElement>(".event")];
+  const cut = rows.find((e) => e.getBoundingClientRect().bottom > top + 1);
+  if (!cut || cut.classList.contains("current")) return;
+  const r = cut.getBoundingClientRect();
+  if (r.top >= top - 1) return;
+  // At the end of the list there may be no room left to scroll: a little bottom padding makes it (at most one row).
+  const room = card.scrollHeight - card.clientHeight - card.scrollTop;
+  const need = r.bottom - top;
+  if (need > room) card.style.paddingBottom = `${8 + need - room}px`;
+  card.scrollTop += need;
+}
+
 const ZONE_NAME: Record<string, string> = { NG: "Norte Grande", NC: "Norte Chico", CE: "Centro", CS: "Centro-sur", SU: "Sur" };
-const SUPPLY_TIP = "Por zona: personas que sus subestaciones generadoras deberían alimentar antes de la falla y las que siguen alimentando cuando la cascada se asienta, con el porcentaje (POST /grids/simulate, reparto por flujo DC; supuesto del modelo). Sobre 100 % significa que esa zona toma gente que antes alimentaban otras. Se muestra por zona, nunca como ranking de subestaciones (docs/cyber.md 8.2).";
+const SUPPLY_TIP = "Por zona: personas que sus subestaciones generadoras deberían alimentar antes de la falla y las que siguen alimentando cuando la cascada se asienta, con el porcentaje, repartidas según el flujo de potencia del modelo (supuesto del modelo). Sobre 100 % significa que esa zona toma gente que antes alimentaban otras. Se muestra por zona, nunca como un ranking de subestaciones.";
 
 /** Supply per zone after the cascade: who the generators should feed against who they still feed. */
 function SupplyCard({ supply }: { supply: Supply }) {
@@ -249,7 +290,7 @@ function SupplyCard({ supply }: { supply: Supply }) {
       {zones.map(([z, v]) => (
         <div className="state-row" key={z}>
           <span className="ellipsis">{ZONE_NAME[z] ?? z} · {int(v.should_feed)} → {int(v.feeds)}</span>
-          <span className={v.pct_fed < 100 ? "num fault" : "num"}>{v.pct_fed.toFixed(2)} %</span>
+          <span className={v.pct_fed < 100 ? "num fault" : "num"}>{pct2(v.pct_fed)}</span>
         </div>
       ))}
     </div>

@@ -54,6 +54,17 @@ export type ScenarioKind = "disaster" | "condition";
 type Folder = "desastres" | "condiciones";
 const same = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
+/**
+ * "Apagón 2011 · Ancoa" as parts that wrap as a whole. Each part after the first carries its own separator, and the
+ * separator of a part that starts a line falls outside the row and is clipped (cascade.css `.name-parts`), so no line
+ * starts or ends with a lone dot.
+ */
+function nameParts(name: string) {
+  const parts = name.split(" · ");
+  if (parts.length < 2) return name;
+  return <span className="name-parts">{parts.map((x, i) => <span key={i} className="name-part">{x}</span>)}</span>;
+}
+
 /** The disaster the grid is showing right now: same hour and exactly its changes. */
 export function activeDisaster(pointId: string, edits: Edits): Disaster | null {
   return DISASTERS.find((d) => d.point === pointId && same(d.edits.lines, edits.lines) && same(d.edits.buses, edits.buses)) ?? null;
@@ -84,7 +95,7 @@ export function ScenarioTree({ points, pointId, edits, open, locked, last = "dis
   const entry = (key: string, name: string, date: string, on: boolean, choice: ScenarioChoice, title?: string, note?: string) => (
     <button key={key} className={on ? "condition on" : "condition"} aria-current={on || undefined} title={locked ? undefined : title}
       aria-disabled={locked && !on ? "true" : undefined} data-tip={locked && !on ? locked : undefined} onClick={() => !locked && open(choice)}>
-      <span className="cond-name">{name}</span>
+      <span className="cond-name">{nameParts(name)}</span>
       <span className="cond-date">{date}</span>
       {note && <span className="cond-note">{note}</span>}
     </button>

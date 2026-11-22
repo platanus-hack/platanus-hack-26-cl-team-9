@@ -115,6 +115,6 @@ describe("NetworkState", () => {
     cleanup();
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
     setup({ edits: { lines: ["L1"], buses: [] }, timeline });
-    await waitFor(() => expect(screen.getByText("No se pudo calcular el costo (500).")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("No se pudo calcular el costo.")).toBeTruthy());
   });
 });

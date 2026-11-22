@@ -48,15 +48,15 @@ export function GridSources({ current, composed, busy, apply, reset, locked }: {
       {expanded && (
         <div className="scenarios sources" role="group" aria-label="Redes disponibles">
           {error && <p className="source-note" role="alert">{error} <button className="text-btn" onClick={load}>Reintentar</button></p>}
-          {!error && !catalog && <p className="source-note">Leyendo el catálogo…</p>}
+          {!error && !catalog && <p className="source-note">Leyendo las redes…</p>}
           {catalog?.grids.map((g) => (
             <label className="source-row" key={g.country} title={locked ? "En una sesión compartida la grilla está fija" : undefined}>
               <input type="checkbox" checked={checked.has(g.country)} disabled={busy || locked} onChange={() => tick(g.country)} />
               <span className="ellipsis">{g.name}</span>
-              <span className={`source-status ${g.status.toLowerCase()}`}>{g.status}</span>
+              <span className={`source-status ${g.status.toLowerCase()}`}>{g.status === "Complete" ? "simulación" : "solo para ver"}</span>
             </label>
           ))}
-          {composed && !busy && !locked && <button className="text-btn source-reset" onClick={reset}>Volver a la caché</button>}
+          {composed && !busy && !locked && <button className="text-btn source-reset" onClick={reset}>Volver a la red de la app</button>}
           {busy && <p className="source-note">Componiendo…</p>}
         </div>
       )}

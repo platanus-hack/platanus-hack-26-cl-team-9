@@ -41,7 +41,6 @@
 .shell .chat-form textarea:disabled { color: var(--faint); }
 .shell .chat-form-foot { display: flex; align-items: center; gap: 10px; }
 .shell .chat-form-foot .primary-btn { margin-left: auto; }
-.shell .assistant .primary-btn:disabled { background: var(--selected); color: var(--faint); cursor: default; }
 .shell .chat-intro { display: flex; align-items: flex-start; gap: 12px; }
 .shell .chat-intro .meta { flex: 1; }
 .shell .chat-intro .text-btn { flex-shrink: 0; }

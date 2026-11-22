@@ -12,8 +12,10 @@ export function SessionBar({ s, compact }: { s: Session; compact?: boolean }) {
   const [text, setText] = useState("");
   const label = s.sid ? `Sesión ${s.session?.label ?? s.sid.slice(0, 6)}` : "";
   const name = s.sid && <span className="session-name" title={label}>{label}</span>;
+  // The revision counts the saved changes; it says something in the session card, not in the strip (WP2 hand-over).
+  const revision = !compact && s.session ? <span className="tag" title="Número de cambios guardados en la sesión">revisión {s.session.revision}</span> : null;
   const tags = <>
-    {s.session && <span className="tag">rev. {s.session.revision}</span>}
+    {revision}
     {s.live && <span className={`tag ${s.live === "sse" ? "live" : "poll"}`} title={s.live === "sse" ? "Recibe los cambios al instante" : "Consulta la sesión cada 2 s"}>{s.live === "sse" ? "en vivo" : "sondeo"}</span>}
   </>;
   if (compact) return s.sid ? (

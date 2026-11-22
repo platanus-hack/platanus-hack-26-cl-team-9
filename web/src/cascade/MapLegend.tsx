@@ -1,7 +1,10 @@
 import { HEAT_ENDS, HEAT_OPTIONS, heatGradient, type HeatKind } from "./heat";
 import { DEAD_LINE, FAULT, LOAD_BANDS, OPEN_LINE, VOLTAGE_TIERS, loadColor, type ColorMode } from "./layers";
 import type { Frame, Network } from "./types";
-import { Chevron } from "./ui";
+import { TECH_COLORS, TECH_NAMES } from "../map/layers";
+import type { RegionalGrid } from "../map/regional";
+
+const MODES: [ColorMode, string][] = [["voltage", "Tensión"], ["load", "Carga"]];
 
 /**
  * Legend card at the bottom right (Design v5). It lists line samples, never a segmented bar. The load legend always
@@ -18,16 +21,16 @@ export function MapLegend({ mode, setMode, network, frame, cascade = false, just
     <section className="legend-card" aria-label="Leyenda">
       <div className="legend-head">
         <h3>Color de líneas</h3>
-        <label className="legend-mode">
-          <span>{mode === "voltage" ? "Tensión" : "Carga"}</span><Chevron />
-          <select aria-label="Qué indica el color de las líneas" value={mode} onChange={(e) => setMode(e.target.value as ColorMode)}>
-            <option value="voltage">Tensión</option>
-            <option value="load">Carga</option>
-          </select>
-        </label>
+        {/* The existing segmented control instead of a native select (D16, E-15). */}
+        <div className="seg legend-seg" role="group" aria-label="Qué indica el color de las líneas">
+          {MODES.map(([m, label]) => <button key={m} className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>{label}</button>)}
+        </div>
       </div>
-      {mode === "voltage" ? <VoltageSamples network={network} /> : <LoadSamples network={network} frame={frame} />}
-      {cascade && <div className="samples just-dark"><Sample label="recién sin suministro" absent={!justDark} fault ring /></div>}
+      {/* "recién sin suministro" is one more cell of the grid, with a visible ring (E-14, G-27). */}
+      <div className="samples">
+        {mode === "voltage" ? <VoltageSamples network={network} /> : <LoadSamples network={network} frame={frame} />}
+        {cascade && <Sample label="recién sin suministro" absent={!justDark} fault ring />}
+      </div>
       {heat && <HeatKey {...heat} />}
       <p className="legend-foot">
         {mode === "voltage"
@@ -40,7 +43,7 @@ export function MapLegend({ mode, setMode, network, frame, cascade = false, just
 
 function VoltageSamples({ network }: { network: Network }) {
   const present = VOLTAGE_TIERS.filter((tier, i) => network.lines.some((l) => l.kv >= tier.minKv && (i === 0 || l.kv < VOLTAGE_TIERS[i - 1].minKv)));
-  return <div className="samples">{present.map((t) => <Sample key={t.label} label={t.label} style={{ background: t.color, height: Math.max(2, t.width + 1) }} />)}</div>;
+  return <>{present.map((t) => <Sample key={t.label} label={t.label} style={{ background: t.color, height: Math.max(2, t.width + 1) }} />)}</>;
 }
 
 function LoadSamples({ network, frame }: { network: Network; frame: Frame | undefined }) {
@@ -54,24 +57,24 @@ function LoadSamples({ network, frame }: { network: Network; frame: Frame | unde
   });
   const has = (s: string) => states.includes(s);
   return (
-    <div className="samples">
+    <>
       {LOAD_BANDS.map((b, i) => <Sample key={b.label} label={b.label} absent={!has(b.color)} fault={i === 3} style={{ background: b.color, height: i === 3 ? 4 : 3 }} />)}
-      <Sample label="sin tensión" absent={!has("dead")} style={{ background: DEAD_LINE, height: 4, outline: "1px solid #FFFFFF40" }} />
+      <Sample label="sin tensión" absent={!has("dead")} outlined style={{ background: DEAD_LINE, height: 4 }} />
       <Sample label="fuera" absent={!has("open")} dashed />
-    </div>
+    </>
   );
 }
 
-function Sample({ label, style, absent = false, fault = false, dashed = false, ring = false }: { label: string; style?: React.CSSProperties; absent?: boolean; fault?: boolean; dashed?: boolean; ring?: boolean }) {
+function Sample({ label, style, absent = false, fault = false, dashed = false, ring = false, outlined = false }: { label: string; style?: React.CSSProperties; absent?: boolean; fault?: boolean; dashed?: boolean; ring?: boolean; outlined?: boolean }) {
   return (
     <div className={absent ? "sample absent" : fault ? "sample fault" : "sample"}>
       {/* A fixed-height slot centers swatches of every thickness, so all labels sit on one line. */}
       <span className="swatch-slot">
         {ring
-          ? <svg width="28" height="6" viewBox="0 0 28 6" aria-hidden><circle cx="4" cy="3" r="2.4" fill="none" stroke={FAULT} strokeWidth="1.3" /></svg>
+          ? <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><circle cx="5" cy="5" r="4" fill="none" stroke={FAULT} strokeWidth="1.5" /></svg>
           : dashed
           ? <svg width="28" height="4" viewBox="0 0 28 4" aria-hidden><path d="M0 2H28" fill="none" stroke={OPEN_LINE} strokeWidth="2" strokeDasharray="3 2.5" /></svg>
-          : <span className="swatch" style={style} />}
+          : <span className={outlined ? "swatch outlined" : "swatch"} style={style} />}
       </span>
       <span>{label}</span>
     </div>
@@ -90,5 +93,27 @@ function HeatKey({ kind, pending, error }: { kind: Exclude<HeatKind, "none">; pe
         <span className="heat-ends"><span>{low}</span><span>{high}</span></span>
       </>}
     </div>
+  );
+}
+
+/**
+ * Compact legend of a view-only network (E-28, G-06): its voltage tiers and the plant technologies it draws, always in
+ * Tensión. It names no source: the panel and Ayuda do.
+ */
+export function RegionalMapLegend({ grid }: { grid: RegionalGrid }) {
+  const tiers = VOLTAGE_TIERS.filter((tier, i) => grid.lines.some((l) => l.kv >= tier.minKv && (i === 0 || l.kv < VOLTAGE_TIERS[i - 1].minKv)));
+  const techs = Object.keys(TECH_COLORS).filter((t) => grid.plants.some((p) => p.tech === t));
+  const rgb = (c: number[]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+  return (
+    <section className="legend-card compact" aria-label="Leyenda">
+      <div className="legend-head"><h3>Tensión</h3><span className="unit">red solo para ver</span></div>
+      <div className="samples">{tiers.map((t) => <Sample key={t.label} label={t.label} style={{ background: t.color, height: Math.max(2, t.width + 1) }} />)}</div>
+      {techs.length > 0 && <>
+        <h4 className="subhead">Generación por tecnología</h4>
+        <div className="samples techs">{techs.map((t) => (
+          <div className="sample tech" key={t}><span className="tech-dot" style={{ background: rgb(TECH_COLORS[t]) }} /><span>{TECH_NAMES[t] ?? t}</span></div>
+        ))}</div>
+      </>}
+    </section>
   );
 }

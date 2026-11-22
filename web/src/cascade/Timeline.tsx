@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { BLACKOUT_HZ, floorTenths, islandDash, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
 import { hz, secs } from "./text";
 import type { Timeline as TimelineData } from "./types";
-import { Chevron, Info } from "./ui";
+import { Info } from "./ui";
 
 export const TRACK_W = 290;
 export const SPEEDS = [1, 2, 4];
@@ -51,12 +51,10 @@ export function TimelineCard(p: Props) {
         <span className="clock">{p.clock}</span>
         <div className="timeline-tools">
           {p.timeline && <Readout islands={p.islands} blackout={!!p.blackout} />}
-          <label className="speed">
-            <span>{p.speed}×</span><Chevron />
-            <select aria-label="Velocidad" value={p.speed} onChange={(e) => p.setSpeed(Number(e.target.value))}>
-              {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
-            </select>
-          </label>
+          {/* The segmented control, not a native select (D16, E-15). */}
+          <div className="seg speed-seg" role="group" aria-label="Velocidad">
+            {SPEEDS.map((s) => <button key={s} className={p.speed === s ? "on" : ""} aria-pressed={p.speed === s} onClick={() => p.setSpeed(s)}>{s}×</button>)}
+          </div>
         </div>
       </div>
       {!p.timeline ? (

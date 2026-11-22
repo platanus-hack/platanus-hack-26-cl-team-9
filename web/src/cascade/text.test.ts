@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clock, conditionDate, conditionName, cutName, errorText, hoursText, index2, narrate, OFFLINE, shutdownNode, substationLines, usdM } from "./text";
+import { clock, conditionDate, conditionName, cutName, errorText, hoursText, index2, narrate, OFFLINE, assumptionTitle, pct2, placeName, plainAssumption, shutdownNode, substationLines, usdM } from "./text";
 import type { Event, Network } from "./types";
 
 describe("operating condition labels", () => {
@@ -87,5 +87,33 @@ describe("texts", () => {
     expect(errorText(new TypeError("Failed to fetch"))).toBe(OFFLINE);
     expect(errorText(new Error("NetworkError when attempting to fetch resource."))).toBe(OFFLINE);
     expect(errorText(new Error("Indica al menos una línea o una subestación"))).toBe("Indica al menos una línea o una subestación");
+  });
+});
+
+describe("no developer text on screen (D11)", () => {
+  it("drops a command or a file named in a server message", () => {
+    expect(errorText(new Error("No hay catálogo de grillas publicado (cascadasen-grids publish)"))).toBe("No hay catálogo de grillas publicado");
+    expect(errorText(new Error("Falló la red (ver data/processed/geo/lines.geojson)."))).toBe("Falló la red.");
+    expect(errorText(new Error("Valor fuera de rango (entre 0 y 5)"))).toBe("Valor fuera de rango (entre 0 y 5)");
+  });
+  it("words an engine assumption without its doc reference", () => {
+    expect(plainAssumption("Una línea se abre cuando supera 120% de su capacidad (supuesto de docs/stack.md 4.3). Las protecciones reales dependen de relés."))
+      .toBe("Una línea se abre cuando supera 120% de su capacidad (supuesto del modelo). Las protecciones reales dependen de relés.");
+    expect(plainAssumption("Baterías en modo rápido: retardo 200 ms y rampa 300 ms (stack.md 4.5), sin límite de energía.")).toBe("Baterías en modo rápido: retardo 200 ms y rampa 300 ms, sin límite de energía.");
+  });
+  it("titles an assumption row by its label, its first sentence or its first words", () => {
+    expect(assumptionTitle("Flujo DC: sin pérdidas, sin tensión ni potencia reactiva.")).toBe("Flujo DC");
+    expect(assumptionTitle("Una línea se abre cuando supera 120% de su capacidad (supuesto del modelo). Las protecciones reales dependen de relés.")).toBe("Una línea se abre cuando supera 120% de su capacidad (supuesto del modelo).");
+    expect(assumptionTitle("Despacho y demanda son simulados, no medidos.")).toBe("Despacho y demanda son simulados, no medidos.");
+    expect(assumptionTitle("x ".repeat(80)).endsWith("…")).toBe(true);
+  });
+  it("gives well-known place names their accents back, never touching codes or owners", () => {
+    expect(placeName("S/E NUEVA PAN DE AZUCAR")).toBe("Nueva Pan de Azúcar");
+    expect(placeName("S/E CONCEPCION (FFCC)")).toBe("Concepción (FFCC)");
+    expect(placeName("S/E CERRO NAVIA (TRANSELEC)")).toBe("Cerro Navia (TRANSELEC)");
+  });
+  it("writes two-decimal percentages with a decimal comma (D15)", () => {
+    expect(pct2(29.94)).toBe("29,94 %");
+    expect(pct2(100)).toBe("100,00 %");
   });
 });

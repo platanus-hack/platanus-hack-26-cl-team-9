@@ -14,7 +14,6 @@
 .shell .seg.cy-defense button.on:disabled { color: #18191b; }
 .shell .cy-go-row { display: flex; align-items: center; gap: 12px; }
 .shell .cy-go-row .meta { flex: 1; min-width: 0; }
-.shell .cyber .primary-btn:disabled { background: var(--selected); color: var(--faint); cursor: default; }
 .shell .cy-params { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
 .shell .cy-params[open] > summary { margin-bottom: 8px; }
 .shell .cy-params > .meta { margin-bottom: 8px; }

@@ -30,7 +30,6 @@
 .shell .inc-options .seg button.on:disabled { color: #18191b; }
 .shell .inc-go-row { display: flex; align-items: center; gap: 12px; }
 .shell .inc-go-row .meta { flex: 1; min-width: 0; }
-.shell .incidents .primary-btn:disabled { background: var(--selected); color: var(--faint); cursor: default; }
 
 /* ---- Result ---- */
 .shell .inc-heading:focus { outline: none; }

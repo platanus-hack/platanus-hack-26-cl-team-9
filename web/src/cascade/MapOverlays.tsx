@@ -12,7 +12,7 @@ export interface LocatedMarker { marker: Marker; lon: number; lat: number; zone:
  * HTML layer over the map: event pins, the current event's callout and, on the offline map, city names. Each anchor
  * carries data-lon/data-lat; the app's animation loop moves it to the projected point every frame.
  * The callout does not follow its pin: it sits docked in the quiet corner next to the panel, so it never covers the
- * network and no line crosses it. The pin stays on the map, marked as the current one. "Cerrar" hides the callout until
+ * network, and a 1 px leader joins it to the pin, which stays marked as the current one (E-13, G-17). "Cerrar" hides the callout until
  * another event becomes current or a pin is clicked (A2-12). Pins that would overlap are spread apart by the shell's
  * animation loop (`_placeOverlays`), so a group never covers another pin (A2-06).
  */
@@ -51,6 +51,8 @@ export function MapOverlays(p: { markers: LocatedMarker[]; states: Map<Marker, M
           </div>
         );
       })}
+      {/* The leader joins the callout to its pin; CascadeApp `_placeOverlays` sets its ends every frame. */}
+      {docked && closed !== docked.number && <svg className="leader" aria-hidden><line x1="0" y1="0" x2="0" y2="0" /></svg>}
       {docked && closed !== docked.number && (
         <div className="callout docked" role="status">
           <div className="callout-head"><span className="fault">{secs(docked.now.t)} s · evento {docked.number}</span><span>{docked.zone}</span>
