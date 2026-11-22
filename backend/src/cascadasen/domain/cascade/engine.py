@@ -18,6 +18,7 @@ from cascadasen.domain.simulation.params import load_params, value
 
 from .flow import dc_flow, find_islands
 from .frequency import (
+    EdacStep,
     IslandInput,
     IslandResult,
     Params,
@@ -36,6 +37,7 @@ ASSUMPTIONS = [
     "Reserva primaria 4% de la potencia sincrónica en línea con estatismo 5%, constante de tiempo 3 s y amortiguamiento de carga 1,5 %/Hz: supuestos sin calibrar.",
     "La inercia de cada isla es la de las unidades sincrónicas en línea; solar y eólica no aportan. Una unidad que sale antes del transitorio ya no cuenta.",
     "EDAC con los escalones del informe del CEN sobre el 25F (centro-sur y Norte Grande); los MW de cada escalón se interpolan entre demanda baja y alta. El EDAC por contingencia extrema no se modela.",
+    "Una isla que se vuelve a partir parte de nuevo en 50 Hz con la tabla EDAC completa y cuenta como disponible la reserva que ya entregó: puede contar dos veces escalones EDAC y reserva.",
     "Baterías en modo rápido: retardo 200 ms y rampa 300 ms (stack.md 4.5), sin límite de energía en el transitorio de 20 s.",
     "No hay desconexión de generación por frecuencia o tensión (ride-through) salvo la reducción por sobrefrecuencia de solar y eólica.",
     "Despacho y demanda del punto de operación son simulados o modelados (PyPSA-CL), no medidos.",
@@ -52,6 +54,9 @@ class CascadeParams:
     stage_spacing_s: float = float(value(_C["stage_spacing_s"]))
     local_cut_mw: float = float(value(_C["local_cut_mw"]))
     frequency: Params = field(default_factory=Params)
+    # Off by default (issue #90, docs/engine.md "Re-split islands"): a sub-island of a re-split island runs the full
+    # EDAC table and a reserve cap that includes the reserve already deployed. On, it keeps what its parent used.
+    resplit_memory: bool = False
 
 
 @dataclass
@@ -75,6 +80,9 @@ class _State:
     prefault_boundary_mw: float = 0.0  # pre-fault flow across the 25F boundary, positive north to south
     voltage_ends: tuple[int, int] | None = None  # 25F corridor ends whose separation collapses both islands
     stage: int = 0  # cascade stage being settled (tags the island events)
+    # what an island already used, so a sub-island of a later split does not use it again
+    edac_fired: list[set[tuple[str, int]]] = field(default_factory=list)  # (zone, step index) per bus
+    reserve_used: np.ndarray | None = None  # primary reserve already deployed, MW per bus
 
 
 @dataclass
@@ -210,6 +218,8 @@ def _start(net, point, params, cut_ids, already_open: set[str] | None = None) ->
         {},
         set(),
     )
+    state.edac_fired = [set() for _ in range(net.size)]
+    state.reserve_used = np.zeros(net.size)
     if cut_ids:
         state.events.append(
             {"t": 0.0, "type": "line_cut", "ids": list(cut_ids), "text_key": "line_cut", "params": {}}
@@ -330,23 +340,32 @@ F0_HZ = 50.0
 def _island_input(
     s: _State, island: list[int], inertia: float, sync: float, gen: float, load: float
 ) -> IslandInput:
+    """With `resplit_memory`, a sub-island of a re-split island keeps what its parent used: EDAC steps that
+    already fired shed nothing again (their loads are already off), and the reserve cap counts the reserve
+    already deployed (sync_mw is the units' output before that reserve, so the governor gain is unchanged)."""
     system_zone = zone_load(s.net, s.point.load, list(range(s.net.size)))
+    memory = s.params.resplit_memory
+    fired = set().union(*(s.edac_fired[b] for b in island)) if memory else set()
     edac = {
-        z: steps
+        z: [
+            EdacStep(st.threshold_hz, 0.0, st.gradient) if (z, j) in fired else st
+            for j, st in enumerate(steps)
+        ]
         for z, steps in edac_tables(system_zone, float(s.point.load.sum())).items()
         if z not in s.edac_off
     }
+    used = float(s.reserve_used[island].sum()) if memory else 0.0
     extra = float(s.extra_reserve[island].sum()) if s.extra_reserve is not None else 0.0
     battery = float(s.battery[island].sum()) if s.battery is not None else 0.0
     return IslandInput(
         inertia,
-        sync,
+        sync - used,
         gen,
         load,
         float(s.gen[island].sum() - s.sync[island].sum()),
         zone_load(s.net, s.load, island),
         edac,
-        extra,
+        extra - used,
         battery,
     )
 
@@ -380,6 +399,9 @@ def _apply_result(s: _State, island: list[int], sim: IslandResult, t: float) -> 
         return info
     _shed_load(s, island, sim.shed_mw)
     _share_reserve(s, island, sim)
+    for step in sim.steps:
+        for b in island:
+            s.edac_fired[b].add((step["zone"], step["step"] - 1))
     s.events.append(
         {
             "t": round(t + s.params.frequency.horizon_s, 2),
@@ -441,6 +463,7 @@ def _share_reserve(s: _State, island: list[int], sim: IslandResult) -> None:
         share = sim.reserve_mw * sync / sync.sum()
         s.gen[island] += share
         s.sync[island] += share
+        s.reserve_used[island] += share
     nonsync = np.maximum(s.gen[island] - s.sync[island], 0.0)
     if nonsync.sum() > 0 and sim.curtailed_mw > 0:
         s.gen[island] -= sim.curtailed_mw * nonsync / nonsync.sum()

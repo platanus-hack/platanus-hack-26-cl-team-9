@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cascade): optional re-split memory for EDAC steps and reserve
+
+- **Changed:** `_State` keeps `edac_fired` (the `(zone, step index)` that fired, per bus) and `reserve_used` (primary reserve deployed, MW per bus). With `CascadeParams(resplit_memory=True)`, `_island_input` passes the fired steps with fraction 0 (indices and step numbers stay). It also gives `sync_mw` without the deployed reserve (same governor gain) and lowers the reserve cap by the reserve already deployed (`extra_reserve_mw - used`). `frequency.py` is unchanged.
+- **Changed:** The flag is **off by default**. The default behaviour (a sub-island runs the full EDAC table again and counts its parent's deployed reserve as headroom) is a new line in `ASSUMPTIONS`, `docs/engine.md` item 5 "re-split islands", and `plan.md` §9 item 16.
+- **Why:** Issue #90 plan step A3, with the fallback the user approved: "if it turns out to be a large change, document it as an assumption". The code is small, but turning it on changes `nov2026-2000/R239` from 3.9 M to 14.7 M people. It also breaks `test_flagship.py::test_adaptive_coordination_keeps_most_of_the_mission` (policy C 0.9425 < A 0.9508 at seed 7).
+- **Agents:** Islands only split (lines only open), so a new island's buses all share one parent's fired steps. Turning the flag on is a team decision (`plan.md` §9 item 16). It needs a cache regeneration and a look at the flagship scenario.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`, `docs/{engine,plan}.md`.
+
 ## 2026-11-22 · feat(cascade): list dark bus ids on island_blackout
 
 - **Changed:** `_lose_island` fills `island_blackout.ids` with the island's buses (`B###`). `_settle_islands` emits no `island_formed` when nothing split (stage 0 with one island), and the `load_mw` of `island_formed` and `island_blackout` is clamped at 0 (a lone bus with net negative load).
