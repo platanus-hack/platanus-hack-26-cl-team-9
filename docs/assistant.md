@@ -112,7 +112,8 @@ The web reads `/chat/stream` and shows each step while the model works. It needs
 - **Persistence.** The conversation id is kept in `localStorage` under `sub50.assistant.cid` (wrapped in try/catch). On load the web rebuilds the chat with `GET /conversations/{cid}`; a 404 forgets the id. That route does not say which turn ran each tool and carries no `notice`, so a restored chat shows the replies, the earlier texts of each answer, and one collapsed list "Herramientas que ya usó esta conversación (N)". Restoring joins the conversation's session only when no session is on screen.
 - **Errors.** Before the stream: 422 and 413 "El mensaje está vacío o supera 2000 caracteres.", 429 "Demasiados mensajes; espera N s." (from `Retry-After`), 404 forgets the id, 503 disables the chat. In the stream (`error`): 502 "El modelo falló; tu mensaje quedó guardado, intenta de nuevo.", 409 "Otro mensaje de esta conversación estaba corriendo; reintenta.", 500 generic. A stream that closes without `done` or `error` marks the turn interrupted and re-reads the conversation up to 5 times, 3 s apart, because the backend still finishes and saves it.
 - **Guardrails.** The panel only shows what the tools returned. The summaries repeat fields of the result; the scenario `notice` (with the assumption note) is shown under each reply.
-- Checked on 2026-11-21 against a local backend whose model was a scripted stand-in (the real app and routes, not Bedrock), with headless Chromium: live cards, `?sesion=` set, datacenter in Datos and cascade playing without reload, second message on the same session, chat restored after reload, **Nueva conversación** clearing it. A live check against Bedrock is still pending.
+- Checked on 2026-11-21 against a local backend whose model was a scripted stand-in (the real app and routes, not Bedrock), with headless Chromium: live cards, `?sesion=` set, datacenter in Datos and cascade playing without reload, second message on the same session, chat restored after reload, **Nueva conversación** clearing it. Also with the stand-in: a run with `step` (snapshot summary on the card), the truncation notice with **Continuar**, the 502, 429 and 503 texts, and a stream cut before `tool_result` recovered by re-reading the conversation.
+- Checked on 2026-11-22 against Bedrock (`deepseek.v3.2`) in the browser: the datacenter + R014 request (`start_session`, `add_datacenter`, `cut_lines`), a second message repairing R014 on the same session, reload, **Nueva conversación**, and a strategic run (`start_run`, `inject_event`, `step` of 3 cycles). The phone layout does not fit, as in the rest of mapa 3.
 
 ## 3. How it works
 
@@ -127,6 +128,7 @@ The web reads `/chat/stream` and shows each step while the model works. It needs
 - If the model ends a turn promising an action ("la cortaré") with no tool call, no question and no offer ("dime…", "si quieres…"), the loop adds one hidden user message telling it to act now (`announces`, `NUDGE`). Hidden messages never appear in `GET /conversations/{cid}`.
 - The deadline is predictive: a model call is not started when the elapsed time plus the mean duration of this message's calls would pass `assistant_deadline_s`.
 - `tool_calls` in the response carries each call's `arguments`.
+- `deepseek.v3.2` on Converse sometimes ends a text block with the start of its own tool-call markup (`<｜DSML｜function_calls`) next to a real `toolUse` block. `clean_text` in `infrastructure/llm_tools.py` cuts the text at the first `<｜…｜` marker, so the stream, the reply and the stored history stay clean.
 
 ## 4. Guardrails
 
@@ -139,7 +141,6 @@ Same as `cyber.md` section 8, `sessions-api.md` section 11 and `mcp.md` section 
 
 ## 5. Not done
 
-- A live check of the web chat against Bedrock (section 2c).
 - Other providers (`anthropic`, `bedrock` Messages API).
 - Terraform: the task role has no Bedrock permission and CloudFront keeps its default 30 s origin timeout (`infrastructure/iam.tf`, `cloudfront.tf`).
 - Live test on 2026-11-21 against Bedrock and the 188-bus network with a bench of 17 turns in 5 conversations (edit and cut, strategic run with report and replay, guardrail, ambiguous requests, harder multi-step and prompt injection). `qwen.qwen3-next-80b-a3b` needed most of the guards above and still failed intermittently; `deepseek.v3.2` passed every check across several passes (the only flags were false negatives of the bench), with 1-19 s per message, and is the model set in the team's local `.env`. Other models that call tools through Converse on the account: `moonshotai.kimi-k2.5`, `zai.glm-5`, `mistral.mistral-large-3-675b-instruct`, `openai.gpt-oss-120b-1:0` (not benchmarked). The bench script is not in the repo.
