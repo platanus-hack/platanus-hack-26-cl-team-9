@@ -95,6 +95,18 @@ def _people(net: ReducedNetwork, snapshot: dict) -> np.ndarray:
     return out
 
 
+def people_by_comuna(net: ReducedNetwork, snapshot: dict) -> list[dict[str, float]]:
+    """The same assignment as _people, kept per comuna: entry i maps a comuna cut code to the people bus i serves there."""
+    node_bus = _nearest_bus_per_node(net, snapshot)
+    out: list[dict[str, float]] = [{} for _ in range(net.size)]
+    for comuna in snapshot["comunas"]:
+        for s in comuna["served_by"]:
+            if s["node"] in node_bus:
+                rows = out[node_bus[s["node"]]]
+                rows[comuna["cut"]] = rows.get(comuna["cut"], 0.0) + s["population"]
+    return out
+
+
 def _nearest_bus_per_node(net: ReducedNetwork, snapshot: dict) -> dict[str, int]:
     nearest: dict[str, int] = {}
     for b in sorted(snapshot["model_buses"], key=lambda b: b["kv"]):

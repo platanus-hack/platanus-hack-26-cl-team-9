@@ -1,5 +1,39 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+
+## 2026-11-22 · feat(web): affected-population heat map and Comunas sin suministro in Simulación
+
+- **Changed:** New heat kind `affected` (`heat.ts`): a fault-red heat map of the `people` of the buses in `frame.dark`, so it grows as the cascade plays. New card **Comunas sin suministro** in the Simulación tab (after the impact card, only with a cut or outage): the toggle "Mapa de calor de personas sin suministro", people without supply per comuna at the current second (bar = share of the comuna, "estimado" when partly dark), a line for EDAC people not assigned to a comuna, and the source line "Fuente: INE Censo 2024. Asignación de comunas a subestaciones: supuesto.". The impact card gets a red bar for its share of the country.
+- **Why:** The user asked for a heat map of how many people lose power as the grid fails, as a filter under the simulation category. The Capas popover has only "Capas" and "Mapa de calor"; "Simulación" is a side-panel tab, and the user's mockup is that tab, so the toggle lives there.
+- **Agents:** `affected` is not in `HEAT_OPTIONS`, so it never shows in Capas; it shares the `heat` state, so picking a Capas radio replaces it and while it is on no Capas radio is checked. `affectedByComuna` (`web/src/cascade/affected.ts`) groups dark buses by comuna from `comunas-<year>.json` (`loadComunas` in `api.ts`, null on an old cache), scaling each bus's split to its current `people`; a dark bus with no split becomes a row named after its substation (estimado). EDAC people in surviving islands are not per bus, so the list can sum to less than "Personas sin suministro". Left out: per-comuna circles on the map, outage duration and cost views, a region view, a URL param. Checks run: `cd web && npx tsc --noEmit && npx vitest run && npm run build`; backend ruff, format, mypy and pytest. Not checked in a browser.
+- **Files:** `web/src/cascade/{affected.ts,affected.test.ts,heat.ts,heat.test.ts,api.ts,types.ts,CascadeApp.tsx,SimulationPanel.tsx,cascade.css}`, `docs/mapa3.md`, `docs/dependency.md`.
+
+## 2026-11-22 · feat(cache): people per substation and comuna for the affected-population view
+
+- **Changed:** New `people_by_comuna(net, snapshot)` in `domain/cascade/scenario.py` keeps the comuna of each share that `_people` sums per bus. `cache_builder.comunas_json` / `write_comunas` write `web/public/cache/comunas-<year>.json` (`source`, `is_assumption: true`, `comunas` cut -> name, `buses` B### -> `[[cut, people], ...]`, rounded, sorted by people). Both files (2025, 2026) are committed; they are identical because both networks have the same 188 buses.
+- **Why:** The web "Comunas sin suministro" card groups the people of the dark buses by comuna. The cache had people per bus only; the comuna split lives in `grid_snapshot.json` `comunas[].served_by`.
+- **Agents:** Regenerate the files without rerunning every cut: `cd backend && uv run python -c "from pathlib import Path; from cascadasen.application.cache_builder import write_comunas; write_comunas(Path('../data/processed'), Path('../web/public/cache'), [2025, 2026])"`. `cascadasen-cache` also writes them (from `build_cache_workflow`, not `_build_point`). `_people` was not refactored, so `buses.json` does not move. `test_comunas_file_matches_bus_people_and_the_committed_cache` checks the committed file for drift. No API route changed.
+- **Files:** `backend/src/cascadasen/domain/cascade/scenario.py`, `backend/src/cascadasen/application/cache_builder.py`, `backend/tests/unit/test_cascade.py`, `web/public/cache/comunas-{2025,2026}.json`, `docs/mapa3.md`.
+
+## 2026-11-22 · chore(index): regenerate after merging main into the event pins fix
+
+- **Changed:** `docs/index/repo-index.json` regenerated on `fix/event-pins-above-grid` after merging `origin/main` again (PR #61).
+- **Why:** The branch was cut before #108 brought the index, so the merged tree had an index without this branch's `CHANGELOG.md` entry and stylesheet change; the `repo-index` job would have turned red.
+- **Agents:** The fix itself is the 2026-11-21 entry "fix(web): draw the event pins and callout above the grid". Since #52 the callout is docked next to the panel, so the fix now matters mostly for the numbered event pins and the placed-point pins, which the grid was still painted over on Mapbox. Still not seen in a browser.
+- **Files:** `docs/index/repo-index.json`, `CHANGELOG.md`.
+
+## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
+
+- **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`. After merging #117, three more references that #110 had shifted point at the right line again: `ConverseToolChat.turn` (`llm_tools.py:85`), `simulate` (`grid_routes.py:122`), `prepare_workflow` (`grid_stress.py:55`).
+- **Why:** The `repo-index` job of PR #114 failed: the branch was cut before #108, so the merged tree had an index without its changes.
+- **Agents:** Nothing new: regenerate with `cd backend && uv run python ../scripts/build_index.py` after `git add`, as `docs/index/README.md` says.
+- **Files:** `docs/index/repo-index.json`, `docs/{README.md,code-map.md,for-reviewers.md}`, `backend/tests/unit/test_mcp_tools.py` (the exact digest test from #108 now also checks `overloaded_lines_note`).
+
+## 2026-11-22 · docs(index): regenerate the index and re-point 25 references after #106, #111 and #115
+- **Changed:** `docs/index/repo-index.json` is regenerated and 25 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` follow the code that moved (`sessions.py`, `session_routes.py`, `overlay.py`, `cycle.py`, `run_experiment.py`, `simulation_schemas.py`). No code changed.
+- **Why:** #106 (atomic `add_substation`), #111 (cyberattack scenario) and #115 landed while PR #108 was merging; the informational `repo-index` job was red on `main`.
+- **Agents:** After a change that moves a symbol named in those docs, re-point the reference and regenerate the index.
+- **Files:** `docs/code-map.md`, `docs/for-reviewers.md`, `docs/README.md`, `docs/index/repo-index.json`.
 ## 2026-11-22 · feat(web): tab Componente, reinicio al cambiar de escenario y aparición de islas en el timeline (#118)
 
 - **Changed:** The card of the selected line or substation moved to a fourth tab, **Componente**, which a map click opens; the other tabs show only their own content.
@@ -74,6 +108,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Technical-review follow-up (issue #79): an agent or reviewer finds a file, a symbol, a route or a test with one query instead of reading the tree.
 - **Agents:** Regenerate with `cd backend && uv run python ../scripts/build_index.py` (`--check` verifies) before every commit that adds, removes or edits a source, doc or test file, a route or this file, and `git add` new files first (the builder reads `git ls-files`). The index does not list itself, holds no timestamp or hash, and is byte-identical across runs. Python symbols with no docstring carry `"undocumented": true`. No product code changed.
 - **Files:** `scripts/build_index.py`, `docs/index/{README.md,repo-index.json}`, `backend/tests/integration/test_repo_index.py`.
+
+## 2026-11-22 · fix(assistant): no session for map changes, no comparison the result does not give
+
+- **Changed:** `SessionTools.defers_session`: a first `start_session` at the default point answers `deferred: true` and opens nothing (another point still opens one). The prepared summary carries `overloaded_lines_note`. The system prompt says prepare_scenario needs no session.
+- **Why:** Checked on sub50.cl with the real model after #110: points land right, but the model opened a session before every map change (each counts against the per-IP creation limit), and it said "8 líneas sobrecargadas, las mismas que en la base" when the base had 1.
+- **Agents:** `test_the_conversation_continues_and_can_be_read_and_deleted` now opens its session through `describe_network`.
+- **Files:** `backend/src/cascadasen/mcp/{toolbox,digest}.py`, `backend/src/cascadasen/api/assistant_routes.py`, `backend/tests/{unit/test_assistant.py,integration/test_assistant_api.py}`, `docs/assistant.md`.
 
 ## 2026-11-22 · chore(web): quitar el ítem Validación del menú lateral (#112)
 
@@ -1248,6 +1289,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Agents (and a later MCP wrapper) need a small public spec with only the CRUD, run and catalog endpoints, separate from the full `/docs`.
 - **Agents:** Follow `docs/openapi.md` for every agent route: mark it, set `operation_id` from its list, English summary/description, `responses=errors(...)`, tags. Regenerate with `cd backend && uv run python -m cascadasen.api.agent_openapi` in the same commit, or the test fails. Session routes (`/sessions/*`) still need marking when they land. Tags and English summaries of the marked routes also changed in the full `/docs` (were `experimentos`, Spanish). `ErrorResponse.detail` is `str | object | list` because simulator input errors return `{field, message, valid}`.
 - **Files:** `backend/src/cascadasen/api/{agent_openapi,app,simulation_routes,simulation_schemas}.py`, `backend/tests/integration/test_agent_openapi.py`, `docs/openapi.md`, `docs/openapi/agents.openapi.json`, `docs/{stack,architecture,agents}.md`, `backend/README.md`.
+
+## 2026-11-21 · fix(web): draw the event pins and callout above the grid
+
+- **Changed:** `.shell .map` gets `z-index: 0`, so the map is its own stacking context and the HTML overlays (event pins, callout, first-event label, city names) sit above everything the map draws.
+- **Why:** On the Mapbox basemap the grid lines and the regional generation symbols were painted across the callout text and the numbered pins. Mapbox's control container has `z-index: 2` and holds the deck.gl canvas, `.map-overlays` has `z-index: 1`, and `.map` had no z-index, so both competed in the same stacking context. Found by the browser test of PR #60; it was already there before that PR.
+- **Agents:** The offline map was not affected (its canvas has no z-index). The deck.gl hover tooltip lives inside the map, so it now draws below the pins and the callout. Not seen in a browser yet after the fix. Still open from the same test: a selected out-of-service line is hard to read at country zoom next to its event pin; and against the Design v6 frame the play button sits 14 px lower and the legend is 5 to 6 px taller.
+- **Files:** `web/src/cascade/cascade.css`, `CHANGELOG.md`.
 
 ## 2026-11-21 · feat(web): click selects a line, double click cuts it
 

@@ -5,6 +5,8 @@ export type Origin = "base" | "session";
 export interface NetNode { id: string; name: string; lon: number; lat: number; kv: number; zone: string; map_nodes: string[]; origin?: Origin; overridden?: boolean; in_service?: boolean; is_assumption?: boolean }
 export interface NetLine { id: string; a: string; b: string; kv: number; capacity_mw: number; x_pu: number; map_edges: string[]; branches: string[]; origin?: Origin; overridden?: boolean; is_assumption?: boolean }
 export interface Network { nodes: NetNode[]; lines: NetLine[] }
+/** comunas-<year>.json: people per bus split by comuna (INE Censo 2024); the comuna-to-substation split is an assumption. */
+export interface ComunaPeople { source: string; is_assumption: true; comunas: Record<string, string>; buses: Record<string, [string, number][]> }
 export interface BusState { gen_mw: number; load_mw: number; people: number; origin?: Origin; is_assumption?: boolean }
 export interface EdgeState { flow_mw: number; status: "ok" | "overload" | "open"; loading: number }
 export interface Frame { t: number; edges: Record<string, EdgeState>; dark: string[]; islands: { buses: number; gen_mw: number; load_mw: number }[] }

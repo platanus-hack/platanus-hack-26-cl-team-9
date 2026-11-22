@@ -92,7 +92,7 @@ def test_a_point_lands_at_the_substation_that_serves_the_place(make_app):
 
 
 def test_the_conversation_continues_and_can_be_read_and_deleted(make_app):
-    model = ScriptedModel(calls(("start_session", {})), AssistantTurn("listo"), AssistantTurn("sigo"))
+    model = ScriptedModel(calls(("describe_network", {})), AssistantTurn("listo"), AssistantTurn("sigo"))
     client = TestClient(make_app(model))
     first = client.post(CHAT, json={"message": "crea una sesión"}).json()
     cid, sid = first["conversation_id"], first["session_id"]
@@ -100,7 +100,7 @@ def test_the_conversation_continues_and_can_be_read_and_deleted(make_app):
     assert second["session_id"] == sid and second["reply"] == "sigo"
     read = client.get(f"/api/v1/assistant/conversations/{cid}").json()
     assert [t["role"] for t in read["turns"]] == ["user", "assistant", "user", "assistant"]
-    assert read["tool_calls"][0]["name"] == "start_session"
+    assert read["tool_calls"][0]["name"] == "describe_network"
     assert client.delete(f"/api/v1/assistant/conversations/{cid}").status_code == 204
     assert client.get(f"/api/v1/assistant/conversations/{cid}").status_code == 404
     assert client.get(f"/api/v1/sessions/{sid}").status_code == 200  # the session stays

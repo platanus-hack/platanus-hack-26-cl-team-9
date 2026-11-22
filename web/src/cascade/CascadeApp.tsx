@@ -6,7 +6,8 @@ import { cameraTarget, type LonLat } from "../map/countryBounds";
 import { countryName } from "../map/iso3";
 import { buildRegionalLayers, loadCountryGrid, loadOutline, regionalCountries, regionalFromDocuments, regionalTooltip, type RegionalGrid } from "../map/regional";
 import { deleteUpload, listUploads, newUploadId, saveUpload, type StoredNetwork } from "../map/uploadStore";
-import { loadBuses, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./api";
+import { affectedByComuna } from "./affected";
+import { loadBuses, loadComunas, loadHealth, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourcePick } from "./GridSources";
@@ -29,7 +30,7 @@ import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, recentDarkAt, timeWarp, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
-import type { BusState, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
+import type { BusState, ComunaPeople, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
 import { Icon, TipLayer, Wordmark } from "./ui";
 import { DataPanel } from "../session/DataPanel";
 import { SessionBar } from "../session/SessionBar";
@@ -90,6 +91,7 @@ export function CascadeApp() {
   const [network, setNetwork] = useState<Network | null>(null);
   const [buses, setBuses] = useState<Record<string, BusState>>({});
   const [health, setHealth] = useState<HealthReport | null>(null);
+  const [comunas, setComunas] = useState<ComunaPeople | null>(null); // people per bus and comuna, for "Comunas sin suministro"
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
   // Every change the user made outside a session, kept together (docs/grids.md); a session owns its own cuts.
@@ -179,7 +181,9 @@ export function CascadeApp() {
   const changes = s.sid ? [] : changesOf(edits);
   const heatKey = `${pointId}|${[...cuts].sort()}|${[...outBuses].sort()}|${JSON.stringify(changes)}`;
   const heatData = dependency?.key === heatKey ? dependency.nodes : null;
-  const heatLayerList = useMemo<Layer[]>(() => (network ? heatLayers(heat, heatPoints(heat, network, buses, heatData)) : []), [heat, network, buses, heatData]);
+  const darkSet = useMemo(() => new Set(frame?.dark ?? []), [frame]);
+  const affected = useMemo(() => (network ? affectedByComuna(darkSet, buses, network, comunas) : { people: 0, rows: [] }), [darkSet, buses, network, comunas]);
+  const heatLayerList = useMemo<Layer[]>(() => (network ? heatLayers(heat, heatPoints(heat, network, buses, heatData, darkSet)) : []), [heat, network, buses, heatData, darkSet]);
   const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, colorMode) : []), [shownGrid, colorMode]);
   const contextLayers = useMemo<Layer[]>(() => (isChile && contextGrid ? buildRegionalLayers(contextGrid, colorMode) : []), [isChile, contextGrid, colorMode]);
 
@@ -206,6 +210,8 @@ export function CascadeApp() {
   useEffect(() => _loadPrepared(), [pointId, JSON.stringify(changes)]);
   // Pre-fault health of the base point; null when the cache predates it. Hidden in a session or a composed grid: they change the network.
   useEffect(() => { let live = true; setHealth(null); loadHealth(pointId).then((h) => { if (live) setHealth(h); }); return () => { live = false; }; }, [pointId]);
+  const year = point?.year;
+  useEffect(() => { let live = true; setComunas(null); if (year) loadComunas(year).then((c) => { if (live) setComunas(c); }); return () => { live = false; }; }, [year]);
   useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
   useEffect(() => { if (s.state) { timelineRequest.current = "session"; setLoaded({ key: "session", timeline: s.state.timeline }); setT(0); setPlaying(s.state.open_lines.length > 0); } }, [s.state]);
   useEffect(() => _onSessionChange(), [s.sid]);
@@ -798,7 +804,7 @@ export function CascadeApp() {
           {view === "tabs" && isChile && tab === "sim" && network && (timeline && timelineReady ? (
             <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} totalPeople={totalPeople}
               seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} health={s.sid || composed ? null : health}
-              supply={simResult?.supply ?? null} />
+              supply={simResult?.supply ?? null} affected={affected} heatOn={heat === "affected"} setHeatOn={(on) => setHeat(on ? "affected" : "none")} />
           ) : !error && <Loading text="Cargando la simulación" />)}
           {view === "tabs" && tab === "datos" && (s.network
             ? <DataPanel network={s.network} edit={s.edit} pick={_pick} picking={picking} />
@@ -834,7 +840,7 @@ export function CascadeApp() {
             {HEAT_OPTIONS.map((o) => (
               <label className="check" key={o.kind}><input type="radio" name="heat" checked={heat === o.kind} onChange={() => setHeat(o.kind)} />{o.label}</label>
             ))}
-            {heat !== "none" && <p className="heat-hint">{heatError ?? (needsDependency(heat) && !heatData ? "Calculando en el servidor…" : HEAT_OPTIONS.find((o) => o.kind === heat)?.hint)}</p>}
+            {heat !== "none" && heat !== "affected" && <p className="heat-hint">{heatError ?? (needsDependency(heat) && !heatData ? "Calculando en el servidor…" : HEAT_OPTIONS.find((o) => o.kind === heat)?.hint)}</p>}
           </div>
         )}
       </div>

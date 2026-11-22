@@ -290,6 +290,7 @@ def test_prepare_digest_names_at_most_five_substations_and_drops_the_per_substat
             "assumptions": [{"text": "a1"}, {"text": "a2"}],
         }
     )
+    assert "no las compares" in out.pop("overloaded_lines_note")  # the count has no base to compare with
     assert out == {
         "changes": [
             {"target": "demand", "count": 2, "matched": 2, "at": ["B000 S/E A", "B001 S/E B"]},
