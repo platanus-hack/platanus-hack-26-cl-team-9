@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { BLACKOUT_HZ, floorTenths, islandDash, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
 import { hz, secs } from "./text";
 import type { Timeline as TimelineData } from "./types";
@@ -21,6 +21,18 @@ interface Props {
   failed?: boolean;
   /** Every substation is dark at `t`: the readout says "apagón", never 50 Hz (D3). */
   blackout?: boolean;
+  /** A run played in 5-minute cycles (the Ciberataque): the same card drives it instead of the cascade seconds. */
+  cycles?: CycleRun | null;
+}
+
+/** What the card needs to drive a run in cycles: progress over the horizon, the cycle on screen and its marks. */
+export interface CycleRun {
+  clock: string; status: string; played: number; total: number; at: number; playing: boolean; finished: boolean;
+  /** Cycles worth a mark on the rail: the attack hit an area (red) or the defence eradicated one (light). */
+  marks: { cycle: number; side: "attack" | "defense"; title: string }[];
+  togglePlay(): void; seek(cycle: number): void;
+  /** Extra control at the right of the head: Terminar turno when the user defends, Ver cascada for a cycle. */
+  action?: ReactNode;
 }
 
 /**
@@ -30,6 +42,7 @@ interface Props {
  * said by the cold start card in Simulación, not here.
  */
 export function TimelineCard(p: Props) {
+  if (p.cycles) return <CycleCard c={p.cycles} speed={p.speed} setSpeed={p.setSpeed} />;
   const duration = p.timeline?.duration_s ?? 0;
   const hasCascade = !!p.timeline && p.timeline.events.length > 0;
   const view = p.warp.viewDuration;
@@ -152,5 +165,54 @@ function Readout({ islands, blackout }: { islands: IslandFrequency[]; blackout: 
       </span>
       <Info tip={many ? `${live.map(({ i }) => `${i.name}: ${i.collapsed ? "apagón" : `${hz(i.hz ?? 50)} Hz`}`).join(" · ")}. ${tip}` : tip} />
     </div>
+  );
+}
+
+/**
+ * The bottom card in cycle mode: clock of the cycle on screen, the run's status, play or pause, and a rail that fills as
+ * cycles are played over the horizon, with a mark where the attack hit or the defence cleaned an area. Clicking a played
+ * part shows that cycle; the part not played yet cannot be chosen.
+ */
+function CycleCard({ c, speed, setSpeed }: { c: CycleRun; speed: number; setSpeed(s: number): void }) {
+  const total = Math.max(1, c.total);
+  const xOf = (cycle: number) => ((cycle + 0.5) / total) * TRACK_W;
+  const pick = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const cycle = Math.floor(((e.clientX - r.left) / r.width) * total);
+    if (c.played > 0) c.seek(Math.max(0, Math.min(cycle, c.played - 1)));
+  };
+  return (
+    <section className="timeline cycles" aria-label="Línea de tiempo del ciberataque">
+      <div className="timeline-head">
+        <span className="clock">{c.clock}</span>
+        <div className="timeline-tools"><span className="cycle-status">{c.status}</span>{c.action}<div className="seg speed-seg" role="group" aria-label="Velocidad">{SPEEDS.map((s) => <button key={s} className={speed === s ? "on" : ""} aria-pressed={speed === s} onClick={() => setSpeed(s)}>{s}×</button>)}</div></div>
+      </div>
+      <div className="timeline-row">
+        <button className="play" aria-label={c.playing ? "Pausa" : c.finished ? "Repetir" : "Continuar"} onClick={c.togglePlay}>
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
+            {c.playing ? <path d="M3 2v6M7 2v6" fill="none" stroke="#1E1F21" strokeWidth="1.8" strokeLinecap="round" />
+              : c.finished ? <path d="M7.8 3.6A3.2 3.2 0 1 0 8 6M8 1.6v2.2H5.8" fill="none" stroke="#1E1F21" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                : <path d="M2.5 1.5v7l6-3.5z" fill="#1E1F21" />}
+          </svg>
+        </button>
+        <div className="track-area" role="slider" tabIndex={0} aria-label="Ciclo de la partida" aria-valuemin={0} aria-valuemax={total}
+          aria-valuenow={c.at} aria-valuetext={`ciclo ${c.at} de ${total}`} onPointerDown={pick}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight") c.seek(Math.min(c.played - 1, c.at + 1));
+            else if (e.key === "ArrowLeft") c.seek(Math.max(0, c.at - 1));
+            else return;
+            e.preventDefault();
+          }}>
+          <div className="track-rail" />
+          <div className="track-rail played" style={{ width: (c.played / total) * TRACK_W }} />
+          {c.marks.map((m) => <span key={`${m.side}${m.cycle}`} className={`cycle-mark ${m.side}`} style={{ left: xOf(m.cycle) }} title={m.title} />)}
+          <div className="head" style={{ left: xOf(c.at) }} />
+        </div>
+        <div className="timeline-right">
+          <span className="ref">5 min</span>
+          <span className="pos">{`${c.at} / ${total}`}</span>
+        </div>
+      </div>
+    </section>
   );
 }
