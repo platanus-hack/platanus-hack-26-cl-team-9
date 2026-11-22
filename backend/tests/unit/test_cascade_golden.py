@@ -42,7 +42,8 @@ def test_real_cascade_is_byte_stable_for_every_single_cut(point_id):
     runs = [run_cascade_workflow(net, point, cut) for cut in cuts]
     kinds = {e["type"] for r in runs for e in r["events"]}
     assert {"line_cut", "island_formed", "line_overload_open", "load_shed", "island_stable"} <= kinds
-    assert digest(*runs) == REAL_CASCADE[point_id]
+    got = digest(*runs)
+    assert got == REAL_CASCADE[point_id], f"{point_id} digest {got}"  # full value: the hash depends on the platform's floats
 
 
 TOY_CASCADE = "8bdad44a1774856d155a868024abe9c30f6075b07b3d024f2203fe82d0f77ba5"
