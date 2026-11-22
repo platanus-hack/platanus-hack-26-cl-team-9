@@ -3,7 +3,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 
 ## 2026-11-22 · feat(cyber): monitor del ciberataque con defensa por algoritmo, LLM o usuario, y dificultades (#121)
 
-- **Changed:** Runs play turn by turn: with an algorithm or the LLM one cycle every 1.2 s (pause and continue), with the user one cycle per **Terminar turno**; before, the monitor showed only the final state.
+- **Changed:** Runs play turn by turn: with an algorithm or the LLM one cycle every 0.7 s (pause and continue), shown on a progress bar over the horizon instead of a slider that always sat at the right end, with the user one cycle per **Terminar turno**; before, the monitor showed only the final state.
 - **Changed:** One monitor for every defender (the reference design): attack and defence counters, operating areas with people and state, Territorio / Jugadas / Reglas, cycle bar, area labels with leader lines on the map (`web/src/cyber/`, `layoutTags` in the overlay loop).
 - **Changed:** `manual_defense` on runs: the staff proposes nothing and only actions from `POST .../actions` run (Usuario mode, turn by turn). Snapshots' `cyber` adds `people_out` per area, `segmented`, `dark` and `defense_actions`; the catalog adds area population and anchor coordinates, `defense_actions` and `presets`.
 - **Changed:** The intrusion is latent until it strikes; the defence wins when no intrusion is left and at most 5 % of the demand is lost; Operations re-segments when a clean-up did not hold and no longer holds a crew in local control while repairing. New defaults = Normal.

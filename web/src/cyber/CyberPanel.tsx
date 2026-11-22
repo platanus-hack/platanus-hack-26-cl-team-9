@@ -230,7 +230,7 @@ function TurnBar({ c, f, name, user }: { c: Cyber; f: CyberFrame; name: (id: str
               : <button className="btn" disabled={run.finished && run.frames.length < 2} onClick={c.play}>{run.finished ? "Repetir" : "Continuar"}</button>}
           </div>
         )}
-      <input className="cy-range" type="range" min={0} max={Math.max(0, last)} value={c.at} onChange={(e) => c.seek(Number(e.target.value))} aria-label="Ciclo" />
+      <Progress c={c} />
       {f.transient && (c.mapCycle === f.cycle
         ? <button className="text-btn" onClick={() => c.showOnMap(null)}>Quitar cascada del mapa</button>
         : <button className="text-btn" onClick={() => c.showOnMap(f.cycle)}>Ver cascada de este ciclo en el mapa</button>)}
@@ -256,5 +256,30 @@ export function CyberMapTags({ c }: { c: Cyber }) {
         );
       })}
     </>
+  );
+}
+
+/**
+ * Progress of the run over its horizon: the filled part is the cycles played so far, the marker the cycle on screen.
+ * Clicking a played part shows that cycle; the unplayed part cannot be chosen.
+ */
+function Progress({ c }: { c: Cyber }) {
+  const run = c.run!;
+  const total = Math.max(1, run.horizon);
+  const played = run.frames.length ? run.frames[run.frames.length - 1].cycle + 1 : 0;
+  const shownCycle = run.frames[c.at]?.cycle ?? 0;
+  const pick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const cycle = Math.floor(((e.clientX - r.left) / r.width) * total);
+    const i = run.frames.findIndex((f) => f.cycle >= Math.min(cycle, played - 1));
+    if (i >= 0) c.seek(i);
+  };
+  return (
+    <div className="cy-progress" role="progressbar" aria-label="Avance de la partida" aria-valuemin={0} aria-valuemax={total} aria-valuenow={played}
+      aria-valuetext={`ciclo ${shownCycle} de ${total}`} onClick={pick}>
+      <div className="cy-progress-done" style={{ width: `${(played / total) * 100}%` }} />
+      <div className="cy-progress-at" style={{ left: `${((shownCycle + 0.5) / total) * 100}%` }} />
+      <span className="cy-progress-text">{run.finished ? `terminó en el ciclo ${played - 1} de ${total}` : `ciclo ${played} de ${total}`}</span>
+    </div>
   );
 }

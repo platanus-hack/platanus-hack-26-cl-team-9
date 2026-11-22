@@ -61,7 +61,10 @@
 .shell .cy-shield { display: grid; place-items: center; width: 32px; height: 32px; background: var(--selected); color: var(--defense); }
 .shell .cy-turn-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .shell .cy-turn-text b { color: var(--fg); font-size: 13px; font-weight: 600; }
-.shell .cy-range { grid-column: 1 / -1; width: 100%; }
+.shell .cy-progress { grid-column: 1 / -1; position: relative; height: 18px; margin-top: 4px; background: #3a3b3f; cursor: pointer; }
+.shell .cy-progress-done { position: absolute; left: 0; top: 0; bottom: 0; background: var(--fg-3); transition: width 0.3s linear; }
+.shell .cy-progress-at { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--fault); }
+.shell .cy-progress-text { position: absolute; right: 6px; top: 0; color: var(--fg); font-size: 11px; line-height: 18px; mix-blend-mode: difference; }
 .shell .cy-turn .text-btn { grid-column: 1 / -1; justify-self: start; }
 
 /* labels on the map: a dot at the area's anchor substation, a leader line and the label in a column (layoutTags) */

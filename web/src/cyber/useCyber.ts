@@ -4,13 +4,14 @@ import { incidentError } from "../incidents/incidents";
 import { ApiError, createRun, createSession, getRunReport, getSimCatalog, stepRun, submitRunAction } from "../session/sessionApi";
 import { frames as toFrames, invalidFields, runBody, type CyberCatalog, type CyberFrame, type CyberReport, type Defense } from "./cyber";
 
-const TURN_MS = 1200; // one cycle per turn on screen when an algorithm or the LLM defends
+const TURN_MS = 700; // one cycle per turn on screen when an algorithm or the LLM defends
 const PLAY_MS = 700; // replay speed of a finished run
 const BASE_POINT = "nov2026-1300"; // the standard grid: the original nodes at the default hour
 
 export interface Queued { action: string; target: string; label: string }
 export interface CyberRun {
   sid: string; runId: string; seed: number | null; defense: Defense; frames: CyberFrame[]; report: CyberReport | null; finished: boolean;
+  horizon: number; // cycles the run may last; the progress bar is played cycles over this
 }
 export interface Cyber {
   catalog: CyberCatalog | null; llmAvailable: boolean; params: Record<string, number>; defense: Defense; crews: number; seed: number | null;
@@ -98,7 +99,7 @@ export function useCyber(): Cyber {
       const created = await createRun(doc.session_id, runBody(cat, p, d, c, sd));
       let cur: CyberRun = {
         sid: doc.session_id, runId: String(created.run_id), seed: typeof created.seed === "number" ? created.seed : null,
-        defense: d, frames: [], report: null, finished: false,
+        defense: d, frames: [], report: null, finished: false, horizon: Number(created.horizon) || 72,
       };
       setRun(cur);
       cur = await advance(cur, 1); // cycle 0: the intrusion appears
