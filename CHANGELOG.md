@@ -1,6 +1,17 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): pins for placed points, Markdown replies, the chat stays open on a scenario
+
+- **Changed:**
+  - `cascade/placed.ts` + `MapOverlays`: each change that adds demand or generation at one to five substations gets a pin with "+120 MW de demanda · S/E ANTOFAGASTA" (plant: disc in its technology color; load: white ring). "Estado de la red" shows "en S/E …" for changes with places.
+  - `assistant/markdown.tsx`: replies and step texts render paragraphs, lists, bold, code and headings, as text nodes only.
+  - `labels.ts`: the `prepare_scenario` card reads "Preparar el mapa" with the changes in words and where each place went (it read "[object Object]"); names for the incident tools.
+  - `applyScenario` keeps the chat open instead of jumping to the tabs, so the reply stays visible beside the map.
+- **Why:** Found testing sub50.cl: with changes and no failure the map draws the base case, so a placed point was invisible; the replies showed `**`; the chat closed when the scenario arrived.
+- **Agents:** `StressChange` and `PreparedChange` carry `places`. Checked in headless Chromium against a local backend with a scripted stand-in model: three pins across two messages, the place error keeps the map, no console errors. `tsc`, 178 web tests and `npm run build` pass.
+- **Files:** `web/src/cascade/{placed.ts,placed.test.ts,MapOverlays.tsx,CascadeApp.tsx,NetworkState.tsx,edits.ts,gridsApi.ts,cascade.css}`, `web/src/assistant/{markdown.tsx,markdown.test.tsx,AssistantPanel.tsx,assistant.css,labels.ts,labels.test.ts}`.
+
 ## 2026-11-22 · fix(assistant): place points through prepare_scenario, strip reasoning, answer JSON errors
 
 - **Changed:**
