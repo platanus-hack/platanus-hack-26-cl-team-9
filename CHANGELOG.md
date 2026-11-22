@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(cascade): shared make_event and frame_edges / island_summary
+- **Changed:** New `domain/events.py::make_event(t, kind, ids, text_key=None, *, ndigits=3, **params)`. `simulation/engine.py` calls it instead of its private `_event`; `cascade/engine.py` builds its seven event dicts with it (`ndigits=2`, `text_key` defaults to the kind).
+- **Changed:** `cascade/engine.py` gains public `frame_edges(lines, flows, open_lines)` and `island_summary(islands, gen, load)`; `_frame` and `theater/grid.py::TheaterGrid.frame` call them instead of repeating the loops.
+- **Why:** F5 and F6 of the duplication report. Output is byte-identical: `tests/unit/test_cascade_golden.py` (added in the previous commit, hashes taken before the refactor) passes unchanged.
+- **Agents:** Rounding stays per engine: 13-area events `round(t, 3)`, cascade events `round(t, 2)`. `docs/minimum-dataset.md` now says bus ids come from `bus_id` in `domain/cascade/network.py`. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 259 passed 2 skipped.
+- **Files:** `backend/src/cascadasen/domain/events.py`, `domain/simulation/engine.py`, `domain/cascade/engine.py`, `domain/theater/grid.py`, `docs/minimum-dataset.md`.
 ## 2026-11-22 · test(cascade): golden hashes of the cascade engine events, frames and theatre frame
 - **Changed:** New `backend/tests/unit/test_cascade_golden.py`: sha256 of the canonical JSON of `run_cascade_workflow` for the baseline, every single-line cut and one 3-line cut on the toy network and on the real network at `nov2026-1300` and `feb2025-0300` (skipped when `data/processed` is missing), plus the toy `TheaterGrid.frame()` after a corridor opening.
 - **Why:** F5 and F6 of the duplication report: the event dicts, `round(t, 2)` timestamps and frame/edge blocks must stay byte-identical when they move to shared helpers. The real-network case emits all seven cascade event kinds.

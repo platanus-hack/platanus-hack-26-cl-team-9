@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from cascadasen.domain.events import make_event
 from cascadasen.domain.simulation.defenses import DefenseSet, documented_trips_25f
 from cascadasen.domain.simulation.frequency import (
     Coupling,
@@ -106,10 +107,6 @@ class TransientResult:
         return bool(self.events)
 
 
-def _event(t: float, kind: str, ids: list[str], text_key: str, **params: Any) -> dict[str, Any]:
-    return {"t": round(t, 3), "type": kind, "ids": ids, "text_key": text_key, "params": params}
-
-
 def _trip(state: GridState, area: str, mw: float, tech: str | None = None) -> float:
     """Trip up to `mw` of online generation in an area (one technology or pro rata). Returns MW tripped."""
     gens = state.gen_mw.get(area, {})
@@ -139,10 +136,10 @@ def apply_change(network: ReducedNetwork, state: GridState, ch: Change, events: 
     if ch.kind == "open_corridor":
         state.open_corridors.add(ch.target)
         opened.append(ch.target)
-        events.append(_event(0.0, "line_cut", [ch.target], "line_cut"))
+        events.append(make_event(0.0, "line_cut", [ch.target], "line_cut"))
     elif ch.kind == "lines_out":
         state.out_lines |= set(ch.lines)
-        events.append(_event(0.0, "line_cut", list(ch.lines), "line_cut"))
+        events.append(make_event(0.0, "line_cut", list(ch.lines), "line_cut"))
     elif ch.kind == "node_out":
         _node_out(network, state, ch.target, events)
     elif ch.kind == "trip_gen":
@@ -156,24 +153,24 @@ def apply_change(network: ReducedNetwork, state: GridState, ch: Change, events: 
             area = _area_of(network, ch.target)
             mw = ch.mw if ch.mw is not None else (ch.share or 0.25) * _online(state, area, ch.tech)
             tripped = _trip(state, area, mw, ch.tech)
-        events.append(_event(0.0, "plant_trip", [area], "plant_trip", mw=round(tripped, 1), tech=ch.tech))
+        events.append(make_event(0.0, "plant_trip", [area], "plant_trip", mw=round(tripped, 1), tech=ch.tech))
     elif ch.kind in ("group_out", "renewable_drop"):
         areas = network.zone_areas(ch.target) or [_area_of(network, ch.target)]
         share = ch.share if ch.share is not None else 0.4
         tripped = sum(_trip(state, a, share * _online(state, a, ch.tech), ch.tech) for a in areas)
         key = "group_out" if ch.kind == "group_out" else "renewable_drop"
         events.append(
-            _event(
+            make_event(
                 0.0, "plant_trip", areas, key, mw=round(tripped, 1), tech=ch.tech, share=share, zone=ch.target
             )
         )
     elif ch.kind == "disable_defense":
         state.disabled_defenses.add(ch.target)
-        events.append(_event(0.0, "defense_disabled", [ch.target], "defense_disabled"))
+        events.append(make_event(0.0, "defense_disabled", [ch.target], "defense_disabled"))
     elif ch.kind == "no_reserve":
         area = _area_of(network, ch.target)
         state.no_reserve_areas.add(area)
-        events.append(_event(0.0, "control_lost", [area], "control_lost"))
+        events.append(make_event(0.0, "control_lost", [area], "control_lost"))
     elif ch.kind == "load_step":
         areas = network.zone_areas(ch.target) or [_area_of(network, ch.target)]
         added = 0.0
@@ -182,7 +179,7 @@ def apply_change(network: ReducedNetwork, state: GridState, ch: Change, events: 
             state.load_mw[a] += d
             state.served_mw[a] += d
             added += d
-        events.append(_event(0.0, "documented_event", areas, "demand_surge", mw=round(added, 1)))
+        events.append(make_event(0.0, "documented_event", areas, "demand_surge", mw=round(added, 1)))
     else:
         raise ChangeError(f"tipo de cambio desconocido: {ch.kind}")
 
@@ -219,7 +216,7 @@ def _node_out(network: ReducedNetwork, state: GridState, node_id: str, events: l
         ratio = online / inst[tech] if inst.get(tech) else 0.0
         tripped += _trip(state, node.area, mw * ratio, tech)
     events.append(
-        _event(
+        make_event(
             0.0,
             "line_cut",
             list(node.corridor_lines) or [node_id],
@@ -263,7 +260,7 @@ def _separate_weak_links(
             post.open_corridors.add(cid)
             weak.append((cid, t_trip))
             events.append(
-                _event(
+                make_event(
                     t_trip,
                     "line_overload_open",
                     [cid],
@@ -417,7 +414,7 @@ def run_transient(
     if len(comps) > 1 and (weak or opened):
         t_form = max([0.0, *(t for _, t in weak)])
         events.append(
-            _event(
+            make_event(
                 t_form,
                 "island_formed",
                 [f"I{k + 1}" for k in range(len(comps))],
@@ -431,7 +428,7 @@ def run_transient(
         trips, _ = documented_trips_25f()
         ramps = [Ramp(d["start_s"], d["end_s"], d["mw"], d["label_key"]) for d in trips]
         for r in ramps:
-            events.append(_event(r.start, "documented_event", [], r.label_key, mw=r.mw, until_s=r.end))
+            events.append(make_event(r.start, "documented_event", [], r.label_key, mw=r.mw, until_s=r.end))
 
     pdce = _pdce_corridors(network, defenses)
     lost_pdce = pdce & (set(opened) | {c for c, _ in weak})
@@ -461,12 +458,12 @@ def run_transient(
         if r.result in ("blackout", "local_cut", "no_load"):
             _collapse(post, r.areas)
             kind = "island_blackout"
-            events.append(_event(r.trace.blackout_t or 0.0, kind, [r.id], r.result, nodes=r.areas))
+            events.append(make_event(r.trace.blackout_t or 0.0, kind, [r.id], r.result, nodes=r.areas))
         else:
             _settle_island(post, r.areas, r.trace)
             if r.trace.f_min < physics.f0 - 0.05 or r.trace.f_max > physics.f0 + 0.05:
                 events.append(
-                    _event(
+                    make_event(
                         physics.horizon,
                         "island_stable",
                         [r.id],
@@ -476,7 +473,7 @@ def run_transient(
                     )
                 )
         for s in r.trace.shed_events:
-            events.append(_event(s.t, "load_shed", [r.id], s.label_key, mw=s.mw, step=s.step))
+            events.append(make_event(s.t, "load_shed", [r.id], s.label_key, mw=s.mw, step=s.step))
 
     if behavior == "as_happened" and scenario == "25F":
         north = next((r for r in results if defenses.pdce_north in r.areas and r.result == "maintains"), None)
@@ -484,7 +481,7 @@ def run_transient(
             north.documented_collapse = True
             _collapse(post, north.areas)
             events.append(
-                _event(
+                make_event(
                     physics.horizon,
                     "documented_event",
                     [north.id],
@@ -498,7 +495,7 @@ def run_transient(
         eff = post.corridor(network, cid)
         if eff and abs(f) > eff[1]:
             events.append(
-                _event(
+                make_event(
                     physics.weak_link_window,
                     "documented_event",
                     [cid],
