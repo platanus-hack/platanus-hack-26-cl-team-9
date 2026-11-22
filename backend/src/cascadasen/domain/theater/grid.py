@@ -18,12 +18,19 @@ from typing import Any
 
 import numpy as np
 
-from cascadasen.domain.cascade.engine import CascadeParams, people_out_by_bus, run_cascade_state
+from cascadasen.domain.cascade.engine import (
+    CascadeParams,
+    frame_edges,
+    island_summary,
+    people_out_by_bus,
+    run_cascade_state,
+)
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
 from cascadasen.domain.cascade.frequency import F0
 from cascadasen.domain.cascade.frequency import Params as FrequencyParams
+from cascadasen.domain.cascade.network import bus_id
 from cascadasen.domain.cascade.scenario import OperatingPoint
-from cascadasen.domain.theater.areas import EDAC_ZONES, TheaterNetwork, bus_id
+from cascadasen.domain.theater.areas import EDAC_ZONES, TheaterNetwork
 
 RESERVE_SHARE = FrequencyParams().reserve_share_of_sync  # same primary reserve the engine uses
 KINDS = ("sync", "renewable")
@@ -289,24 +296,10 @@ class TheaterGrid:
         """Quasi-steady state in the mapa 3 `Frame` format, plus served load per bus."""
         islands = self.islands()
         flows = dc_flow(self.net.buses, self.open_lines, self.sync + self.renew - self.load, islands)
-        edges = {}
-        for f, ln in zip(flows, self.net.buses.lines, strict=True):
-            ratio = abs(f) / ln.capacity_mw if ln.capacity_mw > 0 else 0.0
-            status = "open" if ln.id in self.open_lines else ("overload" if ratio > 1.0 else "ok")
-            if status != "ok" or abs(f) >= 5:
-                edges[ln.id] = {"flow_mw": round(float(f)), "status": status, "loading": round(ratio, 3)}
         return {
-            "edges": edges,
+            "edges": frame_edges(self.net.buses.lines, flows, self.open_lines),
             "dark": sorted(bus_id(b) for b in self.dark),
-            "islands": [
-                {
-                    "buses": len(i),
-                    "gen_mw": round(float((self.sync[i] + self.renew[i]).sum())),
-                    "load_mw": round(float(self.load[i].sum())),
-                }
-                for i in islands
-                if len(i) > 1
-            ],
+            "islands": island_summary(islands, self.sync + self.renew, self.load),
             "buses": {
                 bus_id(b): round(float(self.load[b]), 1)
                 for b in range(self.net.buses.size)

@@ -18,6 +18,7 @@ import unicodedata
 from typing import Any
 
 from cascadasen.application.grids import GridError
+from cascadasen.domain.cascade.network import bus_id
 
 PREFIXES = (
     "cerca de ",
@@ -177,7 +178,7 @@ def _by_partial_name(ctx: Any, key: str) -> Found:
     names = ctx.names
     partial = [i for i in range(len(names)) if key in bus_key(names[i])]
     if len(partial) > 1:
-        shown = ", ".join(f"B{i:03d} {names[i]}" for i in partial[:8])
+        shown = ", ".join(f"{bus_id(i)} {names[i]}" for i in partial[:8])
         raise GridError("not_found", f"'{key}' coincide con varias subestaciones: {shown}. Indica cuál.")
     return (partial[0], f"subestación {names[partial[0]]}") if partial else None
 
@@ -186,7 +187,7 @@ def _answer(ctx: Any, text: str, bus: int, how: str) -> dict[str, Any]:
     area = ctx.net.areas.get(ctx.area[bus])
     return {
         "place": text,
-        "bus": f"B{bus:03d}",
+        "bus": bus_id(bus),
         "bus_name": ctx.names[bus],
         "area": ctx.area[bus],
         "area_name": area.name if area else None,

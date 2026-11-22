@@ -14,7 +14,6 @@ from typing import Any
 from cascadasen.domain.simulation.network import ReducedNetwork
 from cascadasen.domain.simulation.params import Provenance, collect_provenance, load_params, value
 
-RENEWABLE = ("solar", "eolica")
 MIN_SYNC_SHARE = 0.35  # floor of synchronous dispatch as a share of load, keeps islands with inertia
 
 

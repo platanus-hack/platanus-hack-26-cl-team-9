@@ -21,8 +21,10 @@ from pathlib import Path
 
 from cascadasen.domain.cascade.engine import ASSUMPTIONS, run_cascade_workflow
 from cascadasen.domain.cascade.health import prefault_health, with_event_health
-from cascadasen.domain.cascade.network import ReducedNetwork, reduce_network
+from cascadasen.domain.cascade.network import ReducedNetwork, bus_id, reduce_network
+from cascadasen.domain.cascade.network_json import buses_json, network_json
 from cascadasen.domain.cascade.scenario import load_network_and_point, people_by_comuna
+from cascadasen.domain.serialization import dumps_compact
 
 
 def build_cache_workflow(processed: Path, out: Path, point_ids: list[str] | None = None) -> dict:
@@ -48,17 +50,7 @@ def _build_point(processed: Path, out: Path, point: dict) -> dict:
     _write(out / f"network-{point['year']}.json", network_json(net))
     folder = out / point["id"]
     folder.mkdir(exist_ok=True)
-    _write(
-        folder / "buses.json",
-        {
-            f"B{i:03d}": {
-                "gen_mw": round(float(op.gen[i]), 1),
-                "load_mw": round(float(op.load[i]), 1),
-                "people": round(float(op.people[i])),
-            }
-            for i in range(net.size)
-        },
-    )
+    _write(folder / "buses.json", buses_json(net, op))
     _write(folder / "baseline.json", run_cascade_workflow(net, op, []))
     n1: list[tuple[str, float]] = []
     for line in net.lines:
@@ -71,42 +63,9 @@ def _build_point(processed: Path, out: Path, point: dict) -> dict:
     for i in range(net.size):
         ids = [ln.id for ln in net.lines if i in (ln.a, ln.b)]
         if ids:
-            _write(folder / f"sub-B{i:03d}.json", with_event_health(run_cascade_workflow(net, op, ids)))
+            _write(folder / f"sub-{bus_id(i)}.json", with_event_health(run_cascade_workflow(net, op, ids)))
             substations += 1
     return {"lines": len(net.lines), "substations": substations}
-
-
-def network_json(net: ReducedNetwork) -> dict:
-    ids = [f"B{i:03d}" for i in range(net.size)]
-    return {
-        "nodes": [
-            {
-                "id": ids[i],
-                "name": net.names[i],
-                "lon": net.lon[i],
-                "lat": net.lat[i],
-                "kv": net.kv[i],
-                "zone": net.zone(i),
-                "map_nodes": net.map_nodes[i],
-                "country": net.country,
-            }
-            for i in range(net.size)
-        ],
-        "lines": [
-            {
-                "id": ln.id,
-                "a": ids[ln.a],
-                "b": ids[ln.b],
-                "kv": ln.kv,
-                "capacity_mw": round(ln.capacity_mw, 1),
-                "x_pu": ln.x_pu,
-                "map_edges": list(ln.map_edges),
-                "branches": list(ln.branches),
-                "country": ln.country,
-            }
-            for ln in net.lines
-        ],
-    }
 
 
 def comunas_json(net: ReducedNetwork, snapshot: dict) -> dict:
@@ -119,7 +78,7 @@ def comunas_json(net: ReducedNetwork, snapshot: dict) -> dict:
             (cut, round(p)) for cut, p in sorted(rows.items(), key=lambda r: (-r[1], r[0])) if round(p) > 0
         ]
         used.update(cut for cut, _ in kept)
-        buses[f"B{i:03d}"] = kept
+        buses[bus_id(i)] = kept
     return {
         "source": "INE Censo 2024 population per comuna, split over substations in data/processed/grid_snapshot.json"
         " (comunas[].served_by)",
@@ -137,7 +96,7 @@ def write_comunas(processed: Path, out: Path, years: Iterable[int]) -> None:
 
 
 def _write(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    path.write_text(dumps_compact(data), encoding="utf-8")
 
 
 def main() -> int:

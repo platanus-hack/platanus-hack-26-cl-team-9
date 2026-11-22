@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 from cascadasen.domain.agents.base import AgentView
 from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.catalog import Role
-from cascadasen.domain.theater.decisions import COA
+from cascadasen.domain.theater.decisions import COA, add_unless_active
 
 OPS = Role.OPS.value
 RESEGMENT_AFTER = 6  # cycles (30 min): a clean-up that did not hold is tried again
@@ -29,9 +31,7 @@ class OperationsAgent:
                 self.no_ack.add(fb.target)
         alarms = {(a.area, a.kind) for a in obs.alarms}
 
-        def add(action: str, target: str, key: str, benefit: float, risk: float = 0.0) -> None:
-            if f"{action}:{target}" not in active:
-                coas.append(COA(action, target, OPS, key, benefit=benefit, risk=risk))
+        add = partial(add_unless_active, coas, active, OPS)
 
         if isr:
             for a in isr.verify[:3]:

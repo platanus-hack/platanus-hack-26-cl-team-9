@@ -8,12 +8,14 @@ from typing import Any, cast
 from cascadasen.application.run_campaign import CampaignRunner
 from cascadasen.application.run_experiment import RunCache, RunManager, catalog
 from cascadasen.application.simulate import PhysicsSimulator, SimulateCommand
+from cascadasen.domain.cascade.network import bus_id
+from cascadasen.domain.cascade.network_json import buses_json, network_json
 from cascadasen.domain.cascade.scenario import OperatingPoint
 from cascadasen.domain.model import GridSnapshot
 from cascadasen.domain.ports import CommanderAdvisor, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics, build_state
 from cascadasen.domain.simulation.network import NetworkSpec, ReducedNetwork, build_reduced_network
-from cascadasen.domain.theater.areas import TheaterNetwork, bus_id
+from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.world import TheaterWorld
 
 REFERENCE_OPERATING_POINT = "midday_2026"
@@ -128,47 +130,15 @@ def theater_network_view(
     """The mapa 3 network of a point (same `Network` shape as web/public/cache/network-<year>.json)
     plus the operating areas, corridors and defence functions the theatre uses."""
     b = net.buses
-    ids = [bus_id(i) for i in range(b.size)]
+    base = {**network_json(b), "buses": buses_json(b, op)}
+    for node, area in zip(base["nodes"], net.area_of_bus, strict=True):
+        node["area"] = area
+    for line in base["lines"]:
+        line["corridor"] = net.line_corridor.get(line["id"])
     return {
         "point": point,
         "points": points,
-        "nodes": [
-            {
-                "id": ids[i],
-                "name": b.names[i],
-                "lon": b.lon[i],
-                "lat": b.lat[i],
-                "kv": b.kv[i],
-                "zone": b.zone(i),
-                "map_nodes": b.map_nodes[i],
-                "country": b.country,
-                "area": net.area_of_bus[i],
-            }
-            for i in range(b.size)
-        ],
-        "lines": [
-            {
-                "id": ln.id,
-                "a": ids[ln.a],
-                "b": ids[ln.b],
-                "kv": ln.kv,
-                "capacity_mw": round(ln.capacity_mw, 1),
-                "x_pu": ln.x_pu,
-                "map_edges": list(ln.map_edges),
-                "branches": list(ln.branches),
-                "country": ln.country,
-                "corridor": net.line_corridor.get(ln.id),
-            }
-            for ln in b.lines
-        ],
-        "buses": {
-            ids[i]: {
-                "gen_mw": round(float(op.gen[i]), 1),
-                "load_mw": round(float(op.load[i]), 1),
-                "people": round(float(op.people[i])),
-            }
-            for i in range(b.size)
-        },
+        **base,
         "areas": [
             {
                 "id": a.id,

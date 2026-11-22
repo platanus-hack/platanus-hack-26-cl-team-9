@@ -18,7 +18,7 @@ from cascadasen.domain.agents.base import AgentView
 from cascadasen.domain.theater.areas import TheaterNetwork
 from cascadasen.domain.theater.catalog import Role
 from cascadasen.domain.theater.config import theater_config
-from cascadasen.domain.theater.decisions import COA
+from cascadasen.domain.theater.decisions import COA, add_unless_active
 
 STAB = Role.STAB.value
 FAST_POOL_MW = 100.0  # one battery or reserve block (theater.yaml actions)
@@ -89,8 +89,8 @@ class StabilizationAgent:
         coas: list[COA] = []
 
         def add(action: str, target: str, key: str, benefit: float, risk: float = 0.0) -> None:
-            if f"{action}:{target}" not in active and not any(c.action == action for c in coas):
-                coas.append(COA(action, target, STAB, key, benefit=benefit, risk=risk))
+            if not any(c.action == action for c in coas):
+                add_unless_active(coas, active, STAB, action, target, key, benefit, risk)
 
         frequency, fast, under = self._estimate(view)
         escalation = intent.escalation if intent else 0

@@ -266,7 +266,7 @@ class _Edit:
                     "inertia_mws": min(round(float(self.inertia[i]), 2), MAX_INERTIA_H * sync),
                 }
             if rec:
-                buses[f"B{i:03d}"] = rec
+                buses[bus_id(i)] = rec
         return {"bus_overrides": buses, "line_overrides": self.lines}
 
 
@@ -530,7 +530,7 @@ def _buses(ctx: _Context, change: dict, where: str) -> list[int]:
     size = len(ctx.names)
     picked = set(range(size))
     if change.get("buses"):
-        ids = {f"B{i:03d}": i for i in range(size)}
+        ids = {bus_id(i): i for i in range(size)}
         unknown = sorted(set(change["buses"]) - set(ids))
         if unknown:
             raise GridError("not_found", f"{where}: no existen estas subestaciones: {', '.join(unknown)}")
@@ -627,7 +627,7 @@ def _bus_row(
     people: float | None = None,
 ) -> dict:
     row: dict[str, Any] = {
-        "id": f"B{i:03d}",
+        "id": bus_id(int(i)),
         "name": ctx.names[i],
         "zone": ctx.zone[i],
         key: [round(float(before), 1), round(float(after), 1)],

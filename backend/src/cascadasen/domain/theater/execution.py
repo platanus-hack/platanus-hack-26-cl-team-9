@@ -21,7 +21,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from cascadasen.domain.theater.areas import TheaterNetwork, UnknownTargetError, bus_id
+from cascadasen.domain.cascade.network import bus_id
+from cascadasen.domain.simulation.consequence import level_of
+from cascadasen.domain.theater.areas import TheaterNetwork, UnknownTargetError
 from cascadasen.domain.theater.catalog import EVENTS
 from cascadasen.domain.theater.config import TheaterConfig
 from cascadasen.domain.theater.decisions import COA, FieldReport
@@ -46,14 +48,10 @@ SEGMENTATION_CLEARS = {"D3_unreliable_data", "D5_false_alarms", "C5_remote_dispa
 def consequence_level(summary: dict[str, Any]) -> str:
     """L0 absorbed, L1 contained (load lost, every island survives), L2 regional blackout (some island
     collapses), L3 national blackout (every island with load collapses). Same rule as
-    `domain/simulation/consequence.py`, read from a mapa 3 cascade summary."""
+    `domain/simulation/consequence.py` (`level_of`), read from a mapa 3 cascade summary."""
     counted = [i for i in summary["islands"] if i["result"] != "dark"]
     collapsed = [i for i in counted if i["result"] == "blackout"]
-    if counted and len(collapsed) == len(counted):
-        return "L3"
-    if collapsed:
-        return "L2"
-    return "L1" if summary["load_shed_mw"] > 0.5 else "L0"
+    return level_of(len(counted), len(collapsed), summary["load_shed_mw"])
 
 
 ON_SITE = frozenset({"field_verification", "manual_operation", "rearm_defense"})

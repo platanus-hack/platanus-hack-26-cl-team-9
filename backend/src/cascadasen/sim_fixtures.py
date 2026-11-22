@@ -15,7 +15,6 @@ The files are generated: regenerate them, do not edit them.
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +25,7 @@ from cascadasen.domain.simulation.timeline import NOTICE
 from cascadasen.domain.theater.cycle import AdversaryConfig, RunConfig
 from cascadasen.domain.theater.narrative import templates
 from cascadasen.infrastructure.container import repository
+from cascadasen.infrastructure.files import write_json
 from cascadasen.infrastructure.settings import REPO_ROOT, get_settings
 
 DEFAULT_POINTS = ("nov2026-1300", "feb2025-1500")
@@ -33,9 +33,7 @@ TEMPLATE = "flagship_observability"
 
 
 def _write(path: Path, data: Any) -> str:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    return f"{path} ({path.stat().st_size // 1024} KB)"
+    return f"{path} ({write_json(path, data) // 1024} KB)"
 
 
 def build_theater_cache(

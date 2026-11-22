@@ -146,7 +146,7 @@ def _islanding(coa: COA, ctx: ValidationContext) -> Verdict:
     return _verdict(True, "ok", "controlled_separation")
 
 
-def restorable(area: str, ctx_real: RealState, network: TheaterNetwork) -> bool:
+def restorable(area: str, ctx_real: RealState) -> bool:
     g = ctx_real.grid
     return area in g.blackout_areas or g.served_mw[area] < g.load_mw[area] - 1.0 or g.tripped(area) > 1.0
 
@@ -161,7 +161,7 @@ def _restore(coa: COA, ctx: ValidationContext) -> Verdict:
             return _verdict(False, "no_restoration_path")
         return _verdict(True, "ok", "crew_committed")
     a = coa.target
-    if not restorable(a, real, net):
+    if not restorable(a, real):
         return _verdict(False, "nothing_to_restore")
     blocked = _command_path(a, ctx)
     if blocked:

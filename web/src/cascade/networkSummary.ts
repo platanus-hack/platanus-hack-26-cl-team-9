@@ -1,3 +1,4 @@
+import { fetchJson } from "../lib/fetchJson";
 import linesUrl from "../../../data/processed/geo/lines.geojson?url";
 import plantsUrl from "../../../data/processed/geo/plants.geojson?url";
 import substationsUrl from "../../../data/processed/geo/substations.geojson?url";
@@ -29,9 +30,9 @@ export const cachedNetworkSummary = () => summaryValue;
  */
 export function loadNetworkSummary(): Promise<NetworkSummary> {
   summaryPromise ??= Promise.all([
-    _json<Collection<{ kv: number | null; length_km: number | null }>>(linesUrl),
-    _json<Collection<object>>(substationsUrl),
-    _json<Collection<{ mw: number | null }>>(plantsUrl),
+    fetchJson<Collection<{ kv: number | null; length_km: number | null }>>(linesUrl),
+    fetchJson<Collection<object>>(substationsUrl),
+    fetchJson<Collection<{ mw: number | null }>>(plantsUrl),
   ]).then(([lines, subs, plants]) => {
     summaryValue = summarize(lines.features.map((f) => f.properties), subs.features.length, plants.features.map((f) => f.properties));
     return summaryValue;
@@ -70,10 +71,4 @@ export function pathKm(path: [number, number][]): number {
     km += 2 * EARTH_KM * Math.asin(Math.min(1, Math.sqrt(h)));
   }
   return km;
-}
-
-async function _json<T>(url: string): Promise<T> {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`No se pudo cargar ${url}: ${r.status}`);
-  return r.json();
 }

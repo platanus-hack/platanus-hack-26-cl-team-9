@@ -1,13 +1,13 @@
 import { useId, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { lineName } from "../cascade/text";
+import { fmt } from "../lib/format";
 import type { SessionNetwork } from "../cascade/types";
 import { BUS_MW, CAPACITY_MW, ELEMENT_MW, formErrors, LAT, loadingText, LON, mwText, NAME, parseNumber, X_PU, type Spec } from "./forms";
 import { nearestBus } from "./geo";
 import { addElement, deleteElement, resetSession, updateElement, type Kind } from "./sessionApi";
 import type { Edit } from "./useSession";
 
-type Sub = "buses" | "lines" | "generators" | "loads";
-const SUBS: [Sub, string][] = [["buses", "Barras"], ["lines", "Líneas"], ["generators", "Generadores"], ["loads", "Cargas y datacenters"]];
+const SUBS: [Kind, string][] = [["buses", "Barras"], ["lines", "Líneas"], ["generators", "Generadores"], ["loads", "Cargas y datacenters"]];
 const TECHS = ["solar", "eolica", "hidro", "termica", "bioenergia", "geotermica"];
 const LIMIT = 60;
 const ASSUMED = "Valor que agregó o cambió esta sesión: no viene de los datos públicos.";
@@ -20,7 +20,7 @@ export type Pick = (onPoint: (lon: number, lat: number) => void) => void;
  * with the revision the first one already replaced (a 412 against yourself). Each form checks its fields before sending.
  */
 export function DataPanel(p: { network: SessionNetwork; edit: Edit; pick: Pick; picking: boolean }) {
-  const [sub, setSub] = useState<Sub>("loads");
+  const [sub, setSub] = useState<Kind>("loads");
   const [pending, setPending] = useState(false);
   const writing = useRef(false);
   const edit: Edit = async (fn) => {

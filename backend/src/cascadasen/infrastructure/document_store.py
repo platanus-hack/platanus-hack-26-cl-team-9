@@ -20,10 +20,11 @@ from pathlib import Path
 from typing import Any
 
 from cascadasen.domain.ports import ConflictError
+from cascadasen.domain.serialization import dumps_compact
 
 
 def _encode(doc: dict) -> bytes:
-    return json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode()
+    return dumps_compact(doc).encode()
 
 
 def _etag(data: bytes) -> str:

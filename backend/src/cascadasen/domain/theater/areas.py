@@ -20,17 +20,14 @@ from typing import cast
 import numpy as np
 
 from cascadasen.domain.cascade.network import ReducedNetwork as BusNetwork
-from cascadasen.domain.simulation.network import AreaSpec, NetworkSpec
+from cascadasen.domain.cascade.network import bus_id
+from cascadasen.domain.simulation.network import AreaGraph, NetworkSpec, band_of
 
 EDAC_ZONES = ("norte_grande", "centro_sur")
 
 
 class UnknownTargetError(KeyError):
     pass
-
-
-def bus_id(i: int) -> str:
-    return f"B{i:03d}"
 
 
 @dataclass(frozen=True)
@@ -73,7 +70,7 @@ class Resolved:
 
 
 @dataclass
-class TheaterNetwork:
+class TheaterNetwork(AreaGraph[Area, Corridor]):
     buses: BusNetwork
     areas: dict[str, Area]
     corridors: dict[str, Corridor]
@@ -89,20 +86,6 @@ class TheaterNetwork:
         pos = {a: k for k, a in enumerate(names)}
         return np.array([pos[a] for a in self.area_of_bus], dtype=int), names
 
-    @property
-    def order(self) -> list[str]:
-        return sorted(self.areas, key=lambda a: self.areas[a].index)
-
-    @property
-    def zones(self) -> list[str]:
-        return list(dict.fromkeys(self.areas[a].zone for a in self.order))
-
-    def zone_areas(self, zone: str) -> list[str]:
-        return [a for a in self.order if self.areas[a].zone == zone]
-
-    def incident(self, area: str) -> list[Corridor]:
-        return [c for c in self.corridors.values() if area in (c.a, c.b)]
-
     def bus_lines(self, bus: int) -> list[str]:
         return [ln.id for ln in self.buses.lines if bus in (ln.a, ln.b)]
 
@@ -110,6 +93,14 @@ class TheaterNetwork:
         """Every line with at least one end in the area."""
         mine = set(self.areas[area].buses)
         return [ln.id for ln in self.buses.lines if ln.a in mine or ln.b in mine]
+
+    def sites_of(self, target: str) -> list[str] | None:
+        """Areas where a crew acts on an area or a corridor; None for any other target (the caller's fallback)."""
+        if target in self.areas:
+            return [target]
+        if target in self.corridors:
+            return [self.corridors[target].a, self.corridors[target].b]
+        return None
 
     def defense_areas(self) -> dict[str, list[str]]:
         out: dict[str, list[str]] = {f"edac:{z}": [] for z in EDAC_ZONES}
@@ -149,7 +140,7 @@ def build_theater_network(
 ) -> TheaterNetwork:
     """Group the mapa 3 buses into operating areas by latitude band and find the corridors."""
     specs = (spec or NetworkSpec.default()).areas
-    area_of_bus = [_band(buses.lat[i], specs) for i in range(buses.size)]
+    area_of_bus = [band_of(buses.lat[i], specs) for i in range(buses.size)]
     members: dict[str, list[int]] = defaultdict(list)
     for i, a in enumerate(area_of_bus):
         members[a].append(i)
@@ -180,10 +171,3 @@ def build_theater_network(
     line_corridor = {lid: c.id for c in corridors.values() for lid in c.lines}
     node_bus = {node: i for i in range(buses.size) for node in buses.map_nodes[i]}
     return TheaterNetwork(buses, areas, corridors, area_of_bus, line_corridor, line_area, node_bus)
-
-
-def _band(lat: float, specs: tuple[AreaSpec, ...]) -> str:
-    for s in specs:
-        if s.lat_south is None or lat >= s.lat_south:
-            return s.id
-    return specs[-1].id

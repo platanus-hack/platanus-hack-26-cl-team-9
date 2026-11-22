@@ -17,6 +17,7 @@ from cascadasen.domain.theater.cycle import (
     Simulation,
 )
 from cascadasen.domain.theater.decisions import COA
+from cascadasen.domain.theater.execution import consequence_level
 from cascadasen.domain.theater.resources import Ledger
 from cascadasen.domain.theater.state import AreaDigital, Effect, RealState
 from cascadasen.domain.theater.validator import ValidationContext, validate
@@ -227,3 +228,22 @@ def test_run_without_seed_gets_a_recorded_random_seed(toy_world):
     a.run_to_end()
     again.run_to_end()
     assert a.log.head == again.log.head
+
+
+@pytest.mark.parametrize(
+    ("results", "shed_mw", "level"),
+    [
+        ([], 0.0, "L0"),
+        (["ok"], 0.5, "L0"),
+        (["ok"], 0.6, "L1"),
+        (["ok", "ok"], 120.0, "L1"),
+        (["blackout", "ok"], 0.0, "L2"),
+        (["blackout", "dark"], 0.0, "L3"),
+        (["blackout", "blackout"], 50.0, "L3"),
+        (["dark"], 0.0, "L0"),
+        (["dark", "ok"], 3.0, "L1"),
+    ],
+)
+def test_theater_consequence_level_table(results, shed_mw, level):
+    summary = {"islands": [{"result": r} for r in results], "load_shed_mw": shed_mw}
+    assert consequence_level(summary) == level

@@ -14,12 +14,12 @@ import threading
 import time
 import uuid
 import zlib
-from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from cascadasen.application.cache import BoundedMap
 from cascadasen.domain.agents.propagation import BOUNDS as PROPAGATION_BOUNDS
 from cascadasen.domain.ports import CommanderAdvisor, ConflictError, DocumentStore, Interpreter
 from cascadasen.domain.simulation.grid import Physics
@@ -33,6 +33,11 @@ from cascadasen.domain.theater.world import DEFENSES_ID, TheaterWorld
 MAX_CACHED_RUNS = 20
 LOCK_STRIPES = 64
 RUN_ID = re.compile(r"^[0-9a-f]{12}$")
+
+
+def iso_utc(ts: float) -> str:
+    """Unix time as ISO-8601 UTC with second precision, the format of every stored timestamp."""
+    return datetime.fromtimestamp(ts, UTC).isoformat(timespec="seconds")
 
 
 class RunNotFoundError(KeyError):
@@ -59,27 +64,17 @@ class RunCache:
 
     def __init__(self, max_runs: int = MAX_CACHED_RUNS) -> None:
         self.max_runs = max_runs
-        self._runs: OrderedDict[str, CachedRun] = OrderedDict()
-        self._guard = threading.Lock()
+        self._runs: BoundedMap[str, CachedRun] = BoundedMap(max_runs)
         self._locks = [threading.Lock() for _ in range(LOCK_STRIPES)]
 
     def get(self, key: str) -> CachedRun | None:
-        with self._guard:
-            entry = self._runs.get(key)
-            if entry is not None:
-                self._runs.move_to_end(key)
-            return entry
+        return self._runs.get(key)
 
     def put(self, key: str, entry: CachedRun) -> None:
-        with self._guard:
-            self._runs[key] = entry
-            self._runs.move_to_end(key)
-            while len(self._runs) > self.max_runs:
-                self._runs.popitem(last=False)
+        self._runs.put(key, entry)
 
     def evict(self, key: str) -> None:
-        with self._guard:
-            self._runs.pop(key, None)
+        self._runs.pop(key)
 
     def lock(self, key: str) -> threading.Lock:
         return self._locks[zlib.crc32(key.encode()) % LOCK_STRIPES]
@@ -124,7 +119,7 @@ class RunManager:
         return f"{self.prefix}{run_id}.json"
 
     def _now(self) -> str:
-        return datetime.fromtimestamp(self.clock(), UTC).isoformat(timespec="seconds")
+        return iso_utc(self.clock())
 
     def _load(self, run_id: str) -> CachedRun:
         """The cached run, or the run rebuilt from its record. Call with the run's lock held."""

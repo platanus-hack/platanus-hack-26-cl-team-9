@@ -65,9 +65,4 @@ class LogisticsAgent:
         return out
 
     def _sites(self, target: str) -> list[str]:
-        if target in self.net.areas:
-            return [target]
-        if target in self.net.corridors:
-            c = self.net.corridors[target]
-            return [c.a, c.b]
-        return self.sites.get(target, [])
+        return self.net.sites_of(target) or self.sites.get(target, [])

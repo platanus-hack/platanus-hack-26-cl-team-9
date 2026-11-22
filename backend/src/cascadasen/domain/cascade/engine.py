@@ -14,6 +14,7 @@ from typing import cast
 
 import numpy as np
 
+from cascadasen.domain.events import make_event
 from cascadasen.domain.simulation.consequence import blackout_cost
 from cascadasen.domain.simulation.params import load_params, value
 
@@ -27,7 +28,7 @@ from .frequency import (
     edac_tables,
     simulate_island,
 )
-from .network import ReducedNetwork
+from .network import Line, ReducedNetwork, bus_id
 from .scenario import OperatingPoint
 
 ASSUMPTIONS = [
@@ -238,9 +239,7 @@ def _start(net, point, params, cut_ids, already_open: set[str] | None = None) ->
     state.edac_fired = [set() for _ in range(net.size)]
     state.reserve_used = np.zeros(net.size)
     if cut_ids:
-        state.events.append(
-            {"t": 0.0, "type": "line_cut", "ids": list(cut_ids), "text_key": "line_cut", "params": {}}
-        )
+        state.events.append(make_event(0.0, "line_cut", list(cut_ids), ndigits=2))
     return state
 
 
@@ -263,15 +262,7 @@ def _cascade(s: _State) -> bool:
         settled_until = max((e["t"] for e in s.events[mark:] if e["type"] in _SETTLING), default=t)
         t = round(max(t, settled_until) + s.params.stage_spacing_s, 2)
         s.open_lines.update(over)
-        s.events.append(
-            {
-                "t": t,
-                "type": "line_overload_open",
-                "ids": sorted(over),
-                "text_key": "line_overload_open",
-                "params": {"stage": stage + 1},
-            }
-        )
+        s.events.append(make_event(t, "line_overload_open", sorted(over), ndigits=2, stage=stage + 1))
     return True
 
 
@@ -297,18 +288,16 @@ def _settle_islands(s: _State, islands: list[list[int]], t: float, stage: int = 
             continue
         if not whole:
             s.events.append(
-                {
-                    "t": round(t, 2),
-                    "type": "island_formed",
-                    "ids": [],
-                    "text_key": "island_formed",
-                    "params": {
-                        "buses": len(island),
-                        "gen_mw": round(gen),
-                        "load_mw": max(0, round(load)),
-                        "stage": stage,
-                    },
-                }
+                make_event(
+                    t,
+                    "island_formed",
+                    [],
+                    ndigits=2,
+                    buses=len(island),
+                    gen_mw=round(gen),
+                    load_mw=max(0, round(load)),
+                    stage=stage,
+                )
             )
         s.results[key] = _settle_island(s, island, gen, load, t)
 
@@ -400,15 +389,7 @@ def _apply_result(s: _State, island: list[int], sim: IslandResult, t: float) -> 
     s.curves[f"I{len(s.curves) + 1}"] = [[round(t + p[0], 2), p[1]] for p in sim.curve]
     for step in sim.steps:
         params = {"zone": step["zone"], "step": step["step"], "mw": step["mw"], "stage": s.stage}
-        s.events.append(
-            {
-                "t": round(t + step["t"], 2),
-                "type": "load_shed",
-                "ids": [],
-                "text_key": "load_shed",
-                "params": params,
-            }
-        )
+        s.events.append(make_event(t + step["t"], "load_shed", [], ndigits=2, **params))
     shed = sum(sim.shed_mw.values())
     if sim.outcome == "blackout":
         info = _lose_island(
@@ -422,18 +403,16 @@ def _apply_result(s: _State, island: list[int], sim: IslandResult, t: float) -> 
         for b in island:
             s.edac_fired[b].add((step["zone"], step["step"] - 1))
     s.events.append(
-        {
-            "t": round(t + s.params.frequency.horizon_s, 2),
-            "type": "island_stable",
-            "ids": [],
-            "text_key": "island_stable",
-            "params": {
-                "min_hz": sim.min_hz,
-                "final_hz": sim.final_hz,
-                "rocof_hz_s": sim.rocof_hz_s,
-                "stage": s.stage,
-            },
-        }
+        make_event(
+            t + s.params.frequency.horizon_s,
+            "island_stable",
+            [],
+            ndigits=2,
+            min_hz=sim.min_hz,
+            final_hz=sim.final_hz,
+            rocof_hz_s=sim.rocof_hz_s,
+            stage=s.stage,
+        )
     )
     return _info("maintains", sim.min_hz, sim.inertia_mws, sim.final_hz, sim.rocof_hz_s, shed, sim.battery_mw)
 
@@ -448,19 +427,17 @@ def _lose_island(
     s.inertia[island] = 0.0
     s.dark.update(island)
     s.events.append(
-        {
-            "t": round(t, 2),
-            "type": "island_blackout",
-            "ids": sorted(f"B{b:03d}" for b in island),
-            "text_key": "island_blackout",
-            "params": {
-                "buses": len(island),
-                "load_mw": max(0, round(lost)),
-                "reason": reason,
-                "min_hz": min_hz,
-                "stage": s.stage,
-            },
-        }
+        make_event(
+            t,
+            "island_blackout",
+            sorted(bus_id(b) for b in island),
+            ndigits=2,
+            buses=len(island),
+            load_mw=max(0, round(lost)),
+            reason=reason,
+            min_hz=min_hz,
+            stage=s.stage,
+        )
     )
     return {**_info(result, min_hz, inertia), "reason": reason}
 
@@ -489,26 +466,36 @@ def _share_reserve(s: _State, island: list[int], sim: IslandResult) -> None:
         s.gen[island] -= sim.curtailed_mw * nonsync / nonsync.sum()
 
 
-def _frame(s: _State, islands: list[list[int]], flows: np.ndarray, t: float) -> dict:
+def frame_edges(lines: list[Line], flows: np.ndarray, open_lines: set[str]) -> dict[str, dict]:
+    """The `edges` of a `Frame`: every open or overloaded line and every line carrying 5 MW or more."""
     edges = {}
-    for f, ln in zip(flows, s.net.lines, strict=True):
+    for f, ln in zip(flows, lines, strict=True):
         ratio = abs(f) / ln.capacity_mw if ln.capacity_mw > 0 else 0.0
-        status = "open" if ln.id in s.open_lines else ("overload" if ratio > 1.0 else "ok")
+        status = "open" if ln.id in open_lines else ("overload" if ratio > 1.0 else "ok")
         if status != "ok" or abs(f) >= 5:
             edges[ln.id] = {"flow_mw": round(float(f)), "status": status, "loading": round(ratio, 3)}
+    return edges
+
+
+def island_summary(islands: list[list[int]], gen: np.ndarray, load: np.ndarray) -> list[dict]:
+    """The `islands` of a `Frame`: buses, generation and load of every island with more than one bus."""
+    return [
+        {
+            "buses": len(i),
+            "gen_mw": round(float(gen[i].sum())),
+            "load_mw": round(float(load[i].sum())),
+        }
+        for i in islands
+        if len(i) > 1
+    ]
+
+
+def _frame(s: _State, islands: list[list[int]], flows: np.ndarray, t: float) -> dict:
     return {
         "t": round(t, 2),
-        "edges": edges,
-        "dark": sorted(f"B{b:03d}" for b in s.dark),
-        "islands": [
-            {
-                "buses": len(i),
-                "gen_mw": round(float(s.gen[i].sum())),
-                "load_mw": round(float(s.load[i].sum())),
-            }
-            for i in islands
-            if len(i) > 1
-        ],
+        "edges": frame_edges(s.net.lines, flows, s.open_lines),
+        "dark": sorted(bus_id(b) for b in s.dark),
+        "islands": island_summary(islands, s.gen, s.load),
     }
 
 

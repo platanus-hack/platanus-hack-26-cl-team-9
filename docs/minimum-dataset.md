@@ -186,7 +186,7 @@ Boundaries that already exist (EVIDENCE):
 Coupling to be aware of (ASSUMPTION: these are the likely pain points for a refactor):
 - `engine._State` is a mutable bag shared by `_settle_islands`, `_shed_load`, `_share_reserve` and `_lose_island`. Splitting them needs an explicit state object passed through.
 - Zone (`norte_grande` or `centro_sur`) is derived from latitude in `network.py` and selects EDAC tables in `frequency.py`. Adding a zone means touching both files.
-- Bus ids are positional (`f"B{i:03d}"`, built in `engine._frame` and `cache_builder`). If the network order changes, ids change and the cache must be rebuilt.
+- Bus ids are positional (`bus_id(i)` = `f"B{i:03d}"` in `domain/cascade/network.py`, used by `engine._frame` and `cache_builder`). If the network order changes, ids change and the cache must be rebuilt.
 - The cache is the only contract with the frontend. Changing a key in the timeline breaks `types.ts`, `text.ts` and `CascadeApp.tsx` together.
 - `people` comes from `scenario._people`, outside the physics. It can be replaced without touching the engine, as long as the output stays one value per bus.
 

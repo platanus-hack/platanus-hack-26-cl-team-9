@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { aggregatePlantsByNode, type Substation } from "./gridData";
-import { describeTopology, formatNumber } from "./nodeDetail";
+import { describeTopology } from "./nodeDetail";
+import { formatNumber } from "../lib/format";
 import { formatPeople, narrate } from "../cascade/text";
 import { LOAD_BANDS, loadColor } from "../cascade/layers";
 import type { Network } from "../cascade/types";
