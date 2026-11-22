@@ -1,6 +1,18 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(data): build Brazil flow network from ONS
+
+- **Changed:** New `data/processed/latam/BRA/network.json` (730 KB): 853 buses, 1,305 AC lines (1,842 circuits, 230-765 kV), 4 HVDC links (12 records) and 495 plant groups. `manifest.json` gains `countries.BRA.flow`. The drawn BRA geojson files are unchanged, except that the manifest's EPE `fetched_at` was refreshed.
+- **Changed:** New `backend/tests/validation/test_ons_network.py` (skips without the file). It checks provenance on every element, x > 0 and capacity > 0, a unit guard (the median ohm/km per kV must sit inside `X_PER_KM`), the main component ≥ 95 %, length within ±15 % of 189,308 km, coordinate match ≥ 98 %, and that the manifest counts match the file.
+- **Why:** Issue part A3/A4. The figures: AC 174,428 circuit-km (−7.9 %) and AC+DC 196,456 km (+3.8 %) against 189,308 km. Coordinates come from ONS for 853 of 855 substations (USIBA 230 kV and COL BOA SORTE 2 500 kV have none, and neither is in EPE). 215 circuits use an assumed capacity. 18 lines with a foreign end are excluded.
+- **Agents:** A5 result (also in the manifest):
+  - Deduced x is off by a median of 15 % (p90 39 %); deduced capacity by a median of 31 % (p90 62 %).
+  - The distance-snapped drawn corridors have precision 0.89 and recall 0.99 against the ONS corridors, on the 728 substations both layers share.
+  - ONS coordinates match EPE substations of the same name within a median of 50 m (582 pairs, 9 more than 10 km apart).
+  - HVDC MW are `kV × A` per record: Xingu gives 4,200 MW per bipole (4,000 nominal), but Madeira gives 12,600 MW (6,300 nominal), so DC MW are unverified. Itaipu HVDC states no amperes (`capacity_mw: null`).
+- **Files:** `data/processed/latam/{BRA/network.json,manifest.json}`, `backend/tests/validation/test_ons_network.py`.
+
 ## 2026-11-21 · feat(regional): write BRA/network.json with cascadasen-regional --ons
 
 - **Changed:** `cd backend && uv run cascadasen-regional --countries BRA --ons` now also builds Brazil's flow network through the new use case `BuildFlowNetwork` (`application/build_regional.py`, wired by `container.flow_network_use_case`). It writes `data/processed/latam/BRA/network.json` and a `flow` block under `manifest.countries.BRA`. That block has counts, circuit-km per kV, the length check against 189,308 km, assumed values, exclusions, the coordinate match rate and `deduction_error`. The command prints a summary and every warning.
