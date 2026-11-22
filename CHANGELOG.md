@@ -1,6 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
+
+- **Changed:** `_loadTimeline` (`web/src/cascade/CascadeApp.tsx`) calls `setPlaying(false); seek(0)` before it asks for the new timeline, and `timeline` is only set when `loaded.key === timelineKey`. A new scenario or cut loads paused at 0.
+- **Why:** the old run kept playing and its cascade stayed on the map until the new timeline arrived (seconds for `POST /grids/simulate`).
+- **Agents:** the cut-then-autoplay behaviour is gone for hand cuts too, they share this path. Session timelines are unchanged.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
 ## 2026-11-22 · feat(grids): failure cost that tells a total blackout from a slow grid, per hour, at POST /grids/cost (#82)
 
 - **Changed:** `blackout_cost` (`domain/simulation/consequence.py`) values dark demand with 7.34 h of black start and a total-blackout premium (k = 1.375, scaled by the dark share), and EDAC load shedding with 1 h and no premium; it also gives `cost_per_hour_usd`. The cascade summary adds `dark_load_mw`, `cost_per_hour_usd` and `cost_breakdown`; substations out of service count as dark. New `POST /api/v1/grids/cost` (`cost_workflow`), read by Estado de la red (total, per hour, MWh and "apagón total / parcial / corte parcial de carga"). Cache regenerated.
