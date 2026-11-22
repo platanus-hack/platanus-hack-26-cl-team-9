@@ -3,7 +3,7 @@
   "generator": "scripts/build_index.py",
   "regenerate": "cd backend && uv run python ../scripts/build_index.py",
   "schema": "docs/index/README.md",
-  "counts": {"by_kind": {"config": 34, "doc": 46, "script": 13, "source": 210, "test": 94}, "by_language": {"css": 7, "dockerfile": 4, "html": 2, "markdown": 46, "python": 186, "shell": 8, "terraform": 15, "toml": 1, "typescript": 114, "yaml": 14}, "files": 397, "undocumented_public_symbols": 665},
+  "counts": {"by_kind": {"config": 34, "doc": 44, "script": 13, "source": 210, "test": 94}, "by_language": {"css": 7, "dockerfile": 4, "html": 2, "markdown": 44, "python": 186, "shell": 8, "terraform": 15, "toml": 1, "typescript": 114, "yaml": 14}, "files": 395, "undocumented_public_symbols": 665},
   "skipped": {"data_dirs": ["data/processed/", "data/scenarios/"], "generated": {"web/public/cache/": {"bytes": 42782243, "files": 1861}}, "unindexed_extensions": {".conf": 1, ".dockerignore": 4, ".example": 2, ".gitignore": 2, ".hcl": 1, ".jpg": 3, ".json": 6, ".jsonc": 1, ".lock": 1, ".png": 13, ".svg": 1, ".txt": 1, "pre-commit": 1}},
   "files": [
     {"kind": "script", "language": "shell", "lines": 32, "path": ".claude/hooks/check_changelog_on_commit.sh", "purpose": "Claude Code PreToolUse hook (Bash). Blocks `git commit` when CHANGELOG.md is not part of the commit, so every commit leaves an entry for the next agent. The gi…"},
@@ -14,8 +14,6 @@
     {"kind": "config", "language": "yaml", "lines": 69, "path": ".github/workflows/deploy.yml", "purpose": "Deploys every commit on main with the AWS CLI only (no Terraform): build and push both images to ECR, register a new task definition revision with the new imag…"},
     {"kind": "config", "language": "yaml", "lines": 45, "path": ".github/workflows/lint.yml", "purpose": ""},
     {"kind": "doc", "language": "markdown", "lines": 87, "path": "AGENTS.md", "purpose": "Agent instructions: Sub50"},
-    {"kind": "doc", "language": "markdown", "lines": 2276, "path": "CHANGELOG.md", "purpose": "Changelog"},
-    {"kind": "doc", "language": "markdown", "lines": 2276, "path": "CHANGELOG.md", "purpose": "Changelog"},
     {"kind": "doc", "language": "markdown", "lines": 2276, "path": "CHANGELOG.md", "purpose": "Changelog"},
     {"kind": "doc", "language": "markdown", "lines": 8, "path": "CLAUDE.md", "purpose": ""},
     {"kind": "doc", "language": "markdown", "lines": 98, "path": "README.md", "purpose": "Sub50"},
@@ -504,8 +502,6 @@
   ],
   "docs": [
     {"headings": [{"level": 1, "line": 1, "text": "Agent instructions: Sub50"}, {"level": 2, "line": 5, "text": "1. Before planning or changing anything: read the docs"}, {"level": 2, "line": 31, "text": "2. While changing"}, {"level": 2, "line": 42, "text": "3. Every commit: changelog entry"}, {"level": 2, "line": 66, "text": "4. Conventions (details in `docs/stack.md` section 9)"}, {"level": 2, "line": 74, "text": "5. Tooling map"}], "lines": 87, "path": "AGENTS.md", "title": "Agent instructions: Sub50"},
-    {"headings": [{"level": 1, "line": 1, "text": "Changelog"}], "lines": 2276, "path": "CHANGELOG.md", "title": "Changelog"},
-    {"headings": [{"level": 1, "line": 1, "text": "Changelog"}], "lines": 2276, "path": "CHANGELOG.md", "title": "Changelog"},
     {"headings": [{"level": 1, "line": 1, "text": "Changelog"}], "lines": 2276, "path": "CHANGELOG.md", "title": "Changelog"},
     {"headings": [{"level": 2, "line": 3, "text": "Claude Code specifics"}], "lines": 8, "path": "CLAUDE.md", "title": ""},
     {"headings": [{"level": 1, "line": 1, "text": "Sub50"}, {"level": 2, "line": 3, "text": "What Sub50 is"}, {"level": 2, "line": 9, "text": "What it simulates"}, {"level": 2, "line": 15, "text": "Run it"}, {"level": 2, "line": 25, "text": "What is validated, and what is not"}, {"level": 2, "line": 34, "text": "Checks (CI)"}, {"level": 2, "line": 38, "text": "Names"}, {"level": 2, "line": 46, "text": "Repository map"}, {"level": 2, "line": 58, "text": "Documentation"}, {"level": 2, "line": 80, "text": "Hackathon metadata"}], "lines": 98, "path": "README.md", "title": "Sub50"},
