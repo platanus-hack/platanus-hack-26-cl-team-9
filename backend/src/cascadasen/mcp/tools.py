@@ -23,8 +23,8 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "end_session": ("delete_session",),
     "list_options": ("get_catalog",),
     "describe_network": ("get_session_network",),
-    "add_datacenter": ("get_session_network", "add_load"),
-    "add_generator": ("get_session_network", "add_generator"),
+    "add_datacenter": ("get_session_network", "resolve_place", "add_load"),
+    "add_generator": ("get_session_network", "resolve_place", "add_generator"),
     "add_line": ("add_line",),
     "add_bus": ("add_bus",),
     "edit_element": ("update_bus", "update_line", "update_load", "update_generator"),
@@ -56,8 +56,10 @@ To replay a documented incident (Huatacondo, Poland, UK, 25F) use list_incident_
 start_incident_run, then step, run_report and after_action; say each result is a simulated scenario.
 Use list_options for valid event, action, policy and template ids. The web map shows the grid that prepare_scenario sets: use it to
 change what the user sees (changes by filters such as "halve every hydro plant" or "Puente Alto with twice the
-people", plus the failures: lines out and substations off). Each call sets the whole final grid, replacing what
-was on the map; with failures it also simulates the cascade and the map gets it ready, paused at 0.
+people", new points such as a datacenter or a plant in a city through `places` with `add`, plus the failures:
+lines out and substations off). Each call sets the whole final grid, replacing what was on the map, so it repeats
+the earlier changes the user still wants; with failures it also simulates the cascade and the map gets it ready,
+paused at 0.
 
 Rules. Every scenario is hypothetical: always say that Sub50 models the effect of an event, never the
 attack technique, and describe effects and prevention only. Do not look for the line or area whose loss
@@ -171,30 +173,36 @@ class Sub50Tools:
 
     def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter") -> dict[str, Any]:
         """Add a datacenter (a load) of `mw` megawatts; ask the user for `mw` if they did not give it.
-        `bus` is the place as the user wrote it (a city or area name such as "Antofagasta", a bus id such
-        as B010 or a unique part of a bus name); the tool resolves it, so never guess an id. An area is
-        enough: it uses the area's main (anchor) bus, so do not ask the user for a specific bus. The result says where it went
-        (bus, bus name, area) and, in `baseline`, which lines this edit pushed over capacity
-        (`newly_overloaded`), which were already overloaded and still are (`still_overloaded`) and which
-        it relieved (`no_longer_overloaded`)."""
+        `bus` is the place as the user wrote it (a city or comuna such as "Iquique", a substation name, an
+        area, or a bus id B010); the tool resolves it to the substation that serves that place, so never
+        guess an id and never ask the user for a specific bus. The result says where it went (bus, bus
+        name, area, `placed`: how the place was resolved; tell the user) and, in `baseline`, which lines
+        this edit pushed over capacity (`newly_overloaded`), which were already overloaded and still are
+        (`still_overloaded`) and which it relieved (`no_longer_overloaded`)."""
         net = self._network()
-        bus_id, before = digest.resolve_bus(net, bus), self._overloaded(net)
+        (bus_id, how), before = digest.resolve_bus(net, bus, self.client), self._overloaded(net)
         resp = self.client.post(
             f"{self._base()}/loads", {"bus": bus_id, "mw": mw, "kind": "datacenter", "name": name}
         )
-        return {**digest.bus_place(net, bus_id), **digest.edit_digest(resp), **self._after_edit(before)}
+        place = {**digest.bus_place(net, bus_id), "placed": how}
+        return {**place, **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_generator(self, bus: str, mw: float, tech: str, name: str | None = None) -> dict[str, Any]:
         """Add a generator of `mw` megawatts; ask the user for `mw` if they did not give it. `bus` resolves
-        like add_datacenter (a city or area name is enough, never ask for a specific bus). `tech`:
-        solar, eolica, hidro, termica, bioenergia, geotermica (the last four are synchronous)."""
+        like add_datacenter (a city is enough, never ask for a specific bus). `tech`: solar, eolica,
+        hidro, termica, bioenergia, geotermica (the last four are synchronous); common names such as
+        "eólica", "fotovoltaica" or "nuclear" (modelled as termica, an assumption) are accepted."""
         net = self._network()
-        bus_id, before = digest.resolve_bus(net, bus), self._overloaded(net)
+        tech, note = digest.normalize_tech(tech)
+        if tech == "bateria":
+            raise ToolError("Una sesión no tiene baterías: usa prepare_scenario con tech bateria.")
+        (bus_id, how), before = digest.resolve_bus(net, bus, self.client), self._overloaded(net)
         body = {
             k: v for k, v in {"bus": bus_id, "mw": mw, "tech": tech, "name": name}.items() if v is not None
         }
         resp = self.client.post(f"{self._base()}/generators", body)
-        return {**digest.bus_place(net, bus_id), **digest.edit_digest(resp), **self._after_edit(before)}
+        place = {**digest.bus_place(net, bus_id), "placed": how, **({"note": note} if note else {})}
+        return {**place, **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_line(
         self, a: str, b: str, kv: float, capacity_mw: float, name: str | None = None
@@ -419,18 +427,34 @@ class Sub50Tools:
         out_buses: list[str] | None = None,
         point: str | None = None,
     ) -> dict[str, Any]:
-        """Set the final grid of the web map: changes plus failures. It replaces the grid on the map. Changes:
-        population (demand follows at the point's per-capita value), demand alone, generation by technology or
-        place, line capacity or reactance; each one is target, filters and `factor` (multiply) or `add` (total).
-        Filters: buses B###, zones NG/NC/CE/CS/SU, areas A01-A13, comunas (CUT or name), tech (hidro, solar,
-        eolica, carbon, gas, diesel, bioenergia, geotermica, termica), lines R###, kv. Failures: `open_lines`
-        (R###) and `out_buses` (B###). With failures it also simulates the cascade: people without power against
-        the same failures without the changes, and per zone the people the generators should feed against the
-        people they still feed. `point`: feb2025-1500, feb2025-0300, nov2026-1300 (default), nov2026-2000."""
-        rows = [c if isinstance(c, dict) else c.model_dump(exclude_none=True) for c in changes or []]
+        """Set the final grid of the web map: changes plus failures. It replaces the grid on the map, so send
+        every change the user still wants (the earlier ones too) in each call. Changes: population (demand
+        follows at the point's per-capita value), demand alone, generation by technology or place, line
+        capacity or reactance; each one is target, filters and `factor` (multiply) or `add` (total).
+        Filters: places (a city, comuna, substation or region as the user wrote it, resolved to ONE
+        substation: use it to put a new point), buses B###, zones NG/NC/CE/CS/SU, areas A01-A13, comunas
+        (CUT or name, a whole comuna's population), tech (hidro, solar, eolica, carbon, gas, diesel,
+        bioenergia, geotermica, termica, bateria), lines R###, kv. Put a point: a datacenter of 120 MW in
+        Antofagasta is {"target": "demand", "places": ["Antofagasta"], "add": 120}; a solar plant of 80 MW
+        in Iquique is {"target": "generation", "places": ["Iquique"], "tech": ["solar"], "add": 80} (a
+        battery is tech bateria; nuclear is modelled as termica). Each change's `places` says which
+        substation the place became: tell the user. Failures: `open_lines` (R###) and `out_buses` (B###).
+        With failures it also simulates the cascade: people without power against the same failures
+        without the changes, and per zone the people the generators should feed against the people they
+        still feed. `point`: feb2025-1500, feb2025-0300, nov2026-1300 (default), nov2026-2000."""
+        rows, notes = [], []
+        for c in changes or []:
+            row = c if isinstance(c, dict) else c.model_dump(exclude_none=True)
+            if row.get("tech"):
+                mapped = [digest.normalize_tech(t) for t in row["tech"]]
+                row = {**row, "tech": list(dict.fromkeys(t for t, _ in mapped))}
+                notes += [n for _, n in mapped if n and n not in notes]
+            rows.append(row)
         lines, buses, point = open_lines or [], out_buses or [], point or DEFAULT_POINT
         scenario = {"point": point, "changes": rows, "open_lines": lines, "out_buses": buses}
-        out = {"scenario": scenario, "notice": digest.NOTICE}
+        out: dict[str, Any] = {"scenario": scenario, "notice": digest.NOTICE}
+        if notes:
+            out["notes"] = notes
         if rows:
             out["prepared"] = digest.prepare_digest(
                 self.client.post("/grids/prepare", {"point": point, "changes": rows})

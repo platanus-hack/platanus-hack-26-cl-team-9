@@ -111,13 +111,21 @@ def test_every_call_names_the_agent():
     assert seen["agent"] == "tester"
 
 
-def test_resolve_bus_by_id_area_name_and_unique_bus_name():
-    assert digest.resolve_bus(NET, "b001") == "B001"
-    assert digest.resolve_bus(NET, "Antofagasta") == "B001"
-    assert digest.resolve_bus(NET, "arica") == "B000"
-    assert digest.resolve_bus(NET, "alpha") == "B000"
+def test_resolve_bus_by_id_and_exact_name_here_and_the_rest_on_the_server():
+    assert digest.resolve_bus(NET, "b001") == ("B001", "barra indicada por id")
+    assert digest.resolve_bus(NET, "alpha")[0] == "B000"  # "S/E Alpha" of this session
     with pytest.raises(ToolError, match="No pude elegir"):
-        digest.resolve_bus(NET, "zzz")
+        digest.resolve_bus(NET, "Iquique")  # no client: a city is not resolved locally
+
+    class Places:
+        def get(self, path, **params):
+            assert path == "/grids/places" and params == {"q": "Iquique", "point": "nov2026-1300"}
+            return {"bus": "B058", "how": "subestación que abastece a la comuna de Iquique"}
+
+    assert digest.resolve_bus(NET, "Iquique", Places()) == (
+        "B058",
+        "subestación que abastece a la comuna de Iquique",
+    )
 
 
 def test_network_and_focus_digests_stay_small():
@@ -248,10 +256,33 @@ def test_report_digest_adds_the_incident_section_only_when_the_run_has_one():
     assert out["incident"] == {"id": "huatacondo-2026", "title": "Huatacondo", "mitigations": ["m"]}
 
 
-def test_prepare_digest_drops_the_per_substation_elements():
+def test_prepare_digest_names_at_most_five_substations_and_drops_the_per_substation_rows():
+    digest_warning = digest.prepare_digest(
+        {
+            "changes": [{"matched": 0}],
+            "totals": {},
+            "overloaded_lines": [],
+            "should_feed": {"by_zone": {}},
+            "per_capita_w": 1,
+            "assumptions": [],
+        }
+    )["changes"][0]["warning"]
     out = digest.prepare_digest(
         {
-            "changes": [{"target": "demand", "count": 2, "elements": ["B000", "B001"]}],
+            "changes": [
+                {
+                    "target": "demand",
+                    "count": 2,
+                    "matched": 2,
+                    "elements": [{"id": "B000", "name": "S/E A"}, {"id": "B001", "name": "S/E B"}],
+                },
+                {
+                    "target": "generation",
+                    "matched": 9,
+                    "elements": [{"id": f"B{i:03d}", "name": "x"} for i in range(9)],
+                },
+                {"target": "generation", "matched": 0, "elements": []},
+            ],
             "totals": {"load_mw": 15.0},
             "overloaded_lines": ["R000", "R001"],
             "should_feed": {"by_zone": {"NG": 30}},
@@ -260,7 +291,15 @@ def test_prepare_digest_drops_the_per_substation_elements():
         }
     )
     assert out == {
-        "changes": [{"target": "demand", "count": 2}],
+        "changes": [
+            {"target": "demand", "count": 2, "matched": 2, "at": ["B000 S/E A", "B001 S/E B"]},
+            {"target": "generation", "matched": 9},  # more than five: no list, no ranking of substations
+            {
+                "target": "generation",
+                "matched": 0,
+                "warning": digest_warning,
+            },  # touched nothing: never "applied"
+        ],
         "totals": {"load_mw": 15.0},
         "overloaded_lines": 2,
         "should_feed_by_zone": {"NG": 30},
@@ -310,10 +349,14 @@ EDIT = {"id": "X1", "warnings": ["w"], "balance": [{"redispatch_mw": 1, "rule": 
 
 def test_edit_tools_send_the_documented_body_and_report_the_baseline_change():
     net_over = {**NET, "baseline": {**NET["baseline"], "overloaded": ["R000"]}}
-    client, seen = _recording({"/network": net_over, "/generators": EDIT, "/lines": EDIT, "/buses": EDIT})
+    places = {"bus": "B001", "how": "comuna de Antofagasta, servida por S/E B"}
+    client, seen = _recording(
+        {"/network": net_over, "/places": places, "/generators": EDIT, "/lines": EDIT, "/buses": EDIT}
+    )
     tools = Sub50Tools(client, McpState(session_id="s"))
     gen = tools.add_generator("Antofagasta", 40, "solar")
     assert gen["bus"] == "B001" and gen["area_name"] == "Antofagasta" and gen["id"] == "X1"
+    assert gen["placed"] == places["how"] and any(s[1].endswith("/grids/places") for s in seen)
     assert gen["baseline"]["still_overloaded"] == ["R000"] and gen["baseline"]["newly_overloaded"] == []
     assert seen[-2][2] == {"bus": "B001", "mw": 40, "tech": "solar"}  # no name key when it is None
     line = tools.add_line("B000", "B001", 220, 300, name="L nueva")
@@ -387,7 +430,7 @@ def test_list_options_keeps_ids_and_roles_only():
 
 def test_prepare_scenario_works_without_a_session_and_only_calls_what_the_input_needs():
     prepared = {
-        "changes": [{"target": "demand", "elements": ["B000"]}],
+        "changes": [{"target": "demand", "matched": 1, "elements": [{"id": "B000", "name": "S/E A"}]}],
         "totals": {},
         "overloaded_lines": [],
         "should_feed": {"by_zone": {}},
@@ -403,7 +446,7 @@ def test_prepare_scenario_works_without_a_session_and_only_calls_what_the_input_
     assert seen == [] and empty["scenario"]["point"] == "nov2026-1300" and "prepared" not in empty
     only_changes = tools.prepare_scenario(changes=[change], point="feb2025-1500")
     assert [s[1] for s in seen] == ["/grids/prepare"] and "simulation" not in only_changes
-    assert only_changes["prepared"]["changes"] == [{"target": "demand"}]
+    assert only_changes["prepared"]["changes"] == [{"target": "demand", "matched": 1, "at": ["B000 S/E A"]}]
     seen.clear()
     both = tools.prepare_scenario(changes=[change], open_lines=["R000"], out_buses=["B001"])
     assert [s[1] for s in seen] == ["/grids/prepare", "/grids/simulate", "/grids/simulate"]

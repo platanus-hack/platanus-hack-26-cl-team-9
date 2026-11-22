@@ -162,13 +162,13 @@ function useOutageCost(point: string, edits: Edits): CostState {
 const TARGET_NAME: Record<StressChange["target"], string> = { population: "Personas", demand: "Demanda", generation: "Generación", lines: "Capacidad" };
 const TECH_NAME: Record<string, string> = {
   hidro: "hidro", solar: "solar", eolica: "eólica", carbon: "carbón", gas: "gas", diesel: "diésel", bioenergia: "bioenergía",
-  geotermica: "geotérmica", termica: "térmica",
+  geotermica: "geotérmica", termica: "térmica", bateria: "batería",
 };
 
 /** One change in words: what it changes, where, and by how much. */
 export function describeChange(c: StressChange, nodeName: (id: string) => string, lineLabel: (id: string) => string): string {
   const where = [
-    ...(c.buses ?? []).map(nodeName), ...(c.lines ?? []).map(lineLabel), ...(c.comunas ?? []),
+    ...(c.places ?? []), ...(c.buses ?? []).map(nodeName), ...(c.lines ?? []).map(lineLabel), ...(c.comunas ?? []),
     ...(c.zones ?? []).map((z) => `zona ${z}`), ...(c.areas ?? []).map((a) => `área ${a}`),
     ...(c.tech ?? []).map((t) => TECH_NAME[t] ?? t), ...(c.kv ?? []).map((k) => `${k} kV`),
   ];
@@ -178,7 +178,9 @@ export function describeChange(c: StressChange, nodeName: (id: string) => string
 }
 
 function matchedText(prepared: Prepared | null, i: number): string {
-  const n = prepared?.changes[i]?.matched;
+  const change = prepared?.changes[i];
+  if (change?.places?.length) return ` · en ${change.places.map((p) => p.bus_name).join(", ")}`;
+  const n = change?.matched;
   return n === undefined ? "" : ` · ${n} ${n === 1 ? "elemento" : "elementos"}`;
 }
 

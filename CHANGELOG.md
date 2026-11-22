@@ -1,5 +1,10 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · test(mcp): follow #110 (places, named substations) and re-point the doc references
+- **Changed:** Three tests of `tests/unit/test_mcp_tools.py` that this branch added now match what #110 changed, with no change to `src/`: `prepare_digest` names up to five substations (`at`) and warns when a change touched none, `add_generator` resolves the place through `GET /grids/places`, and the substations of a change are dicts (`id`, `name`). 15 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` moved with `assistant_routes.py`, `llm_tools.py`, `mcp/digest.py` and `mcp/toolbox.py`. The index is regenerated.
+- **Why:** The merge of `main` brought #110. Upstream CI runs without the `mcp` extra, so tests for the MCP tools were skipped there and could not catch the change; this branch installs the extra, so they run.
+- **Agents:** Do not edit `src/` to satisfy these tests: they describe the new behaviour. After any change to a file named in the docs, re-check its `file:line` references (the claims-to-evidence table in `docs/for-reviewers.md` is checked by opening each line).
+- **Files:** `backend/tests/unit/test_mcp_tools.py`, `docs/code-map.md`, `docs/for-reviewers.md`, `docs/README.md`, `docs/index/repo-index.json`.
 ## 2026-11-22 · chore(ci): the repo-index drift test runs in its own non-blocking job
 - **Changed:** `checks.yml` runs `backend-test` with `--ignore=tests/integration/test_repo_index.py` and adds a job `repo-index` (`continue-on-error: true`) that runs it. AGENTS.md, `docs/index/README.md`, `backend/README.md` and `docs/for-reviewers.md` say so. The index is regenerated.
 - **Why:** The index holds line numbers and CHANGELOG headings, so it is stale after almost any commit by anyone. As part of `backend-test`, which the deploy needs, it would have blocked deploys of every teammate who did not regenerate it.
@@ -45,6 +50,38 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Technical-review follow-up (issue #79): an agent or reviewer finds a file, a symbol, a route or a test with one query instead of reading the tree.
 - **Agents:** Regenerate with `cd backend && uv run python ../scripts/build_index.py` (`--check` verifies) before every commit that adds, removes or edits a source, doc or test file, a route or this file, and `git add` new files first (the builder reads `git ls-files`). The index does not list itself, holds no timestamp or hash, and is byte-identical across runs. Python symbols with no docstring carry `"undocumented": true`. No product code changed.
 - **Files:** `scripts/build_index.py`, `docs/index/{README.md,repo-index.json}`, `backend/tests/integration/test_repo_index.py`.
+
+## 2026-11-22 · feat(web): pins for placed points, Markdown replies, the chat stays open on a scenario
+
+- **Changed:**
+  - `cascade/placed.ts` + `MapOverlays`: each change that adds demand or generation at one to five substations gets a pin with "+120 MW de demanda · S/E ANTOFAGASTA" (plant: disc in its technology color; load: white ring). "Estado de la red" shows "en S/E …" for changes with places.
+  - `assistant/markdown.tsx`: replies and step texts render paragraphs, lists, bold, code and headings, as text nodes only.
+  - `labels.ts`: the `prepare_scenario` card reads "Preparar el mapa" with the changes in words and where each place went (it read "[object Object]"); names for the incident tools.
+  - `applyScenario` keeps the chat open instead of jumping to the tabs, so the reply stays visible beside the map.
+- **Why:** Found testing sub50.cl: with changes and no failure the map draws the base case, so a placed point was invisible; the replies showed `**`; the chat closed when the scenario arrived.
+- **Agents:** `StressChange` and `PreparedChange` carry `places`. Checked in headless Chromium against a local backend with a scripted stand-in model: three pins across two messages, the place error keeps the map, no console errors. `tsc`, 178 web tests and `npm run build` pass.
+- **Files:** `web/src/cascade/{placed.ts,placed.test.ts,MapOverlays.tsx,CascadeApp.tsx,NetworkState.tsx,edits.ts,gridsApi.ts,cascade.css}`, `web/src/assistant/{markdown.tsx,markdown.test.tsx,AssistantPanel.tsx,assistant.css,labels.ts,labels.test.ts}`.
+
+## 2026-11-22 · fix(assistant): place points through prepare_scenario, strip reasoning, answer JSON errors
+
+- **Changed:**
+  - The in-app assistant no longer offers the session edits and cuts (`EXCLUDED` in `mcp/toolbox.py`: `add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network`, `cut_lines`, `repair_lines`, `get_grid_state`, `join_session`). It puts points through `prepare_scenario` with `places`; the system prompt and the tool description say so, with examples. `invented_adds` refuses an `add` the user never wrote.
+  - `prepare_scenario` maps technology names ("eólica", "BESS", "nuclear" as `termica` with a note); its summary says where small changes went (`at`) and warns on `matched: 0`.
+  - MCP session tools resolve places through `GET /grids/places` (`digest.resolve_bus` returns `(bus, how)`; results carry `placed`); redispatch carries `meaning`.
+  - `clean_text` drops `<thinking>…</thinking>`; a Converse answer without content is a 502; `/chat` answers other failures as JSON 500 and both routes log the traceback.
+- **Why:** Found testing sub50.cl: the web draws only prepare_scenario's grid (#101), so datacenters the assistant added with `add_datacenter` never reached the map; the reply showed the model's `<thinking>`; `/chat` answered plain-text 500s for some minutes with no traceback in the logs.
+- **Agents:** The MCP server keeps every tool. Integration tests now drive the assistant with `describe_network`, `start_run`, `inject_event` and `prepare_scenario` (`test_a_point_lands_at_the_substation_that_serves_the_place` runs on the real grid). The real model's use of `places` was not checked against Bedrock (no credentials here).
+- **Files:** `backend/src/cascadasen/mcp/{tools,toolbox,digest}.py`, `backend/src/cascadasen/api/assistant_routes.py`, `backend/src/cascadasen/infrastructure/llm_tools.py`, `backend/tests/{unit/test_assistant.py,unit/test_llm_tools.py,unit/test_mcp_tools.py,unit/test_prepare_scenario_tool.py,integration/test_assistant_api.py,integration/test_mcp_server.py}`, `docs/{assistant.md,mcp.md}`.
+
+## 2026-11-22 · feat(stress): resolve places to the substation that serves them and build new plants
+
+- **Changed:**
+  - New `application/places.py`: a place (bus id, area id, substation name, comuna, region or province, area name, part of a name) resolves to one bus and says how. A comuna goes to the substation that serves most of its people (`served_by`); comunas off the SEN answer 404.
+  - A change takes `places` (population, demand, generation), resolved into `buses`; the report carries `places: [{place, bus, bus_name, area, area_name, how}]`. New agent route `GET /api/v1/grids/places?q=` (`resolve_place`).
+  - `add` of generation where the picked buses lack the technology builds a new plant (`new_plant`, H = 4 s if synchronous, assumption `new_plant`); new technology `bateria` (new capacity only, no inertia). No `tech`, or mixed synchronous and not, is a 422.
+- **Why:** Found testing sub50.cl: "Antofagasta" went to S/E ESCONDIDA (140 km) and "Arica"/"Iquique" to S/E COLLAHUASI, because area names matched first. And `/grids/prepare` answered 200 with `matched: 0` for a solar plant at any substation without solar (Antofagasta, Santiago, Concepción, Iquique, Puerto Montt), so a new plant was never built.
+- **Agents:** `stress.md` section 3.1 has the resolution order. The snapshot assigns Isla de Pascua and Juan Fernández to mainland substations; `MAX_SERVING_KM` (300) treats them as off the SEN. `TECH_ORDER` now ends with `bateria`. `agents.openapi.json` regenerated (route `resolve_place`, `places`, `PlaceOut`).
+- **Files:** `backend/src/cascadasen/application/{places.py,grid_stress.py}`, `backend/src/cascadasen/api/{grid_routes.py,stress_schemas.py}`, `backend/tests/unit/test_places.py`, `docs/{stress.md,openapi/agents.openapi.json}`.
 
 ## 2026-11-22 · test(web): render and interaction tests for SelectionCard, NetworkState and IncidentPanel
 - **Changed:** Three new component test files (26 tests): `web/src/cascade/SelectionCard.test.tsx` (11), `web/src/cascade/NetworkState.test.tsx` (6), `web/src/incidents/IncidentPanel.test.tsx` (9). New dev dependencies in `web/package.json` and `web/package-lock.json`: `jsdom`, `@testing-library/react`, `@testing-library/dom`.

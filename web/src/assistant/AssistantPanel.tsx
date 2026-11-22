@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MAX_MESSAGE } from "./assistantApi";
 import { argsText, errorMessage, resultText, toolName, truncatedText } from "./labels";
+import { Markdown } from "./markdown";
 import type { AssistantTurn, Step, ToolCard } from "./steps";
 import type { Assistant } from "./useAssistant";
 import "./assistant.css";
@@ -71,7 +72,7 @@ function AssistantTurnView({ turn, last, busy, onContinue }: { turn: AssistantTu
     <div className="chat-turn" aria-live={last ? "polite" : undefined}>
       {turn.steps.map((s) => <StepView key={s.step} step={s} />)}
       {turn.status === "streaming" && <p className="meta chat-wait"><span className="spinner" aria-hidden />{turn.steps.length ? "Pensando el siguiente paso…" : "Leyendo tu mensaje…"}</p>}
-      {turn.reply && <p className="chat-reply">{turn.reply}</p>}
+      {turn.reply && <Markdown className="chat-reply" text={turn.reply} />}
       {turn.notice && <div className="notice"><span>{turn.notice}</span></div>}
       {truncated && (
         <div className="notice"><span>{truncated}</span>{last && <button className="text-btn" disabled={busy} onClick={onContinue}>Continuar</button>}</div>
@@ -86,7 +87,7 @@ function StepView({ step }: { step: Step }) {
   return (
     <div className="chat-steps">
       {step.items.map((item, i) => (item.kind === "text"
-        ? <p key={i} className="chat-thought">{item.text}</p>
+        ? <Markdown key={i} className="chat-thought" text={item.text} />
         : <ToolCardView key={item.card.id || i} card={item.card} />))}
     </div>
   );

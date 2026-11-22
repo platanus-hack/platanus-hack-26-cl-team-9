@@ -56,25 +56,39 @@ def make_app(toy_snapshot, toy_network, toy_world, toy_spec, physics):
     return build
 
 
-def test_a_message_edits_and_cuts_through_the_real_routes(make_app):
+def test_a_message_runs_tools_through_the_real_routes(make_app):
     model = ScriptedModel(
-        calls(
-            ("start_session", {}),
-            ("add_datacenter", {"bus": "B002", "mw": 100, "name": "DC Toy"}),
-            ("cut_lines", {"lines": ["R1"]}),
-        ),
-        AssistantTurn("Agregué el datacenter y corté R1."),
+        calls(("start_session", {}), ("describe_network", {}), ("start_run", {"horizon": 4})),
+        AssistantTurn("Abrí la corrida."),
     )
     client = TestClient(make_app(model))
-    out = client.post(CHAT, json={"message": "agrega un datacenter de 100 MW y corta R1"}).json()
-    assert out["reply"].startswith("Agregué") and out["steps"] == 2 and out["truncated"] is None
-    assert [t["name"] for t in out["tool_calls"]] == ["start_session", "add_datacenter", "cut_lines"]
+    out = client.post(CHAT, json={"message": "abre una corrida"}).json()
+    assert out["reply"] == "Abrí la corrida." and out["steps"] == 2 and out["truncated"] is None
+    assert [t["name"] for t in out["tool_calls"]] == ["start_session", "describe_network", "start_run"]
     assert all(t["ok"] for t in out["tool_calls"])
-    sid = out["session_id"]
+    sid, rid = out["session_id"], out["run_id"]
     doc = client.get(f"/api/v1/sessions/{sid}").json()
-    assert doc["open_lines"] == ["R1"] and doc["last_op"]["by"] == "asistente"
-    assert client.get(f"/api/v1/sessions/{sid}/network").json()["loads"][0]["name"] == "DC Toy"
+    assert rid in doc["runs"] and doc["last_op"]["by"] == "asistente"
     assert "Sub50 simulates" in model.systems[0]  # the shared guardrails are in the prompt
+    assert "places" in model.systems[0]  # and how to put a point on the map
+
+
+def test_a_point_lands_at_the_substation_that_serves_the_place(make_app):
+    """prepare_scenario resolves "Iquique" and "Antofagasta" on the real 188-bus grid (docs/stress.md)."""
+    changes = [
+        {"target": "demand", "places": ["Antofagasta"], "add": 120},
+        {"target": "generation", "places": ["Iquique"], "tech": ["solar"], "add": 80},
+    ]
+    model = ScriptedModel(calls(("prepare_scenario", {"changes": changes})), AssistantTurn("Listo."))
+    msg = "datacenter de 120 MW en Antofagasta y una solar de 80 MW en Iquique"
+    out = TestClient(make_app(model)).post(CHAT, json={"message": msg}).json()
+    tool = out["tool_calls"][0]
+    assert tool["ok"], tool["result"]
+    dc, solar = tool["result"]["prepared"]["changes"]
+    assert dc["places"][0]["bus_name"] == "S/E ANTOFAGASTA" and dc["load_delta_mw"] == 120.0
+    assert solar["places"][0]["bus_name"] == "S/E CONDORES" and solar["new_plant"] is True
+    assert solar["gen_delta_mw"] == 80.0 and "warning" not in solar
+    assert tool["result"]["scenario"]["changes"] == changes  # what the web loads on the map
 
 
 def test_the_conversation_continues_and_can_be_read_and_deleted(make_app):
@@ -94,12 +108,17 @@ def test_the_conversation_continues_and_can_be_read_and_deleted(make_app):
 
 def test_tool_errors_reach_the_model_not_the_client(make_app):
     model = ScriptedModel(
-        calls(("start_session", {}), ("cut_lines", {"lines": ["R99"]}), ("end_session", {})),
-        AssistantTurn("esa línea no existe"),
+        calls(
+            ("start_session", {}),
+            ("start_incident_run", {"scenario": "no-existe"}),
+            ("cut_lines", {"lines": ["R1"]}),
+        ),
+        AssistantTurn("ese incidente no existe"),
     )
-    out = TestClient(make_app(model)).post(CHAT, json={"message": "corta R99"}).json()
+    out = TestClient(make_app(model)).post(CHAT, json={"message": "corre el incidente no-existe"}).json()
     assert [t["ok"] for t in out["tool_calls"]] == [True, False, False]
-    assert "404" in out["tool_calls"][1]["result"]["error"]
+    assert "422" in out["tool_calls"][1]["result"]["error"]
+    # session cuts are not the assistant's: the map draws only prepare_scenario's grid
     assert out["tool_calls"][2]["result"]["error"].startswith("Herramienta desconocida")
 
 
@@ -128,23 +147,23 @@ def test_the_chat_is_rate_limited_per_client_ip(make_app):
 
 
 def test_session_write_limits_count_against_the_caller_not_a_shared_loopback(make_app):
-    adds = [("add_datacenter", {"bus": "B002", "mw": 1, "name": f"DC{i}"}) for i in range(4)]
-    model = ScriptedModel(calls(("start_session", {}), *adds), AssistantTurn("ok"))
+    event = ("inject_event", {"type": "C3_transmission_opening", "target": "T2-T3"})
+    model = ScriptedModel(
+        calls(("start_session", {}), ("start_run", {}), event, event, event), AssistantTurn("ok")
+    )
     app = make_app(model, rate_writes_per_minute=2)
-    out = TestClient(app).post(CHAT, json={"message": "agrega cuatro de 1 MW"}).json()
+    out = TestClient(app).post(CHAT, json={"message": "abre T2-T3 tres veces"}).json()
     assert [t["ok"] for t in out["tool_calls"][1:]] == [True, True, False, False]
     assert "espera" in out["tool_calls"][3]["result"]["error"]
 
 
 def test_a_tool_that_needs_a_session_opens_it_without_the_user(make_app):
-    model = ScriptedModel(
-        calls(("add_datacenter", {"bus": "B002", "mw": 100, "name": "DC Toy"})), AssistantTurn("Agregado.")
-    )
+    model = ScriptedModel(calls(("describe_network", {})), AssistantTurn("Esta es la red."))
     client = TestClient(make_app(model))
-    out = client.post(CHAT, json={"message": "agrega un datacenter de 100 MW"}).json()
+    out = client.post(CHAT, json={"message": "describe la red"}).json()
     assert out["tool_calls"][0]["ok"] is True and "automáticamente" in out["tool_calls"][0]["result"]["nota"]
     sid = out["session_id"]
-    assert sid and client.get(f"/api/v1/sessions/{sid}/network").json()["loads"][0]["name"] == "DC Toy"
+    assert sid and client.get(f"/api/v1/sessions/{sid}").status_code == 200
 
 
 def test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened(make_app, monkeypatch):
@@ -186,14 +205,12 @@ def parse_sse(text):
 
 def test_the_stream_sends_each_step_then_done(make_app):
     model = ScriptedModel(
-        AssistantTurn(
-            "Agrego el datacenter.", (ToolCall("c1", "add_datacenter", {"bus": "B002", "mw": 100}),)
-        ),
-        calls(("cut_lines", {"lines": ["R1"]})),
+        AssistantTurn("Abro la corrida.", (ToolCall("c1", "start_run", {"horizon": 4}),)),
+        calls(("inject_event", {"type": "C3_transmission_opening", "target": "T2-T3"})),
         AssistantTurn("Listo."),
     )
     client = TestClient(make_app(model))
-    r = client.post(STREAM, json={"message": "agrega un datacenter de 100 MW y corta R1"})
+    r = client.post(STREAM, json={"message": "abre una corrida y el corredor T2-T3"})
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
     events = parse_sse(r.text)
     assert [k for k, _ in events] == [
@@ -207,17 +224,17 @@ def test_the_stream_sends_each_step_then_done(make_app):
     ]
     by = dict(events[:1])
     assert by["start"]["session_id"] is None
-    dc_result, cut_result = events[3][1], events[5][1]
-    assert dc_result["name"] == "add_datacenter" and dc_result["ok"] and dc_result["session_id"]
-    assert cut_result["result"]["open_lines"] == ["R1"]
+    run_result, event_result = events[3][1], events[5][1]
+    assert run_result["name"] == "start_run" and run_result["ok"] and run_result["session_id"]
+    assert run_result["run_id"] and event_result["result"]["accepted"]
     done = events[-1][1]
-    assert done["reply"] == "Listo." and done["session_id"] == dc_result["session_id"]
+    assert done["reply"] == "Listo." and done["session_id"] == run_result["session_id"]
     # the client fetches the full state the event points to
-    state = client.get(f"/api/v1/sessions/{done['session_id']}/state").json()
-    assert state["open_lines"] == ["R1"] and state["timeline"]["frames"]
+    run = client.get(f"/api/v1/sessions/{done['session_id']}/runs/{done['run_id']}").json()
+    assert run["run"]["run_id"] == done["run_id"]
     # the conversation is the same one /chat would have stored
     read = client.get(f"/api/v1/assistant/conversations/{done['conversation_id']}").json()
-    assert [t["name"] for t in read["tool_calls"]] == ["add_datacenter", "cut_lines"]
+    assert [t["name"] for t in read["tool_calls"]] == ["start_run", "inject_event"]
 
 
 def test_stream_errors_before_and_after_it_starts(make_app):
