@@ -38,6 +38,26 @@ describe("cascade at time t", () => {
     expect(frequencyAt(timeline, 0.5)[0].hz).toBeNull();
   });
 
+  it("reports a voltage-collapse island as a blackout, never as a nominal 50 Hz", () => {
+    // 25F (feb2025-1500, R239): both islands collapse by the voltage rule at t = 2 s and no curve is simulated.
+    const voltage: Timeline = {
+      ...timeline, frequency_hz: {},
+      events: [ev(0, "line_cut"), ev(2, "island_formed"), ev(2, "island_blackout", { reason: "voltage", min_hz: null }), ev(2, "island_formed"), ev(2, "island_blackout", { reason: "voltage", min_hz: null })],
+    };
+    expect(frequencyAt(voltage, 1).every((i) => !i.started && !i.collapsed)).toBe(true);
+    const end = frequencyAt(voltage, 22);
+    expect(end).toHaveLength(2);
+    expect(end.every((i) => i.started && i.collapsed && i.hz == null)).toBe(true);
+    expect(end.map((i) => i.name)).toEqual(["Isla 1", "Isla 2"]);
+  });
+
+  it("lists voltage-collapse islands after the islands with a curve", () => {
+    const mixed: Timeline = { ...timeline, events: [...timeline.events, ev(4, "island_blackout", { reason: "voltage" })] };
+    const islands = frequencyAt(mixed, 5);
+    expect(islands.map((i) => i.name)).toEqual(["Isla 1", "Isla 2", "Isla 3"]);
+    expect(islands[2]).toMatchObject({ hz: null, collapsed: true });
+  });
+
   it("groups only same-instant events and keeps every marker inside the track", () => {
     const m = groupEvents(timeline.events, timeWarp(timeline, 290), 290);
     // the shed at 1.5 s joins the new island at 1.0 s; the cut, the island and the blackout keep their own markers

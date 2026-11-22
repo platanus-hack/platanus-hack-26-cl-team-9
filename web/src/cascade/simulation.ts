@@ -158,9 +158,19 @@ export function lastEventTime(tl: Timeline): number {
 
 export interface IslandFrequency { id: string; name: string; hz: number | null; minHz: number; started: boolean; collapsed: boolean }
 
-/** Frequency of each island at time t (linear between samples). `hz` is null before the island exists. */
+/**
+ * Frequency of each island at time t (linear between samples). `hz` is null before the island exists and for an island
+ * with no curve. An island that collapses by the voltage rule (`island_blackout` with `reason: "voltage"`, docs/engine.md)
+ * has no simulated curve: it is listed after the curve islands with `hz: null`, started and collapsed from its blackout
+ * event on, so the panel says "apagón" instead of a nominal 50 Hz.
+ */
 export function frequencyAt(tl: Timeline, t: number): IslandFrequency[] {
-  return Object.entries(tl.frequency_hz).map(([id, curve], i) => {
+  const curves = Object.entries(tl.frequency_hz);
+  const voltage = tl.events.filter((e) => e.type === "island_blackout" && e.params.reason === "voltage").map((e, k): IslandFrequency => {
+    const reached = t + 1e-9 >= e.t;
+    return { id: `V${k + 1}`, name: `Isla ${curves.length + k + 1}`, hz: null, minHz: Number.NaN, started: reached, collapsed: reached };
+  });
+  return [...curves.map(([id, curve], i) => {
     const minHz = Math.min(...curve.map((p) => p[1]));
     const started = curve.length > 0 && t + 1e-9 >= curve[0][0];
     const lastT = curve[curve.length - 1]?.[0] ?? 0;
@@ -168,7 +178,7 @@ export function frequencyAt(tl: Timeline, t: number): IslandFrequency[] {
     const endsInBlackout = tl.events.some((e) => e.type === "island_blackout" && Math.abs(e.t - lastT) < 0.3);
     const collapsed = (endsInBlackout || minHz < BLACKOUT_HZ) && t + 1e-9 >= lastT && lastT < tl.duration_s - 0.5;
     return { id, name: `Isla ${i + 1}`, hz: started ? sample(curve, t) : null, minHz, started, collapsed };
-  });
+  }), ...voltage];
 }
 
 export function sample(curve: [number, number][], t: number): number {

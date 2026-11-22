@@ -1,5 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · fix(web): show "apagón", not 50 Hz, when islands collapse by the voltage rule
+
+- **Changed:** `frequencyAt` (`web/src/cascade/simulation.ts`) lists each `island_blackout` with `reason: "voltage"` as an island with no curve (`hz: null`), started and collapsed from its event on. The Simulación figure and the timeline readout therefore say "apagón" for 25F (`feb2025-1500`, R239), where `frequency_hz` is `{}` and 18.2 M people are dark. Two unit tests; the tips mention the no-curve case.
+- **Why:** With no curve, the panel fell back to 50 Hz and the readout to "País 50,00 Hz" while the whole country was dark.
+- **Agents:** Voltage-collapse islands are named after the curve islands (`Isla N+1`...) with ids `V1`, `V2`; their `minHz` is `NaN`. Islands with a curve (Ancoa, `nov2026-2000` R006) behave as before. Before the first island forms the readout still says "País 50,00 Hz".
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,SimulationPanel.tsx,Timeline.tsx}`, `docs/mapa3.md`.
+
 ## 2026-11-22 · test(mcp): follow #110 (places, named substations) and re-point the doc references
 - **Changed:** Three tests of `tests/unit/test_mcp_tools.py` that this branch added now match what #110 changed, with no change to `src/`: `prepare_digest` names up to five substations (`at`) and warns when a change touched none, `add_generator` resolves the place through `GET /grids/places`, and the substations of a change are dicts (`id`, `name`). 15 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` moved with `assistant_routes.py`, `llm_tools.py`, `mcp/digest.py` and `mcp/toolbox.py`. The index is regenerated.
 - **Why:** The merge of `main` brought #110. Upstream CI runs without the `mcp` extra, so tests for the MCP tools were skipped there and could not catch the change; this branch installs the extra, so they run.

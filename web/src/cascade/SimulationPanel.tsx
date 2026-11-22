@@ -118,6 +118,8 @@ function ImpactCard(p: Props) {
   const lowest = p.islands.filter((i) => i.hz != null).sort((a, b) => (a.hz ?? 50) - (b.hz ?? 50))[0];
   const collapsed = p.islands.some((i) => i.collapsed);
   const hzValue = collapsed ? null : lowest?.hz ?? 50;
+  // An island that collapses by the voltage rule has no curve (hz null): name it when no island has a frequency.
+  const named = lowest ?? p.islands.find((i) => i.collapsed);
   const fault = collapsed || (hzValue != null && hzValue < 49);
   const withstands = withstandsAt(p.timeline, p.t);
   return (
@@ -140,9 +142,9 @@ function ImpactCard(p: Props) {
         <div>
           <div className="value-row">
             {hzValue == null ? <b className="fault">apagón</b> : <b className={fault ? "fault" : ""}>{hz(hzValue)} <small>Hz</small></b>}
-            <Info tip="Frecuencia de la isla más baja, con un modelo de una masa por isla (supuestos sin calibrar). Bajo 47,5 Hz la isla se apaga." />
+            <Info tip="Frecuencia de la isla más baja, con un modelo de una masa por isla (supuestos sin calibrar). Bajo 47,5 Hz la isla se apaga; una isla que colapsa por tensión se apaga sin curva de frecuencia." />
           </div>
-          <span>{p.islands.length > 1 ? `frecuencia ${lowest?.name.toLowerCase() ?? "más baja"}` : "frecuencia"}</span>
+          <span>{p.islands.length > 1 ? `frecuencia ${named?.name.toLowerCase() ?? "más baja"}` : "frecuencia"}</span>
         </div>
       </div>
       {p.timeline.truncated && (

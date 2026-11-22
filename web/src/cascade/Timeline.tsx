@@ -118,7 +118,7 @@ function TrackMarker({ m, state, onClick }: { m: Marker; state: MarkerState; onC
 
 function Readout({ islands }: { islands: IslandFrequency[] }) {
   const live = islands.filter((i) => i.started);
-  const tip = `Frecuencia de cada isla según el motor Sub50. Bajo ${hz(BLACKOUT_HZ)} Hz la isla se apaga.`;
+  const tip = `Frecuencia de cada isla según el motor Sub50. Bajo ${hz(BLACKOUT_HZ)} Hz la isla se apaga; una isla que colapsa por tensión se apaga sin curva.`;
   if (live.length === 0) return <div className="readout"><span>País <em>50,00 Hz</em></span><Info tip={tip} /></div>;
   return (
     <div className="readout">
