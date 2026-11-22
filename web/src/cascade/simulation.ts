@@ -231,6 +231,30 @@ export function groupEvents(events: Event[], warp: TimeWarp, trackWidth: number)
   return out;
 }
 
+/** The instants the network splits into islands (`island_formed`), with how many islands form then, in time order. */
+export function islandMoments(events: Event[]): { t: number; count: number }[] {
+  const out: { t: number; count: number }[] = [];
+  for (const e of events) {
+    if (e.type !== "island_formed") continue;
+    const last = out[out.length - 1];
+    if (last && Math.abs(last.t - e.t) < 1e-6) last.count++;
+    else out.push({ t: e.t, count: 1 });
+  }
+  return out;
+}
+
+/** Island moments as rail ticks: moments closer than `minPx` on the rail share one tick (first time, summed count),
+ * so their labels never overlap. `x` maps simulated seconds to rail pixels. */
+export function islandTicks(moments: { t: number; count: number }[], x: (t: number) => number, minPx = 40) {
+  const out: { t: number; left: number; count: number; times: number[] }[] = [];
+  for (const m of moments) {
+    const last = out[out.length - 1];
+    if (last && x(m.t) - last.left < minPx) { last.count += m.count; last.times.push(m.t); }
+    else out.push({ t: m.t, left: x(m.t), count: m.count, times: [m.t] });
+  }
+  return out;
+}
+
 /** Where an event happens on the map, when it has a place: the cut or opened line, the shed zone, or the dark area. */
 export function eventLocation(e: Event, tl: Timeline, network: Network): [number, number] | null {
   const node = (id: string) => network.nodes.find((n) => n.id === id);
@@ -255,6 +279,12 @@ export function eventLocation(e: Event, tl: Timeline, network: Network): [number
 export function frameAt(tl: Timeline, t: number): Frame {
   const f = tl.frames[frameIndexAt(tl, t)];
   return { ...f, dark: [...darkAt(tl, t)] };
+}
+
+/** Mean loading (share of capacity) of the lines carrying flow in a frame; open lines and lines without flow do not count. Null if none. */
+export function meanLoading(f: Frame): number | null {
+  const on = Object.values(f.edges).filter((e) => e.status !== "open" && e.loading > 0);
+  return on.length ? on.reduce((s, e) => s + e.loading, 0) / on.length : null;
 }
 
 export type LineStatus = "en servicio" | "sobrecargada" | "fuera de servicio" | "sin tensión";

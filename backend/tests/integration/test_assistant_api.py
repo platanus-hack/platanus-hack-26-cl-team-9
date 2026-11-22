@@ -69,7 +69,7 @@ def test_a_message_runs_tools_through_the_real_routes(make_app):
     sid, rid = out["session_id"], out["run_id"]
     doc = client.get(f"/api/v1/sessions/{sid}").json()
     assert rid in doc["runs"] and doc["last_op"]["by"] == "asistente"
-    assert "Sub50 simulates" in model.systems[0]  # the shared guardrails are in the prompt
+    assert "does the most damage" in model.systems[0]  # the shared guardrails are in the prompt
     assert "places" in model.systems[0]  # and how to put a point on the map
 
 
@@ -122,7 +122,7 @@ def test_a_line_with_factor_zero_tells_the_model_to_use_open_lines(make_app):
 
 
 def test_the_conversation_continues_and_can_be_read_and_deleted(make_app):
-    model = ScriptedModel(calls(("start_session", {})), AssistantTurn("listo"), AssistantTurn("sigo"))
+    model = ScriptedModel(calls(("describe_network", {})), AssistantTurn("listo"), AssistantTurn("sigo"))
     client = TestClient(make_app(model))
     first = client.post(CHAT, json={"message": "crea una sesión"}).json()
     cid, sid = first["conversation_id"], first["session_id"]
@@ -130,7 +130,7 @@ def test_the_conversation_continues_and_can_be_read_and_deleted(make_app):
     assert second["session_id"] == sid and second["reply"] == "sigo"
     read = client.get(f"/api/v1/assistant/conversations/{cid}").json()
     assert [t["role"] for t in read["turns"]] == ["user", "assistant", "user", "assistant"]
-    assert read["tool_calls"][0]["name"] == "start_session"
+    assert read["tool_calls"][0]["name"] == "describe_network"
     assert client.delete(f"/api/v1/assistant/conversations/{cid}").status_code == 204
     assert client.get(f"/api/v1/assistant/conversations/{cid}").status_code == 404
     assert client.get(f"/api/v1/sessions/{sid}").status_code == 200  # the session stays
@@ -299,3 +299,20 @@ def test_the_stream_pings_while_the_model_thinks(make_app):
     client = TestClient(make_app(SlowModel(AssistantTurn("ok")), assistant_stream_ping_s=0.05))
     body = client.post(STREAM, json={"message": "x"}).text
     assert ": ping" in body and parse_sse(body)[-1][0] == "done"
+
+
+def test_the_grid_on_the_map_goes_to_the_prompt_of_that_message_only(make_app):
+    model = ScriptedModel(AssistantTurn("a"), AssistantTurn("b"), AssistantTurn("c"))
+    client = TestClient(make_app(model))
+    change = {"target": "generation", "tech": ["hidro"], "factor": 0.5}
+    grid = {"point": "nov2026-1300", "changes": [change], "open_lines": [], "out_buses": ["B039"]}
+    first = client.post(CHAT, json={"message": "hola", "grid": grid}).json()
+    base = {"point": "feb2025-1500", "changes": [], "open_lines": [], "out_buses": []}
+    client.post(CHAT, json={"message": "otra", "conversation_id": first["conversation_id"], "grid": base})
+    client.post(CHAT, json={"message": "sin grilla", "conversation_id": first["conversation_id"]})
+    assert "Grilla actual del mapa" in model.systems[0] and '"factor": 0.5' in model.systems[0]
+    assert '"out_buses": ["B039"]' in model.systems[0]
+    assert "Estado basal del punto feb2025-1500" in model.systems[1] and "B039" not in model.systems[1]
+    assert "Grilla actual" not in model.systems[2]  # a client that sends none gets the plain prompt
+    bad = client.post(CHAT, json={"message": "x", "grid": {**grid, "changes": [{"target": "nope"}]}})
+    assert bad.status_code == 422

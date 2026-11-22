@@ -108,6 +108,26 @@ def test_dc_flow_splits_by_reactance_and_conserves_power():
     assert flows[0] == pytest.approx(flows[2], abs=1e-6)
 
 
+@pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
+@pytest.mark.parametrize("point_id", ["feb2025-1500", "feb2025-0300", "nov2026-1300", "nov2026-2000"])
+def test_dc_flow_solve_matches_the_lstsq_fallback_on_every_point(point_id, monkeypatch):
+    # flow._angles solves with LU and falls back to lstsq on LinAlgError; both must give the same MW
+    net, point = load_network_and_point(PROCESSED, point_id)
+    injection = point.gen - point.load
+    for open_lines in (set(), {"R216", "R239", "R254"}):  # the whole grid, and the 25F split into islands
+        islands = find_islands(net, open_lines)
+        solved = dc_flow(net, open_lines, injection, islands)
+        with monkeypatch.context() as m:
+
+            def singular(*_):
+                raise np.linalg.LinAlgError
+
+            m.setattr(np.linalg, "solve", singular)
+            fallback = dc_flow(net, open_lines, injection, islands)
+        assert np.abs(solved - fallback).max() < 1e-9
+        assert np.abs(solved).max() > 100  # real flows, not an all-zero answer
+
+
 def test_islands_follow_open_lines():
     net = _toy_net()
     assert len(find_islands(net, set())) == 1
@@ -347,6 +367,40 @@ def test_network_json_carries_country_on_every_node_and_line():
     doc = network_json(_toy_net())
     assert all(n["country"] == "CHL" for n in doc["nodes"])
     assert all(ln["country"] == "CHL" for ln in doc["lines"])
+
+
+@pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
+def test_people_by_comuna_sums_to_the_people_of_each_bus():
+    import json
+
+    from cascadasen.domain.cascade.scenario import people_by_comuna
+
+    net, point = load_network_and_point(PROCESSED, "nov2026-2000")
+    snapshot = json.loads((PROCESSED / "grid_snapshot.json").read_text(encoding="utf-8"))
+    rows = people_by_comuna(net, snapshot)
+    assert len(rows) == net.size
+    for i in range(net.size):
+        assert sum(rows[i].values()) == pytest.approx(point.people[i])
+
+
+@pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
+def test_comunas_file_matches_bus_people_and_the_committed_cache(tmp_path):
+    import json
+
+    from cascadasen.application.cache_builder import write_comunas
+
+    net, point = load_network_and_point(PROCESSED, "nov2026-2000")
+    write_comunas(PROCESSED, tmp_path, [2026])
+    doc = json.loads((tmp_path / "comunas-2026.json").read_text(encoding="utf-8"))
+    assert doc["is_assumption"] is True
+    assert set(doc["buses"]) == {f"B{i:03d}" for i in range(net.size)}
+    for i in range(net.size):
+        rows = doc["buses"][f"B{i:03d}"]
+        assert abs(sum(p for _, p in rows) - round(point.people[i])) <= max(1, len(rows))
+        assert all(cut in doc["comunas"] for cut, _ in rows)
+    committed = Path(__file__).resolve().parents[3] / "web" / "public" / "cache" / "comunas-2026.json"
+    if committed.exists():
+        assert json.loads(committed.read_text(encoding="utf-8")) == doc
 
 
 # --- Cascade invariants (issue #90) -------------------------------------------------------------------------------

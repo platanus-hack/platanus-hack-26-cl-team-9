@@ -6724,6 +6724,15 @@
               false
             ]
           },
+          "manual_defense": {
+            "type": "boolean",
+            "title": "Manual Defense",
+            "description": "The defensive staff proposes nothing: only actions sent to POST .../actions run, validated and paid for as usual (a user defends by hand, e.g. in the Ciberataque monitor)",
+            "default": false,
+            "examples": [
+              false
+            ]
+          },
           "stochastic": {
             "type": "boolean",
             "title": "Stochastic",
@@ -7847,10 +7856,11 @@
               "population",
               "demand",
               "generation",
-              "lines"
+              "lines",
+              "substation"
             ],
             "title": "Target",
-            "description": "population (people; demand follows), demand (MW alone), generation (MW), lines (capacity)."
+            "description": "population (people; demand follows), demand (MW alone), generation (MW), lines (capacity), substation (a new substation next to the one that serves `places[0]`, with its own lines)."
           },
           "buses": {
             "items": {
@@ -7969,6 +7979,69 @@
             ],
             "title": "X Factor",
             "description": "Lines only: multiplies the reactance x_pu."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Substation only: its name."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat",
+            "description": "Substation only: latitude (default: next to `places[0]`)."
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon",
+            "description": "Substation only: longitude (default: next to `places[0]`)."
+          },
+          "load_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Mw",
+            "description": "Substation only: demand it serves, MW."
+          },
+          "generator_mw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Mw",
+            "description": "Substation only: generation it injects, MW; `tech` has its technology."
           }
         },
         "additionalProperties": false,

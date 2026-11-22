@@ -117,6 +117,8 @@ Why: on 2026-11-22 the assistant, asked to cut "la línea Nueva Maitencillo – 
 
 **lines.** Capacity (`factor`) and reactance (`x_factor`). The cascade opens a line over its limit.
 
+**substation** (#130). A new substation with its own lines, in the same `changes` (so the web, the simulation and the assistant share one grid). `places` has exactly one place; `name`, `lat`, `lon` (default: 0.03° from the substation that serves the place), `load_mw` and `generator_mw` with one `tech` are optional. It is built with `overlay.add_substation`: a new bus at the voltage of the substation that serves the place, linked to it and to the nearest other substation of that voltage within 150 km (two paths; assumption), each line with the typical capacity of its neighbours. The report row says `new_substation`, `connects_to`, the new id (`elements[0]`: id, name, lat, lon, kv; ids continue after the base buses: B188 on the 188-bus grid), `load_mw`, `gen_mw`. At most 5 per scenario. A new generator pins its MW and the island redispatches the rest, like a new plant. A substation added this way cannot be taken out with `out_buses` (ids are checked against the base grid) and the web draws its pin but not its lines. Its row in `supply` takes the zone of the nearest base substation and has no technology mix.
+
 **Redispatch (every target).** The overlay's rule: the island's synchronous base units take the imbalance, weighted by their synchronous MW. Buses whose generation a change sets take no share. There is no upward capacity limit, so the grid tries to survive and what breaks is the lines. `redispatch` in the response says how much moved. **Assumption.**
 
 ## 5. Recipes (real outputs)

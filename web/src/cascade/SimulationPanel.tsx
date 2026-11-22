@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { Affected } from "./affected";
 import type { Supply } from "./gridsApi";
 import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
 import { cutName, hz, index2, int, narrate, pct, placeName, secs, usdM } from "./text";
@@ -16,6 +17,9 @@ interface Props {
   health: HealthReport | null;
   /** People the generators should feed against the people they still feed (server simulation only). */
   supply: Supply | null;
+  /** People without supply at `t` grouped by comuna (dark buses only). heatOn and setHeatOn: the map's heat map of
+   *  those people, toggled from this tab. */
+  affected: Affected; heatOn: boolean; setHeatOn(on: boolean): void;
 }
 
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
@@ -25,6 +29,7 @@ export function SimulationPanel(p: Props) {
   return (
     <>
       {edited ? <ImpactCard {...p} /> : <EmptyCard health={p.health} />}
+      {edited && <AffectedCard {...p} />}
       {edited && p.supply && <SupplyCard supply={p.supply} />}
       {edited && <History {...p} />}
       {p.timeline.truncated && <p className="note">La cascada llegó al tope de 20 etapas: el resultado puede ser mayor.</p>}
@@ -55,7 +60,7 @@ function IndexFigure({ report, tip }: { report: HealthReport; tip: string }) {
 }
 
 /** Pre-fault index and N-1 money at risk, side by side; nothing when health.json is missing. */
-function PrefaultHealth({ health }: { health: HealthReport }) {
+export function PrefaultHealth({ health }: { health: HealthReport }) {
   const cost = isN1(health.cost) ? health.cost : null;
   const hours = cost ? `${cost.outage_duration_h.value} h` : "4 h";
   return (
@@ -135,6 +140,7 @@ function ImpactCard(p: Props) {
         <div className="title"><span className="share">{pct(p.impact.share)} del país</span><Info tip={`Sobre ${int(p.totalPeople)} personas asignadas a las subestaciones del modelo.`} /></div>
       </div>
       <div className="people">{int(p.impact.people)}</div>
+      <span className="load-bar"><span style={{ width: `${Math.min(1, p.impact.share) * 100}%`, background: "var(--fault)" }} /></span>
       </>}
       <div className="mini-figures ruled">
         <div><div className="value-row"><b>{int(p.impact.lostLoadMw)} <small>MW</small></b><Info tip="Demanda desconectada: islas apagadas y cortes automáticos de carga (EDAC). Flujo DC del motor Sub50." /></div><span>carga perdida</span></div>
@@ -208,3 +214,29 @@ function SupplyCard({ supply }: { supply: Supply }) {
   );
 }
 
+const AFFECTED_TIP = "Personas asignadas a las subestaciones sin suministro en este segundo, agrupadas por comuna (INE Censo 2024). La asignación de comunas a subestaciones es un supuesto geográfico: \"estimado\" marca una comuna que queda sin suministro solo en parte, y esa parte depende del reparto.";
+
+/** People without supply at `t` by comuna, with the toggle of their heat map on the map. */
+function AffectedCard(p: Props) {
+  const others = p.impact.people - p.affected.people;
+  return (
+    <div className="card state-list affected">
+      <div className="card-head"><div className="title"><h3>Comunas sin suministro</h3></div><Info tip={AFFECTED_TIP} /></div>
+      <label className="check"><input type="checkbox" checked={p.heatOn} onChange={(e) => p.setHeatOn(e.target.checked)} />Mapa de calor de personas sin suministro</label>
+      {p.affected.rows.length === 0 ? <p className="meta">Ninguna comuna sin suministro en este segundo.</p> : <>
+        <div className="list-head"><span>Comuna</span><span>personas</span></div>
+        <div className="rows">
+          {p.affected.rows.map((r) => (
+            <div className="state-row" key={r.key}>
+              <span className="ellipsis">{r.name}{r.is_assumption && <small> estimado</small>}</span>
+              <span className="load-bar"><span style={{ width: `${Math.min(1, r.people / r.total) * 100}%`, background: "var(--fault)" }} /></span>
+              <span className="num">{int(r.people)}</span>
+            </div>
+          ))}
+        </div>
+      </>}
+      {others >= 1 && <p className="meta">Otras {int(others)} personas sin suministro por cortes automáticos de carga (EDAC), que el modelo no asigna a una comuna.</p>}
+      <p className="source">Fuente: INE Censo 2024. Asignación de comunas a subestaciones: supuesto.</p>
+    </div>
+  );
+}

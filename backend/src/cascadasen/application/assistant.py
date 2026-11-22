@@ -71,6 +71,22 @@ class Emitter:
             self.callback = None
 
 
+GRID_CONTEXT = (
+    "\n\nGrilla actual del mapa (la fuente de verdad: el usuario puede haber cambiado de escenario o editado a mano "
+    "desde los mensajes anteriores, así que ignora cualquier cambio del historial que no esté aquí). Cada "
+    "prepare_scenario fija la grilla final completa: parte de esta y repite lo que el usuario siga queriendo.\n"
+)
+
+
+def grid_context(grid: dict[str, Any] | None) -> str:
+    """The grid the user has on the map, as text for the system prompt; empty when the client did not send it."""
+    if grid is None:
+        return ""
+    if not (grid.get("changes") or grid.get("open_lines") or grid.get("out_buses")):
+        return GRID_CONTEXT + f"Estado basal del punto {grid.get('point')}: sin cambios ni fallas."
+    return GRID_CONTEXT + json.dumps(grid, ensure_ascii=False)
+
+
 class ConversationNotFoundError(KeyError):
     pass
 
@@ -162,15 +178,16 @@ class Assistant:
         message: str,
         conversation_id: str | None,
         session_id: str | None,
-        toolbox_for: Callable[[str | None, str | None, str], ToolBox],
+        toolbox_for: Callable[[str | None, str | None], ToolBox],
         on_event: Callable[[str, dict[str, Any]], None] | None = None,
         deadline_s: float | None = None,
+        grid: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Run one user message. `toolbox_for(session_id, run_id, said)` builds the tools of this request;
-        `said` is everything the user wrote in the conversation, so tools can check that values such as
-        megawatts come from the user and not from the model. `on_event(kind, data)` receives the steps
+        """Run one user message. `toolbox_for(session_id, run_id)` builds the tools of this request;
+        `on_event(kind, data)` receives the steps
         as they happen (`start`, `assistant_text`, `tool_call`, `tool_result`) for streaming clients;
-        `deadline_s` overrides the default deadline (a stream keeps the connection alive longer)."""
+        `deadline_s` overrides the default deadline (a stream keeps the connection alive longer); `grid` is the scenario
+        on the user's map (point, changes, open_lines, out_buses), added to the prompt of this message only."""
         if session_id is not None and not SESSION_ID.match(session_id):
             raise AssistantInputError("El id de sesión no es válido.")
         if conversation_id is None:
@@ -187,10 +204,7 @@ class Assistant:
             doc, etag = self.load(cid)
         if session_id and session_id != doc.get("session_id"):
             doc["session_id"], doc["run_id"] = session_id, None
-        said = "\n".join(
-            [m["text"] for m in doc["messages"] if m["role"] == "user" and not m.get("hidden")] + [message]
-        )
-        toolbox = toolbox_for(doc.get("session_id"), doc.get("run_id"), said)
+        toolbox = toolbox_for(doc.get("session_id"), doc.get("run_id"))
         messages = trim_history(doc["messages"], self.history)
         messages.append({"role": "user", "text": message})
         start = len(messages) - 1  # this turn's messages, for the trace
@@ -198,7 +212,9 @@ class Assistant:
         emit("start", {"conversation_id": cid, **toolbox.context()})
         failure: ToolChatError | None = None
         try:
-            reply, truncated, steps = self.loop(messages, toolbox, emit, deadline_s or self.deadline_s)
+            reply, truncated, steps = self.loop(
+                messages, toolbox, emit, deadline_s or self.deadline_s, self.system + grid_context(grid)
+            )
         except ToolChatError as exc:  # keep the turn so the user can retry; roles keep alternating
             failure = exc
             messages.append({"role": "assistant", "text": FAILED_TURN})
@@ -226,8 +242,9 @@ class Assistant:
         toolbox: ToolBox,
         emit: Emitter | None = None,
         deadline_s: float | None = None,
+        system: str | None = None,
     ) -> tuple[str, str | None, int]:
-        emit, deadline_s = emit or Emitter(None), deadline_s or self.deadline_s
+        emit, deadline_s, system = emit or Emitter(None), deadline_s or self.deadline_s, system or self.system
         started, specs, nudged = self.clock(), toolbox.specs(), False
         durations: list[float] = []
         for step in range(1, self.max_steps + 1):
@@ -237,7 +254,7 @@ class Assistant:
             if self.clock() - started + expected > deadline_s:
                 return self.stop(messages, "deadline", step - 1)
             call_started = self.clock()
-            turn = self.model.turn(self.system, messages, specs)
+            turn = self.model.turn(system, messages, specs)
             durations.append(self.clock() - call_started)
             messages.append(
                 {

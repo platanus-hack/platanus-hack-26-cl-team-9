@@ -5,7 +5,8 @@ import type { PointInfo } from "./types";
 import { Chevron } from "./ui";
 
 /** A real disaster replayed on the model: an operating point and the changes it applies (lines cut, substations out). */
-export interface Disaster { id: string; name: string; point: string; edits: Edits; title: string }
+/** `date`: when the real event happened, shown instead of the date of the hour it runs on (the analogues run in 2026). */
+export interface Disaster { id: string; name: string; point: string; edits: Edits; title: string; date?: string }
 
 /**
  * Desastres (docs/escenarios.md). Only the 25F runs on its own hour; 2010 and 2011 are analogues on today's network at
@@ -17,11 +18,11 @@ export const DISASTERS: Disaster[] = [
     title: "25 feb 2025: corte del corredor de 500 kV Nueva Maitencillo – Nueva Pan de Azúcar",
   },
   {
-    id: "2011", name: "Apagón 2011 · Ancoa", point: "nov2026-2000", edits: { lines: ["R006"], buses: [] },
+    id: "2011", name: "Apagón 2011 · Ancoa", point: "nov2026-2000", edits: { lines: ["R006"], buses: [] }, date: "24 sep 2011 · 20:31",
     title: "Análogo del 24 sep 2011 (falla de un transformador 500/220 kV en S/E Ancoa, 9,8 M personas): corte de Alto Jahuel – Ancoa 500 kV en la punta nocturna de 2026",
   },
   {
-    id: "2010", name: "Terremoto 2010 · Charrúa", point: "nov2026-2000", edits: { lines: [], buses: ["B043"] },
+    id: "2010", name: "Terremoto 2010 · Charrúa", point: "nov2026-2000", edits: { lines: [], buses: ["B043"] }, date: "14 mar 2010 · 20:43",
     title: "Análogo del 14 mar 2010 (transformador de S/E Charrúa dañado por el terremoto del 27F, apagón de todo el SIC): S/E Charrúa fuera de servicio en la punta nocturna de 2026",
   },
 ];
@@ -29,7 +30,7 @@ export const DISASTERS: Disaster[] = [
 /** The 25F reference case, the one a bare link with `?cut=R239` stands for. */
 export const CASE_25F = { point: DISASTERS[0].point, cut: DISASTERS[0].edits.lines[0] };
 
-/** `edits` replaces the user's changes (a disaster); null keeps them (a Benchmark condition, only the hour changes). */
+/** Any click resets everything: `edits` are the scenario's own failures (a disaster); null is the base case (a Benchmark condition). */
 export interface ScenarioChoice { point: string; edits: Edits | null }
 
 type Folder = "desastres" | "benchmark";
@@ -79,7 +80,7 @@ export function ScenarioTree({ points, pointId, edits, open, locked }: {
   return (
     <div className="scenarios">
       {folder("desastres", "Desastres", DISASTERS.map((d) =>
-        entry(d.id, d.name, dateOf(d.point), disaster?.id === d.id, { point: d.point, edits: d.edits }, d.title)))}
+        entry(d.id, d.name, d.date ?? dateOf(d.point), disaster?.id === d.id, { point: d.point, edits: d.edits }, d.title)))}
       {folder("benchmark", "Benchmark", benchmark.map((p) =>
         entry(p.id, conditionName(p.label), conditionDate(p.snapshot), !disaster && p.id === pointId, { point: p.id, edits: null }, p.label)))}
     </div>

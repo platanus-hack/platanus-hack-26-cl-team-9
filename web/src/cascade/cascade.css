@@ -12,7 +12,9 @@
 }
 .shell *, .shell *::before, .shell *::after { box-sizing: border-box; }
 .shell button, .shell select { font-family: inherit; }
-.shell .map { position: absolute; inset: 0; background: var(--bg); }
+/* z-index 0 makes the map its own stacking context. Without it Mapbox's control container (z-index 2), which holds the
+   deck.gl canvas, competed with .map-overlays (z-index 1) and the grid was painted over the event pins and callout. */
+.shell .map { position: absolute; z-index: 0; inset: 0; background: var(--bg); }
 .shell .fault { color: var(--fault); }
 .shell .cream { color: var(--place); }
 
@@ -195,6 +197,9 @@
   color: var(--fg); font-size: 11px; font-weight: 600; line-height: 12px; white-space: nowrap; cursor: pointer;
 }
 .shell .marker { position: absolute; top: 28px; }
+/* when the network splits into islands: a tick under the rail with the count, so the moment reads without opening a marker */
+.shell .island-tick { position: absolute; top: 41px; transform: translateX(-50%); padding: 0 3px; border: 0; border-top: 1px solid var(--faint); background: none; color: var(--faint); font: 500 9px/11px inherit; white-space: nowrap; cursor: pointer; }
+.shell .island-tick.past { border-top-color: var(--fg-2); color: var(--fg-2); }
 .shell .marker.future { border-color: #ffffff33; color: var(--faint); }
 .shell .marker.current, .shell .pin.current { height: 24px; min-width: 24px; border: 2px solid var(--fg); border-radius: 12px; background: var(--fault); color: #18191b; font-size: 12px; }
 .shell .marker.current { top: 26px; }
@@ -312,6 +317,10 @@
 .shell .loading-bar::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 30%; background: var(--fg-3); animation: shell-loading 1.1s ease-in-out infinite; }
 @keyframes shell-loading { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 @media (prefers-reduced-motion: reduce) { .shell .loading-bar::after { animation: none; width: 100%; opacity: 0.4; } }
+/* cycle mode (Ciberataque): marks where the attack hit (red) or the defence cleaned an area (light) */
+.shell .timeline.cycles .cycle-status { color: var(--fg-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shell .timeline.cycles .cycle-mark { position: absolute; top: 30px; width: 2px; height: 16px; margin-left: -1px; background: var(--fault); pointer-events: auto; }
+.shell .timeline.cycles .cycle-mark.defense { top: 32px; height: 12px; background: var(--fg-2); }
 .shell .timeline-empty { margin: 0 0 6px; color: var(--muted); font-size: 12px; line-height: 16px; }
 
 /* Keyboard focus on the shell's controls. */
@@ -336,5 +345,11 @@
 .shell .state-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; color: var(--fg-2); font-size: 13px; line-height: 16px; }
 .shell .state-row .ellipsis { flex: 1 1 0; min-width: 0; }
 .shell .state-list .list-head { margin-top: 8px; }
+/* Comunas sin suministro (Simulación) */
+.shell .affected .check { margin-top: 8px; }
+.shell .affected .rows { max-height: 240px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
+.shell .affected .load-bar { width: 72px; margin-top: 0; flex-shrink: 0; }
+.shell .affected small { color: var(--muted); font-size: 12px; }
+.shell .affected .source { margin-top: 8px; padding: 0; }
 
 .shell .heat-hint { margin: 0; max-width: 220px; color: var(--muted); font-size: 12px; line-height: 16px; }
