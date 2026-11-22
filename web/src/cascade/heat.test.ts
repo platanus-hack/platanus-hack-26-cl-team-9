@@ -17,4 +17,10 @@ describe("heat maps", () => {
     expect(heatPoints("dependency", net, buses, dep)).toEqual([{ lon: -71, lat: -34, weight: 900 }]);
     expect(heatPoints("criticality", net, buses, dep)).toEqual([{ lon: -71, lat: -34, weight: 500000 }]);
   });
+
+  it("affected weighs only the people of the buses without supply", () => {
+    expect(needsDependency("affected")).toBe(false);
+    expect(heatPoints("affected", net, buses, null, new Set(["B000"]))).toEqual([{ lon: -70, lat: -33, weight: 500 }]);
+    expect(heatPoints("affected", net, buses, null, new Set())).toEqual([]);
+  });
 });

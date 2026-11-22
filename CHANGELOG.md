@@ -1,6 +1,20 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): affected-population heat map and Comunas sin suministro in Simulación
+
+- **Changed:** New heat kind `affected` (`heat.ts`): a fault-red heat map of the `people` of the buses in `frame.dark`, so it grows as the cascade plays. New card **Comunas sin suministro** in the Simulación tab (after the impact card, only with a cut or outage): the toggle "Mapa de calor de personas sin suministro", people without supply per comuna at the current second (bar = share of the comuna, "estimado" when partly dark), a line for EDAC people not assigned to a comuna, and the source line "Fuente: INE Censo 2024. Asignación de comunas a subestaciones: supuesto.". The impact card gets a red bar for its share of the country.
+- **Why:** The user asked for a heat map of how many people lose power as the grid fails, as a filter under the simulation category. The Capas popover has only "Capas" and "Mapa de calor"; "Simulación" is a side-panel tab, and the user's mockup is that tab, so the toggle lives there.
+- **Agents:** `affected` is not in `HEAT_OPTIONS`, so it never shows in Capas; it shares the `heat` state, so picking a Capas radio replaces it and while it is on no Capas radio is checked. `affectedByComuna` (`web/src/cascade/affected.ts`) groups dark buses by comuna from `comunas-<year>.json` (`loadComunas` in `api.ts`, null on an old cache), scaling each bus's split to its current `people`; a dark bus with no split becomes a row named after its substation (estimado). EDAC people in surviving islands are not per bus, so the list can sum to less than "Personas sin suministro". Left out: per-comuna circles on the map, outage duration and cost views, a region view, a URL param. Checks run: `cd web && npx tsc --noEmit && npx vitest run && npm run build`; backend ruff, format, mypy and pytest. Not checked in a browser.
+- **Files:** `web/src/cascade/{affected.ts,affected.test.ts,heat.ts,heat.test.ts,api.ts,types.ts,CascadeApp.tsx,SimulationPanel.tsx,cascade.css}`, `docs/mapa3.md`, `docs/dependency.md`.
+
+## 2026-11-22 · feat(cache): people per substation and comuna for the affected-population view
+
+- **Changed:** New `people_by_comuna(net, snapshot)` in `domain/cascade/scenario.py` keeps the comuna of each share that `_people` sums per bus. `cache_builder.comunas_json` / `write_comunas` write `web/public/cache/comunas-<year>.json` (`source`, `is_assumption: true`, `comunas` cut -> name, `buses` B### -> `[[cut, people], ...]`, rounded, sorted by people). Both files (2025, 2026) are committed; they are identical because both networks have the same 188 buses.
+- **Why:** The web "Comunas sin suministro" card groups the people of the dark buses by comuna. The cache had people per bus only; the comuna split lives in `grid_snapshot.json` `comunas[].served_by`.
+- **Agents:** Regenerate the files without rerunning every cut: `cd backend && uv run python -c "from pathlib import Path; from cascadasen.application.cache_builder import write_comunas; write_comunas(Path('../data/processed'), Path('../web/public/cache'), [2025, 2026])"`. `cascadasen-cache` also writes them (from `build_cache_workflow`, not `_build_point`). `_people` was not refactored, so `buses.json` does not move. `test_comunas_file_matches_bus_people_and_the_committed_cache` checks the committed file for drift. No API route changed.
+- **Files:** `backend/src/cascadasen/domain/cascade/scenario.py`, `backend/src/cascadasen/application/cache_builder.py`, `backend/tests/unit/test_cascade.py`, `web/public/cache/comunas-{2025,2026}.json`, `docs/mapa3.md`.
+
 ## 2026-11-22 · chore(index): regenerate after merging main into the event pins fix
 
 - **Changed:** `docs/index/repo-index.json` regenerated on `fix/event-pins-above-grid` after merging `origin/main` again (PR #61).

@@ -349,6 +349,40 @@ def test_network_json_carries_country_on_every_node_and_line():
     assert all(ln["country"] == "CHL" for ln in doc["lines"])
 
 
+@pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
+def test_people_by_comuna_sums_to_the_people_of_each_bus():
+    import json
+
+    from cascadasen.domain.cascade.scenario import people_by_comuna
+
+    net, point = load_network_and_point(PROCESSED, "nov2026-2000")
+    snapshot = json.loads((PROCESSED / "grid_snapshot.json").read_text(encoding="utf-8"))
+    rows = people_by_comuna(net, snapshot)
+    assert len(rows) == net.size
+    for i in range(net.size):
+        assert sum(rows[i].values()) == pytest.approx(point.people[i])
+
+
+@pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
+def test_comunas_file_matches_bus_people_and_the_committed_cache(tmp_path):
+    import json
+
+    from cascadasen.application.cache_builder import write_comunas
+
+    net, point = load_network_and_point(PROCESSED, "nov2026-2000")
+    write_comunas(PROCESSED, tmp_path, [2026])
+    doc = json.loads((tmp_path / "comunas-2026.json").read_text(encoding="utf-8"))
+    assert doc["is_assumption"] is True
+    assert set(doc["buses"]) == {f"B{i:03d}" for i in range(net.size)}
+    for i in range(net.size):
+        rows = doc["buses"][f"B{i:03d}"]
+        assert abs(sum(p for _, p in rows) - round(point.people[i])) <= max(1, len(rows))
+        assert all(cut in doc["comunas"] for cut, _ in rows)
+    committed = Path(__file__).resolve().parents[3] / "web" / "public" / "cache" / "comunas-2026.json"
+    if committed.exists():
+        assert json.loads(committed.read_text(encoding="utf-8")) == doc
+
+
 # --- Cascade invariants (issue #90) -------------------------------------------------------------------------------
 
 _SETTLING = ("load_shed", "island_blackout")
