@@ -122,7 +122,11 @@ def test_api_prepare_and_simulate_with_changes():
     assert sim.status_code == 200 and "supply" in sim.json()
     both = {"point": POINT, "changes": [{"target": "demand", "factor": 2, "add": 1}]}
     assert client.post("/api/v1/grids/prepare", json=both).status_code == 422
-    too_much = {"point": POINT, "changes": [{"target": "demand", "factor": 5}]}
-    assert (
-        client.post("/api/v1/grids/prepare", json=too_much).status_code == 422
-    )  # over the overlay's MW limit
+    big = {"point": POINT, "changes": [{"target": "demand", "factor": 5}]}
+    assert client.post("/api/v1/grids/prepare", json=big).status_code == 200  # no total MW cap: stress freely
+    off = {
+        "point": POINT,
+        "changes": [{"target": "generation", "tech": ["hidro", "solar", "termica"], "factor": 0}],
+    }
+    out = client.post("/api/v1/grids/prepare", json=off)
+    assert out.status_code == 200 and 0 <= out.json()["health"]["index"] <= 1

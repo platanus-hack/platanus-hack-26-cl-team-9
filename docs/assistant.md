@@ -21,7 +21,7 @@ Without them the other routes work as before and the assistant answers 503. Sett
 
 | Method and path | Body | Response |
 |---|---|---|
-| `POST /chat` | `{message (1-2000 chars), conversation_id?, session_id?}` | `{conversation_id, session_id, run_id, reply, tool_calls: [{name, ok, result}], steps, truncated, notice}` |
+| `POST /chat` | `{message (1-2000 chars), conversation_id?, session_id?, grid?: {point, changes, open_lines, out_buses}}` | `{conversation_id, session_id, run_id, reply, tool_calls: [{name, ok, result}], steps, truncated, notice}` |
 | `GET /conversations/{cid}` | | `{conversation_id, session_id, run_id, turns, tool_calls}` |
 | `DELETE /conversations/{cid}` | | 204. The session it worked on is kept |
 
@@ -96,7 +96,7 @@ curl -N -X POST localhost:8000/api/v1/assistant/chat/stream -H 'content-type: ap
 
 ## 2c. Web client (mapa 3, rail item **Asistente**)
 
-The web reads `/chat/stream` and shows each step while the model works. It needs the backend with the LLM on (section 1); without it the first message gets 503 and the panel disables the input with "El asistente no está habilitado en este servidor."
+The web reads `/chat/stream` and shows each step while the model works. Each message carries `grid`, the grid on the map (point, changes, open lines, substations off; not in a session). The backend appends it to the system prompt for that turn only (`grid_context`, never stored), and the prompt tells the model that every request is about it: it never asks which point to use and keeps the grid's changes. The panel has two tabs: **Chat** and **Salud de la red** (`GridHealth.tsx`): demand, generation and lines over their limit of the prepared grid, people and load lost when there are failures, and the health index (after the cascade, else `/grids/prepare` → `health`, else the point's base). It needs the backend with the LLM on (section 1); without it the first message gets 503 and the panel disables the input with "El asistente no está habilitado en este servidor."
 
 | File (`web/src/assistant/`) | Role |
 |---|---|

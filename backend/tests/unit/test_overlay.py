@@ -144,14 +144,23 @@ def test_a_generation_override_is_not_redispatched_back(base):
     "fields",
     [
         {"load_mw": 1e9},
-        {"load_mw": 150 + 3001},
+        {"load_mw": 150 + 20001},
         {"inertia_mws": 10 * 300 + 1},
-        {"load_mw": 150 + 2900, "gen_mw": 400 + 2200, "sync_mw": 300},  # 5100 MW changed
     ],
 )
 def test_bus_overrides_are_bounded(base, fields):
     with pytest.raises(ov.OverlayError):
         ov.patch(ov.empty_overlay(), "bus", "B000", fields, *base)
+
+
+def test_no_total_mw_cap(base):
+    ov.patch(
+        ov.empty_overlay(),
+        "bus",
+        "B000",
+        {"load_mw": 150 + 2900, "gen_mw": 400 + 2200, "sync_mw": 300},
+        *base,
+    )
 
 
 SUB = {

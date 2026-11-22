@@ -269,3 +269,11 @@ def test_the_stream_pings_while_the_model_thinks(make_app):
     client = TestClient(make_app(SlowModel(AssistantTurn("ok")), assistant_stream_ping_s=0.05))
     body = client.post(STREAM, json={"message": "x"}).text
     assert ": ping" in body and parse_sse(body)[-1][0] == "done"
+
+
+def test_grid_context_names_the_loaded_grid():
+    from cascadasen.api.assistant_routes import GridIn, grid_context
+
+    text = grid_context(GridIn(point="feb2025-1500", open_lines=["R239"], out_buses=["B043"]))
+    assert "feb2025-1500" in text and "R239" in text and "B043" in text
+    assert grid_context(None) == ""

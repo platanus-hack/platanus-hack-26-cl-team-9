@@ -165,9 +165,11 @@ class Assistant:
         toolbox_for: Callable[[str | None, str | None], ToolBox],
         on_event: Callable[[str, dict[str, Any]], None] | None = None,
         deadline_s: float | None = None,
+        context: str = "",
     ) -> dict[str, Any]:
-        """Run one user message. `toolbox_for(session_id, run_id)` builds the tools of this request;
-        `on_event(kind, data)` receives the steps
+        """Run one user message. `context` is appended to the system prompt for this turn only (the grid on
+        the user's map), so it is never stored in the conversation. `toolbox_for(session_id, run_id)` builds
+        the tools of this request; `on_event(kind, data)` receives the steps
         as they happen (`start`, `assistant_text`, `tool_call`, `tool_result`) for streaming clients;
         `deadline_s` overrides the default deadline (a stream keeps the connection alive longer)."""
         if session_id is not None and not SESSION_ID.match(session_id):
@@ -194,7 +196,9 @@ class Assistant:
         emit("start", {"conversation_id": cid, **toolbox.context()})
         failure: ToolChatError | None = None
         try:
-            reply, truncated, steps = self.loop(messages, toolbox, emit, deadline_s or self.deadline_s)
+            reply, truncated, steps = self.loop(
+                messages, toolbox, emit, deadline_s or self.deadline_s, context
+            )
         except ToolChatError as exc:  # keep the turn so the user can retry; roles keep alternating
             failure = exc
             messages.append({"role": "assistant", "text": FAILED_TURN})
@@ -222,6 +226,7 @@ class Assistant:
         toolbox: ToolBox,
         emit: Emitter | None = None,
         deadline_s: float | None = None,
+        context: str = "",
     ) -> tuple[str, str | None, int]:
         emit, deadline_s = emit or Emitter(None), deadline_s or self.deadline_s
         started, specs, nudged = self.clock(), toolbox.specs(), False
@@ -233,7 +238,7 @@ class Assistant:
             if self.clock() - started + expected > deadline_s:
                 return self.stop(messages, "deadline", step - 1)
             call_started = self.clock()
-            turn = self.model.turn(self.system, messages, specs)
+            turn = self.model.turn(self.system + context, messages, specs)
             durations.append(self.clock() - call_started)
             messages.append(
                 {

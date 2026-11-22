@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getRunSnapshots } from "../session/sessionApi";
 import type { Session } from "../session/useSession";
-import { AssistantError, deleteConversation, getConversation, MAX_MESSAGE, streamChat } from "./assistantApi";
+import { AssistantError, deleteConversation, getConversation, MAX_MESSAGE, streamChat, type ChatGrid } from "./assistantApi";
 import type { StressChange } from "../cascade/edits";
 import { refreshFor } from "./labels";
 import type { SseEvent } from "./sse";
@@ -26,13 +26,13 @@ export interface Assistant {
 /** The final grid the assistant set with `prepare_scenario`; the map loads it paused. */
 export interface AssistantScenario { point: string; changes: StressChange[]; open_lines: string[]; out_buses: string[] }
 
-export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => void): Assistant {
+export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => void, gridNow?: () => ChatGrid | null): Assistant {
   const [state, setState] = useState<ChatState>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [restoring, setRestoring] = useState(() => !!readCid());
-  const live = useRef({ state, s, busy, onScenario });
-  live.current = { state, s, busy, onScenario };
+  const live = useRef({ state, s, busy, onScenario, gridNow });
+  live.current = { state, s, busy, onScenario, gridNow };
   const abort = useRef<AbortController | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -82,7 +82,7 @@ export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => 
     const ctrl = new AbortController();
     abort.current = ctrl;
     try {
-      const finished = await streamChat({ message: text, conversation_id: st.conversationId ?? undefined }, onEvent, ctrl.signal);
+      const finished = await streamChat({ message: text, conversation_id: st.conversationId ?? undefined, grid: live.current.gridNow?.() ?? undefined }, onEvent, ctrl.signal);
       if (!finished) await recover();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;

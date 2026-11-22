@@ -349,7 +349,19 @@ def prepare_digest(out: dict[str, Any]) -> dict[str, Any]:
         "había sin estos cambios: no las compares con la red base.",
         "should_feed_by_zone": out["should_feed"]["by_zone"],
         "per_capita_w": out["per_capita_w"],
+        "health": _health_digest(out.get("health")),
         "assumptions": [a["text"] for a in out["assumptions"]],
+    }
+
+
+def _health_digest(h: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The prepared grid's health index (0 at the limit, 1 healthy) and the margin that binds it."""
+    if not h:
+        return None
+    return {
+        "index": h.get("index"),
+        "binding": h.get("binding"),
+        "margins": {m["key"]: m["value"] for m in h.get("margins", [])},
     }
 
 

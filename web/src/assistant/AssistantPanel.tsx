@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MAX_MESSAGE } from "./assistantApi";
 import { argsText, errorMessage, resultText, toolName, truncatedText } from "./labels";
 import { Markdown } from "./markdown";
@@ -13,8 +13,9 @@ const CONTINUE = "continúa";
  * (text, tool cards with their state, final reply), and the message box. It shows only what the tools returned; the
  * scenario notice goes with each reply because it carries the assumption note (AGENTS.md section 4).
  */
-export function AssistantPanel({ a }: { a: Assistant }) {
+export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode }) {
   const [text, setText] = useState("");
+  const [sub, setSub] = useState<"chat" | "salud">("chat");
   const endRef = useRef<HTMLDivElement>(null);
   const { turns, restoredTools } = a.state;
   const lastTurn = turns[turns.length - 1];
@@ -37,6 +38,12 @@ export function AssistantPanel({ a }: { a: Assistant }) {
         <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, avanzar una corrida. El mapa muestra lo que el asistente cambia en la sesión.</p>
       </div>
 
+      <div className="cy-subtabs" role="tablist">
+        {([["chat", "Chat"], ["salud", "Salud de la red"]] as const).map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={sub === k} className={sub === k ? "on" : ""} onClick={() => setSub(k)}>{label}</button>
+        ))}
+      </div>
+      {sub === "salud" ? health ?? <p className="meta">Sin datos de salud.</p> : <>
       {!a.enabled && <p className="note">{errorMessage(503)}</p>}
       {a.restoring && <p className="meta">Recuperando la conversación…</p>}
 
@@ -61,6 +68,7 @@ export function AssistantPanel({ a }: { a: Assistant }) {
           <button type="submit" className="btn" disabled={!a.enabled || a.busy || !text.trim() || tooLong}>{a.busy ? "Trabajando…" : "Enviar"}</button>
         </div>
       </form>
+      </>}
       <div ref={endRef} />
     </div>
   );

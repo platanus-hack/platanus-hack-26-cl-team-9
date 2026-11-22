@@ -24,6 +24,7 @@ from cascadasen.application.places import resolve_place
 from cascadasen.domain.cascade.engine import CascadeParams
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
 from cascadasen.domain.cascade.frequency import cascade_params
+from cascadasen.domain.cascade.health import prefault_health
 from cascadasen.domain.cascade.overlay import BALANCE_RULE, DEFAULT_INERTIA_H, MAX_INERTIA_H
 from cascadasen.domain.cascade.scenario import OperatingPoint, _nearest_bus_per_node
 from cascadasen.domain.cascade.tracing import dependency_workflow
@@ -70,6 +71,8 @@ def prepare_workflow(world, point: str, changes: list[dict]) -> dict:
         "should_feed": _should_feed(ctx, edited.net, edited.point),
         "redispatch": edited.balance,
         "warnings": edited.warnings,
+        # health index of the prepared grid before any failure (no N-1 sweep: one request stays fast)
+        "health": prefault_health(edited.net, edited.point, with_n1=False).as_dict(),
         "assumptions": _assumptions(ctx)
         + (
             [{"id": "new_plant", "text": NEW_PLANT_NOTE, "is_assumption": True}]
