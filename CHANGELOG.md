@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(review): update the technical review to the state of `main` (05dcf000)
+- **Changed:** `reports/technical-review.md` gets a new section 0 "Estado actual": the measurements again on `main` (mypy 0, 534 tests, 91 % coverage, vitest 210, CI gates), the status of every finding (closed, partial, open) with its evidence, updated scores (global estimate 3.5 → 4.0) and how it was verified. The original report (`8664add`) follows unchanged.
+- **Why:** The review was written before PR #100, #108 and #117; the user asked to update only the report.
+- **Agents:** Do not treat sections 1 to 10 as the current state: read section 0 first. The scores are the author's estimates, not an external review.
+- **Files:** `reports/technical-review.md`.
 ## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
 
 - **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`. After merging #117, three more references that #110 had shifted point at the right line again: `ConverseToolChat.turn` (`llm_tools.py:85`), `simulate` (`grid_routes.py:122`), `prepare_workflow` (`grid_stress.py:55`).
@@ -565,6 +570,11 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The engine decides `overload` with `ratio > 1.0` (`domain/cascade/engine.py` `_frame`), so last-bit BLAS/platform float noise flips the status of edges at exactly 100% (`feb2025-1500/R239`: R183, R206, R045, R099; `nov2026-2000/R001`: R206). The cache and the engine did not change, so regenerating would only move the drift to another machine.
 - **Agents:** `web/public/cache/**` is untouched on purpose. Do not regenerate it to fix this test. After this commit: 405 passed, 5 skipped (anthropic, 2 mcp extras, V6, V9), 0 failed.
 - **Files:** `backend/tests/unit/test_llm_commander.py`, `backend/tests/unit/test_grid_simulation.py`.
+## 2026-11-22 · docs(review): technical review of the repository (issue #79)
+- **Changed:** New `reports/technical-review.md`: scores from 1 to 5 per area (backend, MCP and assistant, frontend, data scripts, tests and CI, documentation of the code, modularity), tool results (ruff, mypy, pytest with coverage, tsc, vitest, build), findings with file and line, stale docs and a prioritised fix list.
+- **Why:** Issue #79 asks for a technical evaluation of the repository against the Platanus Hack 26 criteria, with a report in `reports/`.
+- **Agents:** The review audited `8664add`, not this tip: the first lines of the report say so, and some findings (the committed `web/node_modules` symlink, the assistant UI) may already be fixed. Re-check a finding before acting on it. Nothing was changed in the code.
+- **Files:** `reports/technical-review.md`.
 ## 2026-11-22 · Merge origin/main into feat/network-selector
 
 - **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.
