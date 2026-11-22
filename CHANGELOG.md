@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(tests): share the physics and sim_client fixtures in conftest
+- **Changed:** `tests/conftest.py` gains a session-scoped `physics` fixture and a `sim_client` fixture (TestClient over the toy grid and toy world). The module-scoped `physics` copies in `unit/test_sessions.py`, `unit/test_run_persistence.py`, `integration/test_sessions_api.py` and the three identical `client` fixtures in `test_campaigns_api.py`, `test_simulate_api.py`, `test_runs_api.py` are deleted (those tests now take `sim_client`).
+- **Why:** F12 of the duplication report: the same fixtures were copied across test files.
+- **Agents:** Use `sim_client` for HTTP tests over the toy world and `physics` for the default constants. Not merged on purpose: the `_sim` helpers (different call sites, 22 uses), the module-level `PH`/`SNAP` constants (used at import time for `skipif`) and the two store+cache wirings. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 245 passed 2 skipped (baseline 245/2); scripts/lint.sh --check clean.
+- **Files:** `backend/tests/{conftest.py,unit/test_sessions.py,unit/test_run_persistence.py,integration/test_campaigns_api.py,integration/test_simulate_api.py,integration/test_runs_api.py,integration/test_sessions_api.py}`.
 ## 2026-11-21 · fix(api): trusted client IP, rate-limit global runs, document the version tag
 
 - **Changed:** `limits.client_ip` takes the `X-Forwarded-For` entry `CASCADASEN_TRUSTED_PROXY_HOPS` from the right (new setting `trusted_proxy_hops`, default 0 = peer address); `infrastructure/ecs.tf` sets it to 2 (CloudFront appends the viewer, the ALB appends CloudFront). The leftmost entry, which a client can set, is ignored.

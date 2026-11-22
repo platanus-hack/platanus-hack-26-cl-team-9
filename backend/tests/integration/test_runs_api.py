@@ -9,57 +9,48 @@ from cascadasen.application.run_experiment import RunCache
 from cascadasen.application.simulation_service import SimulationService
 
 
-@pytest.fixture
-def client(toy_snapshot, toy_network, toy_world):
-    return TestClient(
-        create_app(
-            service=GridQueryService(toy_snapshot), simulation=SimulationService(toy_network, world=toy_world)
-        )
-    )
-
-
-def test_catalog_lists_choices(client):
-    cat = client.get("/api/v1/sim/catalog").json()
+def test_catalog_lists_choices(sim_client):
+    cat = sim_client.get("/api/v1/sim/catalog").json()
     assert {"events", "actions", "policies", "objectives", "templates"} <= set(cat)
     assert {p["id"] for p in cat["policies"]} == {"A", "B", "C"}
     assert any(t["id"] == "flagship_observability" for t in cat["templates"])
 
 
-def test_select_a_node_trigger_step_and_read(client):
-    run = client.post("/api/v1/sim/runs", json={"policy": "C", "seed": 11, "horizon": 8})
+def test_select_a_node_trigger_step_and_read(sim_client):
+    run = sim_client.post("/api/v1/sim/runs", json={"policy": "C", "seed": 11, "horizon": 8})
     assert run.status_code == 201
     rid = run.json()["run_id"]
-    inj = client.post(
+    inj = sim_client.post(
         f"/api/v1/sim/runs/{rid}/events", json={"type": "C3_transmission_opening", "target": "SE_C1"}
     )
     # a real node id behind a mapa 3 bus resolves to the bus and its area
     assert inj.status_code == 200 and inj.json()["area"] == "T2" and inj.json()["resolved_target"] == "B002"
-    step = client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 3}).json()
+    step = sim_client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 3}).json()
     assert len(step["snapshots"]) == 3 and step["snapshots"][0]["events"][0]["source"] == "user"
     snap = step["snapshots"][-1]
     assert {"real", "observed", "estimated", "decisions", "metrics"} <= set(snap)
-    state = client.get(f"/api/v1/sim/runs/{rid}").json()
+    state = sim_client.get(f"/api/v1/sim/runs/{rid}").json()
     assert state["run"]["cycle"] == 3 and len(state["series"]) == 3
-    client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 10})
-    report = client.get(f"/api/v1/sim/runs/{rid}/report").json()
+    sim_client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 10})
+    report = sim_client.get(f"/api/v1/sim/runs/{rid}/report").json()
     assert report["indicators"]["experimental"] is True and report["run"]["finished"]
     assert (
-        client.post(
+        sim_client.post(
             f"/api/v1/sim/runs/{rid}/events", json={"type": "D1_telemetry_loss", "target": "T1"}
         ).status_code
         == 409
     )
 
 
-def test_replay_reproduces_and_changes_policy(client):
-    rid = client.post("/api/v1/sim/runs", json={"policy": "A", "seed": 5, "horizon": 6}).json()["run_id"]
-    client.post(f"/api/v1/sim/runs/{rid}/events", json={"type": "D4_comms_loss", "target": "T3"})
-    client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 6})
-    head = client.get(f"/api/v1/sim/runs/{rid}/trace").json()
+def test_replay_reproduces_and_changes_policy(sim_client):
+    rid = sim_client.post("/api/v1/sim/runs", json={"policy": "A", "seed": 5, "horizon": 6}).json()["run_id"]
+    sim_client.post(f"/api/v1/sim/runs/{rid}/events", json={"type": "D4_comms_loss", "target": "T3"})
+    sim_client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 6})
+    head = sim_client.get(f"/api/v1/sim/runs/{rid}/trace").json()
     assert head["verified"] and head["recipe"]["injected"][0]["target"] == "T3"
-    same = client.post(f"/api/v1/sim/runs/{rid}/replay", json={}).json()
-    assert client.get(f"/api/v1/sim/runs/{same['run_id']}/trace").json()["head"] == head["head"]
-    other = client.post(f"/api/v1/sim/runs/{rid}/replay", json={"policy": "B"}).json()
+    same = sim_client.post(f"/api/v1/sim/runs/{rid}/replay", json={}).json()
+    assert sim_client.get(f"/api/v1/sim/runs/{same['run_id']}/trace").json()["head"] == head["head"]
+    other = sim_client.post(f"/api/v1/sim/runs/{rid}/replay", json={"policy": "B"}).json()
     assert other["policy"] == "B" and other["replay_of"] == rid
 
 
@@ -73,28 +64,29 @@ def test_replay_reproduces_and_changes_policy(client):
         ({"initial_events": [{"type": "D1_telemetry_loss", "target": "X"}]}, 404),
     ],
 )
-def test_run_creation_errors(client, body, code):
-    assert client.post("/api/v1/sim/runs", json=body).status_code == code
+def test_run_creation_errors(sim_client, body, code):
+    assert sim_client.post("/api/v1/sim/runs", json=body).status_code == code
 
 
-def test_unknown_run_and_event_errors(client):
-    assert client.get("/api/v1/sim/runs/nope").status_code == 404
-    rid = client.post("/api/v1/sim/runs", json={}).json()["run_id"]
+def test_unknown_run_and_event_errors(sim_client):
+    assert sim_client.get("/api/v1/sim/runs/nope").status_code == 404
+    rid = sim_client.post("/api/v1/sim/runs", json={}).json()["run_id"]
     assert (
-        client.post(f"/api/v1/sim/runs/{rid}/events", json={"type": "XX", "target": "T1"}).status_code == 422
+        sim_client.post(f"/api/v1/sim/runs/{rid}/events", json={"type": "XX", "target": "T1"}).status_code
+        == 422
     )
     assert (
-        client.post(
+        sim_client.post(
             f"/api/v1/sim/runs/{rid}/events", json={"type": "D1_telemetry_loss", "target": "NOPE"}
         ).status_code
         == 404
     )
 
 
-def test_narrative_and_after_action(client):
-    nar = client.get("/api/v1/sim/narrative").json()
+def test_narrative_and_after_action(sim_client):
+    nar = sim_client.get("/api/v1/sim/narrative").json()
     assert nar["notice"].startswith("Escenario hipotético") and "rationale" in nar
-    rid = client.post(
+    rid = sim_client.post(
         "/api/v1/sim/runs",
         json={
             "horizon": 4,
@@ -102,18 +94,18 @@ def test_narrative_and_after_action(client):
             "initial_events": [{"type": "D4_comms_loss", "target": "T2", "cycle": 1}],
         },
     ).json()["run_id"]
-    aar = client.get(f"/api/v1/sim/runs/{rid}/after_action").json()
+    aar = sim_client.get(f"/api/v1/sim/runs/{rid}/after_action").json()
     assert aar["summary"][0].startswith("La organización mantuvo el")
     assert any("Pérdida de comunicaciones en T2" in line for c in aar["timeline"] for line in c["lines"])
 
 
-def test_replay_snapshots_can_be_read_back(client):
-    rid = client.post("/api/v1/sim/runs", json={"policy": "A", "seed": 5, "horizon": 4}).json()["run_id"]
-    client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 4})
-    other = client.post(f"/api/v1/sim/runs/{rid}/replay", json={"policy": "C"}).json()
-    snaps = client.get(f"/api/v1/sim/runs/{other['run_id']}/snapshots").json()["snapshots"]
+def test_replay_snapshots_can_be_read_back(sim_client):
+    rid = sim_client.post("/api/v1/sim/runs", json={"policy": "A", "seed": 5, "horizon": 4}).json()["run_id"]
+    sim_client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 4})
+    other = sim_client.post(f"/api/v1/sim/runs/{rid}/replay", json={"policy": "C"}).json()
+    snaps = sim_client.get(f"/api/v1/sim/runs/{other['run_id']}/snapshots").json()["snapshots"]
     assert [s["cycle"] for s in snaps] == [0, 1, 2, 3]
-    tail = client.get(f"/api/v1/sim/runs/{other['run_id']}/snapshots", params={"start": 2}).json()[
+    tail = sim_client.get(f"/api/v1/sim/runs/{other['run_id']}/snapshots", params={"start": 2}).json()[
         "snapshots"
     ]
     assert [s["cycle"] for s in tail] == [2, 3]

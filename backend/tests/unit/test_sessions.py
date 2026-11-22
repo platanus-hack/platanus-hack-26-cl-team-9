@@ -9,16 +9,10 @@ from cascadasen.application.sessions import (
     SessionService,
 )
 from cascadasen.domain.ports import ConflictError
-from cascadasen.domain.simulation.grid import Physics
 from cascadasen.infrastructure.document_store import MemoryDocumentStore
 
 DC = {"bus": "B002", "mw": 100, "kind": "datacenter", "name": "DC Toy"}
 RUN = {"template": "open_field", "seed": 3, "horizon": 8}
-
-
-@pytest.fixture(scope="module")
-def physics():
-    return Physics.load()
 
 
 @pytest.fixture
