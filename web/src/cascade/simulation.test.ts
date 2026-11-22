@@ -130,6 +130,19 @@ describe("dark substations at the blackout's own time", () => {
   });
 });
 
+describe("people in dark substations", () => {
+  it("count whole even when the substation's net load is zero or negative", () => {
+    const tl: Timeline = {
+      ...timeline,
+      events: [ev(0, "line_cut"), { ...ev(2, "island_blackout"), ids: ["B1", "B2"] }, ev(10, "island_stable")],
+      frames: [{ t: 0, edges: {}, dark: ["B1", "B2"], islands: [] }],
+      summary: { ...timeline.summary, people_without_power: 150, load_shed_mw: 100 },
+    };
+    const own: Record<string, BusState> = { B1: { gen_mw: 0, load_mw: 100, people: 100 }, B2: { gen_mw: 30, load_mw: -5, people: 50 } };
+    expect(impactAt(tl, own, 3)).toMatchObject({ people: 150, lostLoadMw: 100 });
+  });
+});
+
 describe("line state", () => {
   const line: NetLine = { id: "R1", a: "B1", b: "B2", kv: 220, capacity_mw: 100, x_pu: 0.1, map_edges: [], branches: ["x"] };
   const frame = (edge: { flow_mw: number; status: "ok" | "overload" | "open"; loading: number }, dark: string[] = []) => ({ t: 0, edges: { R1: edge }, dark, islands: [] });

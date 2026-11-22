@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): count every person in a dark substation
+
+- **Changed:** In `impactAt` (`web/src/cascade/simulation.ts`), the people of dark substations count whole whatever their net load (`sumPeople`). Lost load still adds only positive load (`sumLoad`).
+- **Why:** The web must follow the engine rule of the previous commit, so the figures during playback match `summary.people_without_power` at the end.
+- **Agents:** Test "people in dark substations" in `simulation.test.ts`.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts}`.
+
 ## 2026-11-22 · feat(cascade): re-split memory on and people of dark buses counted whole
 
 - **Changed:** `CascadeParams.resplit_memory` now defaults to `True`: a re-split island keeps its parent's fired EDAC steps and deployed reserve. The `ASSUMPTIONS` line now only says the sub-island starts at 50 Hz.

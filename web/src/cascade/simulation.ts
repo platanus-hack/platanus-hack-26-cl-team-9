@@ -123,19 +123,21 @@ function interp(xs: number[], ys: number[], x: number): number {
 export interface Impact { people: number; lostLoadMw: number; lostGenMw: number; share: number }
 
 /**
- * People without supply, lost load and lost generation at time t. Dark buses count whole; load shed in islands that
+ * People without supply, lost load and lost generation at time t. Dark buses count all their people, whatever their
+ * net load (as the engine does since issue #90), and their load only when it is positive. Load shed in islands that
  * survive is not stored per bus, so it is spread over time by the MW shed so far. At the end the values equal the
  * engine summary.
  */
 export function impactAt(tl: Timeline, buses: Record<string, BusState>, t: number): Impact {
   const totalPeople = Object.values(buses).reduce((s, b) => s + b.people, 0);
-  const sum = (ids: Iterable<string>, f: (b: BusState) => number) => { let s = 0; for (const id of ids) { const b = buses[id]; if (b && b.load_mw > 0) s += f(b); } return s; };
+  const sumPeople = (ids: Iterable<string>) => { let s = 0; for (const id of ids) s += buses[id]?.people ?? 0; return s; };
+  const sumLoad = (ids: Iterable<string>) => { let s = 0; for (const id of ids) s += Math.max(0, buses[id]?.load_mw ?? 0); return s; };
   const sumGen = (ids: Iterable<string>) => { let s = 0; for (const id of ids) s += buses[id]?.gen_mw ?? 0; return s; };
   const dark = darkAt(tl, t);
   const finalDark = tl.frames[tl.frames.length - 1]?.dark ?? [];
   const summary = tl.summary;
-  const residualPeople = Math.max(0, summary.people_without_power - sum(finalDark, (b) => b.people));
-  const residualMw = Math.max(0, summary.load_shed_mw - sum(finalDark, (b) => b.load_mw));
+  const residualPeople = Math.max(0, summary.people_without_power - sumPeople(finalDark));
+  const residualMw = Math.max(0, summary.load_shed_mw - sumLoad(finalDark));
   const sheds = tl.events.filter((e) => e.type === "load_shed");
   const shedTotal = sheds.reduce((s, e) => s + Number(e.params.mw ?? 0), 0);
   const shedNow = sheds.filter((e) => e.t <= t + 1e-9).reduce((s, e) => s + Number(e.params.mw ?? 0), 0);
@@ -145,8 +147,8 @@ export function impactAt(tl: Timeline, buses: Record<string, BusState>, t: numbe
   const progress = shedTotal > 0 ? shedNow / shedTotal : 0;
   // Load shed before its island collapses is already lost: count it at the system's people per MW, capped by the summary.
   const peoplePerMw = summary.load_total_mw > 0 ? totalPeople / summary.load_total_mw : 0;
-  const people = Math.round(Math.min(summary.people_without_power, Math.max(sum(dark, (b) => b.people) + residualPeople * progress, shedNow * peoplePerMw)));
-  const lostLoadMw = Math.round(Math.min(summary.load_shed_mw, Math.max(sum(dark, (b) => b.load_mw) + residualMw * progress, shedNow)));
+  const people = Math.round(Math.min(summary.people_without_power, Math.max(sumPeople(dark) + residualPeople * progress, shedNow * peoplePerMw)));
+  const lostLoadMw = Math.round(Math.min(summary.load_shed_mw, Math.max(sumLoad(dark) + residualMw * progress, shedNow)));
   return { people, lostLoadMw, lostGenMw: Math.round(sumGen(dark)), share: totalPeople > 0 ? people / totalPeople : 0 };
 }
 
