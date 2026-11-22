@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(serialization): dumps_compact and write_json replace nine copies of the compact JSON dump
+- **Changed:** New `domain/serialization.py::dumps_compact(obj, **kw)` (`ensure_ascii=False`, `separators=(",", ":")`) and `infrastructure/files.py::write_json(path, obj) -> int` (creates parent folders, writes UTF-8, returns bytes). Used by `document_store._encode`, `theater/audit.canonical` (`sort_keys=True, default=str`), `snapshot_repository.save`, `exporters`, `sim_fixtures._write` and `cache_builder`; the private `_write` of `cache_builder` is gone.
+- **Changed:** New `backend/tests/unit/test_serialization_golden.py` with literal golden bytes for `_encode` and `canonical` (written and passing before the refactor) and a `write_json` check.
+- **Why:** F3 of the duplication report. Output is byte-identical, so S3 etags / `If-Match` and the audit hash chain (`trace_matches`) of stored runs do not change.
+- **Agents:** Use `dumps_compact` for any new compact JSON. `application/cache_builder.py` now imports `infrastructure.files` (it is a CLI entry point). Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 262 passed 2 skipped, test_document_store 19 passed.
+- **Files:** `backend/src/cascadasen/domain/serialization.py`, `infrastructure/files.py`, `infrastructure/document_store.py`, `infrastructure/snapshot_repository.py`, `infrastructure/exporters.py`, `domain/theater/audit.py`, `application/cache_builder.py`, `sim_fixtures.py`, `backend/tests/unit/test_serialization_golden.py`.
 ## 2026-11-22 · refactor(cascade): shared make_event and frame_edges / island_summary
 - **Changed:** New `domain/events.py::make_event(t, kind, ids, text_key=None, *, ndigits=3, **params)`. `simulation/engine.py` calls it instead of its private `_event`; `cascade/engine.py` builds its seven event dicts with it (`ndigits=2`, `text_key` defaults to the kind).
 - **Changed:** `cascade/engine.py` gains public `frame_edges(lines, flows, open_lines)` and `island_summary(islands, gen, load)`; `_frame` and `theater/grid.py::TheaterGrid.frame` call them instead of repeating the loops.

@@ -7,11 +7,12 @@ data/processed/atlas_sen.html        the API test map with every layer embedded 
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from cascadasen.application.grid_queries import GridQueryService
 from cascadasen.domain.model import LAYERS, GridSnapshot
+from cascadasen.domain.serialization import dumps_compact
+from cascadasen.infrastructure.files import write_json
 
 MAP_TEMPLATE = Path(__file__).resolve().parents[1] / "api" / "static" / "map.html"
 EMBED_TAG = '<script id="sen-embed" type="application/json">null</script>'
@@ -28,9 +29,7 @@ class StaticFilesExporter:
         written = []
         for layer in LAYERS:
             path = geo / f"{layer}.geojson"
-            path.write_text(
-                json.dumps(q.geojson(layer), ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-            )
+            write_json(path, q.geojson(layer))
             written.append(str(path))
         network = {
             "version": snapshot.version,
@@ -45,7 +44,7 @@ class StaticFilesExporter:
             "validation": q.validation(),
         }
         path = self.out_dir / "sen_network.json"
-        path.write_text(json.dumps(network, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        write_json(path, network)
         written.append(str(path))
         written.append(str(self.export_standalone_map(q)))
         return written
@@ -59,7 +58,7 @@ class StaticFilesExporter:
             "assumptions": q.s.assumptions,
             "geo": {layer: q.geojson(layer) for layer in LAYERS},
         }
-        payload = json.dumps(embed, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+        payload = dumps_compact(embed).replace("</", "<\\/")
         html = MAP_TEMPLATE.read_text(encoding="utf-8")
         if EMBED_TAG not in html:
             raise RuntimeError("map template lost its embed tag")

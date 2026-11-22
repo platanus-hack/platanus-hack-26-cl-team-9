@@ -11,6 +11,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from cascadasen.domain.serialization import dumps_compact
+
 GENESIS = "0" * 64
 
 
@@ -26,7 +28,7 @@ def _plain(obj: Any) -> Any:
 
 
 def canonical(obj: Any) -> str:
-    return json.dumps(_plain(obj), sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return dumps_compact(_plain(obj), sort_keys=True, default=str)
 
 
 @dataclass

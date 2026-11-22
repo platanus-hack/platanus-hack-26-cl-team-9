@@ -18,13 +18,14 @@ from pathlib import Path
 from cascadasen.domain.cascade.engine import ASSUMPTIONS, run_cascade_workflow
 from cascadasen.domain.cascade.network import ReducedNetwork, bus_id
 from cascadasen.domain.cascade.scenario import load_network_and_point
+from cascadasen.infrastructure.files import write_json
 
 
 def build_cache_workflow(processed: Path, out: Path, point_ids: list[str] | None = None) -> dict:
     points = _points(processed, point_ids)
     out.mkdir(parents=True, exist_ok=True)
     counts = {p["id"]: _build_point(processed, out, p) for p in points}
-    _write(out / "index.json", {"points": points, "assumptions": ASSUMPTIONS})
+    write_json(out / "index.json", {"points": points, "assumptions": ASSUMPTIONS})
     return counts
 
 
@@ -39,10 +40,10 @@ def _points(processed: Path, wanted: list[str] | None) -> list[dict]:
 
 def _build_point(processed: Path, out: Path, point: dict) -> int:
     net, op = load_network_and_point(processed, point["id"])
-    _write(out / f"network-{point['year']}.json", _network_json(net))
+    write_json(out / f"network-{point['year']}.json", _network_json(net))
     folder = out / point["id"]
     folder.mkdir(exist_ok=True)
-    _write(
+    write_json(
         folder / "buses.json",
         {
             bus_id(i): {
@@ -53,9 +54,9 @@ def _build_point(processed: Path, out: Path, point: dict) -> int:
             for i in range(net.size)
         },
     )
-    _write(folder / "baseline.json", run_cascade_workflow(net, op, []))
+    write_json(folder / "baseline.json", run_cascade_workflow(net, op, []))
     for line in net.lines:
-        _write(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
+        write_json(folder / f"{line.id}.json", run_cascade_workflow(net, op, [line.id]))
     return len(net.lines)
 
 
@@ -88,10 +89,6 @@ def _network_json(net: ReducedNetwork) -> dict:
             for ln in net.lines
         ],
     }
-
-
-def _write(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
 def main() -> int:
