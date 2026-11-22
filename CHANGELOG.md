@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): add pure powerAll helpers for mapa 3
+
+- **Changed:** New `web/src/cascade/powerAll.ts` with `canPowerAll({ cuts, edited })` (true when there is at least one cut or `edited`) and `powerAll(view)`, which keeps `pointId` and returns `cut: null`, `selection: null`, `t: 0`, `playing: false`.
+- **Why:** The "Prender todo" button (next commit) needs a tested rule for when it is enabled and for what it resets.
+- **Agents:** A selection or a timeline position alone does not enable the button. `edited` is always `false` for now; #42 phase B (local value edits) plugs in there. Tests are in `web/src/cascade/powerAll.test.ts`.
+- **Files:** `web/src/cascade/{powerAll.ts,powerAll.test.ts}`.
+
 ## 2026-11-21 · docs(mapa3): document the clean default URL
 
 - **Changed:** `docs/mapa3.md` §2: the URL carries only values that differ from the defaults, a bare `/` is the default view, and `?point=nov2026-1300` is normalised away. §11: a session URL drops `point` as well as `cut`.
