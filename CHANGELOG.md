@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(tests): green suite on a clean checkout
+- **Changed:** `test_bedrock_adapters_use_the_aws_profile` now skips with `pytest.importorskip("anthropic")` when the `llm` extra is not installed. `test_the_committed_cache_matches_the_engine_for_a_single_cut` treats `status` as equal when both edges have `loading == 1.0` and the statuses are `ok`/`overload`; everything else is still compared exactly.
+- **Why:** The engine decides `overload` with `ratio > 1.0` (`domain/cascade/engine.py` `_frame`), so last-bit BLAS/platform float noise flips the status of edges at exactly 100% (`feb2025-1500/R239`: R183, R206, R045, R099; `nov2026-2000/R001`: R206). The cache and the engine did not change, so regenerating would only move the drift to another machine.
+- **Agents:** `web/public/cache/**` is untouched on purpose. Do not regenerate it to fix this test. After this commit: 405 passed, 5 skipped (anthropic, 2 mcp extras, V6, V9), 0 failed.
+- **Files:** `backend/tests/unit/test_llm_commander.py`, `backend/tests/unit/test_grid_simulation.py`.
 ## 2026-11-22 · Merge origin/main into feat/network-selector
 
 - **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.

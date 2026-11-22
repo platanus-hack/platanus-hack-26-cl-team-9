@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -82,10 +84,28 @@ def test_api_simulate():
     )
 
 
+def _without_boundary_status(timeline: dict, cached: dict) -> dict:
+    """Copy `timeline` with `status` taken from `cached` on edges whose loading is exactly 1.0."""
+    out = json.loads(json.dumps(timeline, default=float))
+    for frame, ref in zip(out["frames"], cached["frames"], strict=True):
+        for key, edge in frame["edges"].items():
+            other = ref["edges"][key]
+            if edge["loading"] == other["loading"] == 1.0 and {edge["status"], other["status"]} <= {
+                "ok",
+                "overload",
+            }:
+                edge["status"] = other["status"]
+    return out
+
+
 @pytest.mark.parametrize("point, line", [("feb2025-1500", "R239"), ("nov2026-2000", "R001")])
 def test_the_committed_cache_matches_the_engine_for_a_single_cut(sim, point, line):
-    """The web reads the cache for one cut and this service for several: they must agree (regenerate with cascadasen-cache)."""
-    import json
+    """The web reads the cache for one cut and this service for several: they must agree (regenerate with cascadasen-cache).
 
+    One tolerance: an edge whose rounded loading is exactly 1.0 may be `ok` in one side and `overload` in the
+    other. The engine decides with `ratio > 1.0` (domain/cascade/engine.py `_frame`), so last-bit BLAS/platform
+    float noise flips it. Everything else must be equal.
+    """
     cached = json.loads((REPO_ROOT / f"web/public/cache/{point}/{line}.json").read_text())
-    assert sim.simulate_workflow(point, [line], [])["timeline"] == cached
+    live = sim.simulate_workflow(point, [line], [])["timeline"]
+    assert _without_boundary_status(live, cached) == cached
