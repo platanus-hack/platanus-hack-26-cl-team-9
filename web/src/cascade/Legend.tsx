@@ -73,7 +73,7 @@ function RegionalLegend({ regional }: { regional: RegionalGrid }) {
     <>
       <h3>Otras redes de Latinoamérica</h3>
       <p>Red de contexto: solo se dibuja, no se simula. Usa los mismos colores, grosores y subestaciones que la de Chile; en Simulación sus líneas quedan en gris porque no tienen flujo calculado. Reducida como la de Chile: una barra por subestación, las líneas en paralelo se funden en una y se dibujan rectas entre dos subestaciones. Desde 66 kV; los puntos grandes son la generación de cada subestación (color por tecnología).</p>
-      {regional.countries.map((c) => <Row key={c.country} swatch={<span className="dot big" style={{ background: NODE_COLOR }} />} label={`${c.name}: ${c.counts.lines} líneas y ${c.counts.substations} subestaciones (de ${c.raw_counts.lines} y ${c.raw_counts.substations} en la fuente); ${c.plant_count} centrales en ${c.counts.plants} puntos`} />)}
+      {regional.countries.map((c) => <Row key={c.country} swatch={<span className="dot big" style={{ background: NODE_COLOR }} />} label={`${c.name}: ${c.counts.lines} líneas y ${c.counts.substations} subestaciones (de ${c.raw_counts.lines} y ${c.raw_counts.substations} en la fuente)`} />)}
       {Object.entries(TECH_COLORS).map(([tech, c]) => <Row key={tech} swatch={<span className="dot big" style={{ background: css([c[0], c[1], c[2], 160]) }} />} label={tech} />)}
       <p className="meta">Fuentes: {[...sources.values()].map((s) => `${s.attribution} (${s.license})`).join("; ")}.</p>
     </>

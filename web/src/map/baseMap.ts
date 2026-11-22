@@ -7,17 +7,13 @@ import chileUrl from "../../../data/processed/chile.geojson?url";
 import { PITCH_DEGREES, MAPBOX_STYLE, SEN_BOUNDS } from "./constants";
 import { regionalOutlineUrl } from "./regional";
 import type { CameraTarget } from "./countryBounds";
-import { nearLand, viewportRadiusDeg } from "./regionLimit";
 
 // Until the first network loads: today's Chile frame. Every later target comes from the network's data (countryBounds.ts).
 const START_TARGET: CameraTarget = { frame: SEN_BOUNDS, maxBounds: [[-110, -62], [-30, 8]], land: null };
-// Experiment: keep the camera near the selected country and drop heavy Standard-style features. `?limite=0` turns it all off to compare.
+// Experiment: cap the zoom and drop heavy Standard-style features. `?limite=0` turns it off to compare. The camera itself is free: no bounds, no minimum zoom, no snap-back to land.
 const LIMITED = new URLSearchParams(location.search).get("limite") !== "0";
 const MAX_ZOOM = 13;
-// How far out the user may zoom past the frame that shows the whole network (Brazil's frame is far wider than Chile's).
-const ZOOM_OUT_LEVELS = 1.5;
 const FLY_MS = 1200;
-const LAND_MARGIN = 0.25; // fraction of the shorter viewport side the center may be offshore
 const LITE_BASEMAP = { show3dObjects: false, showPointOfInterestLabels: false, showTransitLabels: false, showPedestrianRoads: false };
 // Design v5: flat neutral gray land on a dark gray ground (Electricity Maps look).
 const LAND_FILL: [number, number, number] = [58, 59, 63];
@@ -30,7 +26,7 @@ export interface BaseMap {
   setLayers(layers: Layer[]): void; setMode(mode: ViewMode): void; zoomBy(delta: number): void; dispose(): void;
   /** Back to the current target's frame: the whole network next to the panel. */
   fitAll(): void;
-  /** Flies to a network's frame (keeping 2D or 3D) and limits zoom, panning and the over-land check to that country. */
+  /** Flies to a network's frame (keeping 2D or 3D). The camera is not limited to that country afterwards. */
   setTarget(target: CameraTarget, durationMs?: number): void;
   /** Screen position (px, relative to the map container) of a point, for HTML overlays such as event pins. */
   project(lon: number, lat: number): [number, number];
@@ -62,40 +58,12 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   // The fit's padding stays as the camera padding, so the center (zoom, land check) is the center of the map left visible.
   const padding = { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 };
   let target = START_TARGET;
-  let flying = false;
   const fit = (duration: number) => map.fitBounds(target.frame, { padding, pitch: map.getPitch(), bearing: 0, duration });
-  /**
-   * The old limits would block the flight (Chile's maxBounds does not contain Brazil), so they are lifted first, and the
-   * new ones are set when the camera lands. The listener goes on before the fit: a jump (duration 0) ends synchronously.
-   */
   const setTarget = (next: CameraTarget, duration = FLY_MS) => {
     target = next;
-    if (!LIMITED) {
-      fit(duration);
-      return;
-    }
-    flying = true;
-    map.setMaxBounds(null as unknown as mapboxgl.LngLatBoundsLike); // null removes the limit (Map#setMaxBounds docs); the public type omits it
-    const minZoom = Math.max(0, (map.cameraForBounds(next.frame, { padding })?.zoom ?? 3) - ZOOM_OUT_LEVELS);
-    map.setMinZoom(Math.min(minZoom, map.getZoom()));
-    let landed = false;
-    const land = () => {
-      if (landed || target !== next) return; // a newer target took over
-      landed = true;
-      flying = false;
-      map.setMinZoom(minZoom);
-      map.setMaxBounds(next.maxBounds);
-      overLand.lastGood = map.getCenter();
-    };
-    map.once("moveend", land);
-    // In case the camera was already there and no moveend comes. On a slow machine the flight outlasts `duration`:
-    // then moveend lands it, and limits set mid-flight would bend the path.
-    setTimeout(() => { if (!map.isMoving()) land(); }, duration + 500);
     fit(duration);
   };
   map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");
-  const overLand = { lastGood: map.getCenter() };
-  if (LIMITED) _keepOverLand(map, container, () => (flying ? null : target), overLand);
   setTarget(START_TARGET, 0);
   // MapboxOverlay forwards Mapbox `click` as a click with tapCount 1 and `dblclick` as a click with tapCount 2
   // (@deck.gl/mapbox dist/mapbox-overlay.js, _handleMouseEvent), so a double click arrives as three clicks.
@@ -127,20 +95,6 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   };
 }
 
-/**
- * Why: zooming into the sea or a neighbour's interior is useless; after each move, a center that is too far from the
- * selected country's land snaps back to the last valid one. No check while flying to a new network, or without an outline.
- */
-function _keepOverLand(map: mapboxgl.Map, container: HTMLDivElement, current: () => CameraTarget | null, state: { lastGood: mapboxgl.LngLat }) {
-  map.on("moveend", () => {
-    const land = current()?.land;
-    if (!land?.length) return;
-    const { lng, lat } = map.getCenter();
-    const radius = viewportRadiusDeg(map.getZoom(), container.clientWidth, container.clientHeight, LAND_MARGIN);
-    if (nearLand(land, lng, lat, radius)) state.lastGood = map.getCenter();
-    else map.easeTo({ center: state.lastGood, duration: 400 });
-  });
-}
 function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode: ViewMode): BaseMap {
   const canvas = document.createElement("canvas");
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
@@ -149,7 +103,7 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode:
   const neighbours = regionalOutlineUrl ? [new GeoJsonLayer({ id: "latam-outline", data: regionalOutlineUrl, stroked: true, filled: true, getFillColor: LAND_FILL, getLineColor: LAND_LINE, lineWidthMinPixels: 1 })] : [];
   let target = START_TARGET;
   let viewState: MapViewState = { ..._viewState(container, target), pitch: pitchOf(initialMode) };
-  const view = (t: CameraTarget) => new MapView({ repeat: false, ...(LIMITED ? { minZoom: Math.max(0, _viewState(container, t).zoom - ZOOM_OUT_LEVELS), maxZoom: MAX_ZOOM } : {}) });
+  const view = (t: CameraTarget) => new MapView({ repeat: false, ...(LIMITED ? { maxZoom: MAX_ZOOM } : {}) });
   // Double-click zoom off: then the dblclick recognizer is disabled, `click` has no enabled recognizer to wait for and
   // fires at once on every tap with tapCount 1, 2, ... (@deck.gl/core dist/lib/constants.js RECOGNIZERS, mjolnir.js
   // dist/hammerjs/recognizers/tap.js). With it on, every single click would wait 300 ms.

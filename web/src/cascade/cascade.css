@@ -57,7 +57,7 @@
 .shell .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- Panel ---- */
-.shell .panel { position: absolute; z-index: 2; left: var(--panel-x); top: var(--gap); width: var(--panel-w); max-height: min(742px, calc(100% - var(--timeline-h) - 3 * var(--gap))); display: flex; flex-direction: column; background: var(--glass); border: 1px solid var(--border); }
+.shell .panel { position: absolute; z-index: 2; left: var(--panel-x); top: var(--gap); width: var(--panel-w); max-height: calc(100% - var(--timeline-h) - 3 * var(--gap)); display: flex; flex-direction: column; background: var(--glass); border: 1px solid var(--border); }
 .shell .panel-head { flex-shrink: 0; padding: 12px 12px 0; border-bottom: 1px solid var(--border); }
 .shell .crumbs { display: flex; align-items: center; gap: 8px; height: 28px; padding-left: 12px; }
 .shell .crumbs h1 { margin: 0; color: var(--fg); font-size: 16px; font-weight: 600; line-height: 20px; white-space: nowrap; }

@@ -1,6 +1,31 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · merge: upstream/main (free map camera, #143) into cleanup/dedupe
+- **Changed:** merged `upstream/main` 99539ca8 again. Conflicts: `CHANGELOG.md` (both sides kept), `docs/index/repo-index.json` (regenerated with `build_index.py`) and `web/src/map/baseMap.ts` (main's free-camera code wins, `START_TARGET` keeps `SEN_BOUNDS` from `map/constants.ts`, which still fits).
+- **Why:** main moved after the first merge with 250101b7, so the PR would have conflicted.
+- **Agents:** nothing new beyond the previous merge entry below. `docs/openapi/agents.openapi.json` is unchanged against main.
+- **Files:** `CHANGELOG.md`, `docs/index/repo-index.json`, `web/src/map/baseMap.ts`.
+## 2026-11-22 · feat(web): draw the other countries like Chile
+
+- **Changed:** `buildRegionalLayers` has no power-plant layer (nor its tooltip), lines highlight on hover and substations get Chile's soft white outline. The regional legend drops the plants count.
+- **Why:** the other countries looked different from Chile.
+- **Agents:** `regional-plants` no longer exists; the plants stay in the data files.
+- **Files:** `web/src/map/{regional.ts,regional.test.ts}`, `web/src/cascade/Legend.tsx`.
+
+## 2026-11-22 · feat(web): free map camera, no bounds or land snap-back
+
+- **Changed:** `baseMap.ts` no longer limits the camera: no `maxBounds`, no minimum zoom, no snap-back to land (`_keepOverLand` removed); only `maxZoom` 13 stays.
+- **Why:** the lock kept users from leaving a country's box.
+- **Agents:** `cameraTarget` still returns `maxBounds` and `land` but only `frame` is used by the basemap. `docs/mapa3.md` updated.
+- **Files:** `web/src/map/baseMap.ts`, `docs/{mapa3.md,code-map.md}`.
+
+## 2026-11-22 · fix(web): side panel fills the height down to the timeline card
+- **Changed:** `.shell .panel` drops the 742 px cap: `max-height` is now `calc(100% - var(--timeline-h) - 3 * var(--gap))`, so a long panel (Estado de la red with many consequences) grows until 12 px above the timeline card instead of leaving an empty band on tall screens.
+- **Why:** user request: on a 951 px tall viewport the panel stopped at 742 px and left a visible gap above the timeline.
+- **Agents:** the panel is still as tall as its content; only the upper bound changed. `docs/design.md` section on the grid no longer says "max 742 px". No test asserts the old cap. Not checked in a browser.
+- **Files:** `web/src/cascade/cascade.css`, `docs/design.md`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · merge: upstream/main into cleanup/dedupe
 
 - **Changed:** `cleanup/dedupe` merged with `upstream/main` (250101b7, 248 commits ahead of the branch's base). Every refactor was re-applied on main's current code. Main wins wherever they differ: cascade engine events now carry `stage` and `load_mw` is clamped, MW bounds (20000 per element, `MAX_ADDED` 80, no `MAX_ADDED_MW`), `serial()` around session writes, new `cache_builder` (health, substations, comunas), new web shell.

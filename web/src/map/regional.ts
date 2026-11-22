@@ -4,7 +4,6 @@ import { fetchJson } from "../lib/fetchJson";
 import { hex, NODE_COLOR, tierOf, type ColorMode } from "../cascade/layers";
 import chileUrl from "../../../data/processed/chile.geojson?url";
 import { outlineOf } from "./countryBounds";
-import { TECH_COLORS, type Rgb } from "./layers";
 
 type OutlineFile = Parameters<typeof outlineOf>[0];
 
@@ -82,13 +81,11 @@ export function regionalFromDocuments(docs: { meta: RegionalCountry; lines: DocE
   };
 }
 
-const withAlpha = (c: Rgb, a: number): [number, number, number, number] => [c[0], c[1], c[2], a];
-const OTHER_TECH: Rgb = [200, 200, 200];
 /** Not part of the load ramp (green to red), so it reads as "no data" in the Simulación view. */
 export const REGIONAL_NO_LOAD = "#767B80";
 
 /**
- * Lines and substations drawn exactly like Chile's (cascade/layers.ts): same voltage tiers, widths and node style.
+ * Lines and substations drawn exactly like Chile's (no power plants, as in Chile) (cascade/layers.ts): same voltage tiers, widths and node style.
  * In the load view they are neutral gray: they carry no load, and the green of the ramp would claim "< 50 %".
  * Not clickable as a cut: the layer ids start with "regional-" and the tooltip says they are not simulated.
  */
@@ -96,16 +93,13 @@ export function buildRegionalLayers(grid: RegionalGrid, colorMode: ColorMode = "
   const lineColor = colorMode === "voltage" ? (l: RegionalLine) => hex(tierOf(l.kv).color) : () => hex(REGIONAL_NO_LOAD);
   return [
     new PathLayer<RegionalLine>({
-      id: "regional-lines", data: grid.lines, pickable: true, widthUnits: "pixels", capRounded: true, getPath: (l) => l.path,
+      id: "regional-lines", data: grid.lines, pickable: true, autoHighlight: true, highlightColor: [255, 255, 255, 255], widthUnits: "pixels", capRounded: true, getPath: (l) => l.path,
       getColor: lineColor, getWidth: (l) => tierOf(l.kv).width, updateTriggers: { getColor: colorMode },
     }),
     new ScatterplotLayer<RegionalSubstation>({
       id: "regional-substations", data: grid.substations, pickable: true, radiusUnits: "pixels", getPosition: (s) => s.position,
       getRadius: (s) => (s.kv >= 500 ? 3 : 2), getFillColor: hex(NODE_COLOR, 200),
-    }),
-    new ScatterplotLayer<RegionalPlant>({
-      id: "regional-plants", data: grid.plants, pickable: true, radiusUnits: "pixels", getPosition: (p) => p.position,
-      getRadius: (p) => Math.min(14, 2 + Math.sqrt(p.mw) * 0.28), getFillColor: (p) => withAlpha(TECH_COLORS[p.tech ?? ""] ?? OTHER_TECH, 120),
+      stroked: true, lineWidthUnits: "pixels", getLineWidth: 0, getLineColor: [255, 255, 255, 64],
     }),
   ];
 }
@@ -120,10 +114,6 @@ export function regionalTooltip(layerId: string, object: unknown): string | null
   if (layerId === "regional-substations") {
     const s = object as RegionalSubstation;
     return `${s.name || (s.kind === "junction" ? "Derivación de línea" : "Subestación")}\n${s.kv} kV\n${s.source}\n${FOOT}`;
-  }
-  if (layerId === "regional-plants") {
-    const p = object as RegionalPlant;
-    return `${p.name || "Generación"}\n${p.count} ${p.count === 1 ? "central" : "centrales"} · ${p.tech ?? "otra"} · ${Math.round(p.mw)} MW\n${p.source}\n${FOOT}`;
   }
   return null;
 }
