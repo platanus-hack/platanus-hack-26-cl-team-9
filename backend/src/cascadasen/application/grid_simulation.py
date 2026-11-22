@@ -8,7 +8,8 @@ the path for two or more changes. Nothing is stored: the same request gives the 
 from __future__ import annotations
 
 from cascadasen.application.grids import GridError
-from cascadasen.domain.cascade.engine import run_cascade_workflow
+from cascadasen.domain.cascade.engine import failure_cost, run_cascade_workflow
+from cascadasen.domain.cascade.health import with_event_health
 from cascadasen.domain.cascade.overlay import OverlayError, apply_overlay, empty_overlay
 from cascadasen.domain.theater.world import TheaterWorld
 
@@ -30,7 +31,7 @@ class GridSimulator:
             "dropped_lines": dropped,  # lines that went with their substation: they are out already, not cut twice
             "direct": direct,
             "warnings": edited.warnings,
-            "timeline": _mark_out_of_service(timeline, out_buses, direct),
+            "timeline": with_event_health(_mark_out_of_service(timeline, out_buses, direct)),
         }
 
 
@@ -93,7 +94,7 @@ def _direct_loss(op, out_buses: list[str]) -> dict:
 
 
 def _mark_out_of_service(timeline: dict, out_buses: list[str], direct: dict) -> dict:
-    """A substation out of service is dark in every frame and its people and load add to the summary.
+    """A substation out of service is dark in every frame and its people, load and failure cost add to the summary.
 
     ASSUMPTION: the engine drops the out bus before the cascade, so the cascade never counts it; adding it here
     does not count it twice.
@@ -108,4 +109,7 @@ def _mark_out_of_service(timeline: dict, out_buses: list[str], direct: dict) -> 
             summary["load_total_mw"] + direct["load_mw"], 1
         )  # the demand of the hour
         summary["dark_buses"] += len(set(out_buses))
+        summary.update(
+            failure_cost(summary["load_shed_mw"])
+        )  # the cost follows the MW lost, direct loss included
     return timeline

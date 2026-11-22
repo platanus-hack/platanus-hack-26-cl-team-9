@@ -141,6 +141,7 @@ def test_edac_totals_match_the_25f_report():
 def test_secure_base_case_has_no_cascade():
     timeline = run_cascade_workflow(_toy_net(), _toy_point(), [])
     assert timeline["summary"]["stages"] == 0 and timeline["summary"]["load_shed_mw"] == 0
+    assert timeline["summary"]["failure_cost_usd"] == 0
 
 
 def test_overload_cascade_darkens_the_grid():
@@ -149,6 +150,10 @@ def test_overload_cascade_darkens_the_grid():
     kinds = [e["type"] for e in timeline["events"]]
     assert kinds[0] == "line_cut" and "line_overload_open" in kinds and "island_blackout" in kinds
     assert timeline["summary"]["load_shed_mw"] == 300 and timeline["summary"]["people_without_power"] == 2000
+    # failure cost of the lost load: MW x 4 h (assumption) x 1,000 x 8.79 US$/kWh (CNE [19])
+    assert timeline["summary"]["unserved_energy_mwh"] == pytest.approx(300 * 4.0)
+    assert timeline["summary"]["failure_cost_usd"] == pytest.approx(300 * 4.0 * 1000 * 8.79)
+    assert timeline["summary"]["outage_duration_h"] == {"value": 4.0, "is_assumption": True}
 
 
 def test_cut_that_the_network_absorbs_sheds_nothing():

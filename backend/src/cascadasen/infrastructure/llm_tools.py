@@ -7,6 +7,7 @@ like `bedrock-converse` in `llm.py`). Credentials come from the AWS chain, never
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from cascadasen.domain.ports import AssistantTurn, ToolCall, ToolChatError, ToolSpec
@@ -16,6 +17,15 @@ from cascadasen.infrastructure.settings import Settings
 log = logging.getLogger(__name__)
 
 MAX_TOKENS = 2000
+# DeepSeek on Converse sometimes leaks the start of its own tool-call markup ("<｜DSML｜function_calls", with
+# fullwidth bars) into the text block next to a real toolUse block. Everything from the marker on is markup.
+LEAKED_MARKUP = re.compile(r"<｜[^｜>]*｜")
+
+
+def clean_text(text: str) -> str:
+    """The model's visible text without leaked tool-call markup."""
+    match = LEAKED_MARKUP.search(text)
+    return (text[: match.start()] if match else text).strip()
 
 
 def _result_block(msg: dict[str, Any]) -> dict[str, Any]:
@@ -88,7 +98,7 @@ class ConverseToolChat:
                 raise ToolChatError("El modelo configurado no acepta herramientas o la solicitud.") from exc
             raise ToolChatError("El modelo de lenguaje no está disponible ahora; reintenta.") from exc
         blocks = out["output"]["message"]["content"]
-        text = "\n".join(b["text"] for b in blocks if "text" in b).strip()
+        text = clean_text("\n".join(b["text"] for b in blocks if "text" in b))
         calls = tuple(
             ToolCall(u["toolUseId"], u["name"], u["input"] if isinstance(u.get("input"), dict) else {})
             for u in (b["toolUse"] for b in blocks if "toolUse" in b)

@@ -10,6 +10,7 @@ from cascadasen.application.grid_simulation import GridSimulator
 from cascadasen.application.grids import GridError
 from cascadasen.application.theater_world import default_world
 from cascadasen.domain.cascade.engine import run_cascade_workflow
+from cascadasen.domain.cascade.health import with_event_health
 from cascadasen.infrastructure.settings import REPO_ROOT, Settings
 
 PROCESSED = REPO_ROOT / "data/processed"
@@ -26,7 +27,7 @@ def test_two_cuts_are_applied_together(sim):
     net, op = sim.world.load(POINT)
     out = sim.simulate_workflow(POINT, ["R239", "R001"], [])
     assert out["open_lines"] == ["R001", "R239"]
-    assert out["timeline"] == run_cascade_workflow(net.buses, op, ["R001", "R239"])
+    assert out["timeline"] == with_event_health(run_cascade_workflow(net.buses, op, ["R001", "R239"]))
     assert out["timeline"]["failed_elements"] == ["R001", "R239"]
 
 
@@ -41,6 +42,11 @@ def test_a_substation_out_is_dark_in_every_frame_and_counted_as_direct_loss(sim)
         out["timeline"]["summary"]["people_without_power"] == out["direct"]["people"]
     )  # no cascade: only the outage
     assert out["timeline"]["summary"]["load_total_mw"] == pytest.approx(float(op.load.sum()), abs=0.2)
+    summary = out["timeline"]["summary"]
+    assert summary["failure_cost_usd"] == round(
+        summary["load_shed_mw"] * 4.0 * 1000 * 8.79
+    )  # direct loss included
+    assert out["timeline"]["health"]["cost"]["cost_usd"] == summary["failure_cost_usd"]
 
 
 def test_a_line_that_goes_with_its_substation_is_not_cut_twice(sim):
