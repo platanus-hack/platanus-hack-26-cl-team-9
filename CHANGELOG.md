@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+
+## 2026-11-22 · feat(web): free map camera, no bounds or land snap-back
+
+- **Changed:** `baseMap.ts` no longer limits the camera: no `maxBounds`, no minimum zoom, no snap-back to land (`_keepOverLand` removed); only `maxZoom` 13 stays.
+- **Why:** the lock kept users from leaving a country's box.
+- **Agents:** `cameraTarget` still returns `maxBounds` and `land` but only `frame` is used by the basemap. `docs/mapa3.md` updated.
+- **Files:** `web/src/map/baseMap.ts`, `docs/{mapa3.md,code-map.md}`.
+
 ## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
 
 - **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`. After merging #117, three more references that #110 had shifted point at the right line again: `ConverseToolChat.turn` (`llm_tools.py:85`), `simulate` (`grid_routes.py:122`), `prepare_workflow` (`grid_stress.py:55`).
