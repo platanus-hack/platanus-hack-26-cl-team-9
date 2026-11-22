@@ -15,6 +15,9 @@ export const HEAT_OPTIONS: { kind: HeatKind; label: string; hint: string }[] = [
 
 /** The maps that need the server (POST /api/v1/grids/dependency); population reads the buses already loaded. */
 export const needsDependency = (kind: HeatKind) => kind === "dependency" || kind === "criticality";
+/** Key of a server heat map: the kind plus the changes. Each kind has its own request, because Dependencia asks
+ *  without criticality (milliseconds) and must not wait for the cascade per substation that Criticidad needs. */
+export const heatRequestKey = (kind: HeatKind, changesKey: string) => `${kind}|${changesKey}`;
 
 type Rgba = [number, number, number, number];
 const RAMPS: Record<Exclude<HeatKind, "none">, Rgba[]> = {
