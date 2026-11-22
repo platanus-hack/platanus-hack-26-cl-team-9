@@ -25,7 +25,7 @@ import { NetworkState } from "./NetworkState";
 import { batches, isSwitchedOff } from "./outage";
 import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
-import { SimulationPanel } from "./SimulationPanel";
+import { PrefaultHealth, SimulationPanel } from "./SimulationPanel";
 import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, recentDarkAt, timeWarp, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
@@ -44,7 +44,8 @@ import { IncidentPanel } from "../incidents/IncidentPanel";
 import { ChangePanel } from "../changelog/ChangePanel";
 import { cascadeEntries, cyberEntries, diffEdits, type Entry } from "../changelog/changelog";
 import { useIncident } from "../incidents/useIncident";
-import { CyberPanel } from "../cyber/CyberPanel";
+import { cyberCycles, CyberMapTags, CyberPanel } from "../cyber/CyberPanel";
+import { layoutTags } from "../cyber/cyber";
 import { useCyber } from "../cyber/useCyber";
 import { DEFAULT_POINT, syncedSearch } from "./url";
 import "./cascade.css";
@@ -84,7 +85,8 @@ export function CascadeApp() {
   const s = useSession();
   const a = useAssistant(s, (sc) => applyScenario(sc)); // owned here so the chat survives view changes
   const inc = useIncident(s); // likewise for the incident result and the cascade it plays
-  const cyb = useCyber(); // and for the Ciberataque run
+  const [speed, setSpeed] = useState(1); // the timeline card's speed: cascade seconds and Ciberataque cycles alike
+  const cyb = useCyber(speed); // and for the Ciberataque run
   // ?pais=<ISO3> opens that country's network; a session is always Chile's (its API is Chile-only).
   const startNetwork = s.sid ? DEFAULT_COUNTRY : networkFromParam(params.get("pais"), AVAILABLE.map((n) => n.id));
   const startCut = s.sid || startNetwork !== DEFAULT_COUNTRY ? null : params.get("cut"); // a session owns its cut
@@ -93,6 +95,7 @@ export function CascadeApp() {
   const [network, setNetwork] = useState<Network | null>(null);
   const [buses, setBuses] = useState<Record<string, BusState>>({});
   const [health, setHealth] = useState<HealthReport | null>(null);
+  const [cyberHealth, setCyberHealth] = useState<HealthReport | null>(null); // the Ciberataque runs at nov2026-1300
   const [comunas, setComunas] = useState<ComunaPeople | null>(null); // people per bus and comuna, for "Comunas sin suministro"
   // The loaded timeline with the point and cut it belongs to, so a stale one is never shown under a new cut's name.
   const [loaded, setLoaded] = useState<{ key: string; timeline: Timeline } | null>(null);
@@ -108,7 +111,6 @@ export function CascadeApp() {
   const [prepared, setPrepared] = useState<{ key: string; value: Prepared } | null>(null);
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1);
   const [tab, setTab] = useState<Tab>(startCut ? "sim" : "red");
   const [view, setView] = useState<View>("tabs");
   // Desastres (a cut) open on Carga, Benchmark (no cut) on Tensión, also when the rail picks them (chooseTab).
@@ -168,7 +170,13 @@ export function CascadeApp() {
   const duration = timeline?.duration_s ?? 0;
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
   const darkCount = timeline ? darkAt(timeline, t).size : 0;
-  const frame = useMemo(() => (timeline ? frameAt(timeline, t) : undefined), [timeline, fi, darkCount]);
+  const cascadeFrame = useMemo(() => (timeline ? frameAt(timeline, t) : undefined), [timeline, fi, darkCount]);
+  // In the Ciberataque view the map draws the run's grid at the cycle on screen (lights going out, lines opening),
+  // unless a cycle's cascade is playing second by second.
+  const cyberGrid = view === "cyber" && cyb.mapCycle == null ? cyb.gridNow : null;
+  const frame = cyberGrid ?? cascadeFrame;
+  const cyberOn = !!cyberGrid;
+  useEffect(() => { if (cyberOn) setColorMode("load"); }, [cyberOn]); // the attack reads on Carga: dark and overloaded lines
   const impact = useMemo(() => (timeline ? impactAt(timeline, buses, t) : { people: 0, lostLoadMw: 0, lostGenMw: 0, share: 0 }), [timeline, buses, t]);
   const islands = useMemo(() => (timeline ? frequencyAt(timeline, t) : []), [timeline, t]);
   const totalPeople = useMemo(() => Object.values(buses).reduce((s, b) => s + b.people, 0), [buses]);
@@ -199,8 +207,8 @@ export function CascadeApp() {
   const contextLayers = useMemo<Layer[]>(() => (isChile && contextGrid ? buildRegionalLayers(contextGrid, colorMode) : []), [isChile, contextGrid, colorMode]);
 
   const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 0;
-  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile, pointId, changes, contextLayers, warp, recent });
-  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile, pointId, changes, contextLayers, warp, recent };
+  const live = useRef({ view, network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile, pointId, changes, contextLayers, warp, recent });
+  live.current = { view, network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, offState, sid: s.sid, switchOff, isChile, pointId, changes, contextLayers, warp, recent };
   const fitted = useRef<string | null>(null); // the network the camera last flew to
   const prevSid = useRef(s.sid);
   const clickMemory = useRef(NO_CLICK);
@@ -228,6 +236,7 @@ export function CascadeApp() {
   useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
   useEffect(() => _loadPrepared(), [pointId, JSON.stringify(changes)]);
   // Pre-fault health of the base point; null when the cache predates it. Hidden in a session or a composed grid: they change the network.
+  useEffect(() => { if (view === "cyber" && !cyberHealth) loadHealth("nov2026-1300").then(setCyberHealth); }, [view, cyberHealth]);
   useEffect(() => { let live = true; setHealth(null); loadHealth(pointId).then((h) => { if (live) setHealth(h); }); return () => { live = false; }; }, [pointId]);
   const year = point?.year;
   useEffect(() => { let live = true; setComunas(null); if (year) loadComunas(year).then((c) => { if (live) setComunas(c); }); return () => { live = false; }; }, [year]);
@@ -526,9 +535,12 @@ export function CascadeApp() {
       root.querySelectorAll<HTMLElement>("[data-lon]").forEach((el) => {
         const [x, y] = map.project(Number(el.dataset.lon), Number(el.dataset.lat));
         el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+        el.dataset.px = x.toFixed(1);
+        el.dataset.py = y.toFixed(1);
         el.classList.toggle("flip", x > width - 340);
         el.classList.toggle("up", y > height - 300);
       });
+      layoutTags(root, width - 230); // the Ciberataque monitor's area labels, in a column right of the network
       // The first event keeps a short label, unless it would sit under the current event's callout.
       const label = root.querySelector<HTMLElement>(".pin-label");
       const callout = root.querySelector<HTMLElement>(".callout");
@@ -572,6 +584,7 @@ export function CascadeApp() {
   /** A click on a line or substation opens its card in the Componente tab; the other tabs keep only their own content. */
   function select(target: Pick) {
     setSelection(target);
+    if (live.current.view === "cyber") { cyb.setSub("componente"); return; } // the monitor keeps the map's cycle
     setView("tabs");
     setTab("componente");
   }
@@ -619,6 +632,7 @@ export function CascadeApp() {
   function restoreBus(id: string) { setEdits((e) => dropBus(e, id)); }
   /** Second click on the selected element: switch it off, unless it already is (switching on is only from the card). */
   function switchOff(pick: Pick) {
+    if (live.current.view === "cyber") return; // the monitor only shows components: the defence acts by area
     if (!network || isSwitchedOff(pick, network, offState, !!s.sid)) return;
     if (pick.kind === "line") cutLine(pick.id);
     else if (s.sid ? substationLines(network, pick.id).length > 0 : true) outBus(pick.id);
@@ -738,6 +752,7 @@ export function CascadeApp() {
       <div className="map" ref={mapRef} />
       <div className="map-overlays" ref={overlayRef}>
         {isChile && network && <MapOverlays markers={located} states={mapStates} visible={visible} network={network} impact={impact} showCities={!hasLabels} placed={placed} select={seek} />}
+        {isChile && view === "cyber" && <CyberMapTags c={cyb} />}
       </div>
 
       <nav className="rail" aria-label="Navegación">
@@ -795,7 +810,12 @@ export function CascadeApp() {
           {view === "assistant" && <AssistantPanel a={a} />}
           {view === "history" && <ChangePanel entries={historyEntries} />}
           {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
-          {view === "cyber" && <CyberPanel c={cyb} />}
+          {view === "cyber" && <CyberPanel c={cyb} prefault={cyberHealth ? <PrefaultHealth health={cyberHealth} /> : null}
+            component={network && selection ? (
+              <SelectionCard network={network} buses={buses} frame={frame} selection={selection} cut={null} year={2026}
+                select={select} clear={() => setSelection(null)} cutLine={() => undefined} restore={() => undefined}
+                shutDown={false} shutdown={() => undefined} powerOn={() => undefined} edits={null} prepared={null} supply={null} setFactor={() => undefined} readOnly />
+            ) : null} />}
           {notice && <div className="notice" role="status"><span>{notice}</span><button className="text-btn" onClick={() => setNotice(null)}>Cerrar</button></div>}
           {view === "sources" && <SourcesPanel assumptions={timeline?.assumptions ?? index?.assumptions ?? []} index={index} />}
           {view === "help" && network && <HelpPanel network={network} buses={buses} mode={mode} regional={shownGrid} />}
@@ -832,7 +852,7 @@ export function CascadeApp() {
         </div>
       </section>
 
-      {isChile && <TimelineCard timeline={edited && timelineReady ? timeline : null} loading={edited && !timelineReady} markers={markers} warp={warp} t={t} clock={clock(point?.snapshot, t).tenths} islands={edited ? islands : []} playing={playing} speed={speed}
+      {isChile && <TimelineCard cycles={view === "cyber" ? cyberCycles(cyb) : null} timeline={edited && timelineReady ? timeline : null} loading={edited && !timelineReady} markers={markers} warp={warp} t={t} clock={clock(point?.snapshot, t).tenths} islands={edited ? islands : []} playing={playing} speed={speed}
         setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />}
 
       {isChile && <button className="power-all" aria-disabled={!canPower || undefined} onClick={() => canPower && powerAllOn()}
