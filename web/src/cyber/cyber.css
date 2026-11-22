@@ -74,3 +74,7 @@
 .shell .cy-tag-anchor.defense .cy-tag { background: var(--defense); color: #0e1a2b; }
 .shell .cy-tag-anchor.recovered .cy-tag { background: var(--bg); border: 1px solid var(--defense); color: var(--fg); }
 .shell .cy-tag-shield { width: 8px; height: 9px; background: currentColor; clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%); }
+
+/* "Salud de la red": nine figures stacked one per row (side by side they overlapped). */
+.shell .mini-figures.cy-figures { flex-direction: column; gap: 8px; }
+.shell .mini-figures.cy-figures > div { flex: none; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 12px; }

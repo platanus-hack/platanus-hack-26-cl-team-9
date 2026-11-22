@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): Salud de la red lists its figures one per row
+
+- **Changed:** `.cy-figures` (the Cyber "Salud de la red" card) is a column, label left and value right, instead of the shared `.mini-figures` flex row.
+- **Why:** nine figures in one row overlapped each other.
+- **Agents:** `.mini-figures` is unchanged for the other cards. No test: CSS only.
+- **Files:** `web/src/cyber/cyber.css`.
+
 ## 2026-11-22 · feat(web): draw the other countries like Chile
 
 - **Changed:** `buildRegionalLayers` has no power-plant layer (nor its tooltip), lines highlight on hover and substations get Chile's soft white outline. The regional legend drops the plants count.
