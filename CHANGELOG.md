@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · Merge origin/main into feat/incident-scenarios
+
+- **Changed:** Integrates main after #98 (the incident scenarios) was merged, with the technical-quality work (mypy gate, CI checks, architecture tests, 64 KB body limit). The only conflict was `domain/theater/cycle.py`: main added `cast(...)` to two lines that the calibrated-cost commit removes, so they stay removed.
+- **Why:** #98 went into main before the calibrated-cost commit (US$ 984 M for the 25F), which needs its own pull request.
+- **Agents:** Checked with CI's own commands: `mypy src` 0 errors, `pytest --cov-fail-under=87` gives 456 passed at 90.27 %, web `tsc`, `vitest` (155 tests) and build. The two `test_the_committed_cache_matches_the_engine_for_a_single_cut` failures are gone on main.
+- **Files:** `backend/src/cascadasen/domain/theater/cycle.py`, `CHANGELOG.md`.
+
 ## 2026-11-22 · fix(incidents): cost from the calibrated cascade method, no editable duration
 
 - **Changed:** The incident card takes `unserved_energy_mwh`, `failure_cost_usd`, `cost_per_hour_usd`, `outage_duration_h` and `cost_breakdown` from the most expensive cascade of the run (`transient.summary`, `blackout_cost` of #82) and adds `cost_basis` (the calibrated terms with their source or `is_assumption`, also in the catalog). The 25F now gives US$ 984.3 M and 81,443 MWh, as "Estado de la red".
@@ -99,6 +106,30 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
   - Not built from the first proposal: `plant_out`/`fleet_out`, free `effects` in a request, `/attacks/simulate`.
   - The MCP extra is needed to run its tests: `uv sync --all-extras`.
 - **Files:** `backend/src/cascadasen/domain/theater/{incident,config,cycle,narrative}.py`, `domain/theater/params/{incidents,narrative_es}.yaml`, `api/{incident_routes,app,simulation_schemas}.py`, `application/run_experiment.py`, `backend/tests/unit/test_incidents.py`, `backend/tests/integration/test_sessions_api.py`, `docs/openapi/agents.openapi.json`.
+## 2026-11-22 · fix(types): mypy reports 0 errors and becomes a CI gate
+- **Changed:** The 56 remaining `mypy src` errors are fixed with annotations and `typing.cast`, with no change at run time: `float | None` coordinates guarded by `located` (`domain/unify.py`, `validation.py`, `simulation/network.py`, `regional_reduction.py`, `regional_network.py`, `application/grid_queries.py`), two casts in the incident fields of `domain/theater/cycle.py` (code that came with #98), `SimulationService.world` (the API always passes a world), a renamed loop variable in `unify.py`, the typed bus row of `grid_stress.py`. In `regional_network.py` the all-or-nothing check on `r_pu` became `len(rs) == len(group)` over the non-None values, which gives the same result.
+- **Changed:** The `backend-mypy` job of `checks.yml` no longer has `continue-on-error`, so a new type error blocks the deploy. README and `backend/README.md` say so.
+- **Why:** The check was red on PR #100 because the baseline (52) was below the real count (56 after `main` added code), and the user asked to fix mypy first.
+- **Agents:** Run `cd backend && uv run mypy src` before pushing Python changes; it must say "no issues found". Do not raise a baseline: fix the error or add a justified `cast`.
+- **Files:** `backend/src/cascadasen/{domain,application}/*`, `.github/workflows/checks.yml`, `README.md`, `backend/README.md`.
+## 2026-11-22 · docs(quality): fix the BodyLimitMiddleware docstring and the scipy row in stack.md
+
+- **Changed:** the `BodyLimitMiddleware` docstring says the limit covers declared and chunked bodies. `docs/stack.md` no longer lists scipy in the simulation engine row (only `data/scripts/build_baseline_opf.py` imports it, via the `data` dependency group).
+- **Why:** Two stale statements the final review found after the chunked-limit fix and the scipy group.
+- **Agents:** Docstring and docs only, no behaviour change.
+- **Files:** `backend/src/cascadasen/api/limits.py`, `docs/stack.md`.
+
+## 2026-11-22 · chore(ci): run tests, mypy baseline and web checks in CI, and make deploy need them
+- **Changed:** new `.github/workflows/checks.yml` (runs on `pull_request` and `workflow_call`) with jobs `backend-test` (`uv sync --locked --group dev`, `pytest --cov=cascadasen --cov-fail-under=87`), `backend-mypy` (`mypy src`, `continue-on-error: true`, baseline of 52 errors) and `web` (`npm ci`, `tsc --noEmit`, `vitest run`, `npm run build`). `deploy.yml` gets a `checks` job (`uses: ./.github/workflows/checks.yml`) and `needs: checks` on `deploy`; nothing else in it changed. `lint.yml` also runs `ruff check` and `ruff format --check` on `../data/scripts` (backend config).
+- **Why:** Review R-01, B-02, W-03: no test ran in CI and a broken main could deploy. Coverage measured 89% (12147 statements, 1311 missed) without the mcp/llm extras; the floor is 87.
+- **Agents:** a failing `backend-test` or `web` job now blocks the deploy; `backend-mypy` never does. Raise the floor when coverage rises; the README "Checks (CI)" wording matches. `test_the_committed_cache_matches_the_engine_for_a_single_cut` compares the cache with the live engine exactly (except `status` at loading 1.0) and is tolerant of one rounding unit of platform float noise (fix(tests) commit just before this one). This commit is the only one that touches `.github/workflows/`: pushing it needs a token with the `workflow` scope.
+- **Files:** `.github/workflows/{checks,deploy,lint}.yml`, `CHANGELOG.md`.
+
+## 2026-11-22 · fix(tests): cache-vs-engine test tolerates one rounding unit of platform float noise
+- **Changed:** in `backend/tests/unit/test_grid_simulation.py` the helper `_without_boundary_status` is now `_without_rounding_noise`: an edge `flow_mw` (whole MW) or `loading` (3 decimals) that differs from the committed cache by at most one unit of its last rounded digit is taken from the cache, and the existing `status` tolerance at loading 1.0 is kept. Everything else must still be equal.
+- **Why:** the cache was written on another machine. On macOS arm64 nov2026-2000-R001 gave R113 `flow_mw` -40 vs -39 cached; on linux/amd64 feb2025-1500-R239 gave R091 `loading` 0.314 vs 0.313. Float noise at a rounding boundary, so the test would fail the CI `backend-test` job and block deploys.
+- **Agents:** test only. The engine and `web/public/cache/**` are unchanged and the cache is not regenerated. The test passes on macOS arm64 and linux/amd64 (QEMU).
+- **Files:** `backend/tests/unit/test_grid_simulation.py`, `CHANGELOG.md`.
 ## 2026-11-22 · feat(grids): prepared scenarios for population, demand, generation and lines, and supply per source (#97)
 
 - **Changed:** new `POST /api/v1/grids/prepare` (agent route `prepare_scenario`, tool `prepare_scenario`). It resolves filters (buses, zones, areas, comunas, tech, lines, kv) into a prepared grid. It does not simulate: it returns what each change touches, lines already over their limit and whom each generator should feed.
@@ -152,7 +183,84 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** #81's flat 4 h x 8.79 US$/kWh gave US$ 390 M for the 25F; the ISCI study for Enel Foundation [44] gives US$ 984 M and 81,430 MWh, and a blackout costs more per hour than load shedding. Now the 25F gives US$ 984.3 M and 81,443 MWh.
 - **Agents:** the two calibrated terms come from [44] (`cascade.yaml` `cost`), not from tuning the engine; only the 25F is checked against a real figure. `failure_cost(shed)` without the dark split counts everything as dark with no premium (N-1 money at risk). The 13-area engine's consequence card (`outage_cost`) is unchanged.
 - **Files:** `backend/src/cascadasen/{domain/simulation/consequence.py,domain/cascade/engine.py,domain/cascade/health.py,domain/cascade/params/cascade.yaml,application/grid_simulation.py,api/grid_routes.py}`, tests, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,gridsApi.ts}`, `docs/{engine,datasets}.md`.
-
+## 2026-11-22 · docs(readme): product README and stale docs
+- **Changed:** `README.md` is now the Sub50 product README (what it is and simulates, `docker compose up --build`, honest validation scope, CI checks, names, repo map, doc links); the hackathon template text is gone, team list and logo stay at the end. `docs/stack.md`: status, section 0 (now history), decision rows (React hooks, custom charts, engine, API, precompute, tests, CI), `cascadasen-cache`, `sen_network.json`, section 7.1 with `GET /sim/runs/{id}/snapshots` (14 operations). `docs/plan.md`: built state, CI and `cascadasen-cache` lines, V6 marked skipped, duplicate decision 14 renumbered to 15. `docs/mapa3.md`: Glossary moved to section 12 (no duplicate `## 10`), missing `web/src/cascade` modules in the section 8 table, theatre-cache git-ignore wording, deleted `icons.ts` sentence dropped. `web/README.md`, `docs/architecture.md` (`built_at` exception), `docs/datasets.md` (no personal path, 188 buses, appendices not in repo) and `backend/README.md` (endpoint list) corrected.
+- **Why:** Review R-14, R-15 and section 7 rows 2-17. Docs only: no code, cache or OpenAPI change.
+- **Agents:** The CI wording lives in `README.md` section "Checks (CI)"; `stack.md` and `plan.md` point to it. Update it there when the workflows change. `mapa3.md` section 10 is still the operation mode; the Glossary is section 12. Left for the team: voltage_limited (B-06) and the idea/cyber text conflicts (review rows 18, 25, 26).
+- **Files:** `README.md`, `docs/{stack,plan,mapa3,architecture,datasets}.md`, `web/README.md`, `backend/README.md`.
+## 2026-11-22 · refactor(web): error boundary, typed tooltip, logged catches, helper tests
+- **Changed:** New `web/src/ErrorBoundary.tsx` wraps only `<CascadeApp />` in `main.tsx` (error shows `Algo salió mal al mostrar el mapa.` and a `Recargar` button; without an error it renders children unchanged). `_tooltip` in `map/mapboxMap.ts` no longer uses `any`. Five silent catch sites now `console.warn` (sessionApi poll, CascadeApp uploads list and delete, NetworkPanel summary, useSession 412 reload, baseMap picking). Deleted unused `web/src/cascade/icons.ts`. New tests `map/iso3.test.ts` and `map/shapes.test.ts`.
+- **Why:** Review W-07 and W-08. No behaviour, API or cache change.
+- **Agents:** `docs/mapa3.md` line 130 still names `web/src/cascade/icons.ts` (deleted): the docs commit must drop that sentence. `useSession` stays untested (no jsdom or testing-library). Legacy maps 1 and 2 and unused `sessionApi` run helpers were left in place on purpose.
+- **Files:** `web/src/ErrorBoundary.tsx`, `web/src/main.tsx`, `web/src/map/mapboxMap.ts`, `web/src/map/baseMap.ts`, `web/src/cascade/CascadeApp.tsx`, `web/src/cascade/NetworkPanel.tsx`, `web/src/session/*`, `web/src/map/*.test.ts`.
+## 2026-11-22 · docs(adr): add architecture decision records
+- **Changed:** New `docs/adr/` with `README.md` (index and format) and five records: 0001 two engines, 0002 reduced 188-bus network, 0003 DC power flow with the voltage rule, 0004 sessions on S3 with the session id as capability, 0005 hexagonal layering and its test. `docs/architecture.md` links the folder.
+- **Why:** Review R-18. The reasons behind these decisions were spread over `plan.md` section 9, `engine.md` and `sessions-api.md`. Each record cites its source doc and holds no new facts.
+- **Agents:** Add a record when a decision is expensive to reverse. Keep records under 40 lines, number them in order and mark replaced ones `superseded by NNNN`. The root README is owned by the docs commit, so it does not link the folder yet.
+- **Files:** `docs/adr/*`, `docs/architecture.md`.
+## 2026-11-22 · docs(backend): explain the why of the 14 largest undocumented functions
+- **Changed:** Docstrings only, no code line changed. Functions: `validate_snapshot`, `_cycle` and `__post_init__` (theatre `Simulation`), `infer_line_topology`, `GridUnifier.unify`, `_reconcile_cen_sections`, `_plants`, `_electrical`, `run_transient`, `simulate_island` (simulation), `ISRAgent.step`, `IdeEnergiaSource.contribute`, `create_app`, `PhysicsSimulator.simulate`.
+- **Why:** Review R-16. These were the largest functions without a docstring (40 to 325 lines). Each docstring gives the order of the steps and why, thresholds and what a caller may assume, checked against the code.
+- **Agents:** Check that a docstring-only commit leaves the code unchanged by comparing `ast.dump` of each changed file before and after with docstrings removed (done here: 10 files, 0 differences).
+- **Files:** `backend/src/cascadasen/{api/app.py,application/simulate.py,domain/{validation,unify,topology_inference}.py,domain/agents/isr.py,domain/simulation/{engine,frequency}.py,domain/theater/cycle.py,infrastructure/sources/ide_energia.py}`.
+## 2026-11-22 · test(architecture): enforce the layer import rules
+- **Changed:** New `backend/tests/unit/test_architecture.py` parses `src/cascadasen` with `ast` (stdlib only, no package import) and asserts: `domain` imports no outer layer (api, application, infrastructure, mcp, cli, sim_fixtures); `application` and `infrastructure` import neither `api` nor `mcp`; no module cycle among top-level imports; the application to infrastructure imports equal the set `KNOWN_EXCEPTIONS`.
+- **Why:** Review R-21. The hexagonal rule in `docs/architecture.md` had no check. Measured on this base: 0 violations for the first four rules. A temporary `from cascadasen.api import app` in a domain module made 2 tests fail.
+- **Agents:** The 6 `KNOWN_EXCEPTIONS` (CLI entry points in `application/{build_regional,grid_health,grids}.py` and the default document store of `run_experiment.py`) are listed in the test. A new application to infrastructure import fails the test. The 4 api to mcp imports are not asserted (review B-08 is a larger refactor).
+- **Files:** `backend/tests/unit/test_architecture.py`.
+## 2026-11-22 · chore(types): fix plain mypy annotation errors
+- **Changed:** `uv run mypy src` goes from 153 to 52 errors (179 before the config). Only annotations, `cast`, two `assert x is not None` that cannot fail (`execution.py` C3, `cycle.py` LLM answer) and renames of shadowed loop variables (`r` to `ramp`, `p` to `prob`, `k` to `nearest`, `c` to `comuna`, `z` to `zone`, `a, b` to `src, dst`). No runtime behaviour changed. `backend/README.md` gets a `Type checking` section.
+- **Why:** Review R-03/B-10.
+- **Agents:** Left on purpose (need a behaviour or model change): `float | None` coordinates guarded by `located`, and `TheaterWorld | None` passed where it is required. mypy is still not a CI gate.
+- **Files:** `backend/src/cascadasen/{api,application,domain,infrastructure,mcp}/*` (21 files), `backend/README.md`.
+## 2026-11-22 · chore(types): add a mypy baseline configuration
+- **Changed:** `backend/pyproject.toml` gets `[tool.mypy]` (`python_version = "3.12"`, `files = ["src"]`, `ignore_missing_imports = true`, `plugins = ["pydantic.mypy"]`). `uv run mypy src` goes from 179 to 153 errors.
+- **Why:** Review R-03/B-10. Without a config, mypy reported 16 errors for libraries without stubs (networkx, yaml, boto3, openpyxl, anthropic, mcp) and did not understand pydantic models.
+- **Agents:** Run `cd backend && uv run mypy src`. The count is a baseline, not a gate. Annotation fixes follow in later commits.
+- **Files:** `backend/pyproject.toml`.
+## 2026-11-22 · chore(backend): remove nine unreferenced methods
+- **Changed:** Removed `ProcessedWorld.labels`, `LogisticsAgent.freedom`, `Grid.add_inertia`, `Grid.totals` (simulation grid), `Decision.param`, `Belief.trust_of`, `Action.param` (execution), `TheaterGrid.island_inertia_mws` and `TheaterGrid.release_hold`. 40 lines deleted, none added.
+- **Why:** Review B-13. `vulture` flags them, and `git grep` finds no caller in `backend/src`, `backend/tests`, `web/src`, `docs` or the OpenAPI specs (only CHANGELOG history mentions `island_inertia_mws`). None is reached through `getattr` (the `getattr` sites use fixed names or tool/route names).
+- **Agents:** `api/static/map.html` stays: it serves `/map`. Only these nine locations were re-checked on this base (the review counted 11).
+- **Files:** `backend/src/cascadasen/{application/theater_world.py,domain/agents/logistics.py,domain/simulation/grid.py,domain/theater/{decisions,execution,grid}.py}`.
+## 2026-11-22 · chore(deps): add a `data` dependency group with scipy
+- **Changed:** `backend/pyproject.toml` gets `[dependency-groups] data = ["scipy"]` and `backend/uv.lock` adds scipy 1.18.1 (75 added lines, no other package changed). `docs/mapa3.md` now says `cd backend && uv sync --group data`.
+- **Why:** Review R-23: `data/scripts/build_baseline_opf.py` imports scipy, which was in no dependency list. openpyxl is already a main dependency.
+- **Agents:** The Dockerfiles use `uv sync --locked --no-dev`, so the image does not get scipy. Run data scripts with `uv sync --group dev --group data` first. A later plain `uv sync --group dev` removes scipy again.
+- **Files:** `backend/pyproject.toml`, `backend/uv.lock`, `docs/mapa3.md`.
+## 2026-11-22 · fix(data): safer PyPSA-CL download in build_operating_points.py
+- **Changed:** `_ensure_loads_file` returns before the SharePoint cookie request when the four files already exist in `data/raw/pypsa_cl/`, uses `curl -fsSL` (an HTTP error fails instead of saving HTML as `.xlsx`), and downloads to `<name>.part` then renames.
+- **Why:** Review D-01. An offline rebuild needed the network, and an error page or an interrupted download left a corrupt `.xlsx` that later runs trusted.
+- **Agents:** If an old run left a corrupt `.xlsx` in `data/raw/pypsa_cl/`, delete it by hand. The script was not re-run, so `data/processed/*` is unchanged. Provenance headers in the generated JSON (review D-03) were skipped because they change data outputs.
+- **Files:** `data/scripts/build_operating_points.py`, `docs/datasets.md`.
+## 2026-11-22 · chore(data): ruff-clean data/scripts
+- **Changed:** `zip()` calls in `build_baseline_opf.py` and `build_operating_points.py` get `strict=False` (same behaviour). The deliberate import after the `sys.path` insert in `build_baseline_opf.py` gets `# noqa: E402` with the reason. The three scripts are reformatted with `ruff format` (mechanical). `scripts/lint.sh` now runs ruff from `backend/`, so files outside it (`data/scripts`) use `backend/pyproject.toml` instead of ruff defaults (88 columns, no `B`/`RUF` rules).
+- **Why:** Review D-02: `ruff check ../data/scripts` reported 5 errors and 3 files were unformatted.
+- **Agents:** Run `cd backend && uv run ruff check . ../data/scripts && uv run ruff format --check . ../data/scripts`. The scripts were not re-run, so `data/processed/*` is byte-identical.
+- **Files:** `data/scripts/{build_baseline_opf,build_operating_points,build_node_index}.py`, `scripts/lint.sh`.
+## 2026-11-22 · chore(repo): bash 3.2 pre-commit hook, lint.sh checks web/, ignore coverage output
+- **Changed:**
+  - `scripts/hooks/pre-commit` no longer uses `mapfile` (bash 4 only), so it runs on macOS bash 3.2. Same checks.
+  - `scripts/lint.sh` and `AGENTS.md` point at `web/` (the `frontend/` directory does not exist). For `web/**/*.ts|tsx` it runs `tsc --noEmit` on the whole project once per run when `web/node_modules/.bin/tsc` exists. eslint and prettier branches stay, but only run if installed there.
+  - `.gitignore` adds `.coverage`, `htmlcov/`, `web/coverage/` and `web/public/cache/theater/` (docs already say that directory is git-ignored).
+- **Why:** Review R-04, R-06, R-10, R-11. The hook failed on macOS, the lint script linted a directory that does not exist, and `.coverage` showed up as untracked.
+- **Agents:** Decision: no eslint or prettier dependency is added, because they would reformat the app. `scripts/lint.sh --check web/src/foo.ts` fails on any type error in the web project, not only in that file. You no longer need `--no-verify` on macOS.
+- **Files:** `.gitignore`, `scripts/lint.sh`, `scripts/hooks/pre-commit`, `AGENTS.md`.
+## 2026-11-22 · fix(api): enforce the 64 KB body limit on chunked requests
+- **Changed:** `BodyLimitMiddleware` now counts the body of a request without `content-length` (chunked) on the limited prefixes. Over `MAX_BODY_BYTES` it sends the same 413 JSON (`Cuerpo demasiado grande (máximo 64 KB).`). Otherwise it replays the buffered messages to the app. Requests with `content-length` keep the same path and the prefixes are unchanged.
+- **Why:** A chunked request skipped the limit entirely (review B-04).
+- **Agents:** The 413 body is built in `BodyLimitMiddleware._too_large`. New test `test_a_chunked_body_over_64_kb_gives_413_and_a_small_one_passes` in `tests/integration/test_sessions_api.py`.
+- **Files:** `backend/src/cascadasen/api/limits.py`, `backend/tests/integration/test_sessions_api.py`.
+## 2026-11-22 · chore(api): log a dropped assistant stream callback at debug level
+- **Changed:** `Emitter.__call__` in `application/assistant.py` logs `stream callback dropped` with `log.debug(..., exc_info=True)` before it sets `callback = None`.
+- **Why:** The `except Exception` swallowed the cause silently. Behaviour is the same.
+- **Agents:** Set the `cascadasen.application.assistant` logger to DEBUG to see why a stream client was dropped.
+- **Files:** `backend/src/cascadasen/application/assistant.py`.
+## 2026-11-22 · fix(tests): green suite on a clean checkout
+- **Changed:** `test_bedrock_adapters_use_the_aws_profile` now skips with `pytest.importorskip("anthropic")` when the `llm` extra is not installed. `test_the_committed_cache_matches_the_engine_for_a_single_cut` treats `status` as equal when both edges have `loading == 1.0` and the statuses are `ok`/`overload`; everything else is still compared exactly.
+- **Why:** The engine decides `overload` with `ratio > 1.0` (`domain/cascade/engine.py` `_frame`), so last-bit BLAS/platform float noise flips the status of edges at exactly 100% (`feb2025-1500/R239`: R183, R206, R045, R099; `nov2026-2000/R001`: R206). The cache and the engine did not change, so regenerating would only move the drift to another machine.
+- **Agents:** `web/public/cache/**` is untouched on purpose. Do not regenerate it to fix this test. After this commit: 405 passed, 5 skipped (anthropic, 2 mcp extras, V6, V9), 0 failed.
+- **Files:** `backend/tests/unit/test_llm_commander.py`, `backend/tests/unit/test_grid_simulation.py`.
 ## 2026-11-22 · Merge origin/main into feat/network-selector
 
 - **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.

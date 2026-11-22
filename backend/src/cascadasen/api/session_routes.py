@@ -9,7 +9,7 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -368,7 +368,7 @@ def _element_routes(
         agent: Agent = "anon",
     ) -> dict[str, Any]:
         limit(request, "write", sid)
-        fields = body.model_dump(exclude_unset=True)
+        fields = cast(BaseModel, body).model_dump(exclude_unset=True)
         with serial(request, sid):
             out = session_call(svc.add, sid, kind, fields, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])
@@ -394,7 +394,7 @@ def _element_routes(
         agent: Agent = "anon",
     ) -> dict[str, Any]:
         limit(request, "write", sid)
-        fields = body.model_dump(exclude_unset=True)
+        fields = cast(BaseModel, body).model_dump(exclude_unset=True)
         with serial(request, sid):
             out = session_call(svc.patch, sid, kind, element_id, fields, agent, if_revision(if_match))
         etag(response, out["dataset_revision"])

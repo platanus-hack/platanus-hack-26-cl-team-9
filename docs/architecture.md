@@ -1,6 +1,7 @@
 # Architecture
 
 How Sub50 is built today (2026-11-21): the pieces, how they depend on each other, and where each responsibility lives. Product and scope are in `idea.md`, the simulation model in `stack.md` section 4, data contracts and API in `stack.md` sections 6-7. When code and this document disagree, the code wins; fix this document in the same change.
+Why it is built this way (two engines, the 188-bus network, DC flow, sessions on S3, the layering rule): [`adr/`](adr/README.md).
 
 ## 1. System overview
 
@@ -24,7 +25,7 @@ Principles (`stack.md` section 2):
 - Physics lives only in the backend. The frontend draws what the engine returns and never computes physics.
 - The demo works without a server: every line cut is precomputed into `web/public/cache/`.
 - Every parameter carries a source or `is_assumption: true` (`datasets.md` section 6). The YAML loaders reject bare numbers.
-- Runs are deterministic: one seed per run, independent seeded streams, no wall clock in the domain.
+- Runs are deterministic: one seed per run, independent seeded streams, no wall clock in the simulation. The one exception is `domain/unify.py`, which stamps `built_at` with `datetime.now(UTC)` as metadata of the snapshot; no simulation reads it.
 
 ## 2. Backend: ports and adapters (hexagonal)
 

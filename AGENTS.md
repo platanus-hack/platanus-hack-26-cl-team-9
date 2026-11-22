@@ -27,7 +27,7 @@ Do this before each plan and before each change, not only at the start of a sess
 
 - **Lint every change when a linter applies.** Run `scripts/lint.sh --fix <files>`:
   - Python: `ruff check --fix` and `ruff format`, configured in `backend/pyproject.toml`.
-  - Frontend (`frontend/`): eslint and prettier, as soon as `frontend/package.json` installs them. Until then the script skips frontend files.
+  - Frontend (`web/`): `tsc --noEmit` on the whole project when `web/node_modules` is installed (`cd web && npm ci`). eslint and prettier run only if they are installed there; they are not dependencies today.
   - Markdown and data files: no linter.
   Claude Code runs this automatically after every edit (section 5). Other agents run it themselves before committing.
 - **Tests:** after backend changes, run `cd backend && uv run pytest`.

@@ -15,7 +15,7 @@ Everything is appended to a hash-chained audit log. A run is reproducible from i
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any
+from typing import Any, cast
 
 from cascadasen.domain.agents.adversary import AdversaryAgent
 from cascadasen.domain.agents.auditor import AuditorAgent, CycleRecord
@@ -134,6 +134,15 @@ class Simulation:
     light: bool = False  # campaigns: skip the per-cycle map frame (no effect on the run itself)
 
     def __post_init__(self) -> None:
+        """Build the whole run from `config` and the world, without simulating any cycle.
+
+        Order: a fresh seed when none was given (stored in `config`, so the recipe replays the run), config
+        validation, template and horizon, the adversary config (the request's, else the template's), the
+        operating point (`RunInputError` when unknown) and its network, the real state, the resource ledger
+        (catalog resources plus the requested capabilities), the agents, and last the scheduled events (scenario
+        first, then the user's), each checked by `_check_event` and indexed by cycle. All randomness comes from
+        named streams of the seed (`Chance`, `rng_for`), so the same config and seed give the same run. Writes
+        the first audit entry, `run_created`. `light` only skips the per-cycle map frame."""
         if self.config.seed is None:
             self.config = replace(self.config, seed=new_seed())
         cfg, conf = self.cfg, self.config
@@ -163,7 +172,9 @@ class Simulation:
         self.ledger = Ledger({**cfg.resources, **dict(conf.capabilities)})
         self.defense_areas = net.defense_areas()
         self.chance = (
-            Chance.for_run(conf.seed, cfg.stochastic) if conf.stochastic and cfg.stochastic else None
+            Chance.for_run(cast(int, conf.seed), cfg.stochastic)
+            if conf.stochastic and cfg.stochastic
+            else None
         )
         self.executor = Executor(net, cfg, self.defense_areas, self.chance)
         self.ex = ExecutionState()
@@ -202,13 +213,13 @@ class Simulation:
                 budget=adv.budget,
                 adaptive=adv.adaptive,
                 plan=list(self.template.adversary.get("plan") or []),
-                rng=rng_for(conf.seed, "adversary"),
+                rng=rng_for(cast(int, conf.seed), "adversary"),
                 catalog=cfg.adversary,
             )
         self.evaluator = Evaluator(
             self.mission.priority_areas, cfg.clock["cycle_minutes"] / 60.0, self.physics.voll_usd_per_kwh
         )
-        self.rng_digital = rng_for(conf.seed, "digital")
+        self.rng_digital = rng_for(cast(int, conf.seed), "digital")
         self.history_real = [self._real_snapshot()]
         self.observations: list[ObservedState] = []
         self.snapshots: list[dict[str, Any]] = []
@@ -442,7 +453,9 @@ class Simulation:
                     "bus": bus_id(anchor) if anchor is not None else None,
                     "lon": buses.lon[anchor] if anchor is not None else None,
                     "lat": buses.lat[anchor] if anchor is not None else None,
-                    "target_bus": bus_id(self.network.areas[target].anchor_bus) if target else None,
+                    "target_bus": bus_id(cast(int, self.network.areas[target].anchor_bus))
+                    if target
+                    else None,
                 }
             )
         return out
@@ -488,6 +501,25 @@ class Simulation:
     # ---------------------------------------------------------------- cycle
 
     def _cycle(self) -> dict[str, Any]:
+        """Run one decision cycle and return its snapshot. The steps are ordered because each reads what the
+        previous one wrote.
+
+        0. Let the executor advance the actions already in force and free the resources it releases.
+        1. Events: the ones scheduled for this cycle, the queued injections, background failures (stochastic
+           runs only, from cycle 1) and the adversary's. They hit the real state before anything is observed, so
+           the cycle sees its own events.
+        2. Observe: agents never read the real state. `observe` builds what the digital layer lets through
+           (delay, bias, false alarms) from the real history.
+        3. ISR builds the picture, C2 sets the intent, and the staff (operations, stabilization, logistics)
+           propose courses of action (COA). Duplicates by key keep the highest benefit.
+        4. Validate every COA against the real state and the resources, collect the vetoes of stabilization and
+           logistics, and let C2 decide (with an LLM pick when one is configured). Actions queued by an external
+           agent are approved too, unless C2 already approved the same key.
+        5. Execute the approved COAs one by one. Each approval spends operator attention and is validated again,
+           because earlier actions of this cycle change the state. A failed validation, a stochastic action
+           failure or a missing crew becomes `ActionFeedback`, not an exception.
+        6. Evaluate, audit, let the adversary learn, write the audit log, build the snapshot and advance
+           `self.cycle`."""
         k, real, net = self.cycle, self.real, self.network
         real.cycle = k
         self.ledger.new_cycle(k)
@@ -833,6 +865,7 @@ class Simulation:
                 return None
             keys = tuple(str(x) for x in chosen if str(x) in {o["id"] for o in options})[:capacity]
             self.llm_record[k] = keys
+            assert answer is not None  # `chosen` came from it
             explanation = str(answer.get("explanation", ""))[:2000]
             self.log.append(
                 k, "decide", "c2", "llm_choice", {"chosen": list(keys), "explanation": explanation}
@@ -914,7 +947,7 @@ class Simulation:
                 "spent": self.adversary.spent,
                 "strategy_mix": self.adversary.strategy_mix(),
             },
-            "after_action": sorted(moments, key=lambda m: m["cycle"]),
+            "after_action": sorted(moments, key=lambda m: cast(int, m["cycle"])),
             "trace_head": self.log.head,
         }
         inc = self.cfg.incidents.get(self.template.id)

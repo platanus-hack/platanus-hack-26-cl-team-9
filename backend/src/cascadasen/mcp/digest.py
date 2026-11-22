@@ -22,8 +22,8 @@ def fold(text: str) -> str:
 
 def bus_place(net: dict[str, Any], bus_id: str | None) -> dict[str, Any]:
     """Where a bus is (name and area), so the model never guesses a bus's location."""
-    node = next((n for n in net.get("nodes", []) if n["id"] == bus_id), {})
-    area = next((a for a in net.get("areas", []) if a["id"] == node.get("area")), {})
+    node: dict[str, Any] = next((n for n in net.get("nodes", []) if n["id"] == bus_id), {})
+    area: dict[str, Any] = next((a for a in net.get("areas", []) if a["id"] == node.get("area")), {})
     return {
         "bus": bus_id,
         "bus_name": node.get("name"),

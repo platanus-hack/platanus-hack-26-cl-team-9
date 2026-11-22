@@ -44,7 +44,7 @@ Validation (18 checks, all passing on the current build; `GET /api/v1/validation
 - 25F: removing Nueva Maitencillo - Nueva Pan de Azucar 500 kV alone does not split the grid. The north separates only when both 220 kV circuits around Punta Colorada and the coastal 110 kV path (Maitencillo - Algarrobo - Incahuasi - Las Companias) also open. This is a test in `backend/tests/validation/`.
 
 Built on top of `data/processed/` by standalone scripts in `data/scripts/` (merged in #10, not part of `cascadasen-build`):
-- `build_operating_points.py` -> `operating_points.json`: demand per electrical bus from PyPSA-CL `Loads.xlsx` (259 loads, 252 mapped to model buses) and merit-order dispatch from PyPSA-CL generators (2,056 with bus, cost and inertia), solar and wind profiles and fuel prices. Synchronous units stay online until 31,000 MWs of inertia. Four points: Feb 2025 15:00 (25F reference) and 03:00, Nov 2026 13:00 and 20:00. PyPSA-CL has one representative day per month, so these are modelled, not measured. Downloads the four files into the git-ignored `data/raw/pypsa_cl/`. Needs openpyxl.
+- `build_operating_points.py` -> `operating_points.json`: demand per electrical bus from PyPSA-CL `Loads.xlsx` (259 loads, 252 mapped to model buses) and merit-order dispatch from PyPSA-CL generators (2,056 with bus, cost and inertia), solar and wind profiles and fuel prices. Synchronous units stay online until 31,000 MWs of inertia. Four points: Feb 2025 15:00 (25F reference) and 03:00, Nov 2026 13:00 and 20:00. PyPSA-CL has one representative day per month, so these are modelled, not measured. Downloads the four files into the git-ignored `data/raw/pypsa_cl/`. Needs openpyxl (a main dependency). Skips the SharePoint request when the four files are already there, and writes each download to `.part` first.
 - `build_baseline_opf.py` -> `baseline_opf.json`: DC optimal power flow per point so no branch exceeds s_nom (NTSyCS art. 5-27), with the same inertia floor. All four points solve without load shedding. N-1 is not enforced. Needs numpy and scipy. Run after the previous script.
 - `build_node_index.py` -> `node_index.json` (1.4 MB): one record per substation or tap for the web map popup (ficha, lines, plants, storage, served comunas, PyPSA-CL model, demand and dispatch). PyPSA-CL storage named `<TYPE>_<node>_<h>h` is shown as model candidates, not real batteries.
 
@@ -99,11 +99,11 @@ Largest plants: Atacama (thermal, 716 MW), Guacolda (703 MW), Ralco (hydro, 685 
 
 ### 2.3 Unified file and where it lives
 
-A previous session wrote these under `/Users/alonsoutreras/Desktop/Hackathon/cascadasen/datos/` on Alonso's machine (outside this repo):
+A previous session wrote these under `~/Desktop/Hackathon/cascadasen/datos/` on Alonso's machine (outside this repo):
 - `raw/centrales_{bioenergia,eolicas,geotermicas,hidroelectricas,solares,termoelectricas}.geojson`
 - `centrales_sen.geojson`: 1,193 operating SEN plants with fields `nombre, tecnologia, mw, combustible, propietario, region_cod, region, comuna_cod, fuente`.
 
-To get them in the repo, copy those files into `data/` or regenerate with Appendix A and B. Raw files are about 800 KB; the unified file is about 430 KB, small enough to commit. Licence and terms of use of the IDE Energia data were not checked.
+To get them in the repo, copy those files into `data/` or regenerate with Appendix A and B (the scripts were not committed, see the appendices). Raw files are about 800 KB; the unified file is about 430 KB, small enough to commit. Licence and terms of use of the IDE Energia data were not checked.
 
 ### 2.4 Data quirks (read before filtering)
 
@@ -139,7 +139,7 @@ INE Census 2024 by region/commune (https://censo2024.ine.gob.cl/resultados/). Th
 
 ## 5. Plant -> node assignment (task)
 
-The engine has about 10-14 nodes. Every plant in `centrales_sen.geojson` must be assigned to a node by the nearest substation or by zone polygon, and node generation per scenario is built from the assigned plants. Document the rule. This step has not been done.
+The reduced network has 188 buses (`plan.md` section 9, decision 4). Every plant in `centrales_sen.geojson` must be assigned to a node by the nearest substation or by zone polygon, and node generation per scenario is built from the assigned plants. Document the rule. This step has not been done.
 
 ## 6. Provenance rule
 
@@ -186,6 +186,7 @@ Every number that reaches the UI carries a `source` (document + page/table, or A
 Numbering follows the team's earlier research notes; gaps are sources not needed here.
 
 ## Appendix A: download script (`data/scripts/descargar_centrales.py`)
+Not in the repo: the script was not committed, so the file named here does not exist.
 
 ```python
 """Download IDE Energia plant layers as GeoJSON into ../raw/."""
@@ -220,6 +221,7 @@ for capa, nombre in CAPAS.items():
 ```
 
 ## Appendix B: unify script (`data/scripts/unificar_centrales.py`)
+Not in the repo: the script was not committed, so the file named here does not exist.
 
 ```python
 """Unify plant layers into centrales_sen.geojson (operating SEN plants only)."""

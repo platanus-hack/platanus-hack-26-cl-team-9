@@ -50,8 +50,8 @@ function _drawGridWhenLoaded(overlay: MapboxOverlay) {
     .catch((error) => console.error("No se pudo dibujar la red", error));
 }
 
-function _tooltip({ object, layer }: { object?: any; layer?: { id: string } | null }): string | null {
+function _tooltip({ object, layer }: { object?: { name?: string; mw?: number; tech?: string; kv?: number | null }; layer?: { id: string } | null }): string | null {
   if (!object || !layer) return null;
-  if (layer.id === "generation") return `${object.name}\n${Math.round(object.mw)} MW · ${object.tech}`;
+  if (layer.id === "generation") return `${object.name}\n${Math.round(object.mw ?? Number.NaN)} MW · ${object.tech}`;
   return `${object.name}\n${object.kv ?? "?"} kV`;
 }

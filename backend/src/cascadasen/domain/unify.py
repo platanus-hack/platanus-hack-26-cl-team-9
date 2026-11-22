@@ -21,6 +21,7 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import networkx as nx
 import numpy as np
@@ -89,6 +90,15 @@ class GridUnifier:
     # ------------------------------------------------------------------ public
 
     def unify(self, b: SourceBundle) -> GridSnapshot:
+        """Build the `GridSnapshot` from the raw source bundle. The order follows the data dependencies.
+
+        Substations first (joined by CEN id), then the ones without coordinates are located from the PyPSA-CL
+        model. Line topology is inferred from geometry and names, then reconciled with the official CEN sections
+        (which adds edges). The site links come next, then the electrical parameters (they need the edges), then
+        plants and storage (they need the model buses). Generation and storage are summed per node, service areas
+        and macro zones follow (they need the generation), and last the edge geometry is simplified, so that
+        inference worked on the full-resolution lines. Stats and assumptions accumulate on the instance. Apart
+        from `built_at`, the result is a pure function of the bundle."""
         nodes = self._substations(b)
         by_id = {n.id: n for n in nodes}
         self._locate_from_model(b, nodes)
@@ -161,7 +171,7 @@ class GridUnifier:
                 seen_cen.add(s.cen_id)
             levels = sorted(kv_levels.get(s.cen_id or -1, set()) | ({s.kv} if s.kv else set()), reverse=True)
             prov = [Provenance(s.source, s.record_id, "ubicación, tensión, segmento, propietario, comuna")]
-            ids = {"ide_objectid": s.record_id}
+            ids: dict[str, Any] = {"ide_objectid": s.record_id}
             if cen:
                 ids |= {"cen_id": cen.cen_id, "cen_code": cen.cen_code, "cen_name": cen.name}
                 ids |= {k: v for k, v in cen.extra.items() if k.startswith("flag_")}
@@ -264,7 +274,9 @@ class GridUnifier:
 
     # ------------------------------------------------------- CEN reconciliation
 
-    def _resolve_end(self, desc: str, kv: float | None, line_code: str | None, code_idx, name_idx) -> tuple:
+    def _resolve_end(
+        self, desc: str | None, kv: float | None, line_code: str | None, code_idx, name_idx
+    ) -> tuple:
         d = (desc or "").strip()
         kind = d.split(":", 1)[0].strip().upper()
         body = d.split(":", 1)[1].strip() if ":" in d else d
@@ -291,6 +303,25 @@ class GridUnifier:
     def _reconcile_cen_sections(
         self, b: SourceBundle, nodes: list[Node], by_id: dict, edges: list[Edge]
     ) -> list[Edge]:
+        """Check the official CEN line sections against the inferred topology and add the ones it lacks.
+
+        IDE Energía gives line geometry but no ends, so `infer_line_topology` guesses them. CEN Infotecnica
+        gives the ends of each section by name but no geometry. For every section:
+
+        - Both ends are resolved to nodes. An end that cannot be resolved counts as `unresolved_end`, and a
+          section whose ends are the same node counts as `self_loop`. Both are skipped. A declared tap reuses a
+          TAP substation of that name, else a new `TAP-<n>` node. A declared line point becomes a `PT-<n>`
+          junction. New nodes have no coordinates until `_place_declared_taps`.
+        - `confirmed_direct`: an inferred edge already joins the two nodes (voltage within 1 kV when both are
+          known). The section is attached to it as `ids["cen_tramos"]`.
+        - `confirmed_via_taps`: a path of at most 4 hops through taps, junctions and TAP-named substations joins
+          them. The section is attached to every edge of the path.
+        - Otherwise a straight edge `T<id>` is added, with no public geometry. When both ends have coordinates and
+          they are farther apart than `max_line_km(kv)`, the section is counted as `rejected_implausible` and not
+          added. When an end has no coordinates the edge is added without geometry or length.
+
+        Appends the new TAP / PT nodes to `nodes` and `by_id`, returns only the added edges, and stores the
+        counters in `stats["cen_sections"]`. `validate_snapshot` reads them for `cen_sections_confirmed`."""
         code_idx = {n.ids["cen_code"]: n for n in nodes if n.ids.get("cen_code")}
         name_idx = self._name_index(nodes)
         tap_subs: dict[str, list[Node]] = defaultdict(list)
@@ -374,7 +405,7 @@ class GridUnifier:
             if None in ids:
                 counters["unresolved_end"] += 1
                 continue
-            a, c = ids
+            a, c = cast("list[str]", ids)  # no None: unresolved ends were skipped above
             if a == c:
                 counters["self_loop"] += 1
                 continue
@@ -533,6 +564,14 @@ class GridUnifier:
     # -------------------------------------------------------------- electrical
 
     def _electrical(self, b: SourceBundle, nodes: list[Node], by_id: dict, edges: list[Edge]):
+        """Match PyPSA-CL buses to substations and attach the model's branch parameters to the lines.
+
+        Buses are matched by `_match_bus`, which records the method. A branch is attached when both its end buses
+        map to different nodes, and the inferred LINE edges between the same two sites (not nodes, so a bus of
+        another voltage in the same substation still matches) have a voltage within 1 kV of the branch. Branches
+        built after `cfg.current_year` are not attached. Each matching edge gets the whole corridor's r, x and
+        s_nom, so with n parallel edges each one reports the corridor value, not one circuit's. `validate_snapshot`
+        accounts for that in its reactance check. Returns the model buses and the branches."""
         idx = self._name_index(nodes)
         subs = [n for n in nodes if n.kind == NodeKind.SUBSTATION]
         buses: dict[str, ModelBus] = {}
@@ -614,12 +653,32 @@ class GridUnifier:
     # ------------------------------------------------------------------ plants
 
     def _plants(self, b: SourceBundle, nodes: list[Node], by_id: dict, buses: list[ModelBus]) -> list[Plant]:
+        """Connect every IDE plant to a node and record how in `connection_method`. The first strategy that finds
+        a node wins:
+
+        1. PyPSA-CL generator: model generators within `model_gen_m` (3 km) with a compatible technology. The
+           one whose name is most similar picks the connection bus, and that bus maps to a node. All units on
+           that bus within range go to `model_units`, and the mean of their inertia constants becomes `inertia_s`.
+           If the bus has no node, the plant falls through to the next strategy.
+        2. Name: a substation within `plant_name_m` (25 km) whose name contains the plant name as whole words, or
+           is similar to it (`name_ok`) once "CENTRAL " is removed. Whole-word matches come first, then
+           substations of the main component (`component == 0`), then the nearest.
+        3. Nearest substation, with no distance limit. Only this method is marked `is_assumption` in the
+           provenance.
+
+        Plants without coordinates are skipped. Duplicates by name and rounded position keep the first. The CEN
+        plant with the same `plant_key` gives `cen_id` and `cen_name`. Counts per method are stored in
+        `stats["plant_connection_methods"]`."""
         subs = [n for n in nodes if n.kind == NodeKind.SUBSTATION and n.located]
-        sindex = PointIndex([n.lon for n in subs], [n.lat for n in subs])
+        sindex = PointIndex([cast(float, n.lon) for n in subs], [cast(float, n.lat) for n in subs])
         sub_names = [norm(n.name) for n in subs]
         bus_node = {x.name: x.node for x in buses}
         gens = [g for g in b.model_generators if g.lon is not None]
-        gindex = PointIndex([g.lon for g in gens], [g.lat for g in gens]) if gens else None
+        gindex = (
+            PointIndex([cast(float, g.lon) for g in gens], [cast(float, g.lat) for g in gens])
+            if gens
+            else None
+        )
         cen_by_key: dict[str, list[RawPlant]] = defaultdict(list)
         for c in b.cen_plants:
             cen_by_key[plant_key(c.name)].append(c)
@@ -650,7 +709,7 @@ class GridUnifier:
                     if bus and bus_node.get(bus):
                         node_id, method, dist = bus_node[bus], "barra declarada en PyPSA-CL", None
                         units = [gens[i].name for i in sel]
-                        h = [gens[i].inertia_s for i in sel if gens[i].inertia_s]
+                        h = [cast(float, gens[i].inertia_s) for i in sel if gens[i].inertia_s]
                         inertia = round(float(np.mean(h)), 3) if h else None
                         prov.append(
                             Provenance(
@@ -669,17 +728,28 @@ class GridUnifier:
                     for j in np.where(d <= self.cfg.plant_name_m)[0]
                     if pat
                     and (
-                        pat.search(sub_names[j])
+                        cast(re.Pattern[str], pat).search(sub_names[j])
                         or similarity(sub_names[j].removeprefix("CENTRAL ").strip(), target)
                         >= self.cfg.name_ok
                     )
                 ]
                 if cand:
-                    j = min(cand, key=lambda k: (not pat.search(sub_names[k]), subs[k].component != 0, d[k]))
+                    j = min(
+                        cand,
+                        key=lambda k: (
+                            not cast(re.Pattern[str], pat).search(sub_names[k]),
+                            subs[k].component != 0,
+                            d[k],
+                        ),
+                    )
                     node_id, method, dist = subs[j].id, "nombre de subestación", float(d[j]) / 1000
                 else:
-                    j = int(np.argmin(d))
-                    node_id, method, dist = subs[j].id, "subestación más cercana", float(d[j]) / 1000
+                    nearest = int(np.argmin(d))
+                    node_id, method, dist = (
+                        subs[nearest].id,
+                        "subestación más cercana",
+                        float(d[nearest]) / 1000,
+                    )
                 prov.append(
                     Provenance(
                         "derived",
@@ -730,7 +800,7 @@ class GridUnifier:
     ) -> list[Storage]:
         idx = self._name_index(nodes)
         subs = [n for n in nodes if n.kind == NodeKind.SUBSTATION and n.located]
-        sindex = PointIndex([n.lon for n in subs], [n.lat for n in subs])
+        sindex = PointIndex([cast(float, n.lon) for n in subs], [cast(float, n.lat) for n in subs])
         bus_node = {x.name: x.node for x in buses}
         out: list[Storage] = []
         for s in b.storage:
@@ -739,7 +809,7 @@ class GridUnifier:
             if cands:
                 node, method = cands[0], "subestación declarada"
             elif s.lon is not None:
-                node = subs[int(np.argmin(sindex.distances(s.lon, s.lat)))]
+                node = subs[int(np.argmin(sindex.distances(s.lon, cast(float, s.lat))))]
             out.append(
                 Storage(
                     f"BESS{s.record_id}",
@@ -820,7 +890,7 @@ class GridUnifier:
         geometry = {c.cut: c.geometry for c in b.comunas if c.geometry}
         if not delivery or not b.comunas:
             return [], geometry
-        dindex = PointIndex([n.lon for n in delivery], [n.lat for n in delivery])
+        dindex = PointIndex([cast(float, n.lon) for n in delivery], [cast(float, n.lat) for n in delivery])
         per_comuna: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
         urban_by_comuna: dict[str, float] = defaultdict(float)
         for z in b.census_zones:
@@ -864,8 +934,8 @@ class GridUnifier:
                 )
             )
         node_by_id = {n.id: n for n in nodes}
-        for c in comunas:
-            for s in c.served_by:
+        for comuna in comunas:
+            for s in comuna.served_by:
                 node_by_id[s.node].served_population += s.population
                 node_by_id[s.node].served_households += s.households
         self.stats["delivery_substations"] = len(delivery)
@@ -895,8 +965,8 @@ class GridUnifier:
             z = REGION_TO_MACRO.get(p.region_code or "")
             if z in zones and p.operating:
                 zones[z].generation_mw += p.mw
-        for z in zones.values():
-            z.generation_mw = round(z.generation_mw, 1)
+        for zone in zones.values():
+            zone.generation_mw = round(zone.generation_mw, 1)
         return list(zones.values())
 
     # ---------------------------------------------------------------- summary
