@@ -6,16 +6,17 @@ tools also call (docs/stress.md). `/simulate`, `/dependency` and `/cost` take th
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, model_validator
 
 from cascadasen.api.agent_openapi import AGENT, errors, ok
 from cascadasen.api.limits import client_ip
-from cascadasen.api.stress_schemas import PrepareIn, PrepareOut, SimulateOut, StressChange
+from cascadasen.api.stress_schemas import PlaceOut, PrepareIn, PrepareOut, SimulateOut, StressChange
 from cascadasen.application.grid_dependency import GridDependency
 from cascadasen.application.grid_simulation import GridSimulator, cost_workflow
-from cascadasen.application.grid_stress import MAX_CHANGES, prepare_workflow
+from cascadasen.application.grid_stress import MAX_CHANGES, prepare_workflow, stress_context
 from cascadasen.application.grids import GridComposer, GridError, catalog_workflow
+from cascadasen.application.places import resolve_place
 from cascadasen.application.theater_world import default_world
 from cascadasen.infrastructure.container import grid_store
 
@@ -172,3 +173,29 @@ def cost(body: DependencyRequest, request: Request) -> dict:
 def prepare(body: PrepareIn, request: Request) -> dict:
     world = default_world(str(request.app.state.settings.processed_dir))
     return _run(prepare_workflow, world, body.point, [c.model_dump() for c in body.changes])
+
+
+@router.get(
+    "/places",
+    tags=["grid-stress"],
+    operation_id="resolve_place",
+    summary="Find the substation a place resolves to",
+    description="Resolves a place as a person names it (a substation, a comuna, a province or region, an area, or "
+    "an id B###/A##) to one substation of the 188-bus network, with how it was resolved: a comuna goes to the "
+    "substation that serves most of its people. The same rule as `places` in a change of /grids/prepare. Call it "
+    "before adding a load or a generator to a session, so the element lands where the person meant.",
+    responses=ok(PlaceOut)
+    | errors({404: "Unknown place, or a comuna outside the SEN.", 422: "Empty place."}),
+    openapi_extra=AGENT,
+)
+def place(
+    request: Request,
+    q: str = Query(min_length=1, max_length=120, description="The place.", examples=["Iquique"]),
+    point: str = Query(
+        "nov2026-1300",
+        description="Operating point id (the network is the same at every point).",
+        examples=["nov2026-1300"],
+    ),
+) -> dict:
+    world = default_world(str(request.app.state.settings.processed_dir))
+    return _run(lambda: resolve_place(stress_context(world, point), q))

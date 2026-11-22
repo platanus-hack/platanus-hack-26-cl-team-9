@@ -20,10 +20,11 @@ from typing import Any, cast
 import numpy as np
 
 from cascadasen.application.grids import GridError
+from cascadasen.application.places import resolve_place
 from cascadasen.domain.cascade.engine import CascadeParams
 from cascadasen.domain.cascade.flow import dc_flow, find_islands
 from cascadasen.domain.cascade.frequency import cascade_params
-from cascadasen.domain.cascade.overlay import BALANCE_RULE, MAX_INERTIA_H
+from cascadasen.domain.cascade.overlay import BALANCE_RULE, DEFAULT_INERTIA_H, MAX_INERTIA_H
 from cascadasen.domain.cascade.scenario import OperatingPoint, _nearest_bus_per_node
 from cascadasen.domain.cascade.tracing import dependency_workflow
 from cascadasen.domain.simulation.params import value
@@ -69,7 +70,12 @@ def prepare_workflow(world, point: str, changes: list[dict]) -> dict:
         "should_feed": _should_feed(ctx, edited.net, edited.point),
         "redispatch": edited.balance,
         "warnings": edited.warnings,
-        "assumptions": _assumptions(ctx),
+        "assumptions": _assumptions(ctx)
+        + (
+            [{"id": "new_plant", "text": NEW_PLANT_NOTE, "is_assumption": True}]
+            if any(r.get("new_plant") for r in edit.report)
+            else []
+        ),
     }
 
 
@@ -122,9 +128,15 @@ class _Context:
 # Thermal plants split by their first fuel; `termica` is a tag for all of them. Fuel unknown (cogeneration, "S/I",
 # 22 MW): only under `termica`, with no dispatch of its own.
 THERMAL = ("carbon", "diesel", "gas", "termica_otra")
-TECH_ORDER = ("bioenergia", "eolica", "geotermica", "hidro", "solar", *THERMAL)
+# `bateria` has no plants in the dispatch: it only exists as new capacity (`add` at a place), injecting its MW
+# through an inverter, with no inertia (assumption: discharging at full power at the operating point).
+TECH_ORDER = ("bioenergia", "eolica", "geotermica", "hidro", "solar", *THERMAL, "bateria")
 TAGS = {"termica": THERMAL}
 SYNC_TECH = frozenset({"bioenergia", "geotermica", "hidro", *THERMAL})
+NEW_PLANT_NOTE = (
+    "Una central nueva (donde la barra no tenía esa tecnología) inyecta sus MW en la barra elegida; si es "
+    "sincrónica aporta inercia con H = 4 s y una batería inyecta a plena potencia sin inercia (supuestos)."
+)
 FUEL_TECH = (
     ("CARBON", "carbon"),
     ("PETCOKE", "carbon"),
@@ -147,6 +159,11 @@ def _plant_tech(plant: dict) -> str | None:
         return plant.get("tech") if plant.get("tech") in TECH_ORDER else None
     fuel = str(plant.get("fuel") or "").upper()
     return next((tech for key, tech in FUEL_TECH if fuel.startswith(key)), "termica_otra")
+
+
+def stress_context(world, point: str) -> _Context:
+    """The cached context of a point, for resolving places outside a change (`GET /grids/places`)."""
+    return _context(world, point)
 
 
 @cache  # per world and point: the filters and shares do not change between requests
@@ -248,13 +265,31 @@ def _apply_changes(ctx: _Context, changes: list[dict], detail: bool = False) -> 
     _check_changes(changes)
     op = ctx.op
     edit = _Edit(op.people.copy(), op.load.copy(), op.gen.copy(), op.sync_mw.copy(), op.inertia_mws.copy())
-    for k, change in enumerate(changes):
+    for k, raw in enumerate(changes):
         apply = {"population": _population, "demand": _demand, "generation": _generation, "lines": _lines}
+        change, places = _resolve_places(ctx, raw, f"changes[{k}]")
         entry = apply[change["target"]](ctx, edit, change, f"changes[{k}]")
+        if places:
+            entry["places"] = places
         if not detail:
             entry.pop("elements", None)
         edit.report.append({"target": change["target"], **entry})
     return edit
+
+
+def _resolve_places(ctx: _Context, change: dict, where: str) -> tuple[dict, list[dict]]:
+    """`places` (a comuna, a substation, a province, an area) become the one bus each resolves to, added to
+    `buses`. The report keeps how each was resolved, so the caller sees where the point went."""
+    if not change.get("places"):
+        return change, []
+    found = []
+    for place in change["places"]:
+        try:
+            found.append(resolve_place(ctx, place))
+        except GridError as exc:
+            raise GridError(exc.kind, f"{where}: {exc}") from exc
+    buses = list(dict.fromkeys([*(change.get("buses") or []), *(f["bus"] for f in found)]))
+    return {**change, "buses": buses}, found
 
 
 def _check_changes(changes: list[dict]) -> None:
@@ -328,6 +363,8 @@ def _generation(ctx: _Context, edit: _Edit, change: dict, where: str) -> dict:
         sync_share = sum(ctx.tech_share[i, TECH_ORDER.index(t)] for t in techs if t in SYNC_TECH)
         part[i] = edit.gen[i] * share
         sync_part[i] = edit.gen[i] * sync_share if techs != TECH_ORDER else edit.sync[i]
+    if buses and (change.get("add") or 0) > 0 and not part[buses].any():
+        return _new_plant(ctx, edit, change, where, techs, buses)
     delta = _spread(part, [i for i in buses if part[i] > 0], change)
     ratio = np.divide(sync_part, part, out=np.zeros_like(part), where=part > 0)
     before = edit.gen.copy()
@@ -343,6 +380,37 @@ def _generation(ctx: _Context, edit: _Edit, change: dict, where: str) -> dict:
         "matched": len(touched),
         "tech": list(techs),
         "gen_delta_mw": round(float((edit.gen - before).sum()), 1),
+        "elements": [_bus_row(ctx, i, before[i], edit.gen[i], key="gen_mw") for i in touched],
+    }
+
+
+def _new_plant(
+    ctx: _Context, edit: _Edit, change: dict, where: str, techs: tuple[str, ...], buses: list[int]
+) -> dict:
+    """`add` where none of the chosen buses has the technology: a new plant, split evenly over them. Before,
+    `add` was spread by the current MW of the technology, so a solar plant at a bus with no solar added nothing
+    and the answer still said 200 OK with `matched: 0`."""
+    if techs == TECH_ORDER:
+        raise GridError("invalid", f"{where}: una central nueva necesita su tecnología (tech)")
+    sync = [t in SYNC_TECH for t in techs]
+    if any(sync) and not all(sync):
+        raise GridError(
+            "invalid", f"{where}: una central nueva lleva una sola tecnología, o solo sincrónicas"
+        )
+    delta = _spread(np.zeros(len(edit.gen)), buses, change)  # nothing there yet: evenly
+    before, old_sync = edit.gen.copy(), edit.sync.copy()
+    edit.gen = edit.gen + delta
+    if all(sync):
+        edit.sync = edit.sync + delta
+        edit.inertia = np.minimum(edit.inertia + delta * DEFAULT_INERTIA_H, MAX_INERTIA_H * edit.sync)
+    touched = np.flatnonzero(np.abs(edit.gen - before) > 1e-9)
+    return {
+        "matched": len(touched),
+        "tech": list(techs),
+        "new_plant": True,
+        "synchronous": all(sync),
+        "gen_delta_mw": round(float((edit.gen - before).sum()), 1),
+        "sync_delta_mw": round(float((edit.sync - old_sync).sum()), 1),
         "elements": [_bus_row(ctx, i, before[i], edit.gen[i], key="gen_mw") for i in touched],
     }
 

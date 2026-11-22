@@ -114,6 +114,83 @@
         "x-sub50-agent": true
       }
     },
+    "/api/v1/grids/places": {
+      "get": {
+        "tags": [
+          "grids",
+          "grid-stress"
+        ],
+        "summary": "Find the substation a place resolves to",
+        "description": "Resolves a place as a person names it (a substation, a comuna, a province or region, an area, or an id B###/A##) to one substation of the 188-bus network, with how it was resolved: a comuna goes to the substation that serves most of its people. The same rule as `places` in a change of /grids/prepare. Call it before adding a load or a generator to a session, so the element lands where the person meant.",
+        "operationId": "resolve_place",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "description": "The place.",
+              "examples": [
+                "Iquique"
+              ],
+              "title": "Q"
+            },
+            "description": "The place."
+          },
+          {
+            "name": "point",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Operating point id (the network is the same at every point).",
+              "examples": [
+                "nov2026-1300"
+              ],
+              "default": "nov2026-1300",
+              "title": "Point"
+            },
+            "description": "Operating point id (the network is the same at every point)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The one substation a place resolves to (the same rule as `places` in a change).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown place, or a comuna outside the SEN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Empty place.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
     "/api/v1/sim/network": {
       "get": {
         "tags": [
@@ -5916,6 +5993,59 @@
         "type": "object",
         "title": "LoadPatch"
       },
+      "PlaceOut": {
+        "properties": {
+          "place": {
+            "type": "string",
+            "title": "Place",
+            "description": "The place as it was asked."
+          },
+          "bus": {
+            "type": "string",
+            "title": "Bus",
+            "description": "Substation id B### of the 188-bus network."
+          },
+          "bus_name": {
+            "type": "string",
+            "title": "Bus Name",
+            "description": "Substation name."
+          },
+          "area": {
+            "type": "string",
+            "title": "Area",
+            "description": "Operating area A01-A13 of the substation."
+          },
+          "area_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Name",
+            "description": "Name of that area."
+          },
+          "how": {
+            "type": "string",
+            "title": "How",
+            "description": "How the place was resolved, in Spanish (say it to the person)."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "place",
+          "bus",
+          "bus_name",
+          "area",
+          "area_name",
+          "how"
+        ],
+        "title": "PlaceOut",
+        "description": "The one substation a place resolves to (the same rule as `places` in a change)."
+      },
       "PrepareIn": {
         "properties": {
           "point": {
@@ -7539,13 +7669,28 @@
             "description": "Comunas by CUT code or name (population and demand only).",
             "default": []
           },
+          "places": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Places",
+            "description": "Places as a person names them, each resolved to ONE substation: a substation name (S/E ANTOFAGASTA), a comuna (the substation that serves most of its people), a province or region (its most populous comuna) or an area name. Use it to put a new load or plant at a point (`add`); the report says which substation each place became. For a whole comuna's population use `comunas`.",
+            "default": [],
+            "examples": [
+              [
+                "Iquique"
+              ]
+            ]
+          },
           "tech": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Tech",
-            "description": "Generation only: hidro, solar, eolica, carbon, gas, diesel, bioenergia, geotermica, termica (carbon + gas + diesel).",
+            "description": "Generation only: hidro, solar, eolica, carbon, gas, diesel, bioenergia, geotermica, termica (carbon + gas + diesel), bateria (new capacity only). With `add` where the chosen substations have none of these technologies, a new plant of that technology is built there.",
             "default": []
           },
           "lines": {

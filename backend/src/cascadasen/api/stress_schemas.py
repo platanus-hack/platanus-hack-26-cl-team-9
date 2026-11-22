@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from cascadasen.api.agent_openapi import AgentOut
 from cascadasen.application.grid_stress import MAX_CHANGES, MAX_FACTOR
 
 POINT = Field(description="Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000).")
@@ -26,10 +27,20 @@ class StressChange(BaseModel):
     comunas: list[str] = Field(
         default=[], description="Comunas by CUT code or name (population and demand only)."
     )
+    places: list[str] = Field(
+        default=[],
+        max_length=10,
+        description="Places as a person names them, each resolved to ONE substation: a substation name (S/E "
+        "ANTOFAGASTA), a comuna (the substation that serves most of its people), a province or region (its most "
+        "populous comuna) or an area name. Use it to put a new load or plant at a point (`add`); the report says "
+        "which substation each place became. For a whole comuna's population use `comunas`.",
+        examples=[["Iquique"]],
+    )
     tech: list[str] = Field(
         default=[],
         description="Generation only: hidro, solar, eolica, carbon, gas, diesel, bioenergia, geotermica, "
-        "termica (carbon + gas + diesel).",
+        "termica (carbon + gas + diesel), bateria (new capacity only). With `add` where the chosen substations "
+        "have none of these technologies, a new plant of that technology is built there.",
     )
     lines: list[str] = Field(default=[], description="Lines only: line ids R###.")
     kv: list[float] = Field(default=[], description="Lines only: voltage levels (66, 110, 154, 220, 500).")
@@ -48,7 +59,7 @@ class StressChange(BaseModel):
         if self.target == "lines":
             if self.add is not None or (self.factor is None and self.x_factor is None):
                 raise ValueError("lines: usa factor y/o x_factor")
-            if self.comunas or self.buses or self.tech:
+            if self.comunas or self.buses or self.tech or self.places:
                 raise ValueError("lines: filtra por lines, kv, zones o areas")
             return self
         if (self.factor is None) == (self.add is None):
@@ -59,8 +70,8 @@ class StressChange(BaseModel):
             raise ValueError("tech es solo para generation")
         if self.comunas and self.target == "generation":
             raise ValueError("generation: filtra por buses, zones, areas o tech")
-        if self.comunas and (self.buses or self.zones or self.areas):
-            raise ValueError("comunas no se combina con buses, zones o areas")
+        if self.comunas and (self.buses or self.zones or self.areas or self.places):
+            raise ValueError("comunas no se combina con buses, zones, areas o places")
         return self
 
 
@@ -94,6 +105,17 @@ class PrepareOut(BaseModel):
         description="Overlay warnings (isolated buses, no synchronous units)."
     )
     assumptions: list[dict[str, Any]] = Field(description="Assumptions behind the numbers.")
+
+
+class PlaceOut(AgentOut):
+    """The one substation a place resolves to (the same rule as `places` in a change)."""
+
+    place: str = Field(description="The place as it was asked.")
+    bus: str = Field(description="Substation id B### of the 188-bus network.")
+    bus_name: str = Field(description="Substation name.")
+    area: str = Field(description="Operating area A01-A13 of the substation.")
+    area_name: str | None = Field(description="Name of that area.")
+    how: str = Field(description="How the place was resolved, in Spanish (say it to the person).")
 
 
 class SimulateOut(BaseModel):

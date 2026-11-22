@@ -29,6 +29,7 @@ Nothing is stored. Each request carries the whole scenario, like the cuts do. Th
 | `POST /api/v1/grids/simulate` | `simulate_grid` | Cascade of `open_lines` + `out_buses` on the grid prepared with `changes`. At least one failure. |
 | `POST /api/v1/grids/dependency` | (web only) | Heat maps on the prepared grid after the failures. |
 | `POST /api/v1/grids/cost` | (web only) | Failure cost on the prepared grid. |
+| `GET /api/v1/grids/places?q=Iquique` | `resolve_place` | The one substation a place resolves to, with `how` (the rule of `places`, section 3.1). The MCP session tools `add_datacenter` and `add_generator` call it. |
 
 The agent operations are in `docs/openapi/agents.openapi.json` (tag `grid-stress`), with every field described. Bodies:
 
@@ -54,8 +55,9 @@ POST /grids/simulate  {"point": "feb2025-1500", "open_lines": ["R239"], "out_bus
 | `buses` | `["B062"]` | population, demand, generation | Substation ids. |
 | `zones` | `["NG"]` | all | `NG` Norte Grande, `NC` Norte Chico, `CE` Centro, `CS` Centro-sur, `SU` Sur. |
 | `areas` | `["A09"]` | all | Operating areas (table below). |
-| `comunas` | `["Puente Alto"]` or `["13201"]` | population, demand | Comuna by name or CUT code. Not combined with `buses`, `zones` or `areas`. |
-| `tech` | `["hidro"]` | generation | `hidro`, `solar`, `eolica`, `carbon`, `gas`, `diesel`, `bioenergia`, `geotermica`. `termica` = `carbon` + `gas` + `diesel`. |
+| `comunas` | `["Puente Alto"]` or `["13201"]` | population, demand | Comuna by name or CUT code: every substation that serves it. Not combined with `buses`, `zones`, `areas` or `places`. |
+| `places` | `["Iquique"]` | population, demand, generation | Places as a person names them, each resolved to **one** substation (section 3.1) and added to `buses`. Use it to put a point: a datacenter, a plant, a battery. Up to 10. |
+| `tech` | `["hidro"]` | generation | `hidro`, `solar`, `eolica`, `carbon`, `gas`, `diesel`, `bioenergia`, `geotermica`, `bateria` (new capacity only). `termica` = `carbon` + `gas` + `diesel`. |
 | `lines` | `["R239"]` | lines | Line ids. |
 | `kv` | `[220]` | lines | Voltage levels: 66, 110, 154, 220, 500. |
 
@@ -66,6 +68,22 @@ Rules:
 - Changes apply **in order**: a `demand` factor after a `population` change multiplies the demand that already grew with the people.
 - Up to **20 changes** per request. The overlay limits hold: 5,000 MW changed in total (load + generation) and 3,000 MW per bus. Over a limit the request is 422 (section 8).
 - No value goes below zero. A base load that is already negative stays as it was: 28 buses at feb2025-1500 and 27 at nov2026-1300 inject embedded generation.
+
+### 3.1 Places (`application/places.py`)
+
+A place resolves to one bus, in this order, and the report of the change says which one and how (`places: [{place, bus, bus_name, area, area_name, how}]`):
+
+1. A bus id `B###`, or an area id `A##` (its anchor bus, the one with the largest load).
+2. A substation named exactly so, without the "S/E" prefix: `Antofagasta` → S/E ANTOFAGASTA. Of two with that name, the one with no owner in parentheses (`Concepción` → S/E CONCEPCION, not S/E CONCEPCION (FFCC)), then the highest kV.
+3. A comuna: the bus of the substation that serves most of its people (`comunas[].served_by`, mapped to the 188 buses like the population). `Iquique` → S/E CONDORES (43 % of its people); no substation is called Iquique.
+4. A substation whose name carries an owner (`S/E PUENTE ALTO (CMPC)`, a paper mill): only after the comunas, so `Puente Alto` is the comuna.
+5. A region, then a province: the substation of its most populous comuna (`Biobío` → Concepción; `Región Metropolitana`, `Araucanía`, `O'Higgins`, `Aysén` have aliases).
+6. An area name: its anchor bus.
+7. A unique part of a substation name. Several matches, or none, answer 404 with the candidates or a close spelling ("¿Quisiste decir antofagasta?").
+
+Comunas off the SEN answer 404 "no está conectada al Sistema Eléctrico Nacional": Magallanes and Aysén (no serving bus in the 188-bus grid), and the islands, which the snapshot assigns to a mainland substation over 300 km away (Juan Fernández 705 km, Isla de Pascua 3,734 km; the largest gap of a SEN comuna is 150 km). Leading words such as "cerca de", "en", "comuna de", "región de" are dropped.
+
+Why: the earlier rule matched area names first, so the assistant put a datacenter for "Antofagasta" at S/E ESCONDIDA (140 km away) and one for "Arica" or "Iquique" at S/E COLLAHUASI, a mine inland.
 
 Areas: `A01` Arica–Iquique, `A02` Crucero–Kimal, `A03` Antofagasta–Taltal (NG); `A04` Cumbre–Diego de Almagro, `A05` Copiapó, `A06` Vallenar, `A07` La Serena–Coquimbo (NC); `A08` Los Vilos–Valparaíso, `A09` Santiago (CE); `A10` O'Higgins–Maule, `A11` Biobío (CS); `A12` Araucanía, `A13` Los Ríos–Los Lagos (SU).
 
@@ -82,6 +100,7 @@ Areas: `A01` Arica–Iquique, `A02` Crucero–Kimal, `A03` Antofagasta–Taltal 
 **demand.** MW alone, population unchanged: another hour, a new industry, a heat wave.
 
 **generation.** The dispatch comes summed per bus (`baseline_opf.json`). Each bus's generation is split by technology in proportion to its plants' installed MW times the national dispatch factor of that technology at the point. Thermal plants go by their first fuel: carbón and petcoke to `carbon`, natural gas and propane to `gas`, petróleo and fuel oil to `diesel`. Cogeneration and "S/I" (22 MW) count only under `termica`, with no dispatch. Synchronous technologies (hydro, thermal, bioenergy, geothermal) move their synchronous MW with them, and inertia follows, capped at 10 s. **Assumption.**
+- **New plant.** `add` over 0 where none of the picked buses has the technology builds a new plant there, split evenly (`new_plant: true` in the report, assumption `new_plant`). A synchronous one adds its MW as synchronous with H = 4 s (`overlay.DEFAULT_INERTIA_H`); solar, wind and `bateria` add no inertia, and a battery injects its full power (discharging at the point). It needs one technology, or only synchronous ones: no `tech`, or solar with hydro, is a 422. Before (until 2026-11-22), `add` was split by the MW the technology already had, so a plant at a bus without it added nothing and still answered 200 with `matched: 0`.
 
 **lines.** Capacity (`factor`) and reactance (`x_factor`). The cascade opens a line over its limit.
 
@@ -162,6 +181,9 @@ Examples:
 | "Puente Alto con el triple de gente y se cae Charrúa" | `changes=[{"target":"population","comunas":["Puente Alto"],"factor":3}]`, `out_buses=["B043"]` |
 | "Sin térmicas en el norte y el 25F" | `changes=[{"target":"generation","tech":["termica"],"zones":["NG"],"factor":0}]`, `open_lines=["R239"]`, `point="feb2025-1500"` |
 | "Las líneas de 220 kV del centro al 80 %" | `changes=[{"target":"lines","kv":[220],"zones":["CE"],"factor":0.8}]` |
+| "Un datacenter de 120 MW en Antofagasta y una solar de 80 MW en Iquique" | `changes=[{"target":"demand","places":["Antofagasta"],"add":120},{"target":"generation","places":["Iquique"],"tech":["solar"],"add":80}]` |
+
+The tool maps technology names people use before sending (`digest.normalize_tech`): "eólica", "fotovoltaica", "baterías"/"BESS", "biomasa"… and "nuclear" to `termica`, with a note that it is an assumption (there is no nuclear plant in Chile). The prepared summary says, for a change that touched one to five substations, which ones (`at`), and a change that touched none carries a `warning` so the model never reports a plant that was not built.
 
 Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239`.
 
@@ -174,6 +196,8 @@ Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239
 | 422 | Over the overlay limits | `Máximo 5000 MW agregados o cambiados (carga + generación).` |
 | 422 | `/simulate` with no failure | `Indica al menos una línea o una subestación` |
 | 404 | Unknown point, bus, line, comuna, zone or area | `changes[0]: comuna desconocida: Atlantis (usa el código CUT o el nombre)` |
+| 404 | Unknown place, or a comuna off the SEN | `changes[0]: No encuentro el lugar 'Marte'. …` · `La comuna de Punta Arenas no está conectada al Sistema Eléctrico Nacional …` |
+| 422 | A new plant with no technology, or mixing synchronous and not | `changes[0]: una central nueva necesita su tecnología (tech)` |
 
 `changes[i]` names the change that failed. The MCP client turns `detail` into the tool error.
 
@@ -189,5 +213,6 @@ Ids: `describe_network` or the web give `B###` and `R###`. The 25F line is `R239
 - **Batch changes only from the assistant.** "Estado de la red" lists every change, with "Quitar" on each.
 - **Simulation.** With changes, the web never reads the precalculated cache: `/grids/simulate`, `/dependency` and `/cost` get `changes`. With changes and no failure, the map shows the base case, and the panel shows the prepared grid: totals, lines already over their limit, and the prepared values in the card. "Simulación" shows `supply` per zone, and a generating substation's card shows its own numbers.
 - **Reset.** Opening a disaster or a Benchmark condition drops the changes. "Prender todo" drops everything.
-- **Assistant.** A `prepare_scenario` result sets the map's point, changes and failures, paused at 0 (`useAssistant(s, onScenario)`, `scenarioOf()`).
+- **Assistant.** A `prepare_scenario` result sets the map's point, changes and failures, paused at 0 (`useAssistant(s, onScenario)`, `scenarioOf()`). The chat stays open beside the map (before, the view jumped to the tabs and hid the reply).
+- **Pins.** Each change that adds demand or generation (`add` over 0) at one to five substations gets a pin at each substation the prepared grid reports (`placed.ts`, drawn in `MapOverlays`): "+120 MW de demanda · S/E ANTOFAGASTA". A plant is a disc in its technology color (`TECH_COLORS`), a load a white ring. "Estado de la red" lists the change with "en S/E …".
 - **Shared sessions are hidden from the web for now** (#101). There is no rail button, `?sesion=` is ignored and the assistant no longer joins its session. The session code stays in place, inactive.
