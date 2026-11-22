@@ -21,6 +21,12 @@ jobs:
       - name: ruff format --check
         working-directory: backend
         run: ruff format --check .
+      - name: ruff check data scripts (backend config)
+        working-directory: backend
+        run: ruff check ../data/scripts
+      - name: ruff format --check data scripts (backend config)
+        working-directory: backend
+        run: ruff format --check ../data/scripts
 
   changelog:
     if: github.event_name == 'pull_request'

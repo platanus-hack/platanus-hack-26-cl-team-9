@@ -1,6 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(ci): run tests, mypy baseline and web checks in CI, and make deploy need them
+- **Changed:** new `.github/workflows/checks.yml` (runs on `pull_request` and `workflow_call`) with jobs `backend-test` (`uv sync --locked --group dev`, `pytest --cov=cascadasen --cov-fail-under=87`), `backend-mypy` (`mypy src`, `continue-on-error: true`, baseline of 52 errors) and `web` (`npm ci`, `tsc --noEmit`, `vitest run`, `npm run build`). `deploy.yml` gets a `checks` job (`uses: ./.github/workflows/checks.yml`) and `needs: checks` on `deploy`; nothing else in it changed. `lint.yml` also runs `ruff check` and `ruff format --check` on `../data/scripts` (backend config).
+- **Why:** Review R-01, B-02, W-03: no test ran in CI and a broken main could deploy. Coverage measured 89% (12147 statements, 1311 missed) without the mcp/llm extras; the floor is 87.
+- **Agents:** a failing `backend-test` or `web` job now blocks the deploy; `backend-mypy` never does. Raise the floor when coverage rises; the README "Checks (CI)" wording matches. `test_the_committed_cache_matches_the_engine_for_a_single_cut` compares the cache with the live engine exactly (except `status` at loading 1.0) and is tolerant of one rounding unit of platform float noise (fix(tests) commit just before this one). This commit is the only one that touches `.github/workflows/`: pushing it needs a token with the `workflow` scope.
+- **Files:** `.github/workflows/{checks,deploy,lint}.yml`, `CHANGELOG.md`.
+
 ## 2026-11-22 · fix(tests): cache-vs-engine test tolerates one rounding unit of platform float noise
 - **Changed:** in `backend/tests/unit/test_grid_simulation.py` the helper `_without_boundary_status` is now `_without_rounding_noise`: an edge `flow_mw` (whole MW) or `loading` (3 decimals) that differs from the committed cache by at most one unit of its last rounded digit is taken from the cache, and the existing `status` tolerance at loading 1.0 is kept. Everything else must still be equal.
 - **Why:** the cache was written on another machine. On macOS arm64 nov2026-2000-R001 gave R113 `flow_mw` -40 vs -39 cached; on linux/amd64 feb2025-1500-R239 gave R091 `loading` 0.314 vs 0.313. Float noise at a rounding boundary, so the test would fail the CI `backend-test` job and block deploys.

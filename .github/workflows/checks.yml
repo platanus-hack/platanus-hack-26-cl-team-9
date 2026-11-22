@@ -1,0 +1,69 @@
+# Tests and type checks. Runs on every pull request and is called by deploy.yml, so a deploy needs these jobs to pass.
+# Lint (ruff) and the CHANGELOG.md check live in lint.yml.
+name: checks
+on:
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install dependencies (dev group, no mcp/llm extras)
+        run: uv sync --locked --group dev
+      - name: pytest with coverage floor
+        # Measured TOTAL is 89% (12147 statements, 1311 missed) without the mcp/llm extras; the floor is 2 points below.
+        run: uv run pytest -q --cov=cascadasen --cov-report=term --cov-fail-under=87
+  # Baseline, not a gate: 52 known errors (backend/README.md, "Type checking"). It reports and never blocks the deploy.
+  backend-mypy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked --group dev
+      - name: mypy
+        run: uv run mypy src
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: tsc
+        run: npx tsc --noEmit
+      - name: vitest
+        run: npx vitest run
+      - name: build
+        run: npm run build
