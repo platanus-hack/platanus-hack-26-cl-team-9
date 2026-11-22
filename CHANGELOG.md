@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): Benchmark conditions open on the Red tab (#66)
+
+- **Changed:** `openScenario` in `CascadeApp.tsx` opens the Red tab when the chosen scenario has no cut (Benchmark) and Simulación when it has one (Desastres).
+- **Why:** a Benchmark condition has no cascade to play, so Simulación only showed an empty timeline.
+- **Agents:** the tab after a rail choice is Red without a cut, Simulación with one.
+- **Files:** `web/src/cascade/CascadeApp.tsx`.
+
 ## 2026-11-22 · feat(grids): "Fuentes de la grilla" tab and app-ready documents per country (#66)
 
 - **Changed:** `publish` now builds the documents the app reads (`CHL/network-<year>.json`, `CHL/operating/<point>.json`, `<ISO>/grid.json`) and keeps the raw files under `<ISO>/source/`; compose only joins them (no engine, no snapshot). Compose takes `context` (which countries) and `GET /api/v1/grids/documents/<key>` serves a context document. Web: rail item "Fuentes de la grilla" (`GridSources.tsx`, `gridsApi.ts`, `regionalFromDocuments`) that opens downward in the rail with a checkbox and a Complete or Partial status per network (all can be unticked); ticking one composes the grid. The rail's "Escenarios" are now two folders, Desastres (Apagón 25F) and Benchmark (the other three conditions), and recompose once a grid is composed. `GET /sources` adds `grids` with the status.

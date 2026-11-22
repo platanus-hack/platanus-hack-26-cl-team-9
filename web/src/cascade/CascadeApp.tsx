@@ -378,7 +378,7 @@ export function CascadeApp() {
     setPointId(next.point);
     setCut(next.cut);
     if (composed) void composeFromSources(next.point, sourcesRef.current); // the composed grid follows the chosen hour
-    chooseTab("sim");
+    chooseTab(next.cut ? "sim" : "red"); // a Benchmark condition has no cut: it opens on Red
   }
 
   const tabs: [Tab | "avoid" | "validation", string][] = s.sid ? SESSION_TABS : TABS;
