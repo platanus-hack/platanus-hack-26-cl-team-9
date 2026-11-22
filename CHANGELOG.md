@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): outage result and cost in Estado de la red; Chile alone by default (#83)
+
+- **Changed:** Estado de la red opens with "Resultado de la caída": people without power and % of the country, MW lost of the hour's demand, generation lost and islands that went dark, read with the same `impactAt` that Simulación uses at its last second. Cost of the outage comes from `POST /api/v1/grids/cost` (issue #82, not built yet): the card says "pendiente" on 404. `/grids/simulate` now adds the demand of substations out of service to `load_total_mw`. The map opens with Chile alone (no context countries until ticked in Fuentes de la grilla) at Mediodía solar; Desastres open on Carga and Benchmark on Tensión.
+- **Why:** the user wants the cost of the fall and the share of people without power next to the list of changes, with one set of figures for both tabs.
+- **Agents:** the cost contract is in issue #82; `loadOutageCost` in `gridsApi.ts` returns null on 404. `loadRegionalGrid` in `map/regional.ts` is no longer called by the app.
+- **Files:** `web/src/cascade/{NetworkState.tsx,gridsApi.ts,CascadeApp.tsx,GridSources.tsx}`, `backend/src/cascadasen/application/grid_simulation.py`, `backend/tests/unit/test_grid_simulation.py`, `docs/mapa3.md`, `docs/grids.md`.
+
 ## 2026-11-22 · fix(web): drop the committed node_modules symlink
 
 - **Changed:** removes `web/node_modules`, a symlink to a local path that merge `cf013db` committed by mistake, and makes `web/.gitignore` ignore `node_modules` as a file too, not only as a directory.

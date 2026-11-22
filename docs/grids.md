@@ -35,7 +35,7 @@ The web (docs/mapa3.md, tab "Estado de la red") calls it only for two or more ch
 
 ## Web: "Fuentes de la grilla"
 
-Rail item in mapa 3 (`web/src/cascade/GridSources.tsx`) that opens downward under itself, not in a panel. One row per network in the catalogue (`grids` in `GET /sources`) with a checkbox and its status. **Complete**: the store has its network and operating points, so it can be simulated (Chile). **Partial**: only context to draw (ARG, BOL, BRA, PER). Everything can be unticked, Chile included (the map then draws nothing of it). Ticking one composes the grid at once for the current operating point.
+Rail item in mapa 3 (`web/src/cascade/GridSources.tsx`) that opens downward under itself, not in a panel. One row per network in the catalogue (`grids` in `GET /sources`) with a checkbox and its status. **Complete**: the store has its network and operating points, so it can be simulated (Chile). **Partial**: only context to draw (ARG, BOL, BRA, PER). By default only Chile is ticked and the other countries are not drawn. Everything can be unticked, Chile included (the map then draws nothing of it). Ticking one composes the grid at once for the current operating point.
 
 The scenario and the hour are chosen in the rail's "Escenarios", in two folders: **Desastres** (Apagón 25F) and **Benchmark** (the other operating conditions: demanda mínima, mediodía solar, punta nocturna). The cuts the user makes are not scenarios: they go to the tab "Estado de la red". A Benchmark entry keeps those changes at the new hour; Apagón 25F replaces them with its cut. Once a grid is composed, picking one there composes again with the ticked networks.
 

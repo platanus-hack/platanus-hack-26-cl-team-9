@@ -1,7 +1,7 @@
 import type { Layer, PickingInfo } from "@deck.gl/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBaseMap, type BaseMap, type ViewMode } from "../map/baseMap";
-import { buildRegionalLayers, loadRegionalGrid, regionalFromDocuments, regionalTooltip, type RegionalGrid } from "../map/regional";
+import { buildRegionalLayers, regionalFromDocuments, regionalTooltip, type RegionalGrid } from "../map/regional";
 import { loadBuses, loadIndex, loadNetwork, loadTimeline } from "./api";
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
@@ -70,6 +70,7 @@ export function CascadeApp() {
   const [speed, setSpeed] = useState(1);
   const [tab, setTab] = useState<Tab>(startCut ? "sim" : "red");
   const [view, setView] = useState<View>("tabs");
+  // Desastres (a cut) open on Carga, Benchmark (no cut) on Tensión, also when the rail picks them (chooseTab).
   const [colorMode, setColorMode] = useState<ColorMode>(startCut ? "load" : "voltage");
   const [selection, setSelection] = useState<Pick | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -127,7 +128,7 @@ export function CascadeApp() {
   const timelineRequest = useRef("");
 
   useEffect(() => { loadIndex().then(setIndex).catch((e) => setError(String(e.message))); }, []);
-  useEffect(() => { loadRegionalGrid().then(setRegional).catch((e) => console.error("No se pudo cargar la red regional", e)); }, []);
+  // Only Chile by default: the other countries are drawn once they are ticked in Fuentes de la grilla.
   useEffect(() => { if (!s.sid && !composed) _loadPoint(); }, [pointId, index, s.sid, composed]);
   useEffect(() => { if (!s.sid) _loadTimeline(); }, [pointId, edits, network, s.sid]);
   useEffect(() => { if (s.network) { setNetwork(s.network); setBuses(s.network.buses); setPointId(s.network.point); } }, [s.network]);
@@ -177,7 +178,7 @@ export function CascadeApp() {
   }
   function backToCache() {
     setComposed(null);
-    loadRegionalGrid().then(setRegional).catch(() => setRegional(null));
+    setRegional(null);
   }
 
   function _loadTimeline() {
@@ -522,7 +523,7 @@ export function CascadeApp() {
           )}
           {view === "tabs" && tab === "estado" && network && (s.sid
             ? <p className="meta">En una sesión compartida los cambios están en Simulación y Datos.</p>
-            : <NetworkState network={network} edits={edits} result={simResult} timeline={timelineReady ? timeline : null} restoreLine={(id) => restore([id])} restoreBus={restoreBus} restoreAll={() => restore()} />)}
+            : <NetworkState network={network} buses={buses} point={pointId} edits={edits} result={simResult} timeline={timelineReady ? timeline : null} restoreLine={(id) => restore([id])} restoreBus={restoreBus} restoreAll={() => restore()} />)}
           {view === "tabs" && tab === "red" && network && <NetworkPanel source={sourceNote} />}
           {view === "tabs" && tab === "sim" && s.sid && s.state && network && (
             <SessionCut network={network} open={s.state.open_lines} notice={s.state.notice} repair={(lines) => restore(lines)} />

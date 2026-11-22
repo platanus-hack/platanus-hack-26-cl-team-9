@@ -38,3 +38,18 @@ export interface SimulationResult {
 /** The cascade with several changes applied together (`POST /grids/simulate`): the cache only has single cuts. */
 export const simulateGrid = (body: { point: string; open_lines: string[]; out_buses: string[] }) =>
   request<SimulationResult>("simulate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+/** Cost of the outage (`POST /grids/cost`, issue #82). Every value comes from the backend with its source or assumption. */
+export interface OutageCost {
+  energy_not_served_mwh: number; cost_usd: number;
+  outage_hours: { value: number; is_assumption?: boolean; note?: string };
+  unserved_cost_usd_per_mwh: { value: number; source?: string; is_assumption?: boolean };
+  assumptions: string[];
+}
+/** null while the backend has no cost endpoint (404): the panel says it is pending instead of estimating it. */
+export async function loadOutageCost(body: { point: string; open_lines: string[]; out_buses: string[] }): Promise<OutageCost | null> {
+  const r = await fetch("/api/v1/grids/cost", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (r.status === 404 || r.status === 405) return null;
+  if (!r.ok) throw new Error(`No se pudo calcular el costo (${r.status}).`);
+  return r.json();
+}

@@ -93,5 +93,8 @@ def _mark_out_of_service(timeline: dict, out_buses: list[str], direct: dict) -> 
         summary = timeline["summary"]
         summary["people_without_power"] += direct["people"]
         summary["load_shed_mw"] = round(summary["load_shed_mw"] + direct["load_mw"], 1)
+        summary["load_total_mw"] = round(
+            summary["load_total_mw"] + direct["load_mw"], 1
+        )  # the demand of the hour
         summary["dark_buses"] += len(set(out_buses))
     return timeline
