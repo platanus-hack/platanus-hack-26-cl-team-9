@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(web): map/constants.ts and map/tooltip.ts shared by the three map modules
+
+- **Changed:** New `web/src/map/constants.ts` (`SEN_BOUNDS`, `PITCH_DEGREES`, `MAPBOX_STYLE`) and `map/tooltip.ts` (`gridTooltip`). `chileMap.ts`, `mapboxMap.ts` and `baseMap.ts` import them instead of keeping their own copies. The panel clearances stay local: 400 in `chileMap.ts`/`mapboxMap.ts`, 640 in `baseMap.ts`.
+- **Why:** F13 of the duplication report. Values and tooltip text are unchanged. `?mapa=1/2` is not removed (F14 stays a team decision).
+- **Agents:** Verification: web `tsc --noEmit` pass, `vitest run` 5 files 22 tests pass, `npm run build` pass (chunk-size warning only), same as baseline.
+- **Files:** `web/src/map/{constants,tooltip,chileMap,mapboxMap,baseMap}.ts`.
 ## 2026-11-22 · refactor(theater): TheaterNetwork.sites_of replaces two copies of the crew-site lookup
 
 - **Changed:** New `TheaterNetwork.sites_of(target)`: `[area]` for an area, `[a, b]` for a corridor, `None` otherwise. `LogisticsAgent._sites` and `Simulation._sites` call it and keep their own fallback (`self.sites.get(target, [])`; `defense_areas.get(target) or all areas`).

@@ -4,9 +4,9 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import chileUrl from "../../../data/processed/chile.geojson?url";
+import { SEN_BOUNDS, PITCH_DEGREES, MAPBOX_STYLE } from "./constants";
 import { landOf, nearLand, viewportRadiusDeg, type Land } from "./regionLimit";
 
-const SEN_BOUNDS: [[number, number], [number, number]] = [[-75.5, -43.8], [-66.5, -17.4]];
 // Experiment: keep the camera near Chile and drop heavy Standard-style features. `?limite=0` turns it all off to compare.
 const LIMITED = new URLSearchParams(location.search).get("limite") !== "0";
 const MAX_BOUNDS: [[number, number], [number, number]] = [[-85, -60], [-55, -10]];
@@ -16,8 +16,6 @@ const MAX_ZOOM = 13;
 const LAND_URLS = [chileUrl];
 const LAND_MARGIN = 0.25; // fraction of the shorter viewport side the center may be offshore
 const LITE_BASEMAP = { show3dObjects: false, showPointOfInterestLabels: false, showTransitLabels: false, showPedestrianRoads: false };
-const PITCH_DEGREES = 45;
-const STYLE = "mapbox://styles/mapbox/standard";
 const PANEL_CLEARANCE_PX = 640; // rail + floating panel on the left (see .shell in styles.css)
 
 export type ViewMode = "2d" | "3d";
@@ -34,7 +32,7 @@ export function createBaseMap(container: HTMLDivElement, handlers: Handlers): Ba
 function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers): BaseMap {
   mapboxgl.accessToken = token;
   const map = new mapboxgl.Map({
-    container, style: STYLE, logoPosition: "bottom-right", // the panel covers the bottom-left corner
+    container, style: MAPBOX_STYLE, logoPosition: "bottom-right", // the panel covers the bottom-left corner
      projection: "mercator", config: { basemap: { lightPreset: "night", ...(LIMITED ? LITE_BASEMAP : {}) } },
     ...(LIMITED ? { maxBounds: MAX_BOUNDS, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM } : {}),
     bounds: SEN_BOUNDS, fitBoundsOptions: { padding: { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 }, pitch: PITCH_DEGREES }, pitch: PITCH_DEGREES,
