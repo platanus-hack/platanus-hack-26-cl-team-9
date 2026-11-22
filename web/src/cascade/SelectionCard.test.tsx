@@ -35,7 +35,7 @@ describe("SelectionCard: a line", () => {
   it("shows the capacity, the flow, the loading and the overloaded status", () => {
     setup();
     expect(screen.getByRole("heading", { name: "Cerro Navia – Polpaico (220 kV)" })).toBeTruthy();
-    expect(screen.getByText("2 ramas del modelo fusionadas", { exact: false })).toBeTruthy();
+    expect(screen.getByText("2 circuitos del modelo fundidos en uno", { exact: false })).toBeTruthy();
     expect(screen.getByText("113 %")).toBeTruthy(); // loading 1.125
     expect(screen.getByText("sobrecargada")).toBeTruthy();
     expect(screen.getByText("Flujo de Cerro Navia a Polpaico.")).toBeTruthy();
@@ -61,6 +61,15 @@ describe("SelectionCard: a line", () => {
     expect(a.select).toHaveBeenCalledWith({ kind: "node", id: "B2" });
   });
 
+  it("puts the action before the factor fields, which wait closed under Modificar valores (E-22)", () => {
+    const { container } = setup({ edits: { lines: [], buses: [] } });
+    const details = container.querySelector("details.edit-block") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")?.textContent).toContain("Modificar valores");
+    const action = screen.getByRole("button", { name: "Sacar de servicio" });
+    expect(action.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("renders nothing when the selected line is not in the network", () => {
     const { container } = setup({ selection: { kind: "line", id: "ZZ" } });
     expect(container.innerHTML).toBe("");
@@ -80,7 +89,7 @@ describe("SelectionCard: a line", () => {
 
   it("hides the edit block where components cannot be edited", () => {
     setup({ edits: null });
-    expect(screen.queryByText("Modificar")).toBeNull();
+    expect(screen.queryByText("Modificar valores")).toBeNull();
   });
 });
 
@@ -133,6 +142,6 @@ describe("SelectionCard: a substation", () => {
     expect(screen.getAllByText("=").length).toBe(1); // generation was not touched
     cleanup();
     setup({ selection: { kind: "node", id: "B2" }, supply });
-    expect(screen.getByText("40.00 %", { exact: false })).toBeTruthy();
+    expect(screen.getByText("40,00 %", { exact: false })).toBeTruthy();
   });
 });

@@ -1,22 +1,21 @@
 import { useEffect, useState } from "react";
 import { loadOutageCost, type OutageCost, type Prepared, type SimulationResult } from "./gridsApi";
-import { frameAt, impactAt, meanLoading } from "./simulation";
+import { impactAt } from "./simulation";
 import type { Edits, StressChange } from "./edits";
 import { changesOf, countEdits, countFailures } from "./edits";
-import { formatPeople, int, lineName, pct, placeName } from "./text";
+import { errorText, formatPeople, hoursText, int, lineName, pct, placeName, secs } from "./text";
 import type { BusState, Network, Timeline } from "./types";
 import { Info } from "./ui";
 
 /**
- * Tab "Estado de la red": every change made to the grid, kept together so that a new cut adds to the others and
+ * Tab "Cambios" (it was "Estado de la red"): every change made to the grid, kept together so that a new cut adds to the others and
  * never replaces them. Each one can be put back alone, or all at once.
  */
-export function NetworkState({ network, buses, point, edits, result, timeline, t, restoreLine, restoreBus, restoreAll, prepared, dropChange }: {
+export function NetworkState({ network, buses, point, edits, result, timeline, restoreLine, restoreBus, restoreAll, prepared, dropChange }: {
   /** network and buses: the grid on the map. point: operating point id. edits: every change the user made. result: the last
-   *  server simulation of those changes (null for one cached cut). timeline: the cascade on screen. t: the second the
-   *  Simulación tab is at, so the figures here follow it (end of the cascade if absent). restoreLine, restoreBus
+   *  server simulation of those changes (null for one cached cut). timeline: the cascade on screen. restoreLine, restoreBus
    *  and restoreAll put changes back. */
-  network: Network; buses: Record<string, BusState>; point: string; edits: Edits; result: SimulationResult | null; timeline: Timeline | null; t?: number;
+  network: Network; buses: Record<string, BusState>; point: string; edits: Edits; result: SimulationResult | null; timeline: Timeline | null;
   restoreLine(id: string): void; restoreBus(id: string): void; restoreAll(): void;
   /** The prepared grid of the scenario's changes, and how to drop one change. */
   prepared: Prepared | null; dropChange(index: number): void;
@@ -35,7 +34,7 @@ export function NetworkState({ network, buses, point, edits, result, timeline, t
   const nodeName = (id: string) => placeName(network.nodes.find((n) => n.id === id)?.name ?? id);
   return (
     <>
-      {ready && <Outcome timeline={ready} buses={buses} point={point} edits={edits} t={t ?? ready.duration_s} />}
+      {ready && <Outcome timeline={ready} buses={buses} point={point} edits={edits} />}
       <div className="card state-list">
         <div className="card-head">
           <div className="title"><h3>Cambios en la red · {total}</h3></div>
@@ -66,7 +65,7 @@ export function NetworkState({ network, buses, point, edits, result, timeline, t
           <p className="meta">La red está preparada: {formatPeople(prepared.totals.people_total)} personas, {int(prepared.totals.load_total_mw)} MW de demanda. Saca una línea o apaga una subestación para simularla.{prepared.overloaded_lines.length ? ` ${prepared.overloaded_lines.length} líneas ya superan su límite: la cascada parte con ellas.` : ""}</p>
         )}
       </div>
-      <CascadeLines network={network} timeline={timeline} t={t} />
+      <CascadeLines network={network} timeline={timeline} />
       {result && edits.buses.length > 0 && (
         <p className="meta">Apagar {edits.buses.length === 1 ? "esa subestación" : "esas subestaciones"} deja sin suministro a {formatPeople(result.direct.people)} personas y quita {int(result.direct.load_mw)} MW de demanda y {int(result.direct.gen_mw)} MW de generación, antes de la cascada.</p>
       )}
@@ -77,21 +76,20 @@ export function NetworkState({ network, buses, point, edits, result, timeline, t
 }
 
 /** Lines the cascade opened by itself (overload over 120 %), apart from the ones the user cut, with the second they opened. */
-function CascadeLines({ network, timeline, t }: { network: Network; timeline: Timeline | null; t?: number }) {
-  const seen = (timeline?.events ?? []).filter((e) => t === undefined || e.t <= t + 1e-9);
-  const opened = seen.filter((e) => e.type === "line_overload_open").flatMap((e) => e.ids.map((id) => ({ id, t: e.t })));
-  const collapsed = seen.filter((e) => e.type === "island_blackout");
+function CascadeLines({ network, timeline }: { network: Network; timeline: Timeline | null }) {
+  const opened = (timeline?.events ?? []).filter((e) => e.type === "line_overload_open").flatMap((e) => e.ids.map((id) => ({ id, t: e.t })));
+  const collapsed = (timeline?.events ?? []).filter((e) => e.type === "island_blackout");
   if (!opened.length && !collapsed.length) return null;
   return (
     <div className="card state-list">
       <div className="card-head"><div className="title"><h3>Consecuencias en la red · {opened.length + collapsed.length}</h3></div></div>
       {opened.length > 0 && <div className="list-head"><span>Líneas abiertas por sobrecarga · {opened.length}</span><span>segundo</span></div>}
       {opened.map(({ id, t }) => (
-        <div className="state-row" key={id}><span className="ellipsis" title={lineName(network, id)}>{lineName(network, id)}</span><span className="num">{t.toFixed(1)} s</span></div>
+        <div className="state-row" key={id}><span className="ellipsis" title={lineName(network, id)}>{lineName(network, id)}</span><span className="num">{secs(t)} s</span></div>
       ))}
       {collapsed.length > 0 && <div className="list-head"><span>Islas apagadas · {collapsed.length}</span><span>segundo</span></div>}
       {collapsed.map((e, k) => (
-        <div className="state-row" key={k}><span className="ellipsis">{int(Number(e.params.buses))} subestaciones, {int(Number(e.params.load_mw))} MW · {REASON[String(e.params.reason)] ?? String(e.params.reason)}</span><span className="num">{e.t.toFixed(1)} s</span></div>
+        <div className="state-row" key={k}><span className="ellipsis">{int(Number(e.params.buses))} subestaciones, {int(Number(e.params.load_mw))} MW · {REASON[String(e.params.reason)] ?? String(e.params.reason)}</span><span className="num">{secs(e.t)} s</span></div>
       ))}
       <p className="meta">Estas no las cortaste tú: las abre el motor cuando una línea supera el 120 % de su capacidad, o se apagan cuando una isla pierde la frecuencia o la tensión.</p>
     </div>
@@ -103,18 +101,19 @@ const REASON: Record<string, string> = {
 };
 
 /**
- * Result of the cascade at second `t`, read with the same `impactAt` the Simulación tab uses, so both tabs give the same
- * figures at every second. The cost comes from the backend (`POST /grids/cost`): total, per hour of outage, and blackout or load shedding.
+ * Final result of the cascade, read with the same `impactAt` the Simulación tab uses at its last second, so both tabs give
+ * the same figures. The cost comes from the timeline's own summary when it has one (the cache and the server simulation
+ * write it, F-17, G-14); only an older timeline asks the backend (`POST /grids/cost`).
  */
-function Outcome({ timeline, buses, point, edits, t }: { timeline: Timeline; buses: Record<string, BusState>; point: string; edits: Edits; t: number }) {
-  const end = impactAt(timeline, buses, t);
-  const dark = timeline.events.filter((e) => e.type === "island_blackout" && e.t <= t + 1e-9).length;
-  const load = meanLoading(frameAt(timeline, t));
-  const cost = useOutageCost(point, edits);
+function Outcome({ timeline, buses, point, edits }: { timeline: Timeline; buses: Record<string, BusState>; point: string; edits: Edits }) {
+  const end = impactAt(timeline, buses, timeline.duration_s);
+  const dark = timeline.events.filter((e) => e.type === "island_blackout").length;
+  const own = summaryCost(timeline, end.share);
+  const cost = useOutageCost(point, edits, !own);
   return (
     <div className="card impact">
       <div className="card-head">
-        <div className="title"><h3>Resultado de la caída</h3><Info tip="Estado de la red en el segundo que muestra Simulación, calculado por el motor Sub50 con todos los cambios de esta lista. Al final de la cascada es el estado final. El costo es el total de la caída completa." /></div>
+        <div className="title"><h3>Al final de la caída</h3><Info tip="Estado final de la red tras la cascada, calculado por el motor Sub50 con todos los cambios de esta lista. Es la misma cifra que Simulación muestra al final." /></div>
         <span className="share">{pct(end.share)} del país</span>
       </div>
       <div className="people">{int(end.people)}</div>
@@ -124,10 +123,29 @@ function Outcome({ timeline, buses, point, edits, t }: { timeline: Timeline; bus
         <div><div className="value-row"><b>{int(end.lostGenMw)} <small>MW</small></b></div><span>generación perdida</span></div>
         <div><div className="value-row"><b>{dark}</b></div><span>{dark === 1 ? "isla apagada" : "islas apagadas"}</span></div>
       </div>
-      <div className="mini-figures ruled">
-        <div><div className="value-row"><b>{load === null ? "–" : pct(load)}</b><Info tip="Promedio simple de la carga (flujo sobre capacidad) de las líneas con flujo en este segundo. No cuenta las líneas abiertas ni sin flujo." /></div><span>carga promedio de la red</span></div>
-      </div>
-      <CostRow cost={cost} />
+      {own ? <SummaryCostRow cost={own} /> : <CostRow cost={cost} />}
+    </div>
+  );
+}
+
+interface OwnCost { usd: number; mwh: number | null; hours: { value: number; is_assumption: boolean }; kind: string }
+
+/** The failure cost the engine wrote in the timeline summary (CNE failure cost, `docs/health.md` "Cost"), or null without it. */
+export function summaryCost(timeline: Timeline, share: number): OwnCost | null {
+  const s = timeline.summary;
+  if (s.failure_cost_usd == null || !s.outage_duration_h) return null;
+  const dark = timeline.events.some((e) => e.type === "island_blackout");
+  const kind = !dark ? "corte parcial de carga (EDAC)" : share >= 0.9 ? "apagón total" : "apagón parcial";
+  return { usd: s.failure_cost_usd, mwh: s.unserved_energy_mwh ?? null, hours: s.outage_duration_h, kind };
+}
+
+function SummaryCostRow({ cost }: { cost: OwnCost }) {
+  const tip = `Valoración regulatoria (costo de falla CNE, 8,79 US$/kWh) de la energía no servida, con ${hoursText(cost.hours)} de corte. No es la pérdida económica medida.`;
+  return (
+    <div className="mini-figures ruled">
+      <div><div className="value-row"><b>US$ {formatPeople(cost.usd)}</b><Info tip={tip} /></div><span>costo de la caída</span></div>
+      <div><div className="value-row"><b>US$ {formatPeople(cost.usd / Math.max(cost.hours.value, 1e-9))}</b></div><span>por hora de corte</span></div>
+      <div><div className="value-row"><b>{cost.mwh == null ? "s/d" : <>{int(cost.mwh)} <small>MWh</small></>}</b></div><span>{cost.kind} · {hoursText(cost.hours)}</span></div>
     </div>
   );
 }
@@ -144,22 +162,23 @@ function CostRow({ cost }: { cost: CostState }) {
     <div className="mini-figures ruled">
       <div><div className="value-row"><b>US$ {formatPeople(c.cost_usd)}</b><Info tip={tip} /></div><span>costo de la caída</span></div>
       <div><div className="value-row"><b>US$ {formatPeople(c.cost_per_hour_usd)}</b></div><span>por hora de corte</span></div>
-      <div><div className="value-row"><b>{int(c.energy_not_served_mwh)} <small>MWh</small></b></div><span>{kind} · {c.outage_hours.value} h</span></div>
+      <div><div className="value-row"><b>{int(c.energy_not_served_mwh)} <small>MWh</small></b></div><span>{kind} · {hoursText(c.outage_hours)}</span></div>
     </div>
   );
 }
 
 type CostState = { state: "loading" | "ready" | "pending" | "error"; value: OutageCost | null; error?: string };
 
-function useOutageCost(point: string, edits: Edits): CostState {
+function useOutageCost(point: string, edits: Edits, enabled: boolean): CostState {
   const [cost, setCost] = useState<CostState>({ state: "loading", value: null });
-  const key = `${point}|${edits.lines.join(",")}|${edits.buses.join(",")}|${JSON.stringify(changesOf(edits))}`;
+  const key = `${point}|${edits.lines.join(",")}|${edits.buses.join(",")}|${JSON.stringify(changesOf(edits))}|${enabled}`;
   useEffect(() => {
+    if (!enabled) return;
     let live = true;
     setCost({ state: "loading", value: null });
     loadOutageCost({ point, open_lines: edits.lines, out_buses: edits.buses, changes: changesOf(edits) })
       .then((value) => live && setCost({ state: value ? "ready" : "pending", value }))
-      .catch((e) => live && setCost({ state: "error", value: null, error: String(e.message) }));
+      .catch((e) => live && setCost({ state: "error", value: null, error: errorText(e) }));
     return () => { live = false; };
   }, [key]);
   return cost;
@@ -178,8 +197,7 @@ export function describeChange(c: StressChange, nodeName: (id: string) => string
     ...(c.zones ?? []).map((z) => `zona ${z}`), ...(c.areas ?? []).map((a) => `área ${a}`),
     ...(c.tech ?? []).map((t) => TECH_NAME[t] ?? t), ...(c.kv ?? []).map((k) => `${k} kV`),
   ];
-  const mw = c.generator_mw ?? c.load_mw;
-  const how = c.target === "substation" ? (mw ? `+${int(mw)} MW` : "") : c.factor !== undefined ? `× ${c.factor}` : c.add !== undefined ? `${c.add >= 0 ? "+" : ""}${int(c.add)}${c.target === "population" ? " personas" : " MW"}` : "";
+  const how = c.factor !== undefined ? `× ${c.factor}` : c.add !== undefined ? `${c.add >= 0 ? "+" : ""}${int(c.add)}${c.target === "population" ? " personas" : " MW"}` : "";
   const x = c.x_factor !== undefined ? `, reactancia × ${c.x_factor}` : "";
   return `${TARGET_NAME[c.target]} ${how}${x} · ${where.length ? where.join(", ") : "todo el país"}`;
 }

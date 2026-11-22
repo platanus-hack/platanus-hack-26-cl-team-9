@@ -1,23 +1,49 @@
 /* Incidentes view of mapa 3 (docs/mapa3.md section 4.2) in the Design v5 shell: radius 0, only the cascade.css tokens
-   (docs/design.md section 2). Red is never used to rank incidents; the selected card is marked with a neutral rule. */
+   (docs/design.md section 2). Red is never used to rank incidents; the selected card is marked with a white rule and a
+   square radio mark. */
 .shell .incidents { display: flex; flex-direction: column; gap: 10px; }
+.shell .sr-status { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.shell .inc-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* ---- Catalog: selectable cards ---- */
 .shell .inc-list { display: flex; flex-direction: column; gap: 6px; }
-.shell .inc-card { gap: 6px; padding: 10px 12px; border-left: 2px solid transparent; }
-.shell .inc-card.on { border-left-color: var(--fg-2); background: var(--selected); }
-.shell .inc-pick { display: flex; flex-direction: column; gap: 2px; padding: 0; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
+.shell .inc-card { gap: 8px; padding: 10px 12px 10px 10px; border-left: 2px solid transparent; }
+.shell .inc-card.on { border-left-color: var(--fg); background: var(--selected); }
+.shell .inc-pick { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 0; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
+.shell .inc-pick[aria-disabled="true"] { cursor: default; }
+.shell .inc-pick:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 3px; }
+.shell .inc-mark { position: relative; width: 12px; height: 12px; margin-top: 3px; flex-shrink: 0; border: 1px solid var(--muted); }
+.shell .inc-pick[aria-checked="true"] .inc-mark { border-color: var(--fg); }
+.shell .inc-pick[aria-checked="true"] .inc-mark::after { content: ""; position: absolute; inset: 2px; background: var(--fg); }
+.shell .inc-pick-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .shell .inc-title { color: var(--fg); font-size: 13px; font-weight: 600; line-height: 18px; }
-.shell .inc-pick:hover .inc-title { text-decoration: underline; text-underline-offset: 2px; }
-.shell .inc-tag { color: var(--fg-3); font-style: normal; border: 1px solid var(--border-strong); padding: 0 4px; }
+.shell .inc-pick:hover:not([aria-disabled="true"]) .inc-title { text-decoration: underline; text-underline-offset: 2px; }
+.shell .inc-tag { color: var(--fg-3); font-style: normal; border: 1px solid var(--border-strong); padding: 0 4px; white-space: nowrap; }
+.shell .inc-card .inc-effects, .shell .inc-card .inc-sources { margin-left: 22px; }
 .shell .inc-effects, .shell .inc-list-text, .shell .inc-cycles ul { margin: 0; padding-left: 16px; color: var(--fg-3); font-size: 12px; line-height: 17px; }
 .shell .inc-sources a { color: var(--fg-3); }
 .shell .inc-sources a:hover { color: var(--fg); }
-.shell .inc-go { align-self: flex-start; }
+
+/* ---- Options: fixed to the bottom of the panel so the action is always in view ---- */
+.shell .inc-options { position: sticky; z-index: 1; bottom: -12px; display: flex; flex-direction: column; gap: 8px; margin: 0 -12px -12px; padding: 10px 12px 12px; background: var(--surface); border-top: 1px solid var(--border); }
+.shell .inc-options .seg button:disabled { cursor: default; color: var(--faint); }
+.shell .inc-options .seg button.on:disabled { color: #18191b; }
+.shell .inc-go-row { display: flex; align-items: center; gap: 12px; }
+.shell .inc-go-row .meta { flex: 1; min-width: 0; }
+
+/* ---- Result ---- */
+.shell .inc-heading:focus { outline: none; }
+.shell .inc-heading:focus-visible { outline: 1px solid var(--fg-3); outline-offset: 2px; }
 .shell .inc-text { margin: 0; color: var(--fg-2); font-size: 13px; line-height: 19px; }
+.shell .inc-map { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
 /* two per row: four nowrap figures do not fit the 440 px panel side by side */
 .shell .mini-figures.inc-figures { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.shell .inc-text-value { color: var(--fg-2); font-size: 13px; line-height: 18px; }
 .shell .inc-cycles { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .shell .inc-cycles > li { display: flex; flex-direction: column; gap: 4px; padding: 7px 0; border-top: 1px solid var(--border); }
-.shell .inc-cycles > li.on { border-left: 2px solid var(--fg-2); padding-left: 8px; }
-.shell .inc-cycle-head { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; line-height: 16px; }
-.shell .inc-cycle-head .btn, .shell .inc-cycle-head .text-btn { margin-left: auto; }
+.shell .inc-cycles > li.on { border-left: 2px solid var(--fg); padding-left: 8px; }
+.shell .inc-cycle-head { display: flex; align-items: center; gap: 8px; min-height: 28px; color: var(--fg); font-size: 13px; line-height: 16px; }
+.shell .inc-cycle-head .secondary-btn, .shell .inc-cycle-head .text-btn { margin-left: auto; }
+.shell .inc-more summary { padding: 6px 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 16px; cursor: pointer; }
+.shell .inc-more summary:hover { color: var(--fg); }
 .shell .inc-notices span { display: block; }

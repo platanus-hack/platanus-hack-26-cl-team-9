@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { loadNetworkSummary, VOLTAGE_BANDS, type NetworkSummary } from "./networkSummary";
+import { cachedNetworkSummary, loadNetworkSummary, VOLTAGE_BANDS, type NetworkSummary } from "./networkSummary";
 import { int } from "./text";
 import { Info } from "./ui";
 
 const CHILE: Origin = {
   source: "IDE Energía",
-  km: "Suma del largo de todas las líneas de transmisión de IDE Energía (data/processed/geo/lines.geojson).",
-  substations: "Subestaciones registradas en IDE Energía (data/processed/geo/substations.geojson).",
-  mw: "Potencia instalada de todas las centrales de IDE Energía (data/processed/geo/plants.geojson).",
+  km: "Suma del largo de todas las líneas de transmisión de la capa de líneas de IDE Energía (Ministerio de Energía).",
+  substations: "Subestaciones registradas en IDE Energía (Ministerio de Energía).",
+  mw: "Potencia instalada de todas las centrales de IDE Energía (Ministerio de Energía).",
   bands: "Largo de las líneas de IDE Energía por nivel de tensión. Media tensión: bajo 44 kV. Las líneas sin tensión registrada no se cuentan aquí.",
 };
 
@@ -18,16 +18,25 @@ export interface Origin { source: string; km: string; substations: string; mw: s
  * Tab "Red" (Design v5, V1): size of the whole grid by voltage. The selected element's card sits above it (SelectionCard).
  * Without `summary` it counts Chile's IDE Energía data; another network passes its own figures and origin.
  */
-export function NetworkPanel(p: { source: string; summary?: NetworkSummary | null; origin?: Origin; viewOnly?: string }) {
-  const [chile, setChile] = useState<NetworkSummary | null>(null);
+export function NetworkPanel(p: { source: string; summary?: NetworkSummary | null; origin?: Origin; viewOnly?: string; backToChile?(): void }) {
+  // Seeded from the module cache, so switching back to Red never renders an empty tab (G-04, E-12).
+  const [chile, setChile] = useState<NetworkSummary | null>(cachedNetworkSummary);
+  const [failed, setFailed] = useState(false);
   const own = p.summary !== undefined;
-  useEffect(() => { if (!own) loadNetworkSummary().then(setChile).catch((e) => { console.warn("network summary failed to load", e); setChile(null); }); }, [own]);
+  const load = () => {
+    setFailed(false);
+    loadNetworkSummary().then(setChile).catch((e) => { console.warn("network summary failed to load", e); setFailed(true); });
+  };
+  useEffect(() => { if (!own && !chile) load(); }, [own]);
   const summary = own ? p.summary : chile;
   const origin = p.origin ?? CHILE;
   return (
     <>
-      {p.viewOnly && <div className="notice" role="status"><span>{p.viewOnly}</span></div>}
+      {p.viewOnly && <div className="notice" role="status"><span>{p.viewOnly}</span>{p.backToChile && <button className="secondary-btn" onClick={p.backToChile}>Volver a Chile</button>}</div>}
       {summary && <Overview s={summary} o={origin} />}
+      {!summary && !own && (failed
+        ? <p className="note" role="alert">No se pudieron leer las cifras de la red. <button className="text-btn" onClick={load}>Reintentar</button></p>
+        : <div className="card loading" role="status" aria-live="polite"><span className="loading-bar" /><p>Cargando las cifras de la red</p></div>)}
       <p className="source">Fuente: {origin.source}. {p.source}</p>
     </>
   );

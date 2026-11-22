@@ -20,7 +20,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api/v1/grids/${path}`, init);
   if (!r.ok) {
     const detail = await r.json().then((b) => b.detail).catch(() => null);
-    throw new Error(typeof detail === "string" ? detail : `No se pudo leer las fuentes (${r.status}).`);
+    throw new Error(typeof detail === "string" ? detail : "No se pudo leer las redes del servidor.");
   }
   return r.json();
 }
@@ -58,7 +58,7 @@ export interface OutageCost {
 export async function loadOutageCost(body: GridChanges): Promise<OutageCost | null> {
   const r = await fetch("/api/v1/grids/cost", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   if (r.status === 404 || r.status === 405) return null;
-  if (!r.ok) throw new Error(`No se pudo calcular el costo (${r.status}).`);
+  if (!r.ok) throw new Error("No se pudo calcular el costo.");
   return r.json();
 }
 

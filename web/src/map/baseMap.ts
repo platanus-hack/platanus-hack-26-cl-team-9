@@ -6,20 +6,32 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import chileUrl from "../../../data/processed/chile.geojson?url";
 import { regionalOutlineUrl } from "./regional";
 import type { CameraTarget } from "./countryBounds";
+import { nearLand, viewportRadiusDeg } from "./regionLimit";
 
 // Until the first network loads: today's Chile frame. Every later target comes from the network's data (countryBounds.ts).
 const START_TARGET: CameraTarget = { frame: [[-75.5, -43.8], [-66.5, -17.4]], maxBounds: [[-110, -62], [-30, 8]], land: null };
-// Experiment: cap the zoom and drop heavy Standard-style features. `?limite=0` turns it off to compare. The camera itself is free: no bounds, no minimum zoom, no snap-back to land.
+// Experiment: keep the camera near the selected country and drop heavy Standard-style features. `?limite=0` turns it all off to compare.
 const LIMITED = new URLSearchParams(location.search).get("limite") !== "0";
 const MAX_ZOOM = 13;
+// How far out the user may zoom past the frame that shows the whole network (Brazil's frame is far wider than Chile's).
+const ZOOM_OUT_LEVELS = 1.5;
 const FLY_MS = 1200;
+const LAND_MARGIN = 0.25; // fraction of the shorter viewport side the center may be offshore
 const LITE_BASEMAP = { show3dObjects: false, showPointOfInterestLabels: false, showTransitLabels: false, showPedestrianRoads: false };
 const PITCH_DEGREES = 45;
 // Design v5: flat neutral gray land on a dark gray ground (Electricity Maps look).
 const LAND_FILL: [number, number, number] = [58, 59, 63];
 const LAND_LINE: [number, number, number] = [84, 86, 91];
 const STYLE = "mapbox://styles/mapbox/standard";
+// Mapbox's public country polygons (Mapbox Countries v1), used only to paint the land in the design's gray.
+const LAND_TILESET = "mapbox://mapbox.country-boundaries-v1";
+const LAND_SOURCE_LAYER = "country_boundaries";
+const rgb = (c: [number, number, number]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+/** Camera animations are skipped (duration 0, a jump) when the user asked the system for reduced motion. */
+const motion = (ms: number) => (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms);
 const PANEL_CLEARANCE_PX = 664; // nav rail (200) + docked panel (12 + 440) + margin, see .shell in styles.css
+// How far (px) from the pointer a click or hover still reaches a line: at country zoom a line is about 1 to 4 px wide (F-33).
+const PICK_RADIUS_PX = 10;
 
 export type ViewMode = "2d" | "3d";
 export interface Camera { lon: number; lat: number; zoom: number }
@@ -27,13 +39,15 @@ export interface BaseMap {
   setLayers(layers: Layer[]): void; setMode(mode: ViewMode): void; zoomBy(delta: number): void; dispose(): void;
   /** Back to the current target's frame: the whole network next to the panel. */
   fitAll(): void;
-  /** Flies to a network's frame (keeping 2D or 3D). The camera is not limited to that country afterwards. */
+  /** Flies to a network's frame (keeping 2D or 3D) and limits zoom, panning and the over-land check to that country. */
   setTarget(target: CameraTarget, durationMs?: number): void;
   /** Screen position (px, relative to the map container) of a point, for HTML overlays such as event pins. */
   project(lon: number, lat: number): [number, number];
   camera(): Camera;
   /** True when the basemap draws its own place names (Mapbox); the offline outline has none. */
   hasLabels: boolean;
+  /** Every pickable object within the pick radius of a screen point (px, relative to the map container), nearest first. */
+  pickAll(x: number, y: number): PickingInfo[];
 }
 const pitchOf = (mode: ViewMode) => (mode === "2d" ? 0 : PITCH_DEGREES);
 export type Tooltip = string | { text: string; style?: Partial<CSSStyleDeclaration> } | null;
@@ -56,19 +70,58 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
     ...(LIMITED ? { maxZoom: MAX_ZOOM } : {}),
     pitch: pitchOf(initialMode),
   });
+  // Flat neutral gray land (docs/design.md section 2). The Standard style's night preset darkens its own land to near
+  // black and no config option reaches it, so a fill of the country polygons goes in the style's "bottom" slot: above the
+  // style's land, landcover and water polygons, below its roads, borders and labels. Emissive, so the night light does
+  // not darken it. Inland water is covered too, which is the flat look the design asks for; the sea stays dark.
+  map.on("style.load", () => {
+    if (map.getSource("sub50-land")) return;
+    map.addSource("sub50-land", { type: "vector", url: LAND_TILESET });
+    map.addLayer({ id: "sub50-land", type: "fill", source: "sub50-land", "source-layer": LAND_SOURCE_LAYER, slot: "bottom",
+      paint: { "fill-color": rgb(LAND_FILL), "fill-emissive-strength": 1, "fill-antialias": false } });
+  });
   // The fit's padding stays as the camera padding, so the center (zoom, land check) is the center of the map left visible.
   const padding = { top: 20, bottom: 20, left: PANEL_CLEARANCE_PX, right: 20 };
   let target = START_TARGET;
+  let flying = false;
   const fit = (duration: number) => map.fitBounds(target.frame, { padding, pitch: map.getPitch(), bearing: 0, duration });
-  const setTarget = (next: CameraTarget, duration = FLY_MS) => {
+  /**
+   * The old limits would block the flight (Chile's maxBounds does not contain Brazil), so they are lifted first, and the
+   * new ones are set when the camera lands. The listener goes on before the fit: a jump (duration 0) ends synchronously.
+   */
+  const setTarget = (next: CameraTarget, flightMs = FLY_MS) => {
+    const duration = motion(flightMs);
     target = next;
+    if (!LIMITED) {
+      fit(duration);
+      return;
+    }
+    flying = true;
+    map.setMaxBounds(null as unknown as mapboxgl.LngLatBoundsLike); // null removes the limit (Map#setMaxBounds docs); the public type omits it
+    const minZoom = Math.max(0, (map.cameraForBounds(next.frame, { padding })?.zoom ?? 3) - ZOOM_OUT_LEVELS);
+    map.setMinZoom(Math.min(minZoom, map.getZoom()));
+    let landed = false;
+    const land = () => {
+      if (landed || target !== next) return; // a newer target took over
+      landed = true;
+      flying = false;
+      map.setMinZoom(minZoom);
+      map.setMaxBounds(next.maxBounds);
+      overLand.lastGood = map.getCenter();
+    };
+    map.once("moveend", land);
+    // In case the camera was already there and no moveend comes. On a slow machine the flight outlasts `duration`:
+    // then moveend lands it, and limits set mid-flight would bend the path.
+    setTimeout(() => { if (!map.isMoving()) land(); }, duration + 500);
     fit(duration);
   };
   map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-left");
+  const overLand = { lastGood: map.getCenter() };
+  if (LIMITED) _keepOverLand(map, container, () => (flying ? null : target), overLand);
   setTarget(START_TARGET, 0);
   // MapboxOverlay forwards Mapbox `click` as a click with tapCount 1 and `dblclick` as a click with tapCount 2
   // (@deck.gl/mapbox dist/mapbox-overlay.js, _handleMouseEvent), so a double click arrives as three clicks.
-  const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: (info, event) => handlers.onClick(info, tapsOf(event)), getTooltip: handlers.getTooltip, pickingRadius: 8,
+  const overlay = new MapboxOverlay({ interleaved: false, layers: [], onClick: (info, event) => handlers.onClick(info, tapsOf(event)), getTooltip: handlers.getTooltip, pickingRadius: PICK_RADIUS_PX,
     // The overlay's own cursor goes on a container with pointer-events none, so it never shows; set it on the map canvas.
     onHover: (info) => { map.getCanvas().style.cursor = handlers.isClickable(info) ? "pointer" : ""; } });
   map.addControl(overlay);
@@ -77,7 +130,7 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
   if (matchMedia("(any-pointer: coarse)").matches) map.doubleClickZoom.disable();
   map.on("dblclick", (e) => {
     try {
-      const info = overlay.pickObject({ x: e.point.x, y: e.point.y, radius: 8 });
+      const info = overlay.pickObject({ x: e.point.x, y: e.point.y, radius: PICK_RADIUS_PX });
       if (info && handlers.isClickable(info)) e.preventDefault(); // stops ClickZoomHandler (MapMouseEvent.preventDefault)
     } catch (e) { console.warn("picking unavailable, keeping the default zoom", e); /* picking unavailable: keep the default zoom */ }
   });
@@ -85,17 +138,32 @@ function _mapboxMap(container: HTMLDivElement, token: string, handlers: Handlers
     // 2D is the same map seen from straight above: it cannot be tilted or rotated.
     const flat = mode === "2d"; // a true 2D map cannot be tilted or rotated
     flat ? (map.dragRotate.disable(), map.touchZoomRotate.disableRotation()) : (map.dragRotate.enable(), map.touchZoomRotate.enableRotation());
-    map.easeTo({ pitch: pitchOf(mode), bearing: 0, duration: 600 });
+    map.easeTo({ pitch: pitchOf(mode), bearing: 0, duration: motion(600) });
   };
   return {
-    setLayers: (layers) => overlay.setProps({ layers }), setMode, zoomBy: (d) => map.easeTo({ zoom: map.getZoom() + d, duration: 300 }), dispose: () => map.remove(),
-    fitAll: () => fit(600), setTarget,
+    setLayers: (layers) => overlay.setProps({ layers }), setMode, zoomBy: (d) => map.easeTo({ zoom: map.getZoom() + d, duration: motion(300) }), dispose: () => map.remove(),
+    fitAll: () => fit(motion(600)), setTarget,
     project: (lon, lat) => { const p = map.project([lon, lat]); return [p.x, p.y]; },
     camera: () => { const c = map.getCenter(); return { lon: c.lng, lat: c.lat, zoom: map.getZoom() }; },
     hasLabels: true,
+    pickAll: (x, y) => { try { return overlay.pickMultipleObjects({ x, y, radius: PICK_RADIUS_PX }); } catch { return []; } },
   };
 }
 
+/**
+ * Why: zooming into the sea or a neighbour's interior is useless; after each move, a center that is too far from the
+ * selected country's land snaps back to the last valid one. No check while flying to a new network, or without an outline.
+ */
+function _keepOverLand(map: mapboxgl.Map, container: HTMLDivElement, current: () => CameraTarget | null, state: { lastGood: mapboxgl.LngLat }) {
+  map.on("moveend", () => {
+    const land = current()?.land;
+    if (!land?.length) return;
+    const { lng, lat } = map.getCenter();
+    const radius = viewportRadiusDeg(map.getZoom(), container.clientWidth, container.clientHeight, LAND_MARGIN);
+    if (nearLand(land, lng, lat, radius)) state.lastGood = map.getCenter();
+    else map.easeTo({ center: state.lastGood, duration: motion(400) });
+  });
+}
 function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode: ViewMode): BaseMap {
   const canvas = document.createElement("canvas");
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
@@ -104,7 +172,7 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode:
   const neighbours = regionalOutlineUrl ? [new GeoJsonLayer({ id: "latam-outline", data: regionalOutlineUrl, stroked: true, filled: true, getFillColor: LAND_FILL, getLineColor: LAND_LINE, lineWidthMinPixels: 1 })] : [];
   let target = START_TARGET;
   let viewState: MapViewState = { ..._viewState(container, target), pitch: pitchOf(initialMode) };
-  const view = (t: CameraTarget) => new MapView({ repeat: false, ...(LIMITED ? { maxZoom: MAX_ZOOM } : {}) });
+  const view = (t: CameraTarget) => new MapView({ repeat: false, ...(LIMITED ? { minZoom: Math.max(0, _viewState(container, t).zoom - ZOOM_OUT_LEVELS), maxZoom: MAX_ZOOM } : {}) });
   // Double-click zoom off: then the dblclick recognizer is disabled, `click` has no enabled recognizer to wait for and
   // fires at once on every tap with tapCount 1, 2, ... (@deck.gl/core dist/lib/constants.js RECOGNIZERS, mjolnir.js
   // dist/hammerjs/recognizers/tap.js). With it on, every single click would wait 300 ms.
@@ -112,16 +180,16 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode:
   let hovering = false;
   const deck = new Deck({ canvas, views: view(target), controller: controller(initialMode), initialViewState: viewState,
     onViewStateChange: ({ viewState: next }) => { viewState = next as MapViewState; }, // the controller owns the camera; keep a copy to change only the pitch
-    layers: [...neighbours, outline], getTooltip: handlers.getTooltip, onClick: (info, event) => handlers.onClick(info, tapsOf(event)), pickingRadius: 8,
+    layers: [...neighbours, outline], getTooltip: handlers.getTooltip, onClick: (info, event) => handlers.onClick(info, tapsOf(event)), pickingRadius: PICK_RADIUS_PX,
     onHover: (info) => { hovering = handlers.isClickable(info); }, getCursor: ({ isDragging }) => (isDragging ? "grabbing" : hovering ? "pointer" : "grab") });
   return {
     setLayers: (layers) => deck.setProps({ layers: [...neighbours, outline, ...layers] }),
-    setMode: (mode) => deck.setProps({ controller: controller(mode), initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: 600 } }),
-    zoomBy: (d) => deck.setProps({ initialViewState: { ...viewState, zoom: viewState.zoom + d, transitionDuration: 300 } }),
-    fitAll: () => deck.setProps({ initialViewState: { ..._tilted(_viewState(container, target), viewState.pitch), transitionDuration: 600 } }),
+    setMode: (mode) => deck.setProps({ controller: controller(mode), initialViewState: { ...viewState, pitch: pitchOf(mode), bearing: 0, transitionDuration: motion(600) } }),
+    zoomBy: (d) => deck.setProps({ initialViewState: { ...viewState, zoom: viewState.zoom + d, transitionDuration: motion(300) } }),
+    fitAll: () => deck.setProps({ initialViewState: { ..._tilted(_viewState(container, target), viewState.pitch), transitionDuration: motion(600) } }),
     setTarget: (next, duration = FLY_MS) => {
       target = next;
-      deck.setProps({ views: view(next), initialViewState: { ..._tilted(_viewState(container, next), viewState.pitch), transitionDuration: duration, transitionInterpolator: new FlyToInterpolator() } });
+      deck.setProps({ views: view(next), initialViewState: { ..._tilted(_viewState(container, next), viewState.pitch), transitionDuration: motion(duration), transitionInterpolator: new FlyToInterpolator() } });
     },
     dispose: () => { deck.finalize(); canvas.remove(); },
     project: (lon, lat) => {
@@ -131,6 +199,7 @@ function _offlineMap(container: HTMLDivElement, handlers: Handlers, initialMode:
     },
     camera: () => ({ lon: viewState.longitude, lat: viewState.latitude, zoom: viewState.zoom }),
     hasLabels: false,
+    pickAll: (x, y) => { try { return deck.pickMultipleObjects({ x, y, radius: PICK_RADIUS_PX }); } catch { return []; } },
   };
 }
 

@@ -63,6 +63,22 @@ export async function streamChat(body: ChatBody, onEvent: (e: SseEvent) => void,
   return finished;
 }
 
+/**
+ * Whether the assistant can answer, asked without sending a message: reading a conversation that does not exist answers
+ * 503 when the LLM is not configured and 404 when it is (`get_assistant` runs before the lookup in
+ * `api/assistant_routes.py`). `null` when the answer says neither (network failure, rate limit).
+ */
+export const PROBE_CID = "sub50-web-probe-000000"; // 22 characters, the conversation id pattern
+export async function probeAssistant(): Promise<boolean | null> {
+  try {
+    await call("GET", PROBE_CID);
+    return true;
+  } catch (e) {
+    const status = e instanceof AssistantError ? e.status : 0;
+    return status === 503 ? false : status === 404 ? true : null;
+  }
+}
+
 export async function getConversation(cid: string): Promise<ConversationView> {
   const res = await call("GET", cid);
   return (await res.json()) as ConversationView;
