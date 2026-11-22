@@ -10,8 +10,16 @@ const REASONS: Record<string, string> = {
 export const zoneName = (zone: string) => ZONES[zone] ?? zone;
 
 const SMALL_WORDS = new Set(["de", "del", "la", "las", "los", "el", "y", "e", "a"]);
+// The source writes names without accents ("NUEVA PAN DE AZUCAR"); these well-known place names get theirs back on screen.
+// Only the shown name changes, never an id.
+const ACCENTED: Record<string, string> = {
+  AZUCAR: "Azúcar", CAUTIN: "Cautín", CHARRUA: "Charrúa", CHILLAN: "Chillán", CHILOE: "Chiloé", CHOLGUAN: "Cholguán", COLBUN: "Colbún",
+  CONCEPCION: "Concepción", CONSTITUCION: "Constitución", CRISTOBAL: "Cristóbal", DONA: "Doña", FARELLON: "Farellón", HECTOR: "Héctor",
+  HUALPEN: "Hualpén", MARIA: "María", MULCHEN: "Mulchén", PENON: "Peñón", RIO: "Río", RIOS: "Ríos", TARAPACA: "Tarapacá", TOLTEN: "Toltén",
+  TRUPAN: "Trupán", ZALDIVAR: "Zaldívar",
+};
 
-/** "S/E CERRO NAVIA (TRANSELEC)" -> "Cerro Navia (TRANSELEC)". Owner names in parentheses and codes stay as written. */
+/** "S/E CERRO NAVIA (TRANSELEC)" -> "Cerro Navia (TRANSELEC)", "NUEVA PAN DE AZUCAR" -> "Nueva Pan de Azúcar". Owner names in parentheses and codes stay as written. */
 export function placeName(raw: string): string {
   const name = raw.replace(/^S\/E /, "");
   const paren = name.indexOf("(");
@@ -19,6 +27,7 @@ export function placeName(raw: string): string {
   const words = head.split(/(\s+)/).map((w, i) => {
     if (!/^[A-ZÁÉÍÓÚÑ]+$/.test(w) || /^[IVX]+$/.test(w)) return w; // codes, digits, roman numerals
     const lower = w.toLowerCase();
+    if (ACCENTED[w]) return ACCENTED[w];
     return i > 0 && SMALL_WORDS.has(lower) ? lower : lower[0].toUpperCase() + lower.slice(1);
   });
   return words.join("") + (paren >= 0 ? name.slice(paren) : "");
@@ -77,6 +86,10 @@ export const mw = (n: unknown) => int(Number(n ?? 0));
 export const hz = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const secs = (n: number) => n.toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 export const pct = (n: number) => `${Math.round(n * 100)} %`;
+/** A percentage already in 0-100 with two decimals, Chilean format: 29.94 -> "29,94 %". */
+export const pct2 = (n: number) => `${n.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
+/** Megabytes with one decimal, Chilean format. */
+export const mb = (bytes: number) => (bytes / 1024 / 1024).toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 /** US$ in millions with one decimal, Chilean format: 69335520 -> "US$ 69,3 M". */
 export const usdM = (n: number) => `US$ ${(n / 1e6).toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M`;
 /** Health index on its 0-1 scale with two decimals: "0,67". */
@@ -122,3 +135,42 @@ export function conditionName(label: string): string {
   const name = m[1].trim().replace(/^referencia del /i, "referencia ");
   return name ? name[0].toUpperCase() + name.slice(1) : label;
 }
+
+/** "7,34 h calibradas" or "1 h supuesta": the outage hours a cost uses, and whether they are calibrated or assumed (G-07). */
+export function hoursText(h: { value: number; is_assumption?: boolean }): string {
+  const n = h.value.toLocaleString("es-CL", { maximumFractionDigits: 2 });
+  const one = h.value === 1;
+  return `${n} h ${h.is_assumption === false ? (one ? "calibrada" : "calibradas") : one ? "supuesta" : "supuestas"}`;
+}
+
+export const OFFLINE = "No se pudo conectar con el servidor.";
+
+/**
+ * A failed request in Spanish: the browser's network error ("Failed to fetch", "NetworkError ...") reads as OFFLINE, and
+ * a server message loses its developer notes (D11): parentheticals that name a command, a file or a route.
+ */
+export function errorText(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e ?? "");
+  if (e instanceof TypeError || /failed to fetch|networkerror|load failed|network request failed/i.test(message) || !message) return OFFLINE;
+  return withoutDevNotes(message);
+}
+
+/** An engine assumption as people read it: "(supuesto de docs/stack.md 4.3)" says "(supuesto del modelo)", other doc notes go. */
+export const plainAssumption = (s: string) => withoutDevNotes(s.replace(/\s*\(supuesto de [^)]*\)/g, " (supuesto del modelo)").replace(/\s*\((?:docs\/)?[\w-]+\.md[^)]*\)/g, ""));
+
+/**
+ * The closed row of an assumption: its own label when it starts with one ("Flujo DC: ..."), else its first sentence, else
+ * its first words. The open row shows the whole text.
+ */
+export function assumptionTitle(text: string): string {
+  const label = /^([^:.;]{3,40}):\s/.exec(text);
+  if (label) return label[1];
+  const sentence = /^(.{20,100}?\.)\s/.exec(text);
+  if (sentence) return sentence[1];
+  if (text.length <= 100) return text;
+  return `${text.slice(0, 90).replace(/\s+\S*$/, "")}…`;
+}
+
+/** "No hay catálogo de grillas publicado (cascadasen-grids publish)" -> "No hay catálogo de grillas publicado". */
+export const withoutDevNotes = (s: string) =>
+  s.replace(/\s*\((?=[^)]*(?:cascadasen|\.json|\.geojson|\.py|\.md|\/api\/|(?:GET|POST|PUT|DELETE) \/|docs\/|data\/))[^)]*\)/g, "").trim();

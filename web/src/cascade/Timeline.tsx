@@ -1,8 +1,8 @@
-import { useRef, type ReactNode } from "react";
-import { BLACKOUT_HZ, islandMoments, islandTicks, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
+import { useRef } from "react";
+import { BLACKOUT_HZ, floorTenths, islandDash, markerLabel, type IslandFrequency, type Marker, type TimeWarp } from "./simulation";
 import { hz, secs } from "./text";
 import type { Timeline as TimelineData } from "./types";
-import { Chevron, Info } from "./ui";
+import { Info } from "./ui";
 
 export const TRACK_W = 290;
 export const SPEEDS = [1, 2, 4];
@@ -15,28 +15,21 @@ interface Props {
   /** Non-linear track scale (simulation.ts `timeWarp`): x positions, dragging and arrow keys go through it. */
   warp: TimeWarp;
   setPlaying(b: boolean): void; togglePlay(): void; seek(t: number): void; setSpeed(s: number): void;
-  /** A cut is chosen and its timeline is still loading: the empty hint would be wrong. */
+  /** A cut is chosen and its timeline is still loading. */
   loading?: boolean;
-  /** A run played in 5-minute cycles (the Ciberataque): the same card drives it instead of the cascade seconds. */
-  cycles?: CycleRun | null;
-}
-
-/** What the card needs to drive a run in cycles: progress over the horizon, the cycle on screen and its marks. */
-export interface CycleRun {
-  clock: string; status: string; played: number; total: number; at: number; playing: boolean; finished: boolean;
-  /** Cycles worth a mark on the rail: the attack hit an area (red) or the defence eradicated one (light). */
-  marks: { cycle: number; side: "attack" | "defense"; title: string }[];
-  togglePlay(): void; seek(cycle: number): void;
-  /** Extra control at the right of the head: Terminar turno when the user defends, Ver cascada for a cycle. */
-  action?: ReactNode;
+  /** The simulation of the changes failed (the panel says why and offers Reintentar). */
+  failed?: boolean;
+  /** Every substation is dark at `t`: the readout says "apagón", never 50 Hz (D3). */
+  blackout?: boolean;
 }
 
 /**
  * Bottom card (Design v5): clock, frequency of each island, play, and the rail with numbered event markers. The rail
- * uses the warped time (each failure gets room, the quiet tail is short); the clock and the position read simulated s.
+ * uses the warped time (each failure gets room, the quiet tail is short); the clock and the position read simulated s,
+ * both rounded down to tenths. The shell renders it only while there is a timeline to play (D9): how to start one is
+ * said by the cold start card in Simulación, not here.
  */
 export function TimelineCard(p: Props) {
-  if (p.cycles) return <CycleCard c={p.cycles} speed={p.speed} setSpeed={p.setSpeed} />;
   const duration = p.timeline?.duration_s ?? 0;
   const hasCascade = !!p.timeline && p.timeline.events.length > 0;
   const view = p.warp.viewDuration;
@@ -57,12 +50,15 @@ export function TimelineCard(p: Props) {
       <div className="timeline-head">
         <span className="clock">{p.clock}</span>
         <div className="timeline-tools">
-          <Readout islands={p.islands} />
-          <Speed speed={p.speed} setSpeed={p.setSpeed} />
+          {p.timeline && <Readout islands={p.islands} blackout={!!p.blackout} />}
+          {/* The segmented control, not a native select (D16, E-15). */}
+          <div className="seg speed-seg" role="group" aria-label="Velocidad">
+            {SPEEDS.map((s) => <button key={s} className={p.speed === s ? "on" : ""} aria-pressed={p.speed === s} onClick={() => p.setSpeed(s)}>{s}×</button>)}
+          </div>
         </div>
       </div>
       {!p.timeline ? (
-        <p className="timeline-empty">{p.loading ? "Cargando la simulación" : "Sin corte activo. Haz clic en una línea del mapa y clic otra vez para simular su salida de servicio segundo a segundo."}</p>
+        <p className="timeline-empty">{p.failed ? "No se pudo simular este cambio." : "Cargando la simulación"}</p>
       ) : (
       <div className="timeline-row">
         <button className="play" disabled={!hasCascade} aria-label={p.playing ? "Pausa" : atEnd ? "Repetir" : "Reproducir"}
@@ -88,30 +84,22 @@ export function TimelineCard(p: Props) {
           }}>
           <svg className="curves" width={TRACK_W} height="22" viewBox={`0 0 ${TRACK_W} 22`} aria-hidden>
             <path d={`M0 11 H${TRACK_W}`} fill="none" stroke="#FFFFFF1F" strokeDasharray="3 3" />
-            {p.timeline && Object.entries(p.timeline.frequency_hz).map(([id, c]) => {
+            {p.timeline && Object.entries(p.timeline.frequency_hz).map(([id, c], k) => {
               const shown = c.filter((pt) => pt[0] <= p.t + 1e-9);
               if (shown.length < 2) return null;
-              return <polyline key={id} fill="none" stroke={faultCurve(c) ? "#FF5A48" : "#C9CBCF"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                points={shown.map((pt) => `${x(pt[0]).toFixed(1)},${yOf(pt[1]).toFixed(1)}`).join(" ")} />;
+              // Each island keeps its stroke pattern, the same as its swatch in the readout (A2-08); red only under 49 Hz.
+              return <polyline key={id} fill="none" stroke={faultCurve(c) ? "#FF5A48" : "#C9CBCF"} strokeWidth="1.5" strokeLinecap="butt" strokeLinejoin="round"
+                strokeDasharray={islandDash(k) || undefined} points={shown.map((pt) => `${x(pt[0]).toFixed(1)},${yOf(pt[1]).toFixed(1)}`).join(" ")} />;
             })}
           </svg>
           <div className="track-rail" />
           <div className="track-rail played" style={{ width: x(p.t) }} />
-          {!hasCascade && <div className="head" style={{ left: x(p.t) }} />}
-          {hasCascade && islandTicks(islandMoments(p.timeline!.events), x).map((m) => {
-            const text = `${m.count === 1 ? "Se forma 1 isla" : `Se forman ${m.count} islas`} · ${m.times.map((t) => `${secs(t)} s`).join(", ")}`;
-            return (
-              <button key={m.t} className={m.t <= p.t + 1e-9 ? "island-tick past" : "island-tick"} style={{ left: m.left }}
-                onClick={(e) => { e.stopPropagation(); p.seek(m.t); }} onPointerDown={(e) => e.stopPropagation()} aria-label={text} data-tip={text}>
-                {m.count === 1 ? "isla" : `${m.count} islas`}
-              </button>
-            );
-          })}
+          <div className="head" style={{ left: x(p.t) }} />
           {markers.map((m) => <TrackMarker key={m.first} m={m} state={stateOf(m, visible)} onClick={() => p.seek(m.events[m.events.length - 1].t)} />)}
         </div>
         <div className="timeline-right">
           <span className="ref">50 Hz</span>
-          <span className="pos">{`${atEnd ? Math.round(duration) : secs(p.t)} / ${Math.round(duration)} s`}</span>
+          <span className="pos">{`${atEnd ? Math.round(duration) : secs(floorTenths(p.t))} / ${Math.round(duration)} s`}</span>
         </div>
       </div>
       )}
@@ -133,79 +121,36 @@ function TrackMarker({ m, state, onClick }: { m: Marker; state: MarkerState; onC
   );
 }
 
-function Readout({ islands }: { islands: IslandFrequency[] }) {
-  const live = islands.filter((i) => i.started);
-  const tip = `Frecuencia de cada isla según el motor Sub50. Bajo ${hz(BLACKOUT_HZ)} Hz la isla se apaga.`;
-  if (live.length === 0) return <div className="readout"><span>País <em>50,00 Hz</em></span><Info tip={tip} /></div>;
-  return (
-    <div className="readout">
-      <span>
-        {live.map((i, k) => (
-          <span key={i.id}>{k > 0 && " · "}{i.name} <em className={i.collapsed || (i.hz ?? 50) < 49 ? "fault" : ""}>{i.collapsed ? "apagón" : `${hz(i.hz ?? 50)} Hz`}</em></span>
-        ))}
-      </span>
-      <Info tip={tip} />
-    </div>
-  );
-}
+/** Swatch of an island's stroke pattern, so each curve of the rail can be told apart (A2-08). */
+const IslandSwatch = ({ k, fault }: { k: number; fault: boolean }) => (
+  <svg className="island-swatch" width="14" height="6" viewBox="0 0 14 6" aria-hidden>
+    <path d="M0 3H14" fill="none" stroke={fault ? "#FF5A48" : "#C9CBCF"} strokeWidth="1.5" strokeDasharray={islandDash(k) || undefined} />
+  </svg>
+);
 
 /**
- * The bottom card in cycle mode: clock of the cycle on screen, the run's status, play or pause, and a rail that fills as
- * cycles are played over the horizon, with a mark where the attack hit or the defence cleaned an area. Clicking a played
- * part shows that cycle; the part not played yet cannot be chosen.
+ * Frequency of each island with its stroke swatch. With three or more islands the readout wraps onto two short lines
+ * and names each island only by its swatch and the tip. With every substation dark it reads "apagón" (D3).
  */
-function CycleCard({ c, speed, setSpeed }: { c: CycleRun; speed: number; setSpeed(s: number): void }) {
-  const total = Math.max(1, c.total);
-  const xOf = (cycle: number) => ((cycle + 0.5) / total) * TRACK_W;
-  const pick = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const cycle = Math.floor(((e.clientX - r.left) / r.width) * total);
-    if (c.played > 0) c.seek(Math.max(0, Math.min(cycle, c.played - 1)));
-  };
+function Readout({ islands, blackout }: { islands: IslandFrequency[]; blackout: boolean }) {
+  const tip = `Frecuencia de cada isla según el motor Sub50; cada isla tiene su trazo en la curva. Bajo ${hz(BLACKOUT_HZ)} Hz la isla se apaga.`;
+  if (blackout) return <div className="readout"><span>País <em className="fault">apagón</em></span><Info tip={tip} /></div>;
+  const live = islands.map((i, k) => ({ i, k })).filter(({ i }) => i.started);
+  if (live.length === 0) return <div className="readout"><span>País <em>50,00 Hz</em></span><Info tip={tip} /></div>;
+  const many = live.length > 2;
   return (
-    <section className="timeline cycles" aria-label="Línea de tiempo del ciberataque">
-      <div className="timeline-head">
-        <span className="clock">{c.clock}</span>
-        <div className="timeline-tools"><span className="cycle-status">{c.status}</span>{c.action}<Speed speed={speed} setSpeed={setSpeed} /></div>
-      </div>
-      <div className="timeline-row">
-        <button className="play" aria-label={c.playing ? "Pausa" : c.finished ? "Repetir" : "Continuar"} onClick={c.togglePlay}>
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-            {c.playing ? <path d="M3 2v6M7 2v6" fill="none" stroke="#1E1F21" strokeWidth="1.8" strokeLinecap="round" />
-              : c.finished ? <path d="M7.8 3.6A3.2 3.2 0 1 0 8 6M8 1.6v2.2H5.8" fill="none" stroke="#1E1F21" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                : <path d="M2.5 1.5v7l6-3.5z" fill="#1E1F21" />}
-          </svg>
-        </button>
-        <div className="track-area" role="slider" tabIndex={0} aria-label="Ciclo de la partida" aria-valuemin={0} aria-valuemax={total}
-          aria-valuenow={c.at} aria-valuetext={`ciclo ${c.at} de ${total}`} onPointerDown={pick}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowRight") c.seek(Math.min(c.played - 1, c.at + 1));
-            else if (e.key === "ArrowLeft") c.seek(Math.max(0, c.at - 1));
-            else return;
-            e.preventDefault();
-          }}>
-          <div className="track-rail" />
-          <div className="track-rail played" style={{ width: (c.played / total) * TRACK_W }} />
-          {c.marks.map((m) => <span key={`${m.side}${m.cycle}`} className={`cycle-mark ${m.side}`} style={{ left: xOf(m.cycle) }} title={m.title} />)}
-          <div className="head" style={{ left: xOf(c.at) }} />
-        </div>
-        <div className="timeline-right">
-          <span className="ref">5 min</span>
-          <span className="pos">{`${c.at} / ${total}`}</span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/** Playback speed, shared by the cascade (seconds) and the cycle mode (5-minute cycles). */
-function Speed({ speed, setSpeed }: { speed: number; setSpeed(s: number): void }) {
-  return (
-    <label className="speed">
-      <span>{speed}×</span><Chevron />
-      <select aria-label="Velocidad" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-        {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
-      </select>
-    </label>
+    <div className={many ? "readout many" : "readout"}>
+      <span className="readout-list">
+        {live.map(({ i, k }) => {
+          const fault = i.collapsed || (i.hz ?? 50) < 49;
+          return (
+            <span key={i.id} className="readout-item" title={i.name}>
+              <IslandSwatch k={k} fault={fault} />{!many && <>{i.name} </>}<em className={fault ? "fault" : ""}>{i.collapsed ? "apagón" : `${hz(i.hz ?? 50)} Hz`}</em>
+            </span>
+          );
+        })}
+      </span>
+      <Info tip={many ? `${live.map(({ i }) => `${i.name}: ${i.collapsed ? "apagón" : `${hz(i.hz ?? 50)} Hz`}`).join(" · ")}. ${tip}` : tip} />
+    </div>
   );
 }

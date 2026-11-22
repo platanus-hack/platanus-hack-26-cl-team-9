@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getRunSnapshots } from "../session/sessionApi";
 import type { Session } from "../session/useSession";
-import { AssistantError, deleteConversation, getConversation, MAX_MESSAGE, streamChat, type ChatGrid } from "./assistantApi";
+import { AssistantError, deleteConversation, getConversation, MAX_MESSAGE, probeAssistant, streamChat } from "./assistantApi";
 import type { StressChange } from "../cascade/edits";
 import { refreshFor } from "./labels";
 import type { SseEvent } from "./sse";
@@ -14,6 +14,8 @@ const RECOVER_MS = 3000;
 
 export interface Assistant {
   state: ChatState; busy: boolean; enabled: boolean; restoring: boolean;
+  /** Asks the server once whether the assistant is available (on opening the view); a 503 disables the chat. */
+  probe(): void;
   send(text: string): Promise<void>; reset(): Promise<void>;
 }
 
@@ -26,14 +28,15 @@ export interface Assistant {
 /** The final grid the assistant set with `prepare_scenario`; the map loads it paused. */
 export interface AssistantScenario { point: string; changes: StressChange[]; open_lines: string[]; out_buses: string[] }
 
-export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => void, getGrid?: () => AssistantScenario | null): Assistant {
+export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => void): Assistant {
   const [state, setState] = useState<ChatState>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [restoring, setRestoring] = useState(() => !!readCid());
-  const live = useRef({ state, s, busy, onScenario, getGrid });
-  live.current = { state, s, busy, onScenario, getGrid };
+  const live = useRef({ state, s, busy, onScenario });
+  live.current = { state, s, busy, onScenario };
   const abort = useRef<AbortController | null>(null);
+  const probed = useRef(false);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Rehydrate the stored conversation once; a 404 means it expired, so forget it.
@@ -82,7 +85,7 @@ export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => 
     const ctrl = new AbortController();
     abort.current = ctrl;
     try {
-      const finished = await streamChat({ message: text, conversation_id: st.conversationId ?? undefined, grid: live.current.getGrid?.() ?? undefined }, onEvent, ctrl.signal);
+      const finished = await streamChat({ message: text, conversation_id: st.conversationId ?? undefined }, onEvent, ctrl.signal);
       if (!finished) await recover();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -128,7 +131,14 @@ export function useAssistant(s: Session, onScenario: (sc: AssistantScenario) => 
     if (cid) await deleteConversation(cid).catch(() => undefined); // 404: already gone
   }, []);
 
-  return { state, busy, enabled, restoring, send, reset };
+  // Only on opening the view: a bare map makes no /api request (docs/mapa3.md section 11).
+  const probe = useCallback(() => {
+    if (probed.current) return;
+    probed.current = true;
+    void probeAssistant().then((ok) => { if (ok === false) setEnabled(false); });
+  }, []);
+
+  return { state, busy, enabled, restoring, probe, send, reset };
 }
 
 /** After `step`, fetch the snapshots of the cycles it ran and describe them in one line (the web has no run viewer). */

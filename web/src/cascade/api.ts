@@ -1,16 +1,21 @@
 import type { BusState, ComunaPeople, HealthReport, Index, Network, Timeline } from "./types";
 
 const cache = new Map<string, Promise<unknown>>();
+export const MISSING = "Faltan datos de la simulación en esta versión de la app.";
 
 function load<T>(path: string): Promise<T> {
   if (!cache.has(path)) {
-    cache.set(path, fetch(`/cache/${path}`).then(async (r) => {
-      const missing = `Falta la caché (${path}). Genera el caché con cascadasen-cache.`;
-      if (!r.ok) throw new Error(`${missing} Respuesta ${r.status}.`);
-      // Some hosts answer a missing file with the SPA index.html and a 200
-      if (!(r.headers.get("content-type") ?? "").includes("json")) throw new Error(missing);
+    const request = fetch(`/cache/${path}`).then(async (r) => {
+      // Some hosts answer a missing file with the SPA index.html and a 200. The file name goes to the console for whoever
+      // runs the app (regenerate with `cascadasen-cache`); the screen says it in plain words (D11).
+      if (!r.ok || !(r.headers.get("content-type") ?? "").includes("json")) {
+        console.warn(`cache file missing: /cache/${path} (${r.status}); regenerate it with cascadasen-cache`);
+        throw new Error(MISSING);
+      }
       return r.json();
-    }));
+    });
+    request.catch(() => cache.delete(path)); // a failed read is asked again on the next try
+    cache.set(path, request);
   }
   return cache.get(path) as Promise<T>;
 }

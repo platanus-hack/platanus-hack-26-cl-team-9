@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 /** Info icon next to a number: hover or focus shows where the number comes from (design.md section 2, "Numbers"). */
 export function Info({ tip }: { tip: string }) {
@@ -14,32 +14,75 @@ export function Info({ tip }: { tip: string }) {
  * would be cut at the panel edge; this one is fixed to the viewport.
  */
 export function TipLayer() {
-  const [tip, setTip] = useState<{ text: string; x: number; y: number; below: boolean } | null>(null);
+  const [tip, setTip] = useState<Tip | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const shown = useRef(false);
+  shown.current = !!tip;
   useEffect(() => {
     const show = (e: Event) => {
       const el = (e.target as Element | null)?.closest?.("[data-tip]");
       if (!el) return setTip(null);
       const r = el.getBoundingClientRect();
       const below = r.bottom + 120 < window.innerHeight;
-      setTip({ text: el.getAttribute("data-tip") ?? "", x: r.left + r.width / 2, y: below ? r.bottom + 6 : r.top - 6, below });
+      // A tip of the panel stays inside the panel, so it never covers the rail (E-24); others stay inside the window.
+      const box = el.closest(".panel")?.getBoundingClientRect();
+      setTip({ text: el.getAttribute("data-tip") ?? "", x: r.left + r.width / 2, y: below ? r.bottom + 6 : r.top - 6, below,
+        min: box ? box.left + 8 : 8, max: box ? box.right - 8 : window.innerWidth - 8 });
     };
     const hide = () => setTip(null);
+    // Escape dismisses a tip without moving the pointer or the focus (WCAG 1.4.13); only that Escape, nothing else closes.
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && shown.current) { e.stopPropagation(); setTip(null); } };
     document.addEventListener("pointerover", show);
     document.addEventListener("focusin", show);
     document.addEventListener("focusout", hide);
     document.addEventListener("scroll", hide, true);
+    document.addEventListener("keydown", esc, true);
     return () => {
       document.removeEventListener("pointerover", show);
       document.removeEventListener("focusin", show);
       document.removeEventListener("focusout", hide);
       document.removeEventListener("scroll", hide, true);
+      document.removeEventListener("keydown", esc, true);
     };
   }, []);
+  // Placed after it renders, when its width (at most 280 px, CSS) is known: centred on the icon, clamped to its box.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !tip) return;
+    const width = Math.min(el.offsetWidth, tip.max - tip.min);
+    el.style.maxWidth = `${Math.min(280, tip.max - tip.min)}px`;
+    el.style.left = `${Math.max(tip.min, Math.min(tip.max - width, tip.x - width / 2))}px`;
+  }, [tip]);
   if (!tip) return null;
-  const width = 260;
-  const left = Math.max(8, Math.min(window.innerWidth - width - 8, tip.x - width / 2));
-  return <div ref={ref} className="tip" role="tooltip" style={{ left, width, top: tip.y, transform: tip.below ? undefined : "translateY(-100%)" }}>{tip.text}</div>;
+  return <div ref={ref} className="tip" role="tooltip" style={{ left: tip.min, top: tip.y, transform: tip.below ? undefined : "translateY(-100%)" }}>{tip.text}</div>;
+}
+
+interface Tip { text: string; x: number; y: number; below: boolean; min: number; max: number }
+
+/**
+ * "Copiar enlace" (F-20): an icon button that copies the page URL, which mirrors the view (url.ts), and confirms with
+ * "Enlace copiado" for two seconds. The shell offers it only when the URL describes what is on screen.
+ */
+export function CopyLink() {
+  const [state, setState] = useState<"idle" | "done" | "failed">("idle");
+  useEffect(() => {
+    if (state === "idle") return;
+    const id = setTimeout(() => setState("idle"), 2000);
+    return () => clearTimeout(id);
+  }, [state]);
+  const copy = () => {
+    const done = () => setState("done"), failed = () => setState("failed");
+    try { navigator.clipboard.writeText(location.href).then(done, failed); } catch { failed(); }
+  };
+  const label = state === "done" ? "Enlace copiado" : state === "failed" ? "No se pudo copiar el enlace" : "Copiar enlace";
+  return (
+    <span className="copy-link">
+      {state !== "idle" && <span className="copy-done" role="status">{label}</span>}
+      <button className="icon-btn" aria-label={label} data-tip={state === "idle" ? "Copiar enlace a esta simulación" : undefined} onClick={copy}>
+        <Icon size={14}><path d="M6.5 9.5l3-3M7 4.5l1.2-1.2a2.5 2.5 0 0 1 3.5 3.5L10.5 8M9 11.5l-1.2 1.2a2.5 2.5 0 0 1-3.5-3.5L5.5 8" /></Icon>
+      </button>
+    </span>
+  );
 }
 
 /** `color` defaults to the muted gray; pass "currentColor" to let CSS decide (the rail's disclosure chevrons). */

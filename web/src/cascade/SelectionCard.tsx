@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type { Pick } from "./clicks";
-import { factorOf, type Edits, type Target } from "./edits";
+import { factorOf, MAX_FACTOR, parseFactor, type Edits, type Target } from "./edits";
 import type { Prepared, Supply } from "./gridsApi";
 import { loadColor } from "./layers";
 import { lineStateAt } from "./simulation";
-import { formatPeople, int, lineName, pct, placeName, zoneName } from "./text";
+import { formatPeople, int, lineName, pct, pct2, placeName, zoneName } from "./text";
 import type { BusState, Frame, NetLine, Network } from "./types";
-import { Info } from "./ui";
+import { Chevron, Info } from "./ui";
 
 interface Props {
   /** network: the reduced network on the map. buses: gen, load and people per bus at the point. frame: the cascade frame at the
@@ -22,13 +22,10 @@ interface Props {
   /** The prepared grid of the changes (POST /grids/prepare) and the supply after the last simulation, if any. */
   prepared: Prepared | null; supply: Supply | null;
   setFactor(target: Target, id: string, factor: number): void;
-  /** Show the component without switching it off or on (the Ciberataque monitor: the defence acts by area). */
-  readOnly?: boolean;
 }
 
-const MAX_FACTOR = 5; // the backend's bound (docs/stress.md)
-const PREPARED_TIP = "Valor de la red preparada con tus cambios (POST /grids/prepare), antes de cualquier falla. La demanda sube 0,389 × demanda del punto / población por persona agregada (supuesto, docs/stress.md).";
-const SUPPLY_TIP = "Personas que esta subestación debería alimentar antes de la falla y las que sigue alimentando cuando la cascada se asienta (POST /grids/simulate, reparto por flujo DC). Supuesto del modelo.";
+const PREPARED_TIP = "Valor de la red con tus cambios, antes de cualquier falla. Cada persona agregada suma 0,389 veces la demanda por persona del punto de operación: la parte de hogares y comercio (supuesto del modelo).";
+const SUPPLY_TIP = "Personas que esta subestación debería alimentar antes de la falla y las que sigue alimentando cuando la cascada se asienta, repartidas según el flujo de potencia del modelo (supuesto del modelo).";
 
 /** The value of `key` of a bus after every change of the prepared scenario, or null when no change touched it. */
 function preparedValue(prepared: Prepared | null, id: string, key: "load_mw" | "gen_mw" | "people"): number | null {
@@ -44,27 +41,36 @@ function preparedValue(prepared: Prepared | null, id: string, key: "load_mw" | "
   return out;
 }
 
-/** A factor typed in place; it applies on Enter or when the field loses focus, so each keystroke does not simulate. */
-function FactorInput({ label, value, set }: { label: string; value: number; set(f: number): void }) {
+/**
+ * A factor typed in place; it applies on Enter or when the field loses focus, so each keystroke does not simulate. A blank
+ * or out-of-range value keeps the previous factor and says why next to the field (A2-02).
+ */
+function FactorInput({ label, value, target, set }: { label: string; value: number; target: Target; set(f: number): void }) {
   const [text, setText] = useState(String(value));
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => setText(String(value)), [value]);
   const commit = () => {
-    const f = Number(text.replace(",", "."));
-    if (Number.isFinite(f) && f >= 0 && f <= MAX_FACTOR) set(f);
-    else setText(String(value));
+    const r = parseFactor(text, target);
+    if ("factor" in r) { setError(null); if (r.factor !== value) set(r.factor); }
+    else { setError(r.error); setText(String(value)); }
   };
+  const id = `factor-${target}`;
   return (
-    <label className="factor-input">
-      <span>{label}</span>
-      <span className="value-row">×<input type="number" min={0} max={MAX_FACTOR} step={0.1} value={text} aria-label={`Factor de ${label.toLowerCase()}`}
-        onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} /></span>
-    </label>
+    <>
+      <label className="factor-input">
+        <span>{label}</span>
+        <span className="value-row">×<input type="number" min={target === "lines" ? 0.01 : 0} max={MAX_FACTOR} step={0.1} value={text} aria-label={`Factor de ${label.toLowerCase()}`}
+          aria-invalid={error ? true : undefined} aria-describedby={error ? id : undefined}
+          onChange={(e) => { setText(e.target.value); setError(null); }} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} /></span>
+      </label>
+      {error && <p className="field-error" id={id} role="alert">{error} Se mantiene × {String(value).replace(".", ",")}.</p>}
+    </>
   );
 }
 
 const TOPOLOGY_TIP = (year: number | undefined) =>
-  `Red reducida del modelo Sub50 (web/public/cache/network-${year ?? "<año>"}.json): las ramas de PyPSA-CL entre las mismas dos subestaciones se fusionan en un corredor y su capacidad es la suma de sus MVA nominales.`;
-const FLOW_TIP = "Flujo DC calculado por el motor Sub50 en el segundo actual de la simulación (sin tensión ni potencia reactiva).";
+  `Red resumida del modelo Sub50${year ? ` (red de ${year})` : ""}: los circuitos del modelo PyPSA-CL entre las mismas dos subestaciones se funden en un corredor, y su capacidad es la suma de sus capacidades nominales.`;
+const FLOW_TIP = "Flujo de potencia calculado por el motor Sub50 en el segundo actual de la simulación (modelo de corriente continua: sin tensión ni potencia reactiva).";
 const STATUS_TIP = "Estado en el segundo actual según el motor Sub50: una línea sobre el 120 % de su capacidad se abre; sin tensión significa que sus dos extremos quedaron sin suministro.";
 
 /** Detail of the selected line or substation, at the top of the panel in both tabs. */
@@ -83,6 +89,7 @@ function LineCard(p: Props & { line: NetLine }) {
   const name = (id: string) => placeName(p.network.nodes.find((n) => n.id === id)?.name ?? id);
   const isCut = p.cut === line.id;
   const branches = line.branches.length; // model branches, not physical circuits: one branch can stand for several circuits
+  const capacity = factorOf(p.edits ?? { lines: [], buses: [] }, "lines", line.id);
   return (
     <div className="card selection">
       <div className="card-head">
@@ -90,24 +97,26 @@ function LineCard(p: Props & { line: NetLine }) {
         <button className="text-btn" onClick={p.clear}>Cerrar</button>
       </div>
       <div className="value-row meta">
-        <span>Línea de {Math.round(line.kv)} kV · {branches === 1 ? "1 rama del modelo" : `${branches} ramas del modelo fusionadas`}</span>
+        <span>Línea de {Math.round(line.kv)} kV · {branches === 1 ? "1 circuito del modelo" : `${branches} circuitos del modelo fundidos en uno`}</span>
         <Info tip={TOPOLOGY_TIP(p.year)} />
       </div>
       <div className="mini-figures ruled">
         <div><div className="value-row"><b>{int(line.capacity_mw)} <small>MW</small></b><Info tip={TOPOLOGY_TIP(p.year)} /></div><span>capacidad</span></div>
-        <div>
-          <div className="value-row"><b>{int(s.flowMw)} <small>MW</small></b><Info tip={FLOW_TIP} /></div>
-          <span>flujo</span>
-        </div>
-        <div>
-          <div className="value-row"><b className={s.loading > 1 ? "fault" : ""}>{pct(s.loading)}</b><Info tip={`Flujo sobre capacidad. ${FLOW_TIP}`} /></div>
-          <span className="load-bar"><span style={{ width: `${Math.min(1, s.loading) * 100}%`, background: loadColor(edge) }} /></span>
-        </div>
+        <div><div className="value-row"><b>{int(s.flowMw)} <small>MW</small></b><Info tip={FLOW_TIP} /></div><span>flujo</span></div>
+        <div><div className="value-row"><b className={s.loading > 1 ? "fault" : ""}>{pct(s.loading)}</b><Info tip={`Flujo sobre capacidad. ${FLOW_TIP}`} /></div><span>de su capacidad</span></div>
       </div>
+      {/* The load bar spans the card in its load band colour (E-22). */}
+      <span className="load-bar" role="img" aria-label={`Carga ${pct(s.loading)}`}><span style={{ width: `${Math.min(1, s.loading) * 100}%`, background: loadColor(edge) }} /></span>
       {s.flowMw > 0 && <p className="meta">Flujo de {name(s.from)} a {name(s.to)}.</p>}
       <div className="value-row status-row">
         <span>Estado: <b className={s.status === "sobrecargada" ? "fault" : ""}>{s.status}</b>{s.atLimit ? ", al límite de su capacidad" : ""}{isCut ? " (corte de este escenario)" : ""}</span>
         <Info tip={STATUS_TIP} />
+      </div>
+      <div className="actions">
+        {isCut
+          ? <button className="primary-btn" onClick={p.restore}>Volver a conectar</button>
+          : <button className="primary-btn" onClick={() => p.cutLine(line.id)}>Sacar de servicio</button>}
+        <span className="meta">{isCut ? "Vuelve al caso base en este punto de operación." : "O clic otra vez en la línea del mapa."}</span>
       </div>
       <div className="list-head"><span>Extremos</span><span>tensión</span></div>
       {[line.a, line.b].map((id) => {
@@ -119,19 +128,25 @@ function LineCard(p: Props & { line: NetLine }) {
         );
       })}
       {p.edits && (
-        <div className="edit-block">
-          <div className="list-head"><span>Modificar</span><span>factor</span></div>
-          <FactorInput label="Capacidad" value={factorOf(p.edits, "lines", line.id)} set={(f) => p.setFactor("lines", line.id, f)} />
+        <EditBlock changed={capacity !== 1}>
+          <FactorInput label="Capacidad" target="lines" value={capacity} set={(f) => p.setFactor("lines", line.id, f)} />
           <p className="meta">Multiplica la capacidad de la línea antes de cualquier falla. 1 la deja como está.</p>
-        </div>
+        </EditBlock>
       )}
-      {!p.readOnly && <div className="actions">
-        {isCut
-          ? <button className="primary-btn" onClick={p.restore}>Volver a conectar</button>
-          : <button className="primary-btn" onClick={() => p.cutLine(line.id)}>Sacar de servicio</button>}
-        <span className="meta">{isCut ? "Vuelve al caso base en este punto de operación." : "O clic otra vez en la línea del mapa."}</span>
-      </div>}
     </div>
+  );
+}
+
+/** "Modificar valores": the factor fields behind a closed disclosure, after the action (E-22, F-21); open while a factor is set. */
+function EditBlock({ changed, children }: { changed: boolean; children: React.ReactNode }) {
+  return (
+    <details className="disclosure-block edit-block" open={changed || undefined}>
+      <summary><Chevron dir="right" color="currentColor" /><span>Modificar valores</span>{changed && <span className="unit">con cambios</span>}</summary>
+      <div className="edit-fields">
+        <div className="list-head"><span>Valor</span><span>factor</span></div>
+        {children}
+      </div>
+    </details>
   );
 }
 
@@ -141,7 +156,7 @@ function NodeCard(p: Props & { node: string }) {
   const b = p.buses[n.id];
   const dark = p.frame?.dark.includes(n.id);
   const lines = p.network.lines.filter((l) => l.a === n.id || l.b === n.id);
-  const opTip = (what: string) => `${what} de la subestación en el punto de operación del motor Sub50 (web/public/cache/<punto>/buses.json).`;
+  const opTip = (what: string) => `${what} de la subestación en el punto de operación elegido, según el modelo Sub50 (despacho simulado con PyPSA-CL, no medido).`;
   return (
     <div className="card selection">
       <div className="card-head">
@@ -156,13 +171,12 @@ function NodeCard(p: Props & { node: string }) {
       </div>
       <PreparedFigures p={p} id={n.id} />
       <SupplyRow p={p} id={n.id} />
-      {p.edits && (
-        <div className="edit-block">
-          <div className="list-head"><span>Modificar</span><span>factor</span></div>
-          <FactorInput label="Personas" value={factorOf(p.edits, "population", n.id)} set={(f) => p.setFactor("population", n.id, f)} />
-          <FactorInput label="Demanda" value={factorOf(p.edits, "demand", n.id)} set={(f) => p.setFactor("demand", n.id, f)} />
-          <FactorInput label="Generación" value={factorOf(p.edits, "generation", n.id)} set={(f) => p.setFactor("generation", n.id, f)} />
-          <p className="meta">Más personas suben la demanda de hogares y comercio; la de minería e industria no cambia. La demanda también puede cambiar sola. La isla redespacha lo que falte. 1 deja el valor como está.</p>
+      {lines.length > 0 && (
+        <div className="actions">
+          {p.shutDown
+            ? <button className="primary-btn" onClick={() => p.powerOn(n.id)}>Volver a encender</button>
+            : <button className="primary-btn" onClick={() => p.shutdown(n.id)}>Apagar subestación</button>}
+          <span className="meta">{p.shutDown ? "Vuelve a operar con sus líneas." : "Sale de servicio con su demanda y su generación. O clic otra vez en la subestación del mapa."}</span>
         </div>
       )}
       <div className="list-head"><span>Líneas conectadas · {lines.length}</span><span>carga</span></div>
@@ -174,15 +188,18 @@ function NodeCard(p: Props & { node: string }) {
           </button>
         );
       })}
-      <p className="meta">Clic en una línea de la lista para ver su detalle. Carga: flujo DC del motor Sub50 en el segundo actual.</p>
-      {lines.length > 0 && !p.readOnly && (
-        <div className="actions">
-          {p.shutDown
-            ? <button className="primary-btn" onClick={() => p.powerOn(n.id)}>Volver a encender</button>
-            : <button className="primary-btn" onClick={() => p.shutdown(n.id)}>Apagar subestación</button>}
-          <span className="meta">{p.shutDown ? "Vuelve a operar con sus líneas." : "Sale de servicio con su demanda y su generación. O clic otra vez en la subestación del mapa."}</span>
-        </div>
-      )}
+      <p className="meta">Clic en una línea de la lista para ver su detalle. Carga: flujo del motor Sub50 en el segundo actual.</p>
+      {p.edits && (() => {
+        const f = { population: factorOf(p.edits, "population", n.id), demand: factorOf(p.edits, "demand", n.id), generation: factorOf(p.edits, "generation", n.id) };
+        return (
+          <EditBlock changed={f.population !== 1 || f.demand !== 1 || f.generation !== 1}>
+            <FactorInput label="Personas" target="population" value={f.population} set={(x) => p.setFactor("population", n.id, x)} />
+            <FactorInput label="Demanda" target="demand" value={f.demand} set={(x) => p.setFactor("demand", n.id, x)} />
+            <FactorInput label="Generación" target="generation" value={f.generation} set={(x) => p.setFactor("generation", n.id, x)} />
+            <p className="meta">Más personas suben la demanda de hogares y comercio; la de minería e industria no cambia. La demanda también puede cambiar sola. La isla redespacha lo que falte. 1 deja el valor como está.</p>
+          </EditBlock>
+        );
+      })()}
     </div>
   );
 }
@@ -208,7 +225,7 @@ function SupplyRow({ p, id }: { p: Props; id: string }) {
   if (!row) return null;
   return (
     <div className="value-row status-row">
-      <span>Debería alimentar a <b>{formatPeople(row.should_feed)}</b> personas y alimenta a <b className={row.pct_fed < 100 ? "fault" : ""}>{formatPeople(row.feeds)}</b> ({row.pct_fed.toFixed(2)} %).</span>
+      <span>Debería alimentar a <b>{formatPeople(row.should_feed)}</b> personas y alimenta a <b className={row.pct_fed < 100 ? "fault" : ""}>{formatPeople(row.feeds)}</b> ({pct2(row.pct_fed)}).</span>
       <Info tip={SUPPLY_TIP} />
     </div>
   );

@@ -1,5 +1,5 @@
 import type { Prepared } from "../cascade/gridsApi";
-import { EventHealth, PrefaultHealth } from "../cascade/SimulationPanel";
+import { EndOfRun, PrefaultHealth } from "../cascade/SimulationPanel";
 import { formatPeople, int } from "../cascade/text";
 import type { HealthReport, Timeline } from "../cascade/types";
 
@@ -26,7 +26,7 @@ export function GridHealth({ prepared, timeline, failures, base }: {
         {cascade && <div><div className="value-row"><b>{int(cascade.summary.load_shed_mw)} MW</b></div><span>carga perdida</span></div>}
         {cascade && <div><div className="value-row"><b>{cascade.summary.lines_opened.length}</b></div><span>líneas que salieron</span></div>}
       </div>
-      {cascade?.health && <EventHealth timeline={cascade} />}
+      {cascade?.health && <EndOfRun timeline={cascade} />}
       {health && <PrefaultHealth health={health} />}
       {!cascade && !prepared && !base && <p className="meta">Aún no hay datos de salud para esta red.</p>}
     </div>

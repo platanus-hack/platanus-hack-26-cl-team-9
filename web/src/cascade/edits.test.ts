@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addBus, addLine, countEdits, dropBus, dropLine, editKey, fromCache, loadEdits, NO_EDITS, saveEdits } from "./edits";
+import { addBus, addLine, countEdits, dropBus, dropLine, editKey, fromCache, loadEdits, NO_EDITS, parseFactor, saveEdits, startEdits } from "./edits";
 
 describe("edits", () => {
   it("keeps every change, not only the last one", () => {
@@ -50,5 +50,32 @@ describe("saved changes", () => {
     expect(loadEdits(store)).toEqual(NO_EDITS);
     store.setItem("sub50.edits.v1", JSON.stringify({ lines: ["R1", 3], buses: "x" }));
     expect(loadEdits(store)).toEqual({ lines: ["R1"], buses: [] });
+  });
+});
+
+describe("start of the page (F-14)", () => {
+  const stored = { lines: ["R001", "R002"], buses: ["B010"] };
+  it("starts clean without a cut in the URL and offers the saved changes", () => {
+    expect(startEdits(null, stored)).toEqual({ edits: NO_EDITS, restorable: stored });
+    expect(startEdits(null, NO_EDITS)).toEqual({ edits: NO_EDITS, restorable: null });
+  });
+  it("takes the link's line or substation as the only change", () => {
+    expect(startEdits("R239", stored)).toEqual({ edits: { lines: ["R239"], buses: [] }, restorable: null });
+    expect(startEdits("sub-B012", stored)).toEqual({ edits: { lines: [], buses: ["B012"] }, restorable: null });
+  });
+});
+
+describe("card factors (A2-02)", () => {
+  it("never reads a blank field as 0", () => {
+    expect(parseFactor("", "lines")).toHaveProperty("error");
+    expect(parseFactor("  ", "population")).toHaveProperty("error");
+    expect(parseFactor("abc", "demand")).toHaveProperty("error");
+  });
+  it("keeps the backend's bounds: over 0 for a line's capacity, 0 to 5 otherwise", () => {
+    expect(parseFactor("0", "lines")).toEqual({ error: "Escribe un número mayor que 0 y hasta 5." });
+    expect(parseFactor("0", "generation")).toEqual({ factor: 0 });
+    expect(parseFactor("5,5", "demand")).toEqual({ error: "Escribe un número entre 0 y 5." });
+    expect(parseFactor("-1", "population")).toHaveProperty("error");
+    expect(parseFactor("1,5", "lines")).toEqual({ factor: 1.5 });
   });
 });
