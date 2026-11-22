@@ -344,6 +344,9 @@ def prepare_digest(out: dict[str, Any]) -> dict[str, Any]:
         "changes": changes,
         "totals": out["totals"],
         "overloaded_lines": len(out["overloaded_lines"]),
+        # a model said "8 líneas sobrecargadas, las mismas que en la base" when the base had 1
+        "overloaded_lines_note": "Líneas sobre su límite en la red preparada, sin falla. El resultado no dice cuántas "
+        "había sin estos cambios: no las compares con la red base.",
         "should_feed_by_zone": out["should_feed"]["by_zone"],
         "per_capita_w": out["per_capita_w"],
         "assumptions": [a["text"] for a in out["assumptions"]],
