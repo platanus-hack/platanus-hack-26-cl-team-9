@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): el asistente muestra un spinner y colapsa los pasos de herramientas (#126)
+
+- **Changed:** `AssistantTurnView` (exportado) muestra solo "Pensando…" con spinner mientras el turno está en curso. Al terminar muestra la respuesta y los pasos (textos y tarjetas) dentro de un `<details>` cerrado "Detalles del trabajo (N herramientas)".
+- **Why:** el panel mostraba un mensaje por cada paso del modelo; el usuario quiere un spinner nada más.
+- **Agents:** el stream SSE no cambia: `steps.ts` sigue acumulando los pasos y el mapa se sigue refrescando. Test nuevo en `AssistantPanel.test.tsx`.
+- **Files:** `web/src/assistant/AssistantPanel.tsx`, `web/src/assistant/AssistantPanel.test.tsx`, `docs/assistant.md`.
+
 ## 2026-11-22 · feat(assistant): quita las reglas de uso dual, deja solo la de tema
 
 - **Changed:** the assistant's system prompt no longer forbids searching or comparing the worst case; its only strong rule is topic (the network and how to test it, nothing else). The MCP `INSTRUCTIONS` and two tool docstrings drop "do not rank / compare" and "never the attack technique". `docs/assistant.md` section 4 records the decision.

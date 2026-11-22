@@ -66,12 +66,13 @@ export function AssistantPanel({ a }: { a: Assistant }) {
   );
 }
 
-function AssistantTurnView({ turn, last, busy, onContinue }: { turn: AssistantTurn; last: boolean; busy: boolean; onContinue(): void }) {
+export function AssistantTurnView({ turn, last, busy, onContinue }: { turn: AssistantTurn; last: boolean; busy: boolean; onContinue(): void }) {
   const truncated = truncatedText(turn.truncated);
+  const streaming = turn.status === "streaming";
+  const tools = turn.steps.reduce((n, s) => n + s.items.filter((i) => i.kind === "tool").length, 0);
   return (
     <div className="chat-turn" aria-live={last ? "polite" : undefined}>
-      {turn.steps.map((s) => <StepView key={s.step} step={s} />)}
-      {turn.status === "streaming" && <p className="meta chat-wait"><span className="spinner" aria-hidden />{turn.steps.length ? "Pensando el siguiente paso…" : "Leyendo tu mensaje…"}</p>}
+      {streaming && <p className="meta chat-wait"><span className="spinner" aria-hidden />Pensando…</p>}
       {turn.reply && <Markdown className="chat-reply" text={turn.reply} />}
       {turn.notice && <div className="notice"><span>{turn.notice}</span></div>}
       {truncated && (
@@ -79,6 +80,12 @@ function AssistantTurnView({ turn, last, busy, onContinue }: { turn: AssistantTu
       )}
       {turn.status === "error" && turn.error && <p className="note">{errorMessage(turn.error.status, typeof turn.error.detail === "number" ? turn.error.detail : null)}</p>}
       {turn.status === "interrupted" && <p className="note">Se cortó la conexión antes de terminar. El servidor termina el mensaje y lo guarda: se intenta recuperar la respuesta.</p>}
+      {!streaming && turn.steps.length > 0 && (
+        <details className="chat-restored">
+          <summary>Detalles del trabajo ({tools} {tools === 1 ? "herramienta" : "herramientas"})</summary>
+          {turn.steps.map((s) => <StepView key={s.step} step={s} />)}
+        </details>
+      )}
     </div>
   );
 }
