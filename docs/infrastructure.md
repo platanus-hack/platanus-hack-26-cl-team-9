@@ -82,6 +82,10 @@ Pushing `.github/workflows/*` needs a GitHub token with the `workflow` scope (`g
 ## Mapbox token
 The web image needs `VITE_MAPBOX_TOKEN` at build time (Vite inlines it). `deploy.sh` passes it as a build argument. The value is a public `pk.*` token with a default in `deploy.sh`; export `VITE_MAPBOX_TOKEN` to override it.
 
+## www subdomain
+
+`www.sub50.cl` serves the same site as the apex. Applied by hand on 2026-11-22: CloudFront `E1OAZRNNNTLPXE` got the alias `www.sub50.cl`, and the zone got `www` A and AAAA aliases to `d2bc0ohphbh56u.cloudfront.net`. The ACM certificate already covers `*.sub50.cl`. `cloudfront.tf` and `route53.tf` (`aws_route53_record.www`) hold the same change. Before the next `terraform apply`, import the records: `terraform import 'aws_route53_record.www["A"]' Z06674952Y03E6KTIVEQ3_www.sub50.cl_A` (same for `AAAA`). There is no redirect from www to the apex; both answer 200.
+
 ## Backlog
 No issue numbers yet: `scripts/issue.sh` does not exist in the repo and the fork has issues disabled. Create these in the team tracker:
 - HTTPS between CloudFront and the ALB: an `alb.sub50.cl` record pointing to the ALB, CloudFront origin set to that name, and `origin_https = true`.

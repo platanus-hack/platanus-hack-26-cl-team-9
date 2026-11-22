@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · ops(infra): serve www.sub50.cl next to the apex (#101)
+
+- **Changed:** CloudFront alias `www.sub50.cl` and Route 53 `www` A and AAAA aliases to the distribution, applied by hand with the AWS CLI. `cloudfront.tf` and `route53.tf` have the same change.
+- **Why:** `www.sub50.cl` had no DNS record, so the browser said "This site can't be reached".
+- **Agents:** verified `https://www.sub50.cl/` and `/api/v1/health` answer 200 with a valid certificate. Import the www records before the next `terraform apply` (`docs/infrastructure.md`, "www subdomain").
+- **Files:** `infrastructure/cloudfront.tf`, `infrastructure/route53.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-22 · Merge origin/main (#101, #102) into feature/90-cascada-tiempos
 
 - **Changed:** Integrates the in-place component editing, the prepared scenarios on the map and the context layers of main with issue #90. Conflicts only in `CascadeApp.tsx` (the `live` ref and the `setLayers` call) and this file. Both sides were kept: `warp`, `recent` and the pulse from #90, `pointId`, `changes` and `contextLayers` from main. The context layers are drawn under the cascade layers.
