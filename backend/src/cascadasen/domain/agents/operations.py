@@ -8,6 +8,7 @@ from cascadasen.domain.theater.catalog import Role
 from cascadasen.domain.theater.decisions import COA
 
 OPS = Role.OPS.value
+RESEGMENT_AFTER = 6  # cycles (30 min): a clean-up that did not hold is tried again
 
 
 class OperationsAgent:
@@ -17,7 +18,7 @@ class OperationsAgent:
         self.net = network
         self.verified: dict[str, int] = {}
         self.no_ack: set[str] = set()
-        self.contained: set[str] = set()  # areas already segmented to contain an intrusion
+        self.contained: dict[str, int] = {}  # area -> cycle it was last segmented to contain an intrusion
 
     def propose(self, view: AgentView) -> list[COA]:
         isr, policy, obs = view.isr, view.policy, view.observed
@@ -50,12 +51,14 @@ class OperationsAgent:
                 o.comms in ("backup", "down") or (a, "comms_lost") in alarms
             )  # backup comms: still not trusted
             if f"digital_segmentation:{a}" in active:
-                self.contained.add(a)  # segmentation in force: next time, repair instead
+                self.contained[a] = view.cycle  # segmentation in force: next time, repair instead
             if view.containment and comms_lost:
-                if a not in self.contained:  # first isolate, then send a crew to repair what is left
+                # isolate first, then repair; isolate again if supervision is still lost RESEGMENT_AFTER cycles later
+                if view.cycle - self.contained.get(a, -99) >= RESEGMENT_AFTER:
                     add("digital_segmentation", a, "ops_contain_intrusion", 0.9, 0.3)
-                elif f"digital_segmentation:{a}" not in active:  # local control lets the repair go ahead
-                    add("manual_operation", a, "ops_take_local_control", 0.85, 0.1)
+                elif (
+                    f"digital_segmentation:{a}" not in active
+                ):  # segmentation gave remote control back: repair
                     add("restore_element", a, "ops_repair_after_containment", 0.9)
             if policy.preventive and suspicion >= 0.3:
                 add("digital_segmentation", a, "ops_preventive_isolation", 0.5, 0.3)

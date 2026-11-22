@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any
 
 from cascadasen.domain.ports import ToolCall, ToolSpec
@@ -23,6 +22,7 @@ EXCLUDED = frozenset(
         "join_session",
         "add_datacenter",
         "add_generator",
+        "add_substation",
         "add_line",
         "add_bus",
         "edit_element",
@@ -36,38 +36,11 @@ EXCLUDED = frozenset(
 NO_SESSION_NEEDED = frozenset({"start_session", "join_session", "list_options", "prepare_scenario"})
 NEEDS_RUN = frozenset({"inject_event", "submit_action"})  # a run is opened for them when none is active
 MAX_STEP_CYCLES = 24  # a step of many cycles can outlast the request deadline
-USER_SIZED = frozenset({"add_datacenter", "add_generator"})  # their MW must come from the user
-SUBSTATION_MW = ("load_mw", "generator_mw")  # add_substation: these MW, and each capacity_mw, too
-SIZED_TARGETS = frozenset({"demand", "generation", "population"})  # prepare_scenario `add` from the user too
-
-
-def numbers(text: str) -> set[float]:
-    """Numbers the user wrote: "120", "1.200" or "1,5" (Spanish separators), "0.5"."""
-    found = set()
-    for raw in re.findall(r"\d+(?:[.,]\d+)*", text):
-        if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", raw):  # 1.200 -> 1200
-            raw = raw.replace(".", "")
-        try:
-            found.add(float(raw.replace(",", ".")))
-        except ValueError:
-            continue
-    return found
-
-
-def stated(mw: Any, said: str) -> bool:
-    """`mw` (or its value in GW) appears among the numbers the user wrote."""
-    try:
-        value = float(mw)
-    except (TypeError, ValueError):
-        return False
-    return any(abs(value - n) < 1e-6 or abs(value - n * 1000) < 1e-6 for n in numbers(said))
 
 
 class SessionTools:
-    def __init__(
-        self, tools: Sub50Tools, exclude: frozenset[str] = EXCLUDED, said: str | None = None
-    ) -> None:
-        self.tools, self.exclude, self.said = tools, exclude, said
+    def __init__(self, tools: Sub50Tools, exclude: frozenset[str] = EXCLUDED) -> None:
+        self.tools, self.exclude = tools, exclude
         self._specs = tool_specs(tools, exclude)
         self.names = {s.name for s in self._specs}
 
@@ -84,30 +57,6 @@ class SessionTools:
                 "point": DEFAULT_POINT,
                 "nota": "No hace falta abrir una sesión: prepare_scenario no la usa y la sesión se abre sola "
                 "cuando una herramienta la necesita.",
-            }
-        if call.name in USER_SIZED and self.said is not None and not stated(args.get("mw"), self.said):
-            return False, {
-                "error": f"El usuario no indicó {args.get('mw')} MW. No elijas la potencia: pregúntale "
-                "cuántos MW quiere y espera su respuesta."
-            }
-        if call.name == "add_substation" and self.said is not None:
-            values = [args.get(k) for k in SUBSTATION_MW if args.get(k)]
-            values += [
-                c.get("capacity_mw")
-                for c in args.get("connections") or []
-                if isinstance(c, dict) and c.get("capacity_mw")
-            ]
-            wrong = [v for v in values if not stated(v, self.said)]
-            if wrong:
-                return False, {
-                    "error": f"El usuario no indicó {', '.join(f'{v:g}' for v in wrong)} MW. No elijas la potencia: "
-                    "propón la subestación y pregunta antes de crearla."
-                }
-        invented = self.invented_adds(call.name, args)
-        if invented is not None:
-            return False, {
-                "error": f"El usuario no indicó {invented}. No elijas la cantidad: pregúntale cuánto quiere "
-                "y espera su respuesta."
             }
         if call.name == "step" and isinstance(args.get("cycles"), int):
             args["cycles"] = min(args["cycles"], MAX_STEP_CYCLES)
@@ -133,19 +82,6 @@ class SessionTools:
         except Exception as exc:
             log.warning("assistant tool %s failed (%s)", call.name, type(exc).__name__)
             return False, {"error": f"Falló la herramienta {call.name}."}
-
-    def invented_adds(self, name: str, args: dict[str, Any]) -> str | None:
-        """An `add` of prepare_scenario that the user never wrote ("agrega un datacenter en Calama" with no MW),
-        said as "120 MW", or None. Factors are not checked: "a la mitad" is 0.5 and nobody types it."""
-        if name != "prepare_scenario" or self.said is None:
-            return None
-        for change in args.get("changes") or []:
-            if not isinstance(change, dict) or change.get("target") not in SIZED_TARGETS:
-                continue
-            add = change.get("add")
-            if add is not None and not stated(abs(add) if isinstance(add, int | float) else add, self.said):
-                return f"{add} {'personas' if change['target'] == 'population' else 'MW'}"
-        return None
 
     def defers_session(self, name: str, args: dict[str, Any]) -> bool:
         """A first start_session at the default point waits: the model opened one before every map change, which

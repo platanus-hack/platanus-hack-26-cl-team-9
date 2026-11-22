@@ -26,7 +26,7 @@ describe("syncedSearch", () => {
     expect(syncedSearch("?mapa=3", base)).toBe("?mapa=3");
   });
   it("normalises an explicit default point away", () => {
-    expect(syncedSearch("?point=nov2026-1300", base)).toBe("");
+    expect(syncedSearch(`?point=${DEFAULT_POINT}`, base)).toBe("");
   });
   it("writes a network other than Chile's, and drops ?pais=CHL", () => {
     expect(syncedSearch("", { ...base, country: "PER" })).toBe("?pais=PER");

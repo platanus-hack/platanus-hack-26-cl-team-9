@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventText, frames, invalidFields, runBody, shown, stored, type CyberCatalog } from "./cyber";
+import { actionText, activePreset, cycleClock, cycleMarks, eventText, healthRows, frames, invalidFields, runBody, scoreboard, shown, statusOf, stored, type CyberCatalog, type CyberFrame } from "./cyber";
 
 const cat: CyberCatalog = {
   template: "ciberataque", defaults: { spread_p: 0.45, strike_delay: 2 }, bounds: { spread_p: [0, 1], strike_delay: [0, 12] },
@@ -24,7 +24,9 @@ describe("cyber", () => {
 
   it("keeps only snapshots with a cyber block", () => {
     const cyber = { areas: {}, counts: { clean: 1, compromised: 0, struck: 0, eradicated: 0 }, outcome: null, lost_share: 0, people_without_power: 0, crews_busy: 0, events: [] };
-    expect(frames([{ cycle: 0, t_min: 0 }, { cycle: 1, t_min: 5, cyber }])).toEqual([{ ...cyber, cycle: 1, t_min: 5, transient: null }]);
+    expect(frames([{ cycle: 0, t_min: 0 }, { cycle: 1, t_min: 5, cyber }])).toEqual([{ ...cyber, cycle: 1, t_min: 5, transient: null, grid: null, metrics: null }]);
+    const grid = { edges: { R1: { flow_mw: 10, status: "open", loading: 0 } }, dark: ["B1"], islands: [] };
+    expect(frames([{ cycle: 2, t_min: 10, cyber, grid } as never])[0].grid).toEqual({ t: 0, ...grid });
   });
 
   it("writes events in Spanish with area names", () => {
@@ -37,5 +39,50 @@ describe("cyber", () => {
     expect(shown("prob", 0.45)).toBe(45);
     expect(stored("prob", 45)).toBe(0.45);
     expect(shown("ciclos", 3)).toBe(3);
+  });
+
+  it("lets the user defend by hand with manual_defense", () => {
+    const body = runBody(cat, { ...cat.defaults }, "user", 9, null);
+    expect(body).toMatchObject({ manual_defense: true, llm_commander: false, policy: "C" });
+    expect(runBody(cat, { ...cat.defaults }, "B", 9, null)).toMatchObject({ manual_defense: false, policy: "B" });
+  });
+
+  it("reads each area's side and the two counters", () => {
+    const f = {
+      cycle: 3, t_min: 15, areas: { A01: "struck", A02: "compromised", A03: "clean", A04: "eradicated", A05: "clean" },
+      counts: { clean: 2, compromised: 1, struck: 1, eradicated: 1 }, outcome: null, lost_share: 0.1, people_without_power: 250000,
+      crews_busy: 2, events: [], transient: null, dark: ["A03"], segmented: ["A05"],
+    } as unknown as CyberFrame;
+    expect(["A01", "A02", "A03", "A04", "A05"].map((id) => statusOf(f, id))).toEqual(["struck", "compromised", "dark", "recovered", "shielded"]);
+    expect(statusOf(f, "A02", true)).toBe("clean"); // a latent intrusion is hidden from a user defending
+    expect(statusOf({ ...f, segmented: ["A01"] }, "A01")).toBe("compromised"); // hit and segmented: both sides on it
+    const areas = ["A01", "A02", "A03", "A04", "A05"].map((id, i) => ({ id, name: id, zone: "NG", population: (i + 1) * 100000, lon: 0, lat: 0 }));
+    expect(scoreboard(f, areas)).toEqual({ attackAreas: 2, disputed: 1, peopleOut: 250000, defenseAreas: 2, protectedPeople: 900000 });
+  });
+
+  it("says why a defence action failed", () => {
+    expect(actionText({ action: "restore_element", target: "A01", ok: false, verdict: "no_crew_in_range" }, (x) => x)).toMatch(/ninguna cuadrilla/);
+    expect(actionText({ action: "digital_segmentation", target: "A01", ok: true }, (x) => x)).toBe("La defensa segmenta A01.");
+  });
+
+  it("finds the preset the form holds, and none after a manual edit", () => {
+    const withPresets = { ...cat, presets: [{ id: "facil", label: "Fácil", params: { spread_p: 0.35 } }] };
+    expect(activePreset(withPresets, { spread_p: 0.35, strike_delay: 2 })?.id).toBe("facil");
+    expect(activePreset(withPresets, { spread_p: 0.4, strike_delay: 2 })).toBeNull();
+  });
+
+  it("drives the bottom card: clock, rail marks and network health of a cycle", () => {
+    expect(cycleClock(0)).toBe("13:00");
+    expect(cycleClock(65)).toBe("14:05");
+    const base = { areas: {}, counts: { clean: 0, compromised: 0, struck: 0, eradicated: 0 }, outcome: null, lost_share: 0.25, people_without_power: 0, crews_busy: 0, transient: null, metrics: null };
+    const frames = [
+      { ...base, cycle: 2, t_min: 10, events: [{ cycle: 2, kind: "struck" as const, area: "A01" }], grid: null },
+      { ...base, cycle: 4, t_min: 20, events: [{ cycle: 4, kind: "eradicated" as const, area: "A01" }], grid: null },
+    ] as unknown as CyberFrame[];
+    expect(cycleMarks(frames, (x) => x, false).map((m) => [m.cycle, m.side])).toEqual([[2, "attack"], [4, "defense"]]);
+    expect(cycleMarks(frames, (x) => x, true).map((m) => m.side)).toEqual(["attack"]); // a user does not see clean-ups ahead
+    const grid = { t: 0, dark: ["B1", "B2"], islands: [{ buses: 3, gen_mw: 1, load_mw: 1 }], edges: { R1: { flow_mw: 0, status: "open", loading: 0 }, R2: { flow_mw: 9, status: "overload", loading: 1.2 } } };
+    const rows = Object.fromEntries(healthRows({ ...frames[0], grid } as unknown as CyberFrame).map((r) => [r.label, r.value]));
+    expect(rows).toMatchObject({ "Demanda servida": "75 %", "Subestaciones sin luz": "2", "Líneas abiertas": "1", "Líneas sobrecargadas": "1", Islas: "1" });
   });
 });

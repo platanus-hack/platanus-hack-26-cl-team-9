@@ -48,7 +48,7 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
 }
 TOOLS = tuple(OPERATIONS)
 
-INSTRUCTIONS = """\
+WORKFLOW = """\
 Sub50 simulates the consequences of events on the Chilean national grid (188 buses, 13 operating areas).
 Work in this order: start_session (or join_session), describe_network to learn areas and ids, edit the
 network (add_datacenter, add_generator, add_line, edit_element) and/or open lines with cut_lines, then
@@ -62,11 +62,15 @@ lines out and substations off). Each call sets the whole final grid, replacing w
 the earlier changes the user still wants; with failures it also simulates the cascade and the map gets it ready,
 paused at 0.
 
+"""
+
+RULES = """\
 Rules. Every scenario is hypothetical: Sub50 models the effect of an event. You may compare cases and
 look for the lines or areas whose loss does the most damage when the user asks to stress the network; the
 API rate-limits cuts, so choose the cases with care. Values the model adds (redispatch, costs, thresholds) are assumptions; say so.
 Answer in the user's language; the results are in Spanish.
 """
+INSTRUCTIONS = WORKFLOW + RULES
 
 DEFAULT_POINT = "nov2026-1300"
 ELEMENT_ROUTES = {"B": "buses", "R": "lines", "U": "lines", "D": "loads", "G": "generators"}
@@ -172,7 +176,7 @@ class Sub50Tools:
     # -- network edits -----------------------------------------------------------------------
 
     def add_datacenter(self, bus: str, mw: float, name: str = "Datacenter") -> dict[str, Any]:
-        """Add a datacenter (a load) of `mw` megawatts; ask the user for `mw` if they did not give it.
+        """Add a datacenter (a load) of `mw` megawatts; if the user gave no `mw`, size it from the network data and say it is your assumption.
         `bus` is the place as the user wrote it (a city or comuna such as "Iquique", a substation name, an
         area, or a bus id B010); the tool resolves it to the substation that serves that place, so never
         guess an id and never ask the user for a specific bus. The result says where it went (bus, bus
@@ -188,7 +192,7 @@ class Sub50Tools:
         return {**place, **digest.edit_digest(resp), **self._after_edit(before)}
 
     def add_generator(self, bus: str, mw: float, tech: str, name: str | None = None) -> dict[str, Any]:
-        """Add a generator of `mw` megawatts; ask the user for `mw` if they did not give it. `bus` resolves
+        """Add a generator of `mw` megawatts; if the user gave no `mw`, size it from the network data and say it is your assumption. `bus` resolves
         like add_datacenter (a city is enough, never ask for a specific bus). `tech`: solar, eolica,
         hidro, termica, bioenergia, geotermica (the last four are synchronous); common names such as
         "eólica", "fotovoltaica" or "nuclear" (modelled as termica, an assumption) are accepted."""
@@ -234,8 +238,9 @@ class Sub50Tools:
         generator_mw: float | None = None,
         generator_tech: str | None = None,
     ) -> dict[str, Any]:
-        """Add a substation (a new bus) with 1 to 6 lines, all or nothing. Propose it to the user first
-        (place, kv, which buses it connects to, MW) and call only after they agree; never invent MW.
+        """Add a substation (a new bus) with 1 to 6 lines, all or nothing. Choose the place, kv, buses and MW
+        yourself from the network data when the user did not give them (they asked for your help), create it, and
+        tell the user what you chose and that the MW are your assumption.
         `kv` is a base voltage (66, 110, 154, 220, 500) and every connected bus must have that voltage.
         `connections`: [{"to": place or bus id, "capacity_mw": optional}], `to` resolves like add_datacenter;
         without `capacity_mw` the line takes the typical value of its neighbours. `load_mw` adds demand
@@ -247,7 +252,7 @@ class Sub50Tools:
         conns = []
         for c in connections:
             conn = {
-                "to": digest.resolve_bus(net, c.get("to", "")),
+                "to": digest.resolve_bus(net, c.get("to", ""), self.client)[0],
                 **{k: c[k] for k in ("capacity_mw", "x_pu") if c.get(k)},
             }
             conns.append(conn)
@@ -480,7 +485,11 @@ class Sub50Tools:
         bioenergia, geotermica, termica, bateria), lines R###, kv. Put a point: a datacenter of 120 MW in
         Antofagasta is {"target": "demand", "places": ["Antofagasta"], "add": 120}; a solar plant of 80 MW
         in Iquique is {"target": "generation", "places": ["Iquique"], "tech": ["solar"], "add": 80} (a
-        battery is tech bateria; nuclear is modelled as termica). Each change's `places` says which
+        battery is tech bateria; nuclear is modelled as termica). A new substation with its own lines (new
+        capacity or a new path in the grid) is {"target": "substation", "places": ["Vallenar"], "name": "S/E Solar
+        Vallenar", "generator_mw": 120, "tech": ["solar"]} (or `load_mw`): it is built next to the substation that
+        serves the place, at its voltage, linked to it and to the nearest one of that voltage; the result says its
+        id (`created`). At most 5 per scenario. Each change's `places` says which
         substation the place became: tell the user. Failures: `open_lines` (R###) and `out_buses` (B###).
         With failures it also simulates the cascade: people without power against the same failures
         without the changes, and per zone the people the generators should feed against the people they

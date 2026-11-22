@@ -27,11 +27,16 @@ from cascadasen.domain.cascade.frequency import cascade_params
 from cascadasen.domain.cascade.overlay import BALANCE_RULE, DEFAULT_INERTIA_H, MAX_INERTIA_H
 from cascadasen.domain.cascade.scenario import OperatingPoint, _nearest_bus_per_node
 from cascadasen.domain.cascade.tracing import dependency_workflow
+from cascadasen.domain.geo import haversine_km
 from cascadasen.domain.simulation.params import value
+from cascadasen.domain.theater.areas import bus_id
 
 MAX_CHANGES = 20
 MAX_FACTOR = 5.0
-TARGETS = ("population", "demand", "generation", "lines")
+TARGETS = ("population", "demand", "generation", "lines", "substation")
+MAX_SUBSTATIONS = 5
+SUBSTATION_OFFSET_DEG = 0.03  # ~3 km: a new substation sits next to the one that serves its place
+MAX_NEIGHBOUR_KM = 150.0
 # PyPSA-CL carriers of the dispatch (baseline_opf.json) to the plant technologies of the snapshot.
 CARRIER_TECH = {
     "solar PV": "solar",
@@ -105,7 +110,8 @@ def supply_workflow(world, point: str, prepared, edited, state) -> dict:
         )
     }
     rows = [
-        _source_row(ctx, r["bus"], r["people_fed"], feeds.get(r["bus"], 0), before, state.gen) for r in should
+        _source_row(ctx, prepared.net, r["bus"], r["people_fed"], feeds.get(r["bus"], 0), before, state.gen)
+        for r in should
     ]
     rows.sort(key=lambda r: r["id"])
     return {"sources": rows, "by_zone": _by_zone(rows)}
@@ -265,9 +271,18 @@ def _apply_changes(ctx: _Context, changes: list[dict], detail: bool = False) -> 
     _check_changes(changes)
     op = ctx.op
     edit = _Edit(op.people.copy(), op.load.copy(), op.gen.copy(), op.sync_mw.copy(), op.inertia_mws.copy())
+    new_substations = 0
     for k, raw in enumerate(changes):
         apply = {"population": _population, "demand": _demand, "generation": _generation, "lines": _lines}
         change, places = _resolve_places(ctx, raw, f"changes[{k}]")
+        if change["target"] == "substation":
+            entry = _substation_entry(
+                _substation_spec(ctx, raw, f"changes[{k}]"), len(ctx.names) + new_substations
+            )
+            new_substations += 1
+            entry["places"] = places
+            edit.report.append({"target": "substation", **entry})
+            continue
         entry = apply[change["target"]](ctx, edit, change, f"changes[{k}]")
         if places:
             entry["places"] = places
@@ -297,6 +312,71 @@ def _check_changes(changes: list[dict]) -> None:
         raise GridError("invalid", "Indica al menos un cambio")
     if len(changes) > MAX_CHANGES:
         raise GridError("invalid", f"Máximo {MAX_CHANGES} cambios por request")
+    if sum(c.get("target") == "substation" for c in changes) > MAX_SUBSTATIONS:
+        raise GridError("invalid", f"Máximo {MAX_SUBSTATIONS} subestaciones nuevas por escenario")
+
+
+def substation_specs(world, point: str, changes: list[dict]) -> list[dict]:
+    """The overlay spec (`overlay.add_substation`) of each `substation` change, in order. Why: the stateless
+    scenario path builds new substations from the same `changes` the web resends, so the map, the simulation and
+    the assistant see one grid (docs/assistant.md)."""
+    ctx = _context(world, point)
+    return [
+        _substation_spec(ctx, c, f"changes[{k}]")
+        for k, c in enumerate(changes)
+        if c.get("target") == "substation"
+    ]
+
+
+def _substation_spec(ctx: _Context, change: dict, where: str) -> dict:
+    """A new substation next to the one that serves `places[0]`, at its voltage, linked to it and to the nearest
+    other substation of that voltage (two paths: assumption, a single link would make it a dead end)."""
+    try:
+        anchor = int(resolve_place(ctx, change["places"][0])["bus"][1:])
+    except GridError as exc:
+        raise GridError(exc.kind, f"{where}: {exc}") from exc
+    buses, kv = ctx.net.buses, float(ctx.net.buses.kv[anchor])
+    near = sorted(
+        (
+            haversine_km(buses.lon[anchor], buses.lat[anchor], buses.lon[j], buses.lat[j]),
+            j,
+        )
+        for j in range(buses.size)
+        if j != anchor and abs(float(buses.kv[j]) - kv) < 1e-6
+    )
+    targets = [anchor] + [j for km, j in near[:1] if km <= MAX_NEIGHBOUR_KM]
+    name = change.get("name") or f"S/E NUEVA {ctx.names[anchor].removeprefix('S/E ')}"
+    spec: dict[str, Any] = {
+        "name": name,
+        "lat": change["lat"]
+        if change.get("lat") is not None
+        else float(buses.lat[anchor]) + SUBSTATION_OFFSET_DEG,
+        "lon": change["lon"]
+        if change.get("lon") is not None
+        else float(buses.lon[anchor]) + SUBSTATION_OFFSET_DEG,
+        "kv": kv,
+        "connections": [{"to": bus_id(j)} for j in targets],
+    }
+    if change.get("load_mw"):
+        spec["load"] = {"mw": change["load_mw"], "kind": "consumo"}
+    if change.get("generator_mw"):
+        spec["generator"] = {"mw": change["generator_mw"], "tech": change["tech"][0]}
+    return spec
+
+
+def _substation_entry(spec: dict, index: int) -> dict:
+    """The report row of a new substation: where it is, its id and the buses it connects to."""
+    return {
+        "matched": 1,
+        "new_substation": True,
+        "connects_to": [c["to"] for c in spec["connections"]],
+        "load_mw": spec.get("load", {}).get("mw"),
+        "gen_mw": spec.get("generator", {}).get("mw"),
+        "tech": [spec["generator"]["tech"]] if spec.get("generator") else None,
+        "elements": [
+            {k: spec[k] for k in ("name", "lat", "lon", "kv")} | {"id": bus_id(index)},
+        ],
+    }
 
 
 def _population(ctx: _Context, edit: _Edit, change: dict, where: str) -> dict:
@@ -583,29 +663,40 @@ def _overloaded(net, p: OperatingPoint) -> list[dict]:
 
 def _should_feed(ctx: _Context, net, p: OperatingPoint) -> dict:
     rows = [
-        _source_row(ctx, r["bus"], r["people_fed"], r["people_fed"], p, p.gen)
+        _source_row(ctx, net, r["bus"], r["people_fed"], r["people_fed"], p, p.gen)
         for r in dependency_workflow(net, p.gen, p.load, p.people)
     ]
     rows.sort(key=lambda r: r["id"])
     return {"sources": rows, "by_zone": _by_zone(rows)}
 
 
-def _source_row(ctx: _Context, bus: str, should: int, fed: int, before: OperatingPoint, after_gen) -> dict:
+def _source_row(
+    ctx: _Context, net, bus: str, should: int, fed: int, before: OperatingPoint, after_gen
+) -> dict:
+    """One generating substation. A substation the scenario added (index past the base buses) takes the zone of
+    the nearest base one and has no known technology mix."""
     i = int(bus[1:])
+    base = i < len(ctx.names)
+    near = i if base else _nearest_base_bus(ctx, net, i)
     return {
         "id": bus,
-        "name": ctx.names[i],
-        "zone": ctx.zone[i],
+        "name": ctx.names[i] if base else net.names[i],
+        "zone": ctx.zone[near],
         "tech": {
             t: round(float(ctx.tech_share[i, k]), 2)
             for k, t in enumerate(TECH_ORDER)
-            if ctx.tech_share[i, k] >= 0.005
+            if base and ctx.tech_share[i, k] >= 0.005
         },
         "gen_mw": [round(float(before.gen[i]), 1), round(float(after_gen[i]), 1)],
         "should_feed": should,
         "feeds": fed,
         "pct_fed": round(100 * fed / should, 2) if should else 100.0,
     }
+
+
+def _nearest_base_bus(ctx: _Context, net, i: int) -> int:
+    base = ctx.net.buses
+    return min(range(base.size), key=lambda j: haversine_km(net.lon[i], net.lat[i], base.lon[j], base.lat[j]))
 
 
 def _by_zone(sources: list[dict]) -> dict[str, dict]:

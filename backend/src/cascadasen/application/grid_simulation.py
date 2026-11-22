@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from cascadasen.application.grid_stress import scenario_overrides, supply_workflow
+import numpy as np
+
+from cascadasen.application.grid_stress import scenario_overrides, substation_specs, supply_workflow
 from cascadasen.application.grids import GridError
 from cascadasen.domain.cascade.engine import failure_cost, run_cascade_state
 from cascadasen.domain.cascade.frequency import cascade_params
 from cascadasen.domain.cascade.health import with_event_health
-from cascadasen.domain.cascade.overlay import OverlayError, apply_overlay, empty_overlay
+from cascadasen.domain.cascade.overlay import OverlayError, add_substation, apply_overlay, empty_overlay
 from cascadasen.domain.simulation.params import load_params, value
 from cascadasen.domain.theater.world import TheaterWorld
 
@@ -122,7 +124,10 @@ def _prepared(world, point: str, net, op, changes: list[dict] | None):
     if not changes:
         return _apply(net, op, [], {})
     overrides, people = scenario_overrides(world, point, changes)
-    applied = _apply(net, op, [], overrides)
+    applied = _apply(net, op, [], overrides, substation_specs(world, point, changes))
+    people = np.concatenate(
+        [people, np.zeros(len(applied.point.load) - len(people))]
+    )  # new substations: nobody
     return replace(applied, point=replace(applied.point, people=people))
 
 
@@ -149,14 +154,17 @@ def _check_known(net, open_lines: list[str], out_buses: list[str]) -> None:
             raise GridError("not_found", f"No existen estas {kind} en este punto: {', '.join(unknown)}")
 
 
-def _apply(net, op, out_buses: list[str], overrides: dict):
-    """`overrides`: extra `bus_overrides` and `line_overrides` of the overlay (application/grid_stress.py)."""
+def _apply(net, op, out_buses: list[str], overrides: dict, substations: list[dict] | None = None):
+    """`overrides`: extra `bus_overrides` and `line_overrides` of the overlay (application/grid_stress.py);
+    `substations`: specs of new substations (`overlay.add_substation`), added after the overrides."""
     overlay = empty_overlay()
     overlay["bus_overrides"] = {b: dict(r) for b, r in overrides.get("bus_overrides", {}).items()}
     for b in set(out_buses):
         overlay["bus_overrides"].setdefault(b, {})["in_service"] = False
     overlay["line_overrides"] = dict(overrides.get("line_overrides", {}))
     try:
+        for spec in substations or []:
+            overlay, _ = add_substation(overlay, spec, net, op)
         return apply_overlay(net, op, overlay)
     except OverlayError as exc:
         raise GridError("invalid", exc.message) from exc

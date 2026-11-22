@@ -56,5 +56,11 @@ def _angles(active, local, injection: np.ndarray) -> np.ndarray:
     slack = int(np.argmax(np.abs(injection)))
     keep = [i for i in range(n) if i != slack]
     theta = np.zeros(n)
-    theta[keep] = np.linalg.lstsq(laplacian[np.ix_(keep, keep)], injection[keep] / BASE_MVA, rcond=None)[0]
+    reduced, rhs = laplacian[np.ix_(keep, keep)], injection[keep] / BASE_MVA
+    # The reduced Laplacian of a connected island with every x_pu > 0 is positive definite, so an LU solve gives
+    # the same angles as least squares (within float noise) at a fraction of the cost; lstsq stays as a fallback.
+    try:
+        theta[keep] = np.linalg.solve(reduced, rhs)
+    except np.linalg.LinAlgError:
+        theta[keep] = np.linalg.lstsq(reduced, rhs, rcond=None)[0]
     return theta

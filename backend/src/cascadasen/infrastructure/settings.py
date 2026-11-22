@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     session_dir: Path | None = None  # default data_dir / "sessions"
     session_ttl_hours: float = 24
     run_cache_size: int = 20  # strategic runs kept in memory per process; evicted runs are rebuilt
+    # compute the Dependencia/Criticidad heat maps of the base hours and the Desastres at startup, in a background
+    # thread (docs/dependency.md section 4); false skips it (a dev server that does not need them)
+    warm_dependency: bool = True
     admin_enabled: bool = False  # POST /api/v1/admin/reload; off in production
     version: str = "dev"  # code version recorded in each run record
     rate_create_per_hour: int = 10
