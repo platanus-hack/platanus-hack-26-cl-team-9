@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · test(cascade): real-network golden hashes from the Linux CI runner
+
+- **Changed:** `REAL_CASCADE` holds the digests the CI runner printed (#152); the test runs on Linux again (CI) and skips on other platforms instead of skipping on CI.
+- **Why:** the real-network hash depends on the platform's floats; the cascade output did not change in #148.
+- **Agents:** on macOS the test is skipped; if the engine output changes on purpose, take the new digest from the CI failure message.
+- **Files:** `backend/tests/unit/test_cascade_golden.py`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · test(cascade): CI skips the real-network golden hashes
 
 - **Changed:** `test_real_cascade_is_byte_stable_for_every_single_cut` is skipped when `CI` is set. The toy golden test still runs everywhere.
