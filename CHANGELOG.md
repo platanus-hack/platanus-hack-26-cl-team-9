@@ -1,6 +1,139 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · Merge origin/main (#101, #102) into feature/90-cascada-tiempos
+
+- **Changed:** Integrates the in-place component editing, the prepared scenarios on the map and the context layers of main with issue #90. Conflicts only in `CascadeApp.tsx` (the `live` ref and the `setLayers` call) and this file. Both sides were kept: `warp`, `recent` and the pulse from #90, `pointId`, `changes` and `contextLayers` from main. The context layers are drawn under the cascade layers.
+- **Why:** PR #104 was in conflict with main.
+- **Agents:** Main did not touch the engine or the cache, so the cache is still current. Checked on the merged tree: `mypy src` clean, `pytest` 453 passed / 5 skipped at 89 % coverage, web 171 tests, `tsc` and `npm run build` clean.
+- **Files:** `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+
+## 2026-11-22 · Merge origin/main into feature/90-cascada-tiempos
+
+- **Changed:** Integrates `origin/main` (technical-quality: mypy gate, architecture test, ADRs, CI checks, #98) with issue #90. No conflicts. Two `assert s.reserve_used is not None` in `engine.py` (`_island_input`, `_share_reserve`) because the mypy gate flagged the optional field that `_start` always sets.
+- **Why:** Main now runs `mypy src` and a coverage floor in CI, and the engine had 3 mypy errors from the re-split memory.
+- **Agents:**
+  - Checked on the merged tree: `mypy src` clean, `ruff` clean, `pytest` 451 passed / 5 skipped at 89 % coverage (floor 87 %), cache-vs-engine test passes (the cache needs no regeneration), causality scan 0 of 1,848 timelines, web 164 tests, `npm run build` and `tsc` clean.
+  - Not run in a real browser with a GPU.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`.
+
+## 2026-11-22 · chore(cache): regenerate cascade cache with realistic defaults
+
+- **Changed:** `web/public/cache/` regenerated (`uv run cascadasen-cache`) after merging `origin/main` (#82 cost, #92 select-then-cut) and turning on `resplit_memory` and the whole-people rule.
+- **Why:** The merged cost fields and both modelling decisions change the timelines.
+- **Agents:**
+  - Against the cache before issue #90: 219 of the 1,848 timelines change people, 52 change MW and 8 change their stage count.
+  - The causality scan finds 0 violations.
+  - Settled live islands stay within 4.4 % of balance.
+  - R239 is 18.16 M people at Feb 2025 15:00 and at Nov 2026 13:00, 0.31 M at Feb 2025 03:00, and 15.40 M at Nov 2026 20:00.
+- **Files:** `web/public/cache/`.
+
+## 2026-11-22 · fix(web): count every person in a dark substation
+
+- **Changed:** In `impactAt` (`web/src/cascade/simulation.ts`), the people of dark substations count whole whatever their net load (`sumPeople`). Lost load still adds only positive load (`sumLoad`).
+- **Why:** The web must follow the engine rule of the previous commit, so the figures during playback match `summary.people_without_power` at the end.
+- **Agents:** Test "people in dark substations" in `simulation.test.ts`.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts}`.
+
+## 2026-11-22 · feat(cascade): re-split memory on and people of dark buses counted whole
+
+- **Changed:** `CascadeParams.resplit_memory` now defaults to `True`: a re-split island keeps its parent's fired EDAC steps and deployed reserve. The `ASSUMPTIONS` line now only says the sub-island starts at 50 Hz.
+- **Changed:** New `people_out_by_bus` in `engine.py`: a dark bus counts all its people whatever its net load, and a live bus counts the shed share of its positive load. `_timeline`, the theatre (`TheaterGrid.people_without_power`) and `criticality.collateral_people` use it.
+- **Changed:** `test_flagship.py::test_adaptive_coordination_keeps_most_of_the_mission` became `..._across_seeds`: policy C must have the highest **mean** mission continuity over seeds 1-12.
+  - Why the change: the old one-seed ordering (seed 7) no longer holds. With the re-split fix, policy A's cycle-10 cascade sheds 123 MW less, because the cut-off 172-bus island no longer re-fires EDAC steps 1 and 3.
+  - With that, A later restores A08, A09 and A11 in full (after rearming the centro-sur EDAC at cycle 16), reaching 0.951 vs C 0.943. C's restorations in A08/A09 stay limited by headroom and are blocked 5 times.
+  - Neither A3 nor the theatre has a bug: C's runs are identical with the flag on or off.
+  - Over 12 seeds C still leads: mean 0.942 vs A 0.934 and B 0.936, the best worst case (0.910), the lowest peak of people without power and the fewest wrong decisions. The one-seed claim was already fragile: C was best in only 7 of 12 seeds before #90.
+- **Why:** User decision (2026-11-22): the model must be as realistic as possible. Closes `plan.md` §9 items 15 and 16.
+- **Agents:**
+  - Results that moved: 25F 15:00 16.8 → 18.2 M people; Nov 2026 13:00 17.0 → 18.2 M; Nov 2026 20:00 3.9 → 15.4 M people and 1,825 → 6,738 MW (`docs/engine.md` "Results so far" explains why it is real physics, with the same collapse at 25.6 s for 20/30/60/120 s horizons).
+  - `minimum-dataset.md`'s 25F regression anchor is now about 18.2 M.
+  - `resplit_memory=False` exists only for comparison.
+  - The cache is stale until the cache commit below.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine,criticality}.py`, `backend/src/cascadasen/domain/theater/grid.py`, `backend/tests/unit/test_cascade.py`, `backend/tests/validation/{test_flagship,test_results_so_far}.py`, `docs/{engine,plan,minimum-dataset,mapa3}.md`.
+
+## 2026-11-22 · feat(map): pulse buses that just lost power
+
+- **Changed:** New `recentDarkAt(timeline, t, warp)` in `simulation.ts` returns the buses of `island_blackout` events from the last 1.5 s of track time (`RECENT_WINDOW_VIEW_S`), and at most 3 simulated s ago (`RECENT_MAX_SIM_S`), so the squeezed tail does not keep pulsing. If a blackout has no ids it falls back to the `darkAt` difference.
+- **Changed:** `buildCascadeLayers` (`layers.ts`) takes `recent` and `pulse` and draws `nodes-just-dark`, a `FAULT` (#FF5A48) ring that grows from 5 to 14 px and fades. Radius and opacity are layer props, so the attributes are not rebuilt each tick. `CascadeApp` passes the set and a 0.9 s pulse phase. `MapLegend` shows "recién sin suministro" while a cut plays.
+- **Why:** Issue #90 part B: on the map, the buses of the current blackout must stand apart from those that went dark before.
+- **Agents:** Already-dark buses keep the red dot with a dark outline (`docs/mapa3.md` §5). Checked in headless Chrome on `nov2026-1300/R026` at 6.7 s: the ring marks only the 45 buses of the 6.59 s blackout.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,layers.ts,MapLegend.tsx,CascadeApp.tsx,cascade.css}`, `docs/mapa3.md`.
+
+## 2026-11-22 · feat(timeline): non-linear track scale and warped playback
+
+- **Changed:** New `timeWarp(timeline, trackWidth)` in `simulation.ts` returns `{toView, toSim, viewDuration}`, piecewise linear and increasing. Its nodes are the instants of `line_cut`, `line_overload_open`, `island_formed` and `island_blackout`, plus the last `load_shed`.
+  - Each gap between nodes gets at least `MIN_GAP_VIEW_S` (1.5 s) and enough room for `MARKER_GAP_PX` (30 px).
+  - Long gaps keep their length.
+  - The tail after the last event with an effect is squeezed to about `TAIL_SHARE` (15 %), with at least 1.5 s.
+- **Changed:** `groupEvents(events, warp, width)` groups same-instant events. A cut, an opening, a new island or a blackout never joins an earlier marker; load shed and stable islands may. `Timeline.tsx` draws markers, curves and the played rail, and handles dragging and arrow keys, through the warp. The `CascadeApp` loop advances in view time (`v + dt x speed`, `t = toSim(v)`), so playback slows near each failure and runs fast through the tail.
+- **Why:** Issue #90 part B, user decision: a non-linear track with playback in view time; the clock keeps simulated seconds. Before, a cascade sat in the first few pixels and markers merged ("1–11").
+- **Agents:**
+  - Marker numbering still runs over `timeline.events`, the same list as "Historial de eventos" (test "numbers markers over the same event list as the history").
+  - With 9 or more nodes (5 cached cuts) the 30 px rule cannot hold and markers are packed side by side.
+  - `docs/design.md` §7 no longer lists the "1–11" deviation.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,Timeline.tsx,CascadeApp.tsx}`, `docs/{mapa3,design}.md`.
+
+## 2026-11-22 · feat(timeline): exact darkAt and truncated notice
+
+- **Changed:** `darkAt` (`web/src/cascade/simulation.ts`) builds the dark set from the `ids` of every `island_blackout` with `e.t <= t`. Buses in the last frame's `dark` that no blackout lists (substations out of service from `/grids/simulate`) are dark from t = 0. Timelines whose blackouts have no ids fall back to the old frame rule (`frameDarkAt`).
+- **Changed:** The impact card in `SimulationPanel.tsx` says "La cascada se cortó en N etapas (límite del motor); podría seguir." when `timeline.truncated`.
+- **Why:** Issue #90. The old `darkAt` darkened a whole frame at its first blackout, even when islands of one stage go dark seconds apart. `truncated` was in the contract but no UI showed it.
+- **Agents:** `eventLocation` and the map pins compare `darkAt` before and after an event, so they now place each blackout on its own buses. Test: "dark substations at the blackout's own time" in `simulation.test.ts`.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,SimulationPanel.tsx,cascade.css}`, `docs/mapa3.md`.
+
+## 2026-11-22 · chore(cache): regenerate cascade cache
+
+- **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache` after the issue #90 engine changes. That is 1,851 files: 4 hours x (273 lines + 188 substations + baseline + buses + health).
+- **Why:** The timelines change with the causal stages, `island_blackout.ids`, `params.stage`, no stage-0 `island_formed`, and the new `ASSUMPTIONS` line. `resplit_memory` stays off.
+- **Agents:**
+  - The causality scan finds 0 timelines with a stage-k `load_shed` or `island_blackout` after a later opening (98 before).
+  - Settled live islands stay within 3.3 % of balance.
+  - People and MW per cut are unchanged; only times after a waiting stage moved (for example `nov2026-1300/R026` openings at 7.59 and 8.59 s).
+  - `test_the_committed_cache_matches_the_engine_for_a_single_cut` passes.
+- **Files:** `web/public/cache/`.
+
+## 2026-11-22 · test(cascade): cascade invariants and hand-checked cuts
+
+- **Changed:** `tests/unit/test_cascade.py` adds `_assert_invariants`, run on toy grids and on four real cuts. It checks:
+  - time order and causality by `params.stage`;
+  - settled islands balanced within 5 % of load;
+  - `dark` never shrinking, and blackout `ids` equal to the final `dark`;
+  - `people_without_power` rebuilt from the dark buses plus the EDAC share.
+
+  Other new tests: one opening per stage (the rest re-evaluated), `truncated`, the waiting stage, a no-effect cut having only `line_cut`, and `resplit_memory` off and on.
+- **Changed:** `tests/validation/test_results_so_far.py` pins the four R239 rows of `docs/engine.md`. People and MW did not move with the causal stages; only times after a waiting stage did (Nov 2026 20:00: stage 3 at 6.48 s, was 3.0 s). `docs/engine.md` gets a "Hand-checked cuts" table (25F, `nov2026-1300/R026`, `feb2025-1500/R090`, `feb2025-1500/R000`) and the review findings.
+- **Why:** Issue #90 part A: fix the engine's behaviour with tests and a manual stage-by-stage review.
+- **Agents:**
+  - The toys skip the balance check: their EDAC fires late and the 20 s horizon ends before they settle.
+  - Finding, not changed: dark buses with zero or negative net load count no people (engine, theatre and web agree). That is why the 25F full blackout gives 16.8 M of the model's 18.16 M people. The old explanation in `engine.md` ("23 substations with 0 people") was wrong. Open decision: `plan.md` §9 item 15.
+  - Causality scan before the fix: 98 of 1,844 cuts (10 counting only blackouts).
+- **Files:** `backend/tests/unit/test_cascade.py`, `backend/tests/validation/test_results_so_far.py`, `docs/{engine,plan}.md`.
+
+## 2026-11-22 · feat(cascade): optional re-split memory for EDAC steps and reserve
+
+- **Changed:** `_State` keeps `edac_fired` (the `(zone, step index)` that fired, per bus) and `reserve_used` (primary reserve deployed, MW per bus). With `CascadeParams(resplit_memory=True)`, `_island_input` passes the fired steps with fraction 0 (indices and step numbers stay). It also gives `sync_mw` without the deployed reserve (same governor gain) and lowers the reserve cap by the reserve already deployed (`extra_reserve_mw - used`). `frequency.py` is unchanged.
+- **Changed:** The flag is **off by default**. The default behaviour (a sub-island runs the full EDAC table again and counts its parent's deployed reserve as headroom) is a new line in `ASSUMPTIONS`, `docs/engine.md` item 5 "re-split islands", and `plan.md` §9 item 16.
+- **Why:** Issue #90 plan step A3, with the fallback the user approved: "if it turns out to be a large change, document it as an assumption". The code is small, but turning it on changes `nov2026-2000/R239` from 3.9 M to 14.7 M people. It also breaks `test_flagship.py::test_adaptive_coordination_keeps_most_of_the_mission` (policy C 0.9425 < A 0.9508 at seed 7).
+- **Agents:** Islands only split (lines only open), so a new island's buses all share one parent's fired steps. Turning the flag on is a team decision (`plan.md` §9 item 16). It needs a cache regeneration and a look at the flagship scenario.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`, `docs/{engine,plan}.md`.
+
+## 2026-11-22 · feat(cascade): list dark bus ids on island_blackout
+
+- **Changed:** `_lose_island` fills `island_blackout.ids` with the island's buses (`B###`). `_settle_islands` emits no `island_formed` when nothing split (stage 0 with one island), and the `load_mw` of `island_formed` and `island_blackout` is clamped at 0 (a lone bus with net negative load).
+- **Changed:** The web reads "there is a cut timeline" as `events.length > 0` (was `> 1`) in `CascadeApp.tsx` (`markers`, `hasCascade`), `Timeline.tsx` and `impactAt`, because a cut with no effect now has only its `line_cut` event.
+- **Why:** Issue #90. Without bus ids the web could not darken each island at its own blackout time, and the 188-bus `island_formed` at t=0 was noise in every cut.
+- **Agents:** `stack.md` §6 documents the `ids` and the stage-0 rule. The union of `island_blackout.ids` equals `frames[-1].dark`. Baseline timelines now have no events.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`, `web/src/cascade/{CascadeApp,Timeline}.tsx`, `web/src/cascade/simulation.ts`, `docs/{engine,stack}.md`.
+
+## 2026-11-22 · fix(cascade): wait for island settling before the next stage
+
+- **Changed:** `_cascade` (`domain/cascade/engine.py`) carries `t` as state. After settling the islands of stage k, stage k+1 opens at `max(t, last load_shed or island_blackout of stage k) + stage_spacing_s`, not at `(k+1) x stage_spacing_s`. `island_stable` (the 20 s horizon) does not hold it back.
+- **Changed:** `island_formed`, `load_shed`, `island_blackout` and `island_stable` carry `params.stage`, the stage that formed the island. The `ASSUMPTIONS` text and the `stage_spacing_s` note in `cascade.yaml` say the next stage waits.
+- **Why:** Issue #90. The flow of stage k+1 is computed with the gen and load left after stage k's islands shed or went dark, but those events were stamped later than the stage k+1 opening in 9 cached cuts (for example `nov2026-1300/R026`: blackout at 6.59 s, openings at 3.0 and 4.0 s, now at 7.59 and 8.59 s).
+- **Agents:** Frame and opening times are no longer integers. Causality now holds: every load_shed or island_blackout of stage k comes before the stage k+1 `line_overload_open`. The committed cache is stale until the cache commit later in this branch. `docs/engine.md` item 4 and `stack.md` 4.3 item 5 describe the rule.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine.py,params/cascade.yaml}`, `docs/{engine,stack}.md`.
+
 ## 2026-11-22 · docs(stress): guide to the batch endpoints for MCP clients (#101)
 
 - **Changed:** `docs/stress.md` is now the guide for the batch endpoints: flow (prepare never simulates), endpoints and agent operations, every field of a change with its rules, the vocabulary (zones, areas A01-A13, technologies, kV), what each target does, recipes with real outputs, responses, the `prepare_scenario` tool with example calls, errors and guardrails. `docs/mcp.md` and `docs/assistant.md` list the tool and link to it.
@@ -17,6 +150,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** user decisions on 2026-11-22. A person edits one component at a time and batch changes by filters are for the model only. The assistant decides the final grid before a simulation. The cascade still runs only in the existing processes.
 - **Agents:** `prepare_scenario` needs no session (`NO_SESSION_NEEDED`). `useAssistant(s, onScenario)` and `scenarioOf()` read the tool result. `useSession` starts with no session (shortcut comment, #101). `Edits.changes` is optional: old saved edits still load. A prepared scenario never uses the cache. Context layers are drawn under Chile's (`contextLayers`) but are not clickable yet.
 - **Files:** `web/src/cascade/{edits.ts,gridsApi.ts,CascadeApp.tsx,SelectionCard.tsx,NetworkState.tsx,SimulationPanel.tsx,GridSources.tsx,cascade.css,stressEdits.test.ts}`, `web/src/assistant/{useAssistant.ts,scenario.test.ts}`, `web/src/session/useSession.ts`, `backend/src/cascadasen/mcp/{tools.py,digest.py,toolbox.py}`, `backend/src/cascadasen/api/{grid_routes.py,stress_schemas.py}`, `backend/tests/unit/test_prepare_scenario_tool.py`, `docs/{stress.md,openapi/agents.openapi.json}`.
+
 ## 2026-11-22 · Merge origin/main into feat/incident-scenarios
 
 - **Changed:** Integrates main after #98 (the incident scenarios) was merged, with the technical-quality work (mypy gate, CI checks, architecture tests, 64 KB body limit). The only conflict was `domain/theater/cycle.py`: main added `cast(...)` to two lines that the calibrated-cost commit removes, so they stay removed.

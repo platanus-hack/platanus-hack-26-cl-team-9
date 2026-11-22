@@ -89,7 +89,7 @@ DC power flow (flow proportional to angle difference over reactance), solved per
 2. Detect islands (connected components, networkx).
 3. Compute each island's initial imbalance: generation minus load, plus the flow that crossed the boundary.
 4. Run the island frequency model (4.4). An island that collapses loses all its load.
-5. DC flow on surviving islands. Per iteration open only the corridor with the highest relative loading above 120% of capacity (parameter); ties open together.
+5. DC flow on surviving islands. Per iteration open only the corridor with the highest relative loading above 120% of capacity (parameter); ties open together. The other lines above 120% are not lost: the next iteration re-evaluates them with the new flows. The next iteration starts only after the islands of this one finished their EDAC steps or went dark (188-bus engine: `max(t, last load_shed or island_blackout) + stage_spacing_s`, `docs/engine.md`).
 6. Distribute remaining imbalance among synchronous generators in proportion to available reserve.
 7. Automatic under-frequency load shedding (EDAC) applies per zone with the amounts of each zone, proportional across buses with positive load. Exclude buses with net negative load (distributed generation larger than demand).
 8. Overloads in the first ~2 s are labelled "separation through a weak link" (the 25F mechanism [4]). Later overloads are labelled "thermal overload, needs operator action" and do not trip anything in the default mode.
@@ -197,7 +197,7 @@ Values above are placeholders; the node list and ids are decided in phase 0.
   "provenance": [{"key": "inertia_I1", "source": "[4] Table 4-1", "is_assumption": false}]
 }
 ```
-Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
+Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. In the 188-bus engine `island_blackout.ids` lists the buses that go dark (`B###`, the same ids as `frames[].dark`), so the UI darkens them at the event's own time; their union equals the last frame's `dark`. Island events carry `params.stage`. No `island_formed` is emitted when nothing split (stage 0 with one island), and the `load_mw` of `island_formed` and `island_blackout` is never negative. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
 
 ### 6.1 Optional fields for cyber consequence scenarios (draft)
 
