@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Timeline } from "../cascade/types";
+import type { Frame, Timeline } from "../cascade/types";
 import { incidentError } from "../incidents/incidents";
 import { ApiError, createRun, createSession, getRunReport, getSimCatalog, stepRun, submitRunAction } from "../session/sessionApi";
 import { frames as toFrames, invalidFields, runBody, type CyberCatalog, type CyberFrame, type CyberReport, type Defense } from "./cyber";
@@ -19,6 +19,8 @@ export interface Cyber {
   load(): void; setParam(k: string, v: number): void; setDefense(d: Defense): void; setCrews(n: number): void; setSeed(s: number | null): void;
   launch(): Promise<void>; seek(i: number): void; play(): void; pause(): void; close(): void;
   showOnMap(cycle: number | null): void; cascadeAt(cycle: number): Timeline | null;
+  /** The grid of the cycle on screen, for the map: dark substations, open and overloaded lines. */
+  gridNow: Frame | null;
   queue(action: string, target: string, label: string): Promise<void>; endTurn(): Promise<void>;
 }
 
@@ -138,8 +140,9 @@ export function useCyber(): Cyber {
   }, [advance]);
 
   const cascadeAt = useCallback((cycle: number) => run?.frames.find((f) => f.cycle === cycle)?.transient ?? null, [run]);
+  const gridNow = run?.frames[at]?.grid ?? null;
   return {
-    catalog, llmAvailable, params, defense, crews, seed, busy, error, run, at, playing, mapCycle, queued,
+    gridNow, catalog, llmAvailable, params, defense, crews, seed, busy, error, run, at, playing, mapCycle, queued,
     load, setParam: (k, v) => setParams((x) => ({ ...x, [k]: v })), setDefense, setCrews, setSeed, launch, cascadeAt, queue, endTurn,
     seek: (i) => { setPlaying(false); setAt(i); },
     play: () => { if (run?.finished && at >= run.frames.length - 1) setAt(0); setPlaying(true); },

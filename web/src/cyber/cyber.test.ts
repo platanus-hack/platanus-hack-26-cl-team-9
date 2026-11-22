@@ -24,7 +24,9 @@ describe("cyber", () => {
 
   it("keeps only snapshots with a cyber block", () => {
     const cyber = { areas: {}, counts: { clean: 1, compromised: 0, struck: 0, eradicated: 0 }, outcome: null, lost_share: 0, people_without_power: 0, crews_busy: 0, events: [] };
-    expect(frames([{ cycle: 0, t_min: 0 }, { cycle: 1, t_min: 5, cyber }])).toEqual([{ ...cyber, cycle: 1, t_min: 5, transient: null }]);
+    expect(frames([{ cycle: 0, t_min: 0 }, { cycle: 1, t_min: 5, cyber }])).toEqual([{ ...cyber, cycle: 1, t_min: 5, transient: null, grid: null }]);
+    const grid = { edges: { R1: { flow_mw: 10, status: "open", loading: 0 } }, dark: ["B1"], islands: [] };
+    expect(frames([{ cycle: 2, t_min: 10, cyber, grid } as never])[0].grid).toEqual({ t: 0, ...grid });
   });
 
   it("writes events in Spanish with area names", () => {

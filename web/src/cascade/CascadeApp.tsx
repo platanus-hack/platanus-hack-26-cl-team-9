@@ -155,7 +155,13 @@ export function CascadeApp() {
   const duration = timeline?.duration_s ?? 0;
   const fi = timeline ? frameIndexAt(timeline, t) : 0;
   const darkCount = timeline ? darkAt(timeline, t).size : 0;
-  const frame = useMemo(() => (timeline ? frameAt(timeline, t) : undefined), [timeline, fi, darkCount]);
+  const cascadeFrame = useMemo(() => (timeline ? frameAt(timeline, t) : undefined), [timeline, fi, darkCount]);
+  // In the Ciberataque view the map draws the run's grid at the cycle on screen (lights going out, lines opening),
+  // unless a cycle's cascade is playing second by second.
+  const cyberGrid = view === "cyber" && cyb.mapCycle == null ? cyb.gridNow : null;
+  const frame = cyberGrid ?? cascadeFrame;
+  const cyberOn = !!cyberGrid;
+  useEffect(() => { if (cyberOn) setColorMode("load"); }, [cyberOn]); // the attack reads on Carga: dark and overloaded lines
   const impact = useMemo(() => (timeline ? impactAt(timeline, buses, t) : { people: 0, lostLoadMw: 0, lostGenMw: 0, share: 0 }), [timeline, buses, t]);
   const islands = useMemo(() => (timeline ? frequencyAt(timeline, t) : []), [timeline, t]);
   const totalPeople = useMemo(() => Object.values(buses).reduce((s, b) => s + b.people, 0), [buses]);

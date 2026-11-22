@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cyber): el mapa muestra la red de cada ciclo del ciberataque (#121)
+
+- **Changed:** In the Ciberataque view the main map draws the run's grid at the cycle on screen (`snapshot.grid`, the map's Frame format): dark substations, open and overloaded lines, on line colour Carga. Before, the map kept the base grid and only the panel changed.
+- **Why:** the attack looked indicative only: the lights did not go out on the map as the cycles passed.
+- **Agents:** `CyberFrame.grid` holds the frame; `CascadeApp` uses `cyb.gridNow` as `frame` while the view is open and no cycle cascade is playing.
+- **Files:** `web/src/cyber/{cyber.ts,useCyber.ts,cyber.test.ts}`, `web/src/cascade/CascadeApp.tsx`, `docs/attack-sim.md`.
+
 ## 2026-11-22 · feat(cyber): monitor del ciberataque con defensa por algoritmo, LLM o usuario, y dificultades (#121)
 
 - **Changed:** Runs play turn by turn: with an algorithm or the LLM one cycle every 0.7 s (pause and continue), shown on a progress bar over the horizon instead of a slider that always sat at the right end, with the user one cycle per **Terminar turno**; before, the monitor showed only the final state.

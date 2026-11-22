@@ -1,5 +1,5 @@
 import { int, pct } from "../cascade/text";
-import type { Timeline } from "../cascade/types";
+import type { Frame, Timeline } from "../cascade/types";
 
 /**
  * Ciberataque monitor (docs/attack-sim.md section 3.2): types of `GET /sim/catalog` → `cyber_attack`, of the `cyber` block
@@ -23,6 +23,8 @@ export interface CyberFrame {
   cycle: number; t_min: number; areas: Record<string, AreaState>; counts: Record<AreaState, number>; outcome: Outcome | null;
   lost_share: number; people_without_power: number; crews_busy: number; events: CyberEvent[]; transient: Timeline | null;
   people_out?: Record<string, number>; segmented?: string[]; dark?: string[]; defense_actions?: DefenseAction[];
+  /** The grid at the end of the cycle (snapshot `grid`, the map's Frame format): what the map draws for this cycle. */
+  grid: Frame | null;
 }
 export interface CyberReport {
   outcome: Outcome | null; start_area: string | null; params: Record<string, number>; peak_active_areas: number;
@@ -117,10 +119,12 @@ export function invalidFields(cat: CyberCatalog, params: Record<string, number>)
   }).map(([k]) => k);
 }
 
-type Snap = { cycle: number; t_min: number; cyber?: Omit<CyberFrame, "cycle" | "t_min" | "transient">; transient?: Timeline | null };
+type Snap = { cycle: number; t_min: number; cyber?: Omit<CyberFrame, "cycle" | "t_min" | "transient" | "grid">; transient?: Timeline | null; grid?: Omit<Frame, "t"> | null };
 /** Frames from the step snapshots: only the ones with a `cyber` block. */
 export function frames(snapshots: Snap[]): CyberFrame[] {
-  return snapshots.filter((s) => s.cyber).map((s) => ({ ...s.cyber!, cycle: s.cycle, t_min: s.t_min, transient: s.transient ?? null }));
+  return snapshots.filter((s) => s.cyber).map((s) => ({
+    ...s.cyber!, cycle: s.cycle, t_min: s.t_min, transient: s.transient ?? null, grid: s.grid ? { t: 0, ...s.grid } : null,
+  }));
 }
 
 /** A cycle's attack events in Spanish, with area names. */
