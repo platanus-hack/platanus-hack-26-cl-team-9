@@ -21,7 +21,7 @@ import { NetworkPicker } from "./NetworkPicker";
 import { summaryFromGrid, summaryFromManifest } from "./networkSummary";
 import { NetworkState } from "./NetworkState";
 import { batches, isSwitchedOff } from "./outage";
-import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
+import { editsAfter, ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
 import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
@@ -670,9 +670,10 @@ export function CascadeApp() {
     if (!current.simulable) return;
     setSelection(null);
     setNotice(null);
+    // A disaster replaces the changes; a Benchmark condition keeps the user's failures but clears a disaster's.
+    // A prepared scenario never carries over.
+    setEdits((e) => editsAfter(pointId, e, next));
     setPointId(next.point);
-    // A disaster replaces the changes; a Benchmark condition keeps the failures. A prepared scenario never carries over.
-    setEdits((e) => ({ lines: (next.edits ?? e).lines, buses: (next.edits ?? e).buses }));
     if (composed === DEFAULT_COUNTRY) void composeFromSources(next.point, picksRef.current); // the composed grid follows the chosen hour
     setColorMode("load");
     chooseTab(next.edits ? "sim" : "red"); // a disaster opens on Simulación, a Benchmark condition on Red; both on Carga

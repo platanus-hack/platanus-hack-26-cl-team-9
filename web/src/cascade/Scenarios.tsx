@@ -32,7 +32,17 @@ export const CASE_25F = { point: DISASTERS[0].point, cut: DISASTERS[0].edits.lin
 /** `edits` replaces the user's changes (a disaster); null keeps them (a Benchmark condition, only the hour changes). */
 export interface ScenarioChoice { point: string; edits: Edits | null }
 
-type Folder = "desastres" | "benchmark";
+/**
+ * The changes after choosing a scenario. A disaster replaces them. A Benchmark condition keeps the user's own failures,
+ * but leaving a disaster clears its changes: otherwise a condition at the disaster's hour (Punta nocturna for 2010 and
+ * 2011) would keep simulating the disaster and the click would change nothing.
+ */
+export function editsAfter(pointId: string, edits: Edits, next: ScenarioChoice): Edits {
+  if (next.edits) return { lines: next.edits.lines, buses: next.edits.buses };
+  return activeDisaster(pointId, edits) ? { lines: [], buses: [] } : edits;
+}
+
+type Folder ="desastres" | "benchmark";
 const same = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
 /** The disaster the grid is showing right now: same hour and exactly its changes. */

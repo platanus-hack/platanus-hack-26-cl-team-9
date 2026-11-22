@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): a Benchmark condition clears a disaster's changes
+
+- **Changed:** Choosing a Benchmark condition while a disaster is active now clears the disaster's changes; it still keeps the user's own failures. New pure function `editsAfter` in `Scenarios.tsx`, used by `openScenario`.
+- **Why:** "Punta nocturna" is the hour of the 2010 and 2011 analogues. Clicking it from "Terremoto 2010" kept S/E Charrúa out, so the map and the card still showed the earthquake (407.507 personas, 264 MW) and the rail kept the disaster selected.
+- **Agents:** Scenario switching goes through `editsAfter(pointId, edits, choice)`; tests in `scenarios.test.ts`. `docs/mapa3.md` section 4 item 1 describes the rule.
+- **Files:** `web/src/cascade/{Scenarios.tsx,CascadeApp.tsx,scenarios.test.ts}`, `docs/mapa3.md`.
+
 ## 2026-11-22 · Merge origin/main (#101, #102) into feature/90-cascada-tiempos
 
 - **Changed:** Integrates the in-place component editing, the prepared scenarios on the map and the context layers of main with issue #90. Conflicts only in `CascadeApp.tsx` (the `live` ref and the `setLayers` call) and this file. Both sides were kept: `warp`, `recent` and the pulse from #90, `pointId`, `changes` and `contextLayers` from main. The context layers are drawn under the cascade layers.
