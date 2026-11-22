@@ -459,3 +459,7 @@
 .shell .state-list .list-head { margin-top: 8px; }
 
 .shell .heat-hint { margin: 0; max-width: 220px; color: var(--muted); font-size: 12px; line-height: 16px; }
+/* cycle mode (Ciberataque): marks where the attack hit (red) or the defence cleaned an area (light) */
+.shell .timeline.cycles .cycle-status { color: var(--fg-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shell .timeline.cycles .cycle-mark { position: absolute; top: 30px; width: 2px; height: 16px; margin-left: -1px; background: var(--fault); pointer-events: auto; }
+.shell .timeline.cycles .cycle-mark.defense { top: 32px; height: 12px; background: var(--fg-2); }

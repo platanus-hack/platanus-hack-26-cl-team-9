@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): bring back the Ciberataque monitor from #122 (difficulty, attack tags on the map, cycle timeline)
+
+- **Changed:** `web/src/cyber/*` is back to its #122 version (before the #142 merge, #147), keeping #144's one-figure-per-row Salud de la red. `CascadeApp` again wires the monitor: `useCyber(speed)`, the cycle's grid on the map with Carga colours, `CyberMapTags`, `PrefaultHealth` for "Antes del ataque" (`nov2026-1300`), the selected component card, and selecting on the map opens the Componente sub-tab. `Timeline.tsx` gets `CycleRun` and `CycleCard` back (speed uses #142's segmented control); `cascade.css` gets the cycle-mark rules.
+- **Why:** user request: the old Ciberataque UI, where the difficulty is chosen and the map tags the attacked nodes.
+- **Agents:** the Historial entries of the attack (`cyberEntries`) are not wired; #142's Ciberataque panel is gone.
+- **Files:** `web/src/cyber/{CyberPanel.tsx,useCyber.ts,cyber.ts,cyber.test.ts,cyber.css}`, `web/src/cascade/{CascadeApp.tsx,Timeline.tsx,cascade.css}`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · merge: upstream/main (free map camera, #143) into cleanup/dedupe
 - **Changed:** merged `upstream/main` 99539ca8 again. Conflicts: `CHANGELOG.md` (both sides kept), `docs/index/repo-index.json` (regenerated with `build_index.py`) and `web/src/map/baseMap.ts` (main's free-camera code wins, `START_TARGET` keeps `SEN_BOUNDS` from `map/constants.ts`, which still fits).
 - **Why:** main moved after the first merge with 250101b7, so the PR would have conflicted.
