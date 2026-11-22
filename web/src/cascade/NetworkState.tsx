@@ -20,7 +20,7 @@ export function NetworkState({ network, buses, point, edits, result, timeline, r
     return (
       <div className="card empty">
         <h3>Sin cambios</h3>
-        <p>La red está como en el punto de operación elegido. Haz doble clic en una línea del mapa para sacarla de servicio, o en una subestación para apagarla. Cada cambio se suma a los anteriores y queda en esta lista.</p>
+        <p>La red está como en el punto de operación elegido. Haz clic en una línea o una subestación del mapa para ver su detalle, y clic otra vez para sacarla de servicio o apagarla. Cada cambio se suma a los anteriores y queda en esta lista.</p>
       </div>
     );
   }

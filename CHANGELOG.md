@@ -1,18 +1,29 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): select on the first click, switch off on the second
+
+- **Changed:** Mapa 3 map clicks (`clicks.ts`): the first click selects a line or substation, a second click on the selected one switches it off (`toggle`), and a fast double click (tapCount >= 2 or two clicks on the same element within 400 ms) does nothing, not even re-selecting after a cut. The double-click cut (lines and, since #70, substations) is gone. `interpretClick` takes the current selection, so a selection made from a card is switched off by one map click.
+- **Changed:** The second click runs the existing actions: `cutLine` for a line, `outBus` for a substation (one more change on the local list without a session, `POST /{sid}/cut` of its lines in a session). In a session the lines now go in batches of 3: `CutIn` allows at most 3 per call, so the one-call version answered 422 for any substation with more than 3 lines (Charrúa has 16). New pure `outage.ts`: `isSwitchedOff(pick, network, edits, session)` and `batches`.
+- **Changed:** Buttons follow the issue: **Volver a conectar** (line card, impact card; **Volver a conectar todas** for several lines), **Apagar subestación** / **Volver a encender** (substation card, impact card). Map tooltips: "Clic para ver el detalle", then "Clic otra vez para cortarla" / "Clic otra vez para apagarla" on the selected element. Copy that told users to double click (Simulación empty card, Estado de la red, timeline, Ayuda) now describes the two clicks.
+- **Why:** Issue #42 phase A: a line could be cut before its data was seen. User decision: phase A only, values stay plain text.
+- **Agents:** Switching back on is only from the card; a second click on something already off does nothing. Without a session a substation is off when it is in `edits.buses` (its lines are not off by themselves); in a session when all its lines are open. A double click on an element that is already selected switches it off on its first click (that click is a second click on the selection). Open: phase B (editing generation, demand, people). `docs/plan-2.0.md`, cited by the issue, does not exist.
+- **Files:** `web/src/cascade/{clicks.ts,clicks.test.ts,outage.ts,outage.test.ts,CascadeApp.tsx,SelectionCard.tsx,SimulationPanel.tsx,NetworkState.tsx,Timeline.tsx,Legend.tsx}`.
+
 ## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
 
 - **Changed:** `_loadTimeline` (`web/src/cascade/CascadeApp.tsx`) calls `setPlaying(false); seek(0)` before it asks for the new timeline, and `timeline` is only set when `loaded.key === timelineKey`. A new scenario or cut loads paused at 0.
 - **Why:** the old run kept playing and its cascade stayed on the map until the new timeline arrived (seconds for `POST /grids/simulate`).
 - **Agents:** the cut-then-autoplay behaviour is gone for hand cuts too, they share this path. Session timelines are unchanged.
 - **Files:** `web/src/cascade/CascadeApp.tsx`, `CHANGELOG.md`.
+
 ## 2026-11-22 · feat(grids): failure cost that tells a total blackout from a slow grid, per hour, at POST /grids/cost (#82)
 
 - **Changed:** `blackout_cost` (`domain/simulation/consequence.py`) values dark demand with 7.34 h of black start and a total-blackout premium (k = 1.375, scaled by the dark share), and EDAC load shedding with 1 h and no premium; it also gives `cost_per_hour_usd`. The cascade summary adds `dark_load_mw`, `cost_per_hour_usd` and `cost_breakdown`; substations out of service count as dark. New `POST /api/v1/grids/cost` (`cost_workflow`), read by Estado de la red (total, per hour, MWh and "apagón total / parcial / corte parcial de carga"). Cache regenerated.
 - **Why:** #81's flat 4 h x 8.79 US$/kWh gave US$ 390 M for the 25F; the ISCI study for Enel Foundation [44] gives US$ 984 M and 81,430 MWh, and a blackout costs more per hour than load shedding. Now the 25F gives US$ 984.3 M and 81,443 MWh.
 - **Agents:** the two calibrated terms come from [44] (`cascade.yaml` `cost`), not from tuning the engine; only the 25F is checked against a real figure. `failure_cost(shed)` without the dark split counts everything as dark with no premium (N-1 money at risk). The 13-area engine's consequence card (`outage_cost`) is unchanged.
 - **Files:** `backend/src/cascadasen/{domain/simulation/consequence.py,domain/cascade/engine.py,domain/cascade/health.py,domain/cascade/params/cascade.yaml,application/grid_simulation.py,api/grid_routes.py}`, tests, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,gridsApi.ts}`, `docs/{engine,datasets}.md`.
+
 ## 2026-11-22 · Merge origin/main into feat/network-selector
 
 - **Changed:** Integrates #49 with main's grids work (#63/#66/#70/#83/#88), the Estado de la red tab, the heat maps and the assistant.
@@ -181,6 +192,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** the scenario plan (PR #33) had both events; the user asked for them in Desastres.
 - **Agents:** 2011 gives 3.2 M people (real 9.8 M) and 2010 gives 4.1 M (real more than 13 M): analogues, not reproductions (docs/mapa3.md, issue #35). Adding a disaster is one entry in `DISASTERS`.
 - **Files:** `web/src/cascade/{Scenarios.tsx,scenarios.test.ts,CascadeApp.tsx}`, `docs/mapa3.md`.
+
 ## 2026-11-21 · docs(assistant): document the web chat
 
 - **Changed:** `docs/assistant.md` gets section 2c "Web client" (files, which session a message uses, refresh rules, persistence key, rehydration limits, error texts, what was checked) and §5 drops "The web UI" in favour of the pending Bedrock check. `web/README.md` adds a paragraph on the **Asistente** rail item and a row for `src/assistant/`. `docs/mapa3.md` §8 and §11 mention the new rail item and folder.
@@ -288,7 +300,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Changed:** `powerAllOn()`. Without a session it applies `powerAll(...)`: no cut, no selection, no notice, timeline at 0 and paused, same point. In a session it asks `confirm(...)` first, then calls the existing `restore()` (`repairLines(sid, { all: true }, rev)` via `s.edit`) and clears the selection and the timeline. Tab, colour mode and view never change. Session dataset edits are kept.
 - **Why:** Before this, "Reponer línea" in the selection or impact card was the only way back to the base case, and it repaired a single cut. With several elements switched off (#42, PR #67) the user needs one always-visible way back to the starting point that keeps the chosen operating point.
 - **Agents:** Disabled is `aria-disabled` with a guarded click, not `disabled`, so `TipLayer` still shows "No hay nada apagado ni editado." (same pattern as the placeholder tabs). `.power-all` has z-index 2, below `.map-controls` (3), so the layers popover covers it while open. No red: red is reserved for failure. Open PR #67 (`sub-<bus>` cut ids) needs no special handling: `cut: null` clears it too, but expect a textual merge conflict in the same area of `CascadeApp.tsx`. When #42 phase B adds local edits, pass them as `edited`. Known nit: after a click the tooltip keeps its old text until the pointer leaves the button (TipLayer reads `data-tip` only on `pointerover`).
-- **Files:** `web/src/cascade/{CascadeApp.tsx,cascade.css}`.
+- **Files:** `web/src/cascade/{CascadeApp.tsx}`.
 
 ## 2026-11-21 · feat(web): add pure powerAll helpers for mapa 3
 
@@ -302,6 +314,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The user asked for a bigger task. The Fargate On-Demand vCPU quota is 30, so two 4 vCPU tasks fit during a blue/green rollout.
 - **Agents:** The service has `ignore_changes = [task_definition]`, so the new size only reaches it after a one-time `aws ecs update-service --task-definition cascadasen:<revision>` that points at the revision Terraform registers; CI deploys copy that revision and keep the size.
 - **Files:** `infrastructure/ecs.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · feat(web): shut down a substation from its card
 
 - **Changed:** The substation card has **Apagar esta subestación** ("Abre sus N líneas en t = 0.") and, while it is shut down, **Encender subestación**. Without a session it sets the cut to `sub-B###` and plays `<point>/sub-B###.json`; in a session it opens the substation's closed lines in one `POST /{sid}/cut` and repairs exactly those lines to power it on.
@@ -423,6 +436,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The code reads `CASCADASEN_DATA_DIR/processed/grid_snapshot.json`, so with the old layout production answered 503 "No hay snapshot de la red" on `/api/v1/nodes`, `/sim/*` and `/sessions` (health said `sin snapshot`). Local compose mounts `./data` at `/data`, so it never showed. Mapa 3 reads the static cache and was not affected.
 - **Agents:** Any endpoint that needs the grid snapshot only works in the deployed image from this commit on. Check `GET /api/v1/health`: `status` must be `ok`.
 - **Files:** `infrastructure/docker/backend.Dockerfile`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · fix(assistant): guard the tool loop against lost events, invented MW and unkept promises
 
 - **Changed:** `SessionTools` opens an `open_field` run when `inject_event` or `submit_action` arrive with no active run, and refuses `add_datacenter`/`add_generator` with MW the user never wrote (`numbers`, `stated`). `Assistant.loop` adds one hidden nudge when the model promises an action and stops (`announces`, `NUDGE`; hidden turns are left out of `view`), predicts the deadline with the mean call duration, and the trace carries each call's `arguments`. The factory is now `toolbox_for(session_id, run_id, said)`, where `said` is everything the user wrote in the conversation.
@@ -458,28 +472,33 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The cap of 10 is a user decision (entry "retry the busy 409 in the web client and raise the waiter cap to 10"); review pass 3 allowed keeping it if the trade-off is written down.
 - **Agents:** Do not change the cap without asking the user. If the pool fills in production, lower `CASCADASEN_SESSION_LOCK_MAX_WAITERS` or raise the AnyIO thread limit.
 - **Files:** `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`, `CHANGELOG.md`.
+
 ## 2026-11-21 · fix(api): lower the per-session waiter cap to 5
 - **Changed:** `SessionLocks` and `session_lock_max_waiters` (`CASCADASEN_SESSION_LOCK_MAX_WAITERS`) default to 5 waiters instead of 10. The 409 text in `session_routes.ERRORS`, the agent spec description, `docs/sessions-api.md` and `docs/stack.md` say 5; the spec is regenerated.
 - **Why:** Review pass 3: each waiter blocks one of AnyIO's 40 sync workers for up to 10 s, so with 10 four busy sessions could stall every sync route, including the health check. The web and MCP clients now retry the busy 409, so a small cap no longer leaves a browser on a stale network.
 - **Agents:** One busy session holds at most 6 workers. Raise the cap only together with the AnyIO thread limit.
 - **Files:** `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · feat(web): session mode with select and double-click cut after merging PR #60
 - **Changed:** Merged upstream/main at e0c3088 (PR #60: click selects, double click cuts, `SelectionCard`, "Reponer línea", keyed timeline loads). Session mode is re-applied on main's shell: a double click or **Sacar de servicio** calls `POST /{sid}/cut`; `restore(lines?)` repairs through `POST /{sid}/repair` in a session (the selection card repairs the selected open line, the impact card and **Reparar todo** repair every open line).
 - **Changed:** `SimulationPanel` takes `cuts: string[]` again ("Corte:" lists every open line; the button reads "Reponer líneas" when more than one is open). The session timeline is stored as `loaded = {key: "session"}` and a session state cancels a pending cache load. The map `onClick` calls `live.current.cutLine`, and the Datos pick mode runs before click interpretation.
 - **Why:** PR #60 rewrote the click and cut flow in `CascadeApp.tsx`; session mode has to keep cutting and repairing through the session API.
 - **Agents:** Without `?sesion=` the app is main's PR #60 behaviour (same single-cut output). `SelectionCard` in a session gets `cut` = the selected line when it is open.
 - **Files:** `web/src/cascade/{CascadeApp,SimulationPanel}.tsx`, `docs/mapa3.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(web): lock the Escenarios tree in a session after merging PR #57
 - **Changed:** Merged upstream/main at f16cb09 (PR #57: line colors, `ScenarioTree` in the rail, time pill removed). `ScenarioTree` takes `cuts: string[]` instead of `cut` and an optional `locked` tip. Outside a session `CascadeApp` passes `cuts={cut ? [cut] : []}` and no `locked`, so the rail behaves as on main.
 - **Changed:** In a session `locked` is the PINNED tip: scenario rows only fold and unfold, every condition except the session's point is `aria-disabled` with the tip, and no click calls `open`. "Corte ..." names every open line of the session. The dead `.time-pill` and `.scenario[aria-disabled]` rules in `web/src/session/session.css` became a `.condition[aria-disabled]` rule.
 - **Why:** PR #57 removed the time pill and scenario buttons that pinned the operating point in a session; the user's rule is that a session fixes its point.
 - **Agents:** Do not reintroduce a point switcher in session mode; `docs/mapa3.md` section 11 describes the locked tree. The `TimelineCard` clock now uses `clock(point?.snapshot, t).tenths` as on main.
 - **Files:** `web/src/cascade/{CascadeApp,Scenarios}.tsx`, `web/src/session/session.css`, `docs/mapa3.md`, `CHANGELOG.md`.
+
 ## 2026-11-21 · feat(infra): sessions bucket policy
 - **Changed:** `infrastructure/s3.tf` adds `aws_s3_bucket_policy.sessions`: any principal of this AWS account (`aws:PrincipalAccount` condition) may Get/Put/Delete objects under `sessions/*` and `runs/*` and list the bucket. It depends on the public access block, which stays on.
 - **Why:** The user wants the policy in PR #50 as written; it lets the task role, CI and admins read and write session documents without a per-role grant.
 - **Agents:** Never applied here (no plan/apply in this work). The grant is account-wide, not scoped to the ECS task role; narrowing it is a separate decision.
 - **Files:** `infrastructure/s3.tf`.
+
 ## 2026-11-21 · fix(web): retry the busy 409 in the web client and raise the waiter cap to 10
 - **Changed:** `call()` in `web/src/session/sessionApi.ts` retries a 409 that carries `Retry-After` up to 2 times, after that wait (capped at 10 s), with the same method, headers and body. A 409 without `Retry-After` (another instance won the write) is not retried.
 - **Changed:** `useSession` keeps the session when the first load still gets a busy 409 and retries it every 3 s with the note "La sesión está ocupada con otra solicitud. Se reintenta la carga en unos segundos."; network errors and 5xx still fall back to the base case.
@@ -487,6 +506,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Review of PR #50 pass 2: each browser sends 3 parallel GETs per refresh, so 2-3 browsers on one session went past the cap of 5 and got the busy 409 at once; the web client never retried it and a first load dropped the visitor to the base case. User decision: cap 10, web client honours `Retry-After`.
 - **Agents:** Every web session request now absorbs up to 2 busy 409s (about 2 s). `loader.ts` still sends its 3 reads in parallel (running them one after another would change the loader's tested overlap rules). Docs: `docs/sessions-api.md` sections 7-9, `docs/stack.md`, `docs/mapa3.md` section 11; agent spec regenerated (`DESCRIPTION`, `ERRORS[409]`).
 - **Files:** `web/src/session/{sessionApi,sessionApi.test,useSession}.ts`, `backend/src/cascadasen/api/{limits,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/unit/test_session_locks.py`, `docs/{sessions-api,stack,mapa3}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · fix(web): open a session only from ?sesion=, keep a landed edit, neutral overlay warnings
 - **Changed:** `useSession` no longer reads or writes `localStorage.sub50_session`; `sessionIdFrom(search)` takes the id only from `?sesion=`, so a bare `/` never calls `/api` (the URL still keeps `?sesion=` while in a session).
 - **Changed:** `edit()` returns true once the write succeeded; a failed reload after it (for example a busy 409) shows "El cambio se guardó, pero no se pudo recargar la sesión: …" instead of failing the edit, so a form is not resubmitted into a duplicate element.
@@ -507,6 +527,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Review finding (PR #50, user task 3): a run event (`loadDoc`) during a dataset refresh made `load` return early and drop the new network and state, so the screen kept the old dataset.
 - **Agents:** `web/src/session/loader.test.ts` covers the race with deferred promises (document read during a full load, two overlapping loads, cancel). Verification: `npx vitest run` 31 passed (8 files); `npm run build` ok.
 - **Files:** `web/src/session/{loader,loader.test,useSession}.ts`, `docs/mapa3.md`.
+
 ## 2026-11-21 · feat(web): session mode in the Design v5 shell
 - **Changed:** Session mode is wired into main's Design v5 `CascadeApp.tsx`: a rail item **Sesión compartida** (view with **Crear sesión** / **Unirse**, or the id, **Copiar enlace** and **Salir**), a panel-head strip in a session (`Sesión <id>`, `rev. N`, **en vivo** / **sondeo**, **Copiar enlace**), tabs **Red**, **Simulación**, **Datos** in a session (placeholder tabs hidden), line clicks through `POST /{sid}/cut`, and **Elegir en el mapa** pick mode.
 - **Changed:** New `web/src/session/SessionCut.tsx` (**Líneas abiertas en la sesión · N**, **Reparar**, **Reparar todo**) above `SimulationPanel`, whose prop `cut` became `cuts: string[]`. In a session the time pill select and the rail scenarios are disabled with a tooltip and the URL drops `cut`.
@@ -514,6 +535,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** User task 1 (PR #50 brief): PR #45 rebuilt the shell, so session mode goes into the new one instead of restoring the old shell. Without `?sesion=` the app is main's plus one rail item and makes no `/api` request.
 - **Agents:** Never use `.badge` for session labels (`.shell .badge` is the event marker). `web/src/styles.css` holds no session rules. Docs: `docs/mapa3.md` section 11 and `web/README.md` describe the new labels. Verification: `npx vitest run` 28 passed (7 files); `npm run build` ok; Vite proxy smoke test (backend on :18731, `VITE_API_TARGET`, vite on :15731): `POST /api/v1/sessions` 201 with `session_id`, `/network` 200, `/cut` and `/repair` ok, `/` serves the app; both processes stopped.
 - **Files:** `web/src/cascade/{CascadeApp,SimulationPanel}.tsx`, `web/src/session/{SessionBar,SessionCut,DataPanel}.tsx`, `web/src/session/session.css`, `docs/mapa3.md`, `web/README.md`.
+
 ## 2026-11-21 · feat(api): typed response models in the agent spec
 
 - **Changed:** `api/agent_openapi.py` adds `AgentOut` (`extra="allow"`), `ok(model, code=200)` (a `responses=` entry whose description is the model's first docstring line) and a pass in `agent_openapi()` that keeps only the `$ref` of every 2xx JSON schema.
@@ -529,6 +551,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** User rule (PR #50 brief, task 2): a session handles only one request at a time. The wait plus 409 is the orchestrator's default. Store conditional writes and `If-Match` stay the guard across processes.
 - **Agents:** The lock is per process; with several instances two requests on one session can still run at once on different instances. Routes are sync `def`, so a waiting request blocks a threadpool worker, not the event loop. New tests: `tests/unit/test_session_locks.py`, and three tests at the end of `tests/integration/test_sessions_api.py` (same session serial, two sessions parallel, held lock gives 409). Verification: `uv run pytest` 282 passed, 2 skipped, 1 failed (only the Bedrock test); `ruff check` and `ruff format --check` clean; agent spec regenerated.
 - **Files:** `backend/src/cascadasen/api/{limits,app,session_routes,agent_openapi}.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/{unit/test_session_locks.py,integration/test_sessions_api.py}`, `docs/{sessions-api,stack}.md`, `docs/openapi/agents.openapi.json`.
+
 ## 2026-11-21 · fix(assistant): open a session on first use and stop asking the user to call tools
 
 - **Changed:** `SessionTools.run` (`mcp/toolbox.py`) opens a session the first time a tool that needs one is called with none active (all but `start_session`, `join_session`, `list_options`) and adds `nota` to that result. The assistant's system prompt says the user cannot run tools, so the model must call them itself.
@@ -686,6 +709,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Runs and sessions must survive restarts and be shared across instances (shared-sessions plan item 1).
 - **Agents:** Keys are `runs/<run_id>.json`, `sessions/<sid>.json` and `sessions/<sid>/runs/<rid>.json`. Memory and file stores take `ttl_s` and a `clock`; the file store stamps mtime with its clock and raises `ValueError` on keys with `..`, a leading `/` or a backslash. S3 `PreconditionFailed`/`ConditionalRequestConflict`/412/409 → `ConflictError`, `NoSuchKey`/404 → `None` (a 404 on an `if_match` put is also a conflict). `data/sessions/` is git-ignored. Nothing uses the store yet; the rate and SSE settings are unused until the session API lands.
 - **Files:** `backend/src/cascadasen/domain/ports.py`, `backend/src/cascadasen/infrastructure/{document_store,settings,container}.py`, `backend/tests/unit/test_document_store.py`, `backend/pyproject.toml`, `backend/uv.lock`, `.gitignore`, `docs/architecture.md`.
+
 ## 2026-11-21 · feat(api): agent-only OpenAPI spec for external agents
 
 - **Changed:** New `api/agent_openapi.py`: `AGENT` marker (`openapi_extra={"x-sub50-agent": True}`), shared `ErrorResponse {detail}` with `errors({code: text})`, and a spec built from the marked routes, served at `GET /api/v1/agents/openapi.json` with a Swagger page at `/api/v1/agents/docs`. Marked and documented in English (operationId, summary, description, error responses, param and body field descriptions with examples): `/sim/catalog` (`get_catalog`, tag `catalog`), `/sim/network` (`global_get_network`) and every `/sim/runs*` route (`global_*`, tag `global-runs`).
@@ -693,6 +717,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Agents (and a later MCP wrapper) need a small public spec with only the CRUD, run and catalog endpoints, separate from the full `/docs`.
 - **Agents:** Follow `docs/openapi.md` for every agent route: mark it, set `operation_id` from its list, English summary/description, `responses=errors(...)`, tags. Regenerate with `cd backend && uv run python -m cascadasen.api.agent_openapi` in the same commit, or the test fails. Session routes (`/sessions/*`) still need marking when they land. Tags and English summaries of the marked routes also changed in the full `/docs` (were `experimentos`, Spanish). `ErrorResponse.detail` is `str | object | list` because simulator input errors return `{field, message, valid}`.
 - **Files:** `backend/src/cascadasen/api/{agent_openapi,app,simulation_routes,simulation_schemas}.py`, `backend/tests/integration/test_agent_openapi.py`, `docs/openapi.md`, `docs/openapi/agents.openapi.json`, `docs/{stack,architecture,agents}.md`, `backend/README.md`.
+
 ## 2026-11-21 · feat(web): click selects a line, double click cuts it
 
 - **Changed:** A single click on a line or substation now selects it (white halo, card at the top of the panel in both tabs, no tab or colour switch); a double click on a line, or the card's "Sacar de servicio" button, cuts it; "Reponer línea" (line card and impact card) returns to the base case. A cut clears the selection so the impact card stays at the top. The line card shows voltage, model branches, capacity, flow with direction, loading bar and status at the current second, with info icons. Built on the Design v6 rail and colours (entry below): the conditions tree already keeps the cut across hours; if a cut's timeline is missing at the chosen condition the app now falls back to the base case with a note. The event history scrolls inside its own card (it used to scroll the whole panel), a new selection scrolls the panel back to the top, and the map tooltip sits beside the pointer and flips near the right and bottom edges. Plain-language result when a cut leaves nobody without supply, a hint in the timeline with no cut, loading cards, pointer cursor over clickable map elements, Space play/pause, Escape (closes the layers panel, else clears the selection), outside click closes the layers panel, "Ver todo Chile" control, focus-visible outlines.
@@ -728,6 +753,8 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The team needs material for the pitch.
 - **Agents:** `docs/pitch_idea.md` is pitch material, in Spanish. Costs of the measures (e.g. US$ per MW of battery) are assumed values, not sourced data. The note in the doc says no user has been interviewed yet; do not turn the benefits into claims of validated demand.
 - **Files:** `docs/pitch_idea.md`, `CHANGELOG.md`.
+
+
 ## 2026-11-21 · fix(web): the event callout is docked in a quiet corner (#52)
 
 - **Changed:** The callout of the current event (time, event number, title, people without supply, lost load) no longer sits next to its pin in the middle of the network. It is docked at the top left of the map, under the time pill and clear of the panel, with an opaque background and a smaller size, so no line crosses it. The pin stays on the map, still marked as the current one. Code: `MapOverlays.tsx` (`docked`) and `.callout.docked` in `cascade.css`.
@@ -831,11 +858,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The site had no favicon; the full "sub50" wordmark from the Paper "Logo" page is unreadable at tab size.
 - **Agents:** The "5" is Geist Variable at `wght` 800 (the `geist` npm package) outlined with fontTools, so the SVG needs no font. To regenerate it, outline the glyph again rather than adding a `<text>` element. No PNG or `.ico` fallback exists yet; add one only if a target browser lacks SVG favicon support.
 - **Files:** `web/public/favicon.svg`, `web/index.html`, `docs/design.md`.
+
 ## 2026-11-21 · feat(web): keep the mapa 3 camera over land
 - **Changed:** New `web/src/map/regionLimit.ts` (point in polygon, `nearLand`, viewport radius) with tests. `baseMap.ts` loads the land outlines in `LAND_URLS` (today `chile.geojson`) and, after every `moveend`, snaps the camera back to the last valid center when the center is farther from land than a quarter of the shorter viewport side.
 - **Why:** The sea (and Argentina's interior) could be zoomed into. A `maxBounds` rectangle cannot follow Chile's long, thin shape: a tight one forces a high minimum zoom on wide screens and hides the country.
 - **Agents:** To add countries, put their land GeoJSON URL in `LAND_URLS` and widen `MAX_BOUNDS`. Only the Mapbox map snaps back; the offline deck.gl fallback keeps the zoom limits only. `?limite=0` disables it. Checked in headless Chrome: Pacific at zoom 9 returns to Santiago, Santiago at zoom 10 stays.
 - **Files:** `web/src/map/baseMap.ts`, `web/src/map/regionLimit.ts`, `web/src/map/regionLimit.test.ts`, `web/README.md`.
+
 ## 2026-11-21 · docs(architecture): document the system as built
 
 - **Changed:** New `docs/architecture.md`: system overview (sources → `data/processed` → API and static cache → web), backend ports and adapters with the dependency rule, the five ports and their adapters, domain modules (two engines, theatre, agents), use cases and CLI commands, the cut and theatre-cycle flows, frontend, data and parameters, deployment and tooling. `stack.md` sections 2-3 point to it and drop the stale `network.json`/`engine/` backlog entries; `AGENTS.md` and `backend/README.md` link it.
@@ -848,11 +877,13 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The project is called Sub50; the site still showed the old name.
 - **Agents:** The backend package is still `cascadasen` (`backend/src/cascadasen/`); it was not renamed because users never see it and renaming it touches every import.
 - **Files:** `web/index.html`, `web/src/App.tsx`.
+
 ## 2026-11-21 · fix(backend): make ruff check and format pass in CI
 - **Changed:** `zip(..., strict=True)` for flows and lines in `engine.py` (B905), unquoted type annotation in `scenario.py` (UP037), sorted imports in `test_cascade.py` (I001), and `ruff format` on 7 cascade files (`cache_builder.py`, `engine.py`, `flow.py`, `frequency.py`, `network.py`, `scenario.py`, `test_cascade.py`). No behaviour change; 41 tests pass.
 - **Why:** The lint workflow failed on 4 ruff errors and the format check on 7 files.
 - **Agents:** CI runs `ruff check .` and `ruff format --check .` (ruff 0.17.6). Run `scripts/lint.sh --fix <files>` on every Python file you touch. The cache in `web/public/cache/` needs no regeneration.
 - **Files:** `backend/src/cascadasen/application/cache_builder.py`, `backend/src/cascadasen/domain/cascade/*.py`, `backend/tests/unit/test_cascade.py`.
+
 ## 2026-11-21 · perf(web): limit the mapa 3 camera to Chile and lighten the Mapbox style
 - **Changed:** `baseMap.ts` sets `maxBounds` (lon -85 to -55, lat -60 to -10), `minZoom` 4 and `maxZoom` 13 on the Mapbox map and the same zoom limits on the offline deck.gl map. The Standard style config turns off `show3dObjects`, `showPointOfInterestLabels`, `showTransitLabels` and `showPedestrianRoads`.
 - **Why:** The whole world was reachable although the data covers only Chile; the team wants to cut rendering cost. Effect not measured yet.
@@ -1156,21 +1187,25 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Ricardo reframed CascadaSEN: it simulates whether a utility keeps its mission when it loses the capacity to understand its own state, not attacks. The task is backend only; another teammate builds the frontend against this API.
 - **Agents:** Read `strategy.md` after `cyber.md`. The adversary acts only through abstract events at area or function level, and no output ranks elements or areas. The LLM never decides or plays the adversary. Primary user: utility operations and continuity teams, with Mode II (adaptive adversary) first. The framing, item 7 and the node list are pending team confirmation. The implementation lands on branch `feat/strategic-sim-api`.
 - **Files:** `docs/strategy.md`, `docs/cyber.md`, `docs/stack.md`, `docs/plan.md`.
+
 ## 2026-11-21 · feat(infra): CLI-only deploy workflow with CloudFront invalidation
 - **Changed:** `.github/workflows/deploy.yml` no longer runs Terraform: it builds and pushes both images, registers a new task definition revision, updates the ECS service, waits for stable, and invalidates CloudFront. The role ARN is hardcoded (`IAM-Role-ECS-Deploy`). New `infrastructure/deploy-role-policy.json` (minimal permissions for that role). `aws_ecs_service.app` gets `ignore_changes = [task_definition]`.
 - **Why:** The deploy only needs a new image tag; Terraform needed broad IAM permissions and a state bucket. Repository variables cannot be edited, so the ARN cannot come from `AWS_DEPLOY_ROLE_ARN`.
 - **Agents:** The previous entry's `AWS_DEPLOY_ROLE_ARN` requirement is obsolete. The workflow does not apply infrastructure changes: run `infrastructure/deploy.sh` by hand for those. Apply the `ecs.tf` lifecycle change once with `deploy.sh`. The role trust `sub` uses owner and repository IDs; fall back to the classic `sub` if the role cannot be assumed. Pushing the workflow file needs the `workflow` token scope.
 - **Files:** `.github/workflows/deploy.yml`, `infrastructure/deploy-role-policy.json`, `infrastructure/ecs.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · fix(web): commit the mapa 3 cache so the deployed site loads
 - **Changed:** `web/public/cache/` (23 MB, 1103 files, 4 points x 273 cuts) is now versioned; removed it from `web/.gitignore`. nginx answers a missing `/cache/*` file with 404 instead of the SPA `index.html`. `cascade/api.ts` shows "Falta la caché (...)" when the response is not JSON.
 - **Why:** sub50.cl showed `Unexpected token '<', "<!doctype "...`: the cache was git-ignored, so the web image had none and nginx returned `index.html` with 200.
 - **Agents:** Regenerate (`cd backend && uv run cascadasen-cache`) and commit the cache whenever the engine or `data/processed` change, or the deployed site serves stale results. Older docs that say the cache is git-ignored are fixed in `web/README.md` and `docs/mapa3.md`.
 - **Files:** `web/public/cache/`, `web/.gitignore`, `infrastructure/docker/nginx.conf`, `web/src/cascade/api.ts`, `web/README.md`, `docs/mapa3.md`.
+
 ## 2026-11-21 · feat(infra): Mapbox token in the web image and deploy-on-main workflow
 - **Changed:** `web.Dockerfile` takes the build argument `VITE_MAPBOX_TOKEN`; `deploy.sh` passes it (public `pk.*` default, overridable). New `deploy.sh deploy` command (no plan step). New `.github/workflows/deploy.yml` runs it on every push to `main` through GitHub OIDC.
 - **Why:** The deployed map showed the offline fallback because Vite inlines the token at build time. The team wants every commit on main deployed.
 - **Agents:** The workflow needs the repository variable `AWS_DEPLOY_ROLE_ARN` and an IAM role plus OIDC provider created by hand; trust policy in `docs/infrastructure.md`. Until then it fails at the credentials step.
 - **Files:** `infrastructure/docker/web.Dockerfile`, `infrastructure/deploy.sh`, `.github/workflows/deploy.yml`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · feat(web): mapa 3 interface following the Paper design (#28)
 
 - **Changed:** New layout (`.shell` in `styles.css`): a collapsible rail on the left (Sub50, Mapa, Supuestos; the collapsed state is saved in localStorage), a floating panel with the tabs Red, Simulación, Leyenda and Supuestos (the last two used to sit at the bottom of the old right panel), a timeline card at the bottom of the panel (play, scrubber, stage and seconds), the case selector as a pill at the top center of the map, and the 2D/3D toggle plus zoom buttons at the top right. The camera now leaves room on the left, and the Mapbox logo moved to the bottom right. Neutral charcoal colors instead of navy.
@@ -1288,53 +1323,63 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Serve the app on `https://sub50.cl` through CloudFront.
 - **Agents:** `aws_acm_certificate_validation` needs `sub50.cl` delegated to the Route 53 name servers (done by the user). Apply with `infrastructure/deploy.sh apply`, which sets `image_tag`. Origin HTTPS stays off; it needs an `alb.sub50.cl` record first (see backlog in `docs/infrastructure.md`).
 - **Files:** `infrastructure/*.tf`, `infrastructure/terraform.tfvars.example`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · docs(infra): marker line for second deploy
 
 - **Changed:** One marker line in `docs/infrastructure.md`.
 - **Why:** New commit gives a new image tag, so the second deploy proves the blue/green swap.
 - **Agents:** Previous deploy: task definition `cascadasen:2`, tag `aade205`.
 - **Files:** `docs/infrastructure.md`.
+
 ## 2026-11-21 · feat(infra): add ACM certificate for sub50.cl (not applied)
 - **Changed:** `infrastructure/acm.tf` adds `aws_acm_certificate` (`sub50.cl` + `*.sub50.cl`, DNS), the validation records in the Route 53 zone and `aws_acm_certificate_validation`. Output `acm_certificate_arn`. Docs updated.
 - **Why:** A certificate is needed for CloudFront and the ALB HTTPS listener before the domain goes live.
 - **Agents:** Plan: 4 to add. Not applied; needs user approval. Apply only works once the registrar delegates `sub50.cl` to the zone's name servers, else validation waits and times out. The stack is deployed: CloudFront `https://d2bc0ohphbh56u.cloudfront.net`, image tag `aade205`, task definition `cascadasen:2`. Not attached to CloudFront yet.
 - **Files:** `infrastructure/acm.tf`, `infrastructure/outputs.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · fix(infra): build images with buildx as Docker-format gzip layers
 - **Changed:** `push_image` in `deploy.sh` uses `docker buildx build --provenance=false --sbom=false --output type=image,push=true,compression=gzip,force-compression=true,oci-mediatypes=false`.
 - **Why:** Fargate failed with `CannotPullContainerError: wrong diff id` on images pushed with plain `docker build` + `docker push` from Colima (containerd image store, OCI manifest).
 - **Agents:** `docker-buildx` is required (`brew install docker-buildx`, plugin linked in `~/.docker/cli-plugins`). ECR tag `probe1` in `cascadasen/backend` is a test push; ignore it. Images pushed under the old tag format are not usable.
 - **Files:** `infrastructure/deploy.sh`.
+
 ## 2026-11-21 · fix(infra): auto-approve the targeted ECR apply in deploy.sh
 - **Changed:** The ECR-only `terraform apply -target` in `deploy.sh apply` now passes `-auto-approve`.
 - **Why:** The step prompted for `yes`, so a non-interactive `apply` hung. The user already approved the plan that includes the ECR repos.
 - **Agents:** The full apply still uses the saved `tfplan` and needs no prompt. Run `plan` and get approval before `apply`.
 - **Files:** `infrastructure/deploy.sh`.
+
 ## 2026-11-21 · docs(tasks): add animation, city and adversarial agent tasks
 
 - **Changed:** `docs/tasks.md` gains animations with audio on attacked infrastructure, an affected people counter, city lights, a clickable city component (population, % dependent on electricity, deaths rising with blackout time) and an adversarial agents backlog item (attacker and resilience agents plus APIs, owner Ricardo).
 - **Why:** The team refined the task list. The adversarial agents spec is backlog and is not written yet.
 - **Agents:** Open questions are listed in each task (animation and sound mapping, death-rate model and its source, attacker objective and limits). The "% dependent on electricity" value needs a source or `is_assumption: true`. No code or contract changed.
 - **Files:** `docs/tasks.md`.
+
 ## 2026-11-21 · feat(infra): add Route 53 hosted zone for sub50.cl
 - **Changed:** `infrastructure/route53.tf` adds `aws_route53_zone.main` (`sub50.cl`). New output `route53_name_servers`. `docs/infrastructure.md` documents the zone and the NS delegation step.
 - **Why:** The team will serve the app from sub50.cl; the zone must exist first so its name servers can be delegated at the .cl registrar.
 - **Agents:** Zone only: no records, no ACM certificate, no CloudFront alias. The domain is not registered by Terraform. Plan is now 39 to add. `apply` still needs explicit user approval.
 - **Files:** `infrastructure/route53.tf`, `infrastructure/outputs.tf`, `docs/infrastructure.md`.
+
 ## 2026-11-21 · docs(infra): document the AWS deployment
 - **Changed:** `docs/infrastructure.md` covers architecture, sizing, blue/green, `deploy.sh plan|apply`, tag scheme, Route 53 + ACM variables and the backlog. `docs/docker.md` links to it.
 - **Why:** AGENTS.md requires docs with each behavior change.
 - **Agents:** Backlog items have no issue numbers: `scripts/issue.sh` is missing and the fork has issues disabled. Create them upstream when the team agrees. The two-target-group blue/green setup is validated by Terraform only; the ECS API confirms it at first apply.
 - **Files:** `docs/infrastructure.md`, `docs/docker.md`.
+
 ## 2026-11-21 · feat(infra): add deploy.sh with plan and apply phases
 - **Changed:** `infrastructure/deploy.sh plan` checks the AWS account (402909940511), creates the versioned, encrypted state bucket `cascadasen-tfstate-402909940511` if missing, runs init/fmt/validate/plan and writes `infrastructure/.deploy-tag`. `apply` creates ECR, builds and pushes both images (`linux/amd64`), then applies a fresh plan and prints the CloudFront URL. `terraform.tfvars.example` lists the optional variables.
 - **Why:** The user runs deploys with their own credentials; plan and apply are split so the plan is reviewed first.
 - **Agents:** Credentials come from the environment, else the keys file (never printed, no `AWS_PROFILE`). Image tag is the short commit, plus `-dirty-<UTC time>` when `backend`, `web`, `data` or `infrastructure/docker` have uncommitted changes. ECR is immutable, so `apply` skips a build when the tag already exists. `apply` aborts if the tree changed since `plan`. Only run `apply` after the user approves the plan.
 - **Files:** `infrastructure/deploy.sh`, `infrastructure/terraform.tfvars.example`.
+
 ## 2026-11-21 · feat(infra): add Terraform stack for ECS Fargate behind ALB and CloudFront
 - **Changed:** `infrastructure/*.tf` defines a VPC with 2 public subnets, an ALB (production listener :80, test listener :8080, 4 target groups), one ECS Fargate service (1 task, 2 vCPU / 4 GB, containers `backend` :8000 and `web` :80) with native ECS blue/green on two `load_balancer` blocks, two immutable ECR repos, CloudWatch logs, and a CloudFront proxy (no cache, redirect to HTTPS). State uses an S3 backend with `use_lockfile`.
 - **Why:** POC deployment requested by the team. An ALB cannot hold an Elastic IP, so CloudFront points to the ALB DNS name.
 - **Agents:** Variables: `image_tag` (required, set by deploy.sh), `domain_name`, `cloudfront_certificate_arn`, `origin_https`, `alb_certificate_arn` (all optional). ECS rewrites the listener-rule forward actions on each deployment, so those rules use `ignore_changes = [action]`. No Route 53 resources yet. Never run `terraform apply` by hand; `infrastructure/deploy.sh` comes in the next commit.
 - **Files:** `infrastructure/*.tf`, `infrastructure/.terraform.lock.hcl`.
+
 ## 2026-11-21 · feat(docker): add docker compose stack for backend and web
 - **Changed:** `docker-compose.yml` runs `backend` (FastAPI, :8000) and `web` (Vite dev server with npm, :5173). `backend/Dockerfile` installs from `uv.lock`. `web/Dockerfile` uses `npm ci`; compose bind-mounts `./web` and `./data` because the app imports `../data/processed`. Optional `data-build` profile rebuilds `data/processed`. Host ports are configurable with `WEB_PORT` and `BACKEND_PORT`. Root `.gitignore` also ignores `node_modules/`, `dist/`, `.env.local`, `.DS_Store` and `.playwright-mcp/`.
 - **Why:** Run and simulate the whole project locally with only Docker installed.
