@@ -162,10 +162,8 @@ Issue #49. The map draws **one network at a time**. The panel header names it ("
 
 - **Camera per country** (`web/src/map/countryBounds.ts`, `cameraTarget`). Nothing is written by hand: everything comes from the data.
   - The frame is the box of the network's own buses plus 4 %: Chile's reduced network, the other countries' `substations.geojson`, or the upload. It stops where the grid stops (Chiloé for Chile, not Cape Horn).
-  - The area the camera may wander (`maxBounds` on Mapbox) is the box of the buses and of the country outline (`chile.geojson`, or the `shapeGroup` of `latam/outlines.geojson`), grown by its larger side (at least 8°). It is wide on purpose: Mapbox keeps the whole viewport inside it, and Chile is tall and thin.
-  - The lowest zoom is the frame's zoom minus 1.5; the highest stays 13. So Brazil can zoom out much further than Chile.
-  - The over-land check uses only the chosen country's outline. An upload has none, because its country is only declared.
-  - The basemap's `BaseMap.setTarget` lifts the old limits, flies (1.2 s, `fitBounds` with the panel clearance) and sets the new limits when the camera lands. The first fit (page load or `?pais=`) jumps.
+  - The camera is free: no `maxBounds`, no minimum zoom and no snap-back to land. Only the highest zoom stays 13. `cameraTarget` still computes `maxBounds` and `land` (the tests use them) but `baseMap.ts` ignores them.
+  - `BaseMap.setTarget` flies (1.2 s, `fitBounds` with the panel clearance) to the frame. The first fit (page load or `?pais=`) jumps.
   - `web/src/map/countryBounds.test.ts` checks, for each of the five countries, that the frame holds every substation, that `maxBounds` holds the frame, and that over 90 % of the substations are on that country's land.
 - **Only Chile's network is simulated.** The others are drawn at level L0 (`network-format.md` section 2: no reactance, capacity, demand or inertia). On those networks:
   - the Estado de la red and Simulación tabs and the Escenarios tree are disabled, with the tip "Esta red es solo para ver…", and the Red tab repeats it;

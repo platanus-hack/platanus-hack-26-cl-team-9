@@ -1,6 +1,20 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(web): draw the other countries like Chile
+
+- **Changed:** `buildRegionalLayers` has no power-plant layer (nor its tooltip), lines highlight on hover and substations get Chile's soft white outline. The regional legend drops the plants count.
+- **Why:** the other countries looked different from Chile.
+- **Agents:** `regional-plants` no longer exists; the plants stay in the data files.
+- **Files:** `web/src/map/{regional.ts,regional.test.ts}`, `web/src/cascade/Legend.tsx`.
+
+## 2026-11-22 · feat(web): free map camera, no bounds or land snap-back
+
+- **Changed:** `baseMap.ts` no longer limits the camera: no `maxBounds`, no minimum zoom, no snap-back to land (`_keepOverLand` removed); only `maxZoom` 13 stays.
+- **Why:** the lock kept users from leaving a country's box.
+- **Agents:** `cameraTarget` still returns `maxBounds` and `land` but only `frame` is used by the basemap. `docs/mapa3.md` updated.
+- **Files:** `web/src/map/baseMap.ts`, `docs/{mapa3.md,code-map.md}`.
+
 ## 2026-11-22 · fix(web): side panel fills the height down to the timeline card
 - **Changed:** `.shell .panel` drops the 742 px cap: `max-height` is now `calc(100% - var(--timeline-h) - 3 * var(--gap))`, so a long panel (Estado de la red with many consequences) grows until 12 px above the timeline card instead of leaving an empty band on tall screens.
 - **Why:** user request: on a 951 px tall viewport the panel stopped at 742 px and left a visible gap above the timeline.
