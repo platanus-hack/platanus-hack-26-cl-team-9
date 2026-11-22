@@ -201,7 +201,7 @@ Values above are placeholders; the node list and ids are decided in phase 0.
   "provenance": [{"key": "inertia_I1", "source": "[4] Table 4-1", "is_assumption": false}]
 }
 ```
-Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
+Event types: `line_cut`, `line_overload_open`, `island_formed`, `plant_trip`, `load_shed`, `island_blackout`, `island_stable`, `documented_event`. In the 188-bus engine `island_blackout.ids` lists the buses that go dark (`B###`, the same ids as `frames[].dark`), so the UI darkens them at the event's own time; their union equals the last frame's `dark`. Island events carry `params.stage`. No `island_formed` is emitted when nothing split (stage 0 with one island), and the `load_mw` of `island_formed` and `island_blackout` is never negative. Edge `status`: `ok`, `overload`, `open`. Frames sampled at about 10 Hz plus the events. Narration is generated in the UI from `text_key` + `params` using Spanish templates.
 
 ### 6.1 Optional fields for cyber consequence scenarios (draft)
 

@@ -136,7 +136,7 @@ export function CascadeApp() {
   const impact = useMemo(() => (timeline ? impactAt(timeline, buses, t) : { people: 0, lostLoadMw: 0, lostGenMw: 0, share: 0 }), [timeline, buses, t]);
   const islands = useMemo(() => (timeline ? frequencyAt(timeline, t) : []), [timeline, t]);
   const totalPeople = useMemo(() => Object.values(buses).reduce((s, b) => s + b.people, 0), [buses]);
-  const markers = useMemo(() => (timeline && timeline.events.length > 1 ? groupEvents(timeline.events, timeline.duration_s, TRACK_W) : []), [timeline]);
+  const markers = useMemo(() => (timeline && timeline.events.length > 0 ? groupEvents(timeline.events, timeline.duration_s, TRACK_W) : []), [timeline]);
   const located = useMemo(() => (timeline && network ? locate(markers, timeline, network) : []), [markers, timeline, network]);
   const visible = timeline?.events.filter((e) => e.t <= t + 1e-9).length ?? 0;
   const states = useMemo(() => new Map<Marker, MarkerState>(markers.map((m) => [m, stateOf(m, visible)])), [markers, visible]);
@@ -153,7 +153,7 @@ export function CascadeApp() {
   const heatLayerList = useMemo<Layer[]>(() => (network ? heatLayers(heat, heatPoints(heat, network, buses, heatData)) : []), [heat, network, buses, heatData]);
   const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, colorMode) : []), [shownGrid, colorMode]);
 
-  const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 1;
+  const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 0;
   const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile });
   live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile };
   const fitted = useRef<string | null>(null); // the network the camera last flew to

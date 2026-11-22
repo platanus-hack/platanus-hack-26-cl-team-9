@@ -262,25 +262,27 @@ def _most_overloaded(s: _State, flows: np.ndarray) -> list[str]:
 
 def _settle_islands(s: _State, islands: list[list[int]], t: float, stage: int = 0) -> None:
     s.stage = stage
+    whole = stage == 0 and len(islands) == 1  # nothing split: the connected system is not a new island
     for island in islands:
         key = frozenset(island)
         gen, load = float(s.gen[island].sum()), float(s.load[island].sum())
         if key in s.results or (gen < 0.5 and load < 0.5):
             continue
-        s.events.append(
-            {
-                "t": round(t, 2),
-                "type": "island_formed",
-                "ids": [],
-                "text_key": "island_formed",
-                "params": {
-                    "buses": len(island),
-                    "gen_mw": round(gen),
-                    "load_mw": round(load),
-                    "stage": stage,
-                },
-            }
-        )
+        if not whole:
+            s.events.append(
+                {
+                    "t": round(t, 2),
+                    "type": "island_formed",
+                    "ids": [],
+                    "text_key": "island_formed",
+                    "params": {
+                        "buses": len(island),
+                        "gen_mw": round(gen),
+                        "load_mw": max(0, round(load)),
+                        "stage": stage,
+                    },
+                }
+            )
         s.results[key] = _settle_island(s, island, gen, load, t)
 
 
@@ -408,11 +410,11 @@ def _lose_island(
         {
             "t": round(t, 2),
             "type": "island_blackout",
-            "ids": [],
+            "ids": sorted(f"B{b:03d}" for b in island),
             "text_key": "island_blackout",
             "params": {
                 "buses": len(island),
-                "load_mw": round(lost),
+                "load_mw": max(0, round(lost)),
                 "reason": reason,
                 "min_hz": min_hz,
                 "stage": s.stage,

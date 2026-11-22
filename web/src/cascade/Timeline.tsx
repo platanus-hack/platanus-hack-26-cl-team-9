@@ -20,7 +20,7 @@ interface Props {
 /** Bottom card (Design v5): clock, frequency of each island, play, and the rail with numbered event markers. */
 export function TimelineCard(p: Props) {
   const duration = p.timeline?.duration_s ?? 0;
-  const hasCascade = !!p.timeline && p.timeline.events.length > 1;
+  const hasCascade = !!p.timeline && p.timeline.events.length > 0;
   const x = (t: number) => (duration > 0 ? (Math.min(t, duration) / duration) * TRACK_W : 0);
   const markers = hasCascade ? p.markers : [];
   const visible = p.timeline?.events.filter((e) => e.t <= p.t + 1e-9).length ?? 0;

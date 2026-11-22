@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cascade): list dark bus ids on island_blackout
+
+- **Changed:** `_lose_island` fills `island_blackout.ids` with the island's buses (`B###`). `_settle_islands` emits no `island_formed` when nothing split (stage 0 with one island), and the `load_mw` of `island_formed` and `island_blackout` is clamped at 0 (a lone bus with net negative load).
+- **Changed:** The web reads "there is a cut timeline" as `events.length > 0` (was `> 1`) in `CascadeApp.tsx` (`markers`, `hasCascade`), `Timeline.tsx` and `impactAt`, because a cut with no effect now has only its `line_cut` event.
+- **Why:** Issue #90. Without bus ids the web could not darken each island at its own blackout time, and the 188-bus `island_formed` at t=0 was noise in every cut.
+- **Agents:** `stack.md` §6 documents the `ids` and the stage-0 rule. The union of `island_blackout.ids` equals `frames[-1].dark`. Baseline timelines now have no events.
+- **Files:** `backend/src/cascadasen/domain/cascade/engine.py`, `web/src/cascade/{CascadeApp,Timeline}.tsx`, `web/src/cascade/simulation.ts`, `docs/{engine,stack}.md`.
+
 ## 2026-11-22 · fix(cascade): wait for island settling before the next stage
 
 - **Changed:** `_cascade` (`domain/cascade/engine.py`) carries `t` as state. After settling the islands of stage k, stage k+1 opens at `max(t, last load_shed or island_blackout of stage k) + stage_spacing_s`, not at `(k+1) x stage_spacing_s`. `island_stable` (the 20 s horizon) does not hold it back.

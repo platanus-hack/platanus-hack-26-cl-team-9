@@ -47,7 +47,7 @@ export function impactAt(tl: Timeline, buses: Record<string, BusState>, t: numbe
   const sheds = tl.events.filter((e) => e.type === "load_shed");
   const shedTotal = sheds.reduce((s, e) => s + Number(e.params.mw ?? 0), 0);
   const shedNow = sheds.filter((e) => e.t <= t + 1e-9).reduce((s, e) => s + Number(e.params.mw ?? 0), 0);
-  if (t + 1e-9 >= lastEventTime(tl) && tl.events.length > 1) {
+  if (t + 1e-9 >= lastEventTime(tl) && tl.events.length > 0) {
     return { people: summary.people_without_power, lostLoadMw: summary.load_shed_mw, lostGenMw: Math.round(sumGen(dark)), share: totalPeople > 0 ? summary.people_without_power / totalPeople : 0 };
   }
   const progress = shedTotal > 0 ? shedNow / shedTotal : 0;
