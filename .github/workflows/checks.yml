@@ -26,6 +26,7 @@ jobs:
         # The mcp extra is installed so tests/unit/test_mcp_tools.py and tests/integration/test_mcp_server.py run instead of skipping.
         run: uv sync --locked --group dev --extra mcp
       - name: pytest with coverage floor
+        # Includes tests/integration/test_repo_index.py: fails while docs/index/repo-index.json is stale (docs/index/README.md).
         # Measured TOTAL is 90.49% (12690 statements, 1207 missed) with the mcp extra and without llm; the floor is just under it.
         run: uv run pytest -q --cov=cascadasen --cov-report=term --cov-fail-under=90
   # A gate: `mypy src` reports 0 errors (backend/README.md, "Type checking"), so any new error blocks the deploy.

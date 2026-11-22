@@ -1,5 +1,10 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+## 2026-11-22 · docs(index): document the index regeneration command and the CI check
+- **Changed:** `AGENTS.md` (section 2 bullet and a row in the tooling map in section 5), `backend/README.md` and a comment in `.github/workflows/checks.yml` give the regeneration command for `docs/index/repo-index.json`. No new workflow: `tests/integration/test_repo_index.py` already runs in the `pytest` step of the `backend-test` job (`checks.yml`, also called by `deploy.yml`).
+- **Why:** The drift test fails CI on a stale index, so every agent must know the command before committing.
+- **Agents:** `cd backend && uv run python ../scripts/build_index.py`, after `git add` of any new file. Edits to `AGENTS.md` and `backend/README.md` change their line counts in the index, so regenerate after them too.
+- **Files:** `AGENTS.md`, `backend/README.md`, `.github/workflows/checks.yml`.
 ## 2026-11-22 · feat(index): generated repository index with a drift test
 - **Changed:** New `scripts/build_index.py` (standard library plus the real FastAPI app for the route table) writes `docs/index/repo-index.json`: every tracked source, test, doc, script and config file (language, line count, purpose, public symbols with line numbers, backend layer, covering tests), the route table (method, path, operation id, summary, `in_agent_spec`, handler file and line), doc headings, `data/processed` and `data/scenarios` sizes and the CHANGELOG headings. `docs/index/README.md` documents the schema and `jq` queries. New `backend/tests/integration/test_repo_index.py` fails while the committed file differs from the generated one.
 - **Why:** Technical-review follow-up (issue #79): an agent or reviewer finds a file, a symbol, a route or a test with one query instead of reading the tree.
