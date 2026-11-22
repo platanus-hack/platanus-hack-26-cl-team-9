@@ -40,6 +40,7 @@ def test_a_substation_out_is_dark_in_every_frame_and_counted_as_direct_loss(sim)
     assert (
         out["timeline"]["summary"]["people_without_power"] == out["direct"]["people"]
     )  # no cascade: only the outage
+    assert out["timeline"]["summary"]["load_total_mw"] == pytest.approx(float(op.load.sum()), abs=0.2)
 
 
 def test_a_line_that_goes_with_its_substation_is_not_cut_twice(sim):

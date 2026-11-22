@@ -2,6 +2,9 @@ import { useState } from "react";
 import { loadCatalog, type Catalog } from "./gridsApi";
 import { Chevron, Icon } from "./ui";
 
+/** What the map shows by default: Chile alone, the simulable network. */
+const ONLY_CHILE = ["CHL"];
+
 export interface SourceSelection { chile: boolean; context: string[] }
 
 /**
@@ -15,12 +18,12 @@ export function GridSources({ composed, busy, apply, reset, locked }: {
   const [expanded, setExpanded] = useState(false);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [checked, setChecked] = useState<Set<string>>(new Set(ONLY_CHILE));
 
   function toggleOpen() {
     setExpanded(!expanded);
     if (catalog || error) return;
-    loadCatalog().then((c) => { setCatalog(c); setChecked(new Set(c.grids.map((g) => g.country))); }).catch((e) => setError(String(e.message)));
+    loadCatalog().then((c) => { setCatalog(c); setChecked(new Set(ONLY_CHILE)); }).catch((e) => setError(String(e.message)));
   }
   function tick(country: string) {
     if (!catalog) return;
@@ -31,7 +34,7 @@ export function GridSources({ composed, busy, apply, reset, locked }: {
   }
   function back() {
     reset();
-    if (catalog) setChecked(new Set(catalog.grids.map((g) => g.country)));
+    setChecked(new Set(ONLY_CHILE));
   }
 
   return (

@@ -1,15 +1,18 @@
-import type { SimulationResult } from "./gridsApi";
+import { useEffect, useState } from "react";
+import { loadOutageCost, type OutageCost, type SimulationResult } from "./gridsApi";
+import { impactAt } from "./simulation";
 import type { Edits } from "./edits";
 import { countEdits } from "./edits";
-import { formatPeople, int, lineName, placeName } from "./text";
-import type { Network, Timeline } from "./types";
+import { formatPeople, int, lineName, pct, placeName } from "./text";
+import type { BusState, Network, Timeline } from "./types";
+import { Info } from "./ui";
 
 /**
  * Tab "Estado de la red": every change made to the grid, kept together so that a new cut adds to the others and
  * never replaces them. Each one can be put back alone, or all at once.
  */
-export function NetworkState({ network, edits, result, timeline, restoreLine, restoreBus, restoreAll }: {
-  network: Network; edits: Edits; result: SimulationResult | null; timeline: Timeline | null;
+export function NetworkState({ network, buses, point, edits, result, timeline, restoreLine, restoreBus, restoreAll }: {
+  network: Network; buses: Record<string, BusState>; point: string; edits: Edits; result: SimulationResult | null; timeline: Timeline | null;
   restoreLine(id: string): void; restoreBus(id: string): void; restoreAll(): void;
 }) {
   const total = countEdits(edits);
@@ -22,9 +25,11 @@ export function NetworkState({ network, edits, result, timeline, restoreLine, re
     );
   }
   const dropped = new Set(result?.dropped_lines ?? []);
+  const ready = timeline && timeline.events.length > 0 ? timeline : null;
   const nodeName = (id: string) => placeName(network.nodes.find((n) => n.id === id)?.name ?? id);
   return (
     <>
+      {ready && <Outcome timeline={ready} buses={buses} point={point} edits={edits} />}
       <div className="card state-list">
         <div className="card-head">
           <div className="title"><h3>Cambios en la red · {total}</h3></div>
@@ -79,3 +84,50 @@ function CascadeLines({ network, timeline }: { network: Network; timeline: Timel
 const REASON: Record<string, string> = {
   voltage: "colapso por tensión", frequency: "frecuencia bajo 47,5 Hz", no_generation: "sin generación", no_load: "sin demanda", no_inertia: "sin inercia",
 };
+
+/**
+ * Final result of the cascade, read with the same `impactAt` the Simulación tab uses at its last second, so both tabs give
+ * the same figures. The cost comes from the backend (issue #82); until it exists the card says so instead of estimating it.
+ */
+function Outcome({ timeline, buses, point, edits }: { timeline: Timeline; buses: Record<string, BusState>; point: string; edits: Edits }) {
+  const end = impactAt(timeline, buses, timeline.duration_s);
+  const dark = timeline.events.filter((e) => e.type === "island_blackout").length;
+  const cost = useOutageCost(point, edits);
+  return (
+    <div className="card impact">
+      <div className="card-head">
+        <div className="title"><h3>Resultado de la caída</h3><Info tip="Estado final de la red tras la cascada, calculado por el motor Sub50 con todos los cambios de esta lista. Es la misma cifra que Simulación muestra al final." /></div>
+        <span className="share">{pct(end.share)} del país</span>
+      </div>
+      <div className="people">{int(end.people)}</div>
+      <p className="meta">personas sin suministro</p>
+      <div className="mini-figures ruled">
+        <div><div className="value-row"><b>{int(end.lostLoadMw)} <small>MW</small></b></div><span>de {int(timeline.summary.load_total_mw)} MW de demanda</span></div>
+        <div><div className="value-row"><b>{int(end.lostGenMw)} <small>MW</small></b></div><span>generación perdida</span></div>
+        <div><div className="value-row"><b>{dark}</b></div><span>{dark === 1 ? "isla apagada" : "islas apagadas"}</span></div>
+      </div>
+      <div className="value-row status-row">
+        {cost.state === "ready" && cost.value
+          ? <span>Costo de la caída: <b>US$ {int(cost.value.cost_usd)}</b> · {int(cost.value.energy_not_served_mwh)} MWh no suministrados en {cost.value.outage_hours.value} h{cost.value.outage_hours.is_assumption ? " (supuesto)" : ""}</span>
+          : <span className="meta">{cost.state === "error" ? cost.error : cost.state === "loading" ? "Calculando el costo…" : "Costo de la caída: pendiente. El backend aún no lo calcula (issue #82)."}</span>}
+        {cost.value && <Info tip={[cost.value.unserved_cost_usd_per_mwh.source ?? "Supuesto", ...cost.value.assumptions].join(" · ")} />}
+      </div>
+    </div>
+  );
+}
+
+type CostState = { state: "loading" | "ready" | "pending" | "error"; value: OutageCost | null; error?: string };
+
+function useOutageCost(point: string, edits: Edits): CostState {
+  const [cost, setCost] = useState<CostState>({ state: "loading", value: null });
+  const key = `${point}|${edits.lines.join(",")}|${edits.buses.join(",")}`;
+  useEffect(() => {
+    let live = true;
+    setCost({ state: "loading", value: null });
+    loadOutageCost({ point, open_lines: edits.lines, out_buses: edits.buses })
+      .then((value) => live && setCost({ state: value ? "ready" : "pending", value }))
+      .catch((e) => live && setCost({ state: "error", value: null, error: String(e.message) }));
+    return () => { live = false; };
+  }, [key]);
+  return cost;
+}
