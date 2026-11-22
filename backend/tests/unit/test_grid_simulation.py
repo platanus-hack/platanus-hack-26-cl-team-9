@@ -138,3 +138,27 @@ def test_cost_endpoint_gives_the_25f_of_the_isci_study_and_a_cost_per_hour():
     assert night["breakdown"]["dark_mw"] == 0 and night["outage_hours"]["value"] == 1.0  # load shedding only
     assert client.post("/api/v1/grids/cost", json={"point": POINT}).json()["cost_usd"] == 0
     assert client.post("/api/v1/grids/cost", json={"point": "x"}).status_code == 404
+
+
+def test_changes_without_a_failure_start_the_cascade_from_the_lines_they_overload(sim):
+    """All hydro off at nov2026-1300: the redispatch overloads lines and the cascade opens them (no line cut)."""
+    out = sim.simulate_workflow(
+        "nov2026-1300", [], [], [{"target": "generation", "tech": ["hidro"], "factor": 0}]
+    )
+    summary = out["timeline"]["summary"]
+    assert out["open_lines"] == [] and out["timeline"]["failed_elements"] == []
+    assert summary["lines_opened"] and summary["people_without_power"] > 0
+    assert out["timeline"]["events"][0]["type"] == "line_overload_open"
+
+
+def test_no_change_and_no_failure_is_still_rejected(sim):
+    with pytest.raises(GridError):
+        sim.simulate_workflow(POINT, [], [])
+
+
+def test_the_cost_of_changes_without_a_failure_is_the_cost_of_their_cascade(sim):
+    from cascadasen.application.grid_simulation import cost_workflow
+
+    hydro = [{"target": "generation", "tech": ["hidro"], "factor": 0}]
+    out = cost_workflow(sim, "nov2026-1300", [], [], hydro)
+    assert out["cost_usd"] > 0 and out["people_without_power"] > 0
