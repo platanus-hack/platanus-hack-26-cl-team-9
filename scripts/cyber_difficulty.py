@@ -1,7 +1,7 @@
 """Win rate of each defender on each Ciberataque difficulty preset (docs/attack-sim.md 3.2).
 
 Why: the presets in theater.yaml (cyber_attack_presets) quote measured outcomes; this script measures them again.
-Usage: cd backend && uv run python ../scripts/cyber_difficulty.py [- | PRESETS_JSON] [N=100] [POLICIES=ABC]
+Usage: cd backend && uv run python ../scripts/cyber_difficulty.py [- | PRESETS_JSON] [N=100] [POLICIES=ABC] [FIRST_SEED=1]
 "-" uses the presets of theater.yaml; a JSON object {name: params} tries other values. Needs data/processed.
 """
 
@@ -39,7 +39,8 @@ if __name__ == "__main__":
     )
     n = int(sys.argv[2]) if len(sys.argv) > 2 else 100
     pols = sys.argv[3] if len(sys.argv) > 3 else "ABC"
-    jobs = [(presets[k], pol, seed) for k in presets for pol in pols for seed in range(1, n + 1)]
+    first = int(sys.argv[4]) if len(sys.argv) > 4 else 1
+    jobs = [(presets[k], pol, seed) for k in presets for pol in pols for seed in range(first, first + n)]
     with ProcessPoolExecutor() as ex:
         res = list(ex.map(one, jobs, chunksize=4))
     i = 0

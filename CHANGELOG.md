@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(cyber): dificultades balanceadas a 75, 60, 40 y 25 % de victorias de la defensa (#121)
+
+- **Changed:** Difficulty presets retuned for a defence win rate of 75 / 60 / 40 / 25 % (average of rules A, B, C, 9 crews): bisection on seeds 1-200, measured on seeds 201-400. Measured: Fácil 74 %, Normal 57 % (the default), Difícil 36 %, Muy difícil 24 %. Only `spread_p`, `isolation_p`, `eradicate_p` and `generation_share` move between levels.
+- **Why:** the previous curve was 93 / 56 / 3 / 0 %: Difícil and Muy difícil could not be won.
+- **Agents:** `scripts/cyber_difficulty.py` takes a 4th argument, the first seed. Policy B (preventive) wins 12-24 points more than A and C at every level. The LLM commander was not measured. When measuring, set `PYTHONPATH=backend/src`: a shared venv can point to another worktree.
+- **Files:** `backend/src/cascadasen/domain/theater/params/theater.yaml`, `scripts/cyber_difficulty.py`, `docs/attack-sim.md`.
+
 ## 2026-11-22 · feat(cyber): curva de dificultad medida con 100 simulaciones por nivel (#121)
 
 - **Changed:** New difficulty presets, measured with seeds 1-100 per preset and rules policy, 9 crews. Defence win rate A / B / C: Fácil 92 / 96 / 91 % (5-8 cycles), Normal 46 / 71 / 51 %, Difícil 0 / 8 / 0 %, Muy difícil 0 % (the attack wins 93-100 %). "Extremo" is now "Muy difícil" (`muy_dificil`). Defaults = Normal.
