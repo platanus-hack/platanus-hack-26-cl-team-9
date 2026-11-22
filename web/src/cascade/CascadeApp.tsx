@@ -24,7 +24,7 @@ import { NetworkState } from "./NetworkState";
 import { batches, isSwitchedOff } from "./outage";
 import { activeDisaster, DISASTERS, ScenarioTree, type ScenarioChoice, type ScenarioKind } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
-import { ColdStartCard, PrefaultHealth, SimulationPanel } from "./SimulationPanel";
+import { PrefaultHealth, SimulationPanel } from "./SimulationPanel";
 import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
 import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, recentDarkAt, timeWarp, type Marker } from "./simulation";
 import { clock, conditionName, errorText, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
@@ -902,7 +902,6 @@ export function CascadeApp() {
     if (composed === DEFAULT_COUNTRY) void composeFromSources(next.point, picksRef.current); // the composed grid follows the chosen hour
     chooseTab(next.edits ? "sim" : tab === "datos" ? "sim" : tab);
   }
-  const open25F = () => openScenario({ point: DISASTERS[0].point, edits: DISASTERS[0].edits });
 
   // "Mapa" is the highlighted row only while no other rail view is open (D7).
   const mapOn = view === "tabs" || view === "upload" || view === "session";
@@ -1033,9 +1032,8 @@ export function CascadeApp() {
           {view === "tabs" && isChile && tab === "sim" && network && (timeline && timelineReady ? (
             <SimulationPanel network={network} timeline={timeline} cuts={cuts} outBuses={outBuses} t={t} impact={impact} islands={islands} darkCount={darkNow} totalPeople={totalPeople}
               seek={seek} openSources={() => setView("sources")} restore={() => restore()} source={sourceNote} health={s.sid || composed ? null : health}
-              supply={simResult?.supply ?? null} disaster={external ? null : disaster} shareable={shareable} select={select} open25F={open25F} external={external} />
-          ) : !edited ? <ColdStartCard network={network} health={s.sid || composed ? null : health} select={select} open25F={open25F} />
-            : !error && !failed && <Loading text="Cargando la simulación" />)}
+              supply={simResult?.supply ?? null} disaster={external ? null : disaster} shareable={shareable} select={select} edited={edited} external={external} />
+          ) : edited && !error && !failed && <Loading text="Cargando la simulación" />)}
           {view === "tabs" && tab === "datos" && (s.network
             ? <DataPanel network={s.network} edit={s.edit} pick={_pick} picking={picking} />
             : <p className="meta">Cargando la sesión…</p>)}
