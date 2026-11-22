@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · test(api): characterize replay with adversary and capability overrides
+- **Changed:** New `test_replay_applies_adversary_and_capability_overrides` in `backend/tests/integration/test_runs_api.py` replays a run through `POST /api/v1/sim/runs/{id}/replay` with `seed`, `uncertainty`, `adversary` and `capabilities` overrides and asserts the returned `overrides` and the new run summary.
+- **Why:** F4 of the duplication report flagged this path as untested; it pins the current output before the replay-override builder moves onto `ReplayIn`.
+- **Agents:** Test only, no production change. The test passes on the unrefactored code. Verification: backend ruff check pass, ruff format --check pass, mypy src 148 errors (baseline 148), pytest 247 passed 2 skipped; scripts/lint.sh --check clean.
+- **Files:** `backend/tests/integration/test_runs_api.py`.
 ## 2026-11-22 · refactor(api): session request bounds come from the overlay constants
 - **Changed:** `api/session_schemas.py` imports `MAX_ELEMENT_MW`, `MAX_CAPACITY_MW`, `LAT`, `LON`, `X_MAX_PU`, `MAX_INERTIA_H` from `domain/cascade/overlay.py` instead of retyping them; `int()` keeps the generated OpenAPI numbers identical.
 - **Changed:** `domain/cascade/overlay.py` gains `MAX_NAME_LEN = 80` (used by `_name` and every name field) and `MAX_CUT_LINES = 3` (moved from `application/sessions.py`, used by `SessionService.cut` and `CutIn`).

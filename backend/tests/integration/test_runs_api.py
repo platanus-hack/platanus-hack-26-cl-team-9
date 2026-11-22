@@ -54,6 +54,26 @@ def test_replay_reproduces_and_changes_policy(sim_client):
     assert other["policy"] == "B" and other["replay_of"] == rid
 
 
+def test_replay_applies_adversary_and_capability_overrides(sim_client):
+    rid = sim_client.post("/api/v1/sim/runs", json={"policy": "A", "seed": 5, "horizon": 6}).json()["run_id"]
+    sim_client.post(f"/api/v1/sim/runs/{rid}/step", json={"cycles": 3})
+    pool = next(iter(sim_client.get("/api/v1/sim/catalog").json()["resources"]))
+    adversary = {"enabled": True, "objective": "raise_uncertainty", "budget": 5, "adaptive": False}
+    out = sim_client.post(
+        f"/api/v1/sim/runs/{rid}/replay",
+        json={"adversary": adversary, "capabilities": {pool: 7}, "seed": 9, "uncertainty": 1.5},
+    ).json()
+    assert out["overrides"] == {
+        "seed": 9,
+        "uncertainty": 1.5,
+        "adversary": {**adversary, "budget": 5.0},
+        "capabilities": [[pool, 7.0]],
+    }
+    assert out["replay_of"] == rid and out["seed"] == 9 and out["uncertainty"] == 1.5
+    assert out["adversary"]["objective"] == "raise_uncertainty" and out["adversary"]["adaptive"] is False
+    assert out["policy"] == "A" and out["cycle"] == 3
+
+
 @pytest.mark.parametrize(
     ("body", "code"),
     [
