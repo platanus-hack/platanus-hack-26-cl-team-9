@@ -109,13 +109,21 @@ def test_every_call_names_the_agent():
     assert seen["agent"] == "tester"
 
 
-def test_resolve_bus_by_id_area_name_and_unique_bus_name():
-    assert digest.resolve_bus(NET, "b001") == "B001"
-    assert digest.resolve_bus(NET, "Antofagasta") == "B001"
-    assert digest.resolve_bus(NET, "arica") == "B000"
-    assert digest.resolve_bus(NET, "alpha") == "B000"
+def test_resolve_bus_by_id_and_exact_name_here_and_the_rest_on_the_server():
+    assert digest.resolve_bus(NET, "b001") == ("B001", "barra indicada por id")
+    assert digest.resolve_bus(NET, "alpha")[0] == "B000"  # "S/E Alpha" of this session
     with pytest.raises(ToolError, match="No pude elegir"):
-        digest.resolve_bus(NET, "zzz")
+        digest.resolve_bus(NET, "Iquique")  # no client: a city is not resolved locally
+
+    class Places:
+        def get(self, path, **params):
+            assert path == "/grids/places" and params == {"q": "Iquique", "point": "nov2026-1300"}
+            return {"bus": "B058", "how": "subestación que abastece a la comuna de Iquique"}
+
+    assert digest.resolve_bus(NET, "Iquique", Places()) == (
+        "B058",
+        "subestación que abastece a la comuna de Iquique",
+    )
 
 
 def test_network_and_focus_digests_stay_small():

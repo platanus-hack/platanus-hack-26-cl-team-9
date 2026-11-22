@@ -28,6 +28,13 @@ const TOOL_NAMES: Record<string, string> = {
   run_report: "Informe de la corrida",
   after_action: "Revisión posterior",
   replay: "Repetir la corrida",
+  list_incident_scenarios: "Ver incidentes documentados",
+  start_incident_run: "Iniciar un incidente",
+  prepare_scenario: "Preparar el mapa",
+};
+const TARGETS: Record<string, string> = { demand: "demanda", generation: "generación", population: "personas", lines: "capacidad de líneas" };
+const TECHS: Record<string, string> = {
+  eolica: "eólica", bateria: "batería", termica: "térmica", carbon: "carbón", diesel: "diésel", bioenergia: "bioenergía", geotermica: "geotérmica",
 };
 
 export const toolName = (name: string) => TOOL_NAMES[name] ?? name;
@@ -45,11 +52,26 @@ export function argsText(name: string, args: unknown): string {
   if (!isObj(args)) return "";
   if (name === "step" && typeof args.cycles === "number") return `${args.cycles} ${args.cycles === 1 ? "ciclo" : "ciclos"} de 5 min`;
   if (name === "repair_lines" && !args.lines) return "todas las líneas abiertas";
+  if (name === "prepare_scenario") return scenarioArgs(args);
   if (name === "add_line" && args.a && args.b) {
     const rest = Object.entries(args).filter(([k]) => k !== "a" && k !== "b");
     return [`${args.a} – ${args.b}`, ...rest.map(([k, v]) => part(k, v))].filter(Boolean).join(" · ");
   }
   return Object.entries(args).map(([k, v]) => part(k, v)).filter(Boolean).join(" · ");
+}
+
+/** prepare_scenario's changes in words ("+120 MW demanda en Antofagasta"), then the failures. Before, they read
+ * "[object Object], [object Object]". */
+function scenarioArgs(args: Json): string {
+  const changes = Array.isArray(args.changes) ? args.changes.filter(isObj) : [];
+  const words = changes.map((c) => {
+    const how = typeof c.add === "number" ? `${c.add >= 0 ? "+" : ""}${num(c.add)}${c.target === "population" ? "" : " MW"}` : typeof c.factor === "number" ? `× ${num(c.factor)}` : "";
+    const what = Array.isArray(c.tech) && c.tech.length ? c.tech.map((t) => TECHS[String(t)] ?? String(t)).join(", ") : TARGETS[String(c.target)] ?? String(c.target);
+    const where = ["places", "comunas", "buses", "areas", "zones", "lines"].flatMap((k) => (Array.isArray(c[k]) ? (c[k] as unknown[]).map(String) : []));
+    return [how, what, where.length ? `en ${where.join(", ")}` : ""].filter(Boolean).join(" ");
+  });
+  const out = (k: string, label: string) => (Array.isArray(args[k]) && (args[k] as unknown[]).length ? [`${label}: ${list(args[k])}`] : []);
+  return [...words, ...out("open_lines", "líneas fuera"), ...out("out_buses", "subestaciones fuera")].join(" · ") || "red base";
 }
 
 function part(key: string, value: unknown): string {
@@ -65,6 +87,7 @@ function part(key: string, value: unknown): string {
 export function resultText(name: string, ok: boolean, result: unknown): string {
   if (!ok) return failureText(result);
   if (!isObj(result)) return typeof result === "string" ? result.slice(0, 140) : "";
+  if (name === "prepare_scenario") return scenarioResult(result);
   const parts: string[] = [];
   if (typeof result.id === "string") parts.push(`id ${result.id}`);
   if (typeof result.bus_name === "string") parts.push(`en ${result.bus_name}`);
@@ -77,6 +100,19 @@ export function resultText(name: string, ok: boolean, result: unknown): string {
   if (typeof result.session_id === "string" && (name === "start_session" || name === "join_session")) parts.push(`sesión ${result.session_id.slice(0, 6)}`);
   if (Array.isArray(result.warnings) && result.warnings.length) parts.push(`${result.warnings.length} ${result.warnings.length === 1 ? "advertencia" : "advertencias"}`);
   return parts.join(" · ");
+}
+
+/** Where each place went, changes that touched nothing, and the people without power of a simulated failure. */
+function scenarioResult(result: Json): string {
+  const changes = isObj(result.prepared) && Array.isArray(result.prepared.changes) ? result.prepared.changes.filter(isObj) : [];
+  const places = changes.flatMap((c) => (Array.isArray(c.places) ? c.places.filter(isObj).map((p) => String(p.bus_name)) : []));
+  const empty = changes.filter((c) => c.matched === 0).length;
+  const sim = isObj(result.simulation) && isObj(result.simulation.with_changes) ? result.simulation.with_changes : null;
+  return [
+    places.length ? `en ${places.join(", ")}` : "",
+    empty ? `${empty} ${empty === 1 ? "cambio no tocó" : "cambios no tocaron"} ninguna subestación` : "",
+    sim && typeof sim.people_without_power === "number" ? `${num(sim.people_without_power)} personas sin suministro` : "",
+  ].filter(Boolean).join(" · ") || "mapa preparado";
 }
 
 function failureText(result: unknown): string {

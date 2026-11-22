@@ -1,4 +1,5 @@
 import { CITIES } from "./cities";
+import type { PlacedPoint } from "./placed";
 import { markerLabel, type Impact, type Marker } from "./simulation";
 import { formatPeople, int, narrate, secs, shortTitle } from "./text";
 import type { MarkerState } from "./Timeline";
@@ -12,7 +13,7 @@ export interface LocatedMarker { marker: Marker; lon: number; lat: number; zone:
  * The callout does not follow its pin: it sits docked in the quiet corner next to the panel, so it never covers the
  * network and no line crosses it. The pin stays on the map, marked as the current one.
  */
-export function MapOverlays(p: { markers: LocatedMarker[]; states: Map<Marker, MarkerState>; visible: number; network: Network; impact: Impact; showCities: boolean; select(t: number): void }) {
+export function MapOverlays(p: { markers: LocatedMarker[]; states: Map<Marker, MarkerState>; visible: number; network: Network; impact: Impact; showCities: boolean; placed: PlacedPoint[]; select(t: number): void }) {
   const first = p.markers[0];
   const current = p.markers.find((lm) => p.states.get(lm.marker) === "current");
   // A group can reach past the current second: the callout shows its latest event that has already happened.
@@ -24,6 +25,12 @@ export function MapOverlays(p: { markers: LocatedMarker[]; states: Map<Marker, M
     <>
       {p.showCities && CITIES.map((c) => (
         <div key={c.name} className={`anchor city ${c.side}`} data-lon={c.lon} data-lat={c.lat}><span className="city-dot" /><span className="city-name">{c.name}</span></div>
+      ))}
+      {p.placed.map((pt) => (
+        <div key={pt.key} className={`anchor placed ${pt.kind}`} data-lon={pt.lon} data-lat={pt.lat} role="img" aria-label={`${pt.label} en ${pt.name}`}>
+          <span className="placed-dot" style={pt.color ? { background: pt.color } : undefined} />
+          <span className="placed-label"><b>{pt.label}</b><span>{pt.name}</span></span>
+        </div>
       ))}
       {p.markers.map((lm) => {
         const state = p.states.get(lm.marker) ?? "future";

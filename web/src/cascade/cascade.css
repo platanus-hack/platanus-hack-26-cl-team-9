@@ -249,6 +249,13 @@
 .shell .city-name { position: absolute; top: -8px; color: var(--fg); font-size: 12px; font-weight: 600; line-height: 16px; white-space: nowrap; text-shadow: 0 0 3px var(--bg), 0 0 6px var(--bg); }
 .shell .city.left .city-name { right: 8px; }
 .shell .city.right .city-name { left: 8px; }
+/* Points a prepared scenario added (placed.ts): a plant is a disc in its technology color, a load (datacenter) a ring.
+   Round like the other map symbols; the label is a square card like the event pins'. Never red (failure) or cream (cities). */
+.shell .placed-dot { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--fg); box-shadow: 0 0 0 2px var(--bg); }
+.shell .placed.load .placed-dot { background: transparent; border-width: 3px; }
+.shell .placed-label { position: absolute; left: 14px; top: -18px; display: flex; flex-direction: column; padding: 3px 8px; background: var(--surface); border: 1px solid var(--border-strong); white-space: nowrap; }
+.shell .placed-label b { color: var(--fg); font-size: 12px; font-weight: 600; line-height: 16px; }
+.shell .placed-label span { color: var(--muted); font-size: 11px; line-height: 14px; }
 .shell .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; }
 .shell .map-event.past { z-index: 1; }
 .shell .map-event.current { z-index: 2; }
