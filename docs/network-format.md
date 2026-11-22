@@ -242,11 +242,11 @@ Until a source declares the line ends, these countries can only be deduced. Expe
 
 ## 6. Safety of uploaded files
 
-This is the same requirement as issue #49 part C, which can validate uploads against this contract.
+This is the same requirement as issue #49 part C. The map's upload form enforces it in `web/src/map/upload.ts` (`parseUpload`, tested in `upload.test.ts`; `mapa3.md` section 4.1) for both upload formats: the GeoJSON of the regional schema v2 and the v1 JSON of section 1. Differences from the list below: an upload is drawn but never simulated, so `x_pu`, `capacity_mw` and provenance are not required (missing `source` becomes "Red subida por el usuario"). The "inside the declared country's box" check is also left out: the declared country may have no outline in the repo.
 
 - **Read as data, never as code.** Parse with a JSON (or GeoJSON) parser only: no `eval`, no pickle, no YAML tags, no spreadsheet macros or formulas.
 - **Names are text.** Render `name`, `source` and `warnings` escaped. Never interpret them as HTML, Markdown links or file paths.
-- **Size limit.** Refuse files above a fixed size before parsing. Proposed: 10 MB, 5,000 buses, 10,000 lines (Brazil is 0.73 MB, 853 buses and 1,305 lines).
+- **Size limit.** Refuse files above a fixed size before parsing. Enforced: 10 MB, 5,000 buses, 10,000 lines (Brazil is 0.73 MB, 853 buses and 1,305 lines).
 - **Range checks** before use:
   - `lat` within −90..90 and `lon` within −180..180, inside the declared country's box;
   - `kv` within 1..1500;

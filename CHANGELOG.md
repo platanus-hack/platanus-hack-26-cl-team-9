@@ -1,6 +1,17 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(regional): document one network at a time, per-country camera and uploads
+
+- **Changed:**
+  - `mapa3.md` has a new section 4.1 (selector, camera per country, view-only networks, Red figures, the `country` field, upload formats, checks, safety and storage). It also gains the `?pais=` row, "Ver toda la red" and the new files in section 8.
+  - `regional.md`: the countries are shown one at a time and loaded on demand.
+  - `network-format.md` §6: the upload limits are now enforced, with the differences listed.
+  - `plan.md` §9 item 14 records the decisions of issue #49 and what is still open.
+- **Why:** AGENTS.md: behaviour changes are documented in the same delivery.
+- **Agents:** The CHANGELOG entry of 2026-11-21 saying "the proposed upload limits are not enforced anywhere yet" is now wrong: `web/src/map/upload.ts` enforces them. Still open: simulating an uploaded network (phase 2), sharing uploads (#34/#44), and running the Mapbox path in a browser.
+- **Files:** `docs/{mapa3,regional,network-format,plan}.md`.
+
 ## 2026-11-22 · feat(map): one network at a time, per-country camera, selector and upload
 
 - **Changed:** Mapa 3 draws one network at a time.
