@@ -1,6 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(stress): guide to the batch endpoints for MCP clients (#101)
+
+- **Changed:** `docs/stress.md` is now the guide for the batch endpoints: flow (prepare never simulates), endpoints and agent operations, every field of a change with its rules, the vocabulary (zones, areas A01-A13, technologies, kV), what each target does, recipes with real outputs, responses, the `prepare_scenario` tool with example calls, errors and guardrails. `docs/mcp.md` and `docs/assistant.md` list the tool and link to it.
+- **Why:** the batch changes exist for the model. An MCP client needs to know exactly how to write them.
+- **Agents:** the recipe numbers in `docs/stress.md` section 5 were run on 2026-11-22 against `data/processed`. They change when the data does.
+- **Files:** `docs/stress.md`, `docs/mcp.md`, `docs/assistant.md`.
 ## 2026-11-22 · feat(web): edit components in place, prepared scenarios on the map, the assistant sets the grid; sessions hidden (#101)
 
 - **Changed:** the card of a substation edits Personas, Demanda and Generación by factor, and the card of a line edits Capacidad. They are kept in `Edits.changes` and sent as `changes` to `/grids/simulate`, `/dependency` and `/cost`. "Estado de la red" lists them with "Quitar", plus the prepared grid (`/grids/prepare`). "Simulación" shows supply per zone, and a generator's card shows its own.

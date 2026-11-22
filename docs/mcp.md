@@ -39,12 +39,14 @@ A session serves one request at a time (`sessions-api.md` section 7), so a tool 
 | Network edits | `add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network` |
 | Sandbox | `cut_lines` (1-3 lines), `repair_lines`, `get_grid_state` |
 | Strategic runs | `start_run`, `inject_event`, `step`, `submit_action`, `run_status`, `run_report`, `after_action`, `replay` |
+| Prepared scenarios (no session) | `prepare_scenario`: batch changes by filters plus failures, then the cascade (`docs/stress.md`) |
 
 - Where a tool takes a bus it accepts `B###`, an area id or name (`A02`, "Antofagasta", which maps to the area's anchor bus) or a unique part of a bus name; otherwise it answers with the candidate ids.
 - Edits return the new id, where it went (`bus`, `bus_name`, `area`, `area_name`), `warnings`, the redispatch rule with `is_assumption: true` and the baseline after the edit: `newly_overloaded` (caused by the edit), `still_overloaded` (overloaded before and after), `no_longer_overloaded` (relieved), `overloaded_now_total` and `load_shed_mw`. The base case already has overloaded lines, so only `newly_overloaded` is the edit's doing. `describe_network` keeps `baseline.overloaded_lines` (the current list) and lists the corridors with their lines; with `focus` it gives the area's totals and its overloaded lines.
 - `step` returns, per cycle, `unserved_mw` (power, not energy) and `level_text` (the official label, e.g. "L1 · contenido"), plus `events_applied` for the whole call and a `warning` when no event happened, so a summary cannot claim an event that was not applied. `run_report` adds `consequence.worst_level_text`.
 - A corridor between areas (`A06-A07`) is a group of lines: `cut_lines` takes only real line ids; a whole corridor opens in a strategic run with `inject_event(C3_transmission_opening, "A06-A07")`. `start_run` keeps `open_field` (no scripted events) unless the user names another template.
 - Ids for events, actions, policies and templates come from `list_options` (the catalog).
+- `prepare_scenario` works on the default grid, not on a session. It takes `changes` (population, demand, generation, lines, by filters: buses, zones, areas, comunas, tech, lines, kv), `open_lines`, `out_buses` and `point`. It calls `POST /grids/prepare` and, with failures, `POST /grids/simulate` with and without the changes. Each call is the full final state: in the web it replaces the grid on the map, paused at 0. Guide with fields, recipes and errors: `docs/stress.md`.
 
 ## 4. Guardrails
 
