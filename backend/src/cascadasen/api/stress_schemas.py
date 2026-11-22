@@ -94,3 +94,20 @@ class PrepareOut(BaseModel):
         description="Overlay warnings (isolated buses, no synchronous units)."
     )
     assumptions: list[dict[str, Any]] = Field(description="Assumptions behind the numbers.")
+
+
+class SimulateOut(BaseModel):
+    """The cascade of the failures on the prepared grid."""
+
+    point: str = POINT
+    open_lines: list[str] = Field(description="Cuts that applied.")
+    out_buses: list[str] = Field(description="Substations out of service.")
+    dropped_lines: list[str] = Field(description="Lines that went with their substation.")
+    direct: dict[str, Any] = Field(
+        description="Load, generation and people the outages take away before the cascade."
+    )
+    warnings: list[dict[str, Any]] = Field(description="Overlay warnings.")
+    timeline: dict[str, Any] = Field(description="Cascade timeline: events, frames, frequency and summary.")
+    supply: dict[str, Any] = Field(
+        description="Per generating substation (by id) and per zone: should_feed, feeds, pct_fed."
+    )

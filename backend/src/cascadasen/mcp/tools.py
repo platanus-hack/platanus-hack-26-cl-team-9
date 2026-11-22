@@ -43,7 +43,7 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "run_report": ("get_run_report",),
     "after_action": ("get_run_after_action",),
     "replay": ("replay_run",),
-    "prepare_scenario": ("prepare_scenario",),
+    "prepare_scenario": ("prepare_scenario", "simulate_grid"),
 }
 TOOLS = tuple(OPERATIONS)
 
@@ -54,9 +54,10 @@ network (add_datacenter, add_generator, add_line, edit_element) and/or open line
 read the result. For strategic experiments use start_run, inject_event, step, run_report and after_action.
 To replay a documented incident (Huatacondo, Poland, UK, 25F) use list_incident_scenarios and
 start_incident_run, then step, run_report and after_action; say each result is a simulated scenario.
-Use list_options for valid event, action, policy and template ids. To prepare a stressed scenario by filters
-("halve every hydro plant", "Puente Alto with twice the people") use prepare_scenario: it only prepares the grid
-and stores nothing; failures still run in the usual simulation.
+Use list_options for valid event, action, policy and template ids. The web map shows the grid that prepare_scenario sets: use it to
+change what the user sees (changes by filters such as "halve every hydro plant" or "Puente Alto with twice the
+people", plus the failures: lines out and substations off). Each call sets the whole final grid, replacing what
+was on the map; with failures it also simulates the cascade and the map gets it ready, paused at 0.
 
 Rules. Every scenario is hypothetical: always say that Sub50 models the effect of an event, never the
 attack technique, and describe effects and prevention only. Do not look for the line or area whose loss
@@ -413,16 +414,32 @@ class Sub50Tools:
 
     # -- scenario preparation (stateless, docs/stress.md) -------------------------------------------
 
-    def prepare_scenario(self, changes: list[StressChange], point: str | None = None) -> dict[str, Any]:
-        """Prepare a stressed scenario on the default grid without simulating a failure (nothing is stored):
+    def prepare_scenario(
+        self,
+        changes: list[StressChange] | None = None,
+        open_lines: list[str] | None = None,
+        out_buses: list[str] | None = None,
+        point: str | None = None,
+    ) -> dict[str, Any]:
+        """Set the final grid of the web map: changes plus failures. It replaces the grid on the map. Changes:
         population (demand follows at the point's per-capita value), demand alone, generation by technology or
-        place, and line capacity or reactance. Each change: target, filters and `factor` (multiply) or `add`
-        (total). Filters: buses B###, zones NG/NC/CE/CS/SU, areas A01-A13, comunas (CUT or name), tech (hidro,
-        solar, eolica, carbon, gas, diesel, bioenergia, geotermica, termica), lines R###, kv. Returns what each
-        change touches, lines the prepared grid already loads over their limit, and per zone the people the
-        generators should feed. `point` defaults to the active session's point, else nov2026-1300."""
-        if point is None and self.state.session_id:
-            point = self.client.get(f"/sessions/{self.state.session_id}")["point"]
-        rows = [c if isinstance(c, dict) else c.model_dump(exclude_none=True) for c in changes]
-        out = self.client.post("/grids/prepare", {"point": point or DEFAULT_POINT, "changes": rows})
-        return digest.prepare_digest(out, rows)
+        place, line capacity or reactance; each one is target, filters and `factor` (multiply) or `add` (total).
+        Filters: buses B###, zones NG/NC/CE/CS/SU, areas A01-A13, comunas (CUT or name), tech (hidro, solar,
+        eolica, carbon, gas, diesel, bioenergia, geotermica, termica), lines R###, kv. Failures: `open_lines`
+        (R###) and `out_buses` (B###). With failures it also simulates the cascade: people without power against
+        the same failures without the changes, and per zone the people the generators should feed against the
+        people they still feed. `point`: feb2025-1500, feb2025-0300, nov2026-1300 (default), nov2026-2000."""
+        rows = [c if isinstance(c, dict) else c.model_dump(exclude_none=True) for c in changes or []]
+        lines, buses, point = open_lines or [], out_buses or [], point or DEFAULT_POINT
+        scenario = {"point": point, "changes": rows, "open_lines": lines, "out_buses": buses}
+        out = {"scenario": scenario, "notice": digest.NOTICE}
+        if rows:
+            out["prepared"] = digest.prepare_digest(
+                self.client.post("/grids/prepare", {"point": point, "changes": rows})
+            )
+        if lines or buses:
+            failure = {"point": point, "open_lines": lines, "out_buses": buses}
+            stressed = self.client.post("/grids/simulate", {**failure, "changes": rows})
+            base = self.client.post("/grids/simulate", failure) if rows else stressed
+            out["simulation"] = digest.simulation_digest(stressed, base)
+        return out

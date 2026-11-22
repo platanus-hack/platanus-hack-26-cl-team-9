@@ -1,6 +1,22 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(stress): guide to the batch endpoints for MCP clients (#101)
+
+- **Changed:** `docs/stress.md` is now the guide for the batch endpoints: flow (prepare never simulates), endpoints and agent operations, every field of a change with its rules, the vocabulary (zones, areas A01-A13, technologies, kV), what each target does, recipes with real outputs, responses, the `prepare_scenario` tool with example calls, errors and guardrails. `docs/mcp.md` and `docs/assistant.md` list the tool and link to it.
+- **Why:** the batch changes exist for the model. An MCP client needs to know exactly how to write them.
+- **Agents:** the recipe numbers in `docs/stress.md` section 5 were run on 2026-11-22 against `data/processed`. They change when the data does.
+- **Files:** `docs/stress.md`, `docs/mcp.md`, `docs/assistant.md`.
+## 2026-11-22 · feat(web): edit components in place, prepared scenarios on the map, the assistant sets the grid; sessions hidden (#101)
+
+- **Changed:** the card of a substation edits Personas, Demanda and Generación by factor, and the card of a line edits Capacidad. They are kept in `Edits.changes` and sent as `changes` to `/grids/simulate`, `/dependency` and `/cost`. "Estado de la red" lists them with "Quitar", plus the prepared grid (`/grids/prepare`). "Simulación" shows supply per zone, and a generator's card shows its own.
+  - The assistant's `prepare_scenario` takes `open_lines` and `out_buses`. With failures it simulates (`simulate_grid`, now an agent route) against the base. The web loads its `scenario` as the final grid, paused at 0.
+  - "Fuentes de la grilla" uses checkboxes again: with Chile ticked, the other countries are drawn around it as context; without Chile they are shown together, view only. This reverses the radio of the #49 merge, by user decision.
+  - Every scenario starts on Carga: the tab no longer switches the colour mode.
+  - Shared sessions are hidden from the web: no rail button, `?sesion=` ignored, the assistant does not join sessions.
+- **Why:** user decisions on 2026-11-22. A person edits one component at a time and batch changes by filters are for the model only. The assistant decides the final grid before a simulation. The cascade still runs only in the existing processes.
+- **Agents:** `prepare_scenario` needs no session (`NO_SESSION_NEEDED`). `useAssistant(s, onScenario)` and `scenarioOf()` read the tool result. `useSession` starts with no session (shortcut comment, #101). `Edits.changes` is optional: old saved edits still load. A prepared scenario never uses the cache. Context layers are drawn under Chile's (`contextLayers`) but are not clickable yet.
+- **Files:** `web/src/cascade/{edits.ts,gridsApi.ts,CascadeApp.tsx,SelectionCard.tsx,NetworkState.tsx,SimulationPanel.tsx,GridSources.tsx,cascade.css,stressEdits.test.ts}`, `web/src/assistant/{useAssistant.ts,scenario.test.ts}`, `web/src/session/useSession.ts`, `backend/src/cascadasen/mcp/{tools.py,digest.py,toolbox.py}`, `backend/src/cascadasen/api/{grid_routes.py,stress_schemas.py}`, `backend/tests/unit/test_prepare_scenario_tool.py`, `docs/{stress.md,openapi/agents.openapi.json}`.
 ## 2026-11-22 · Merge origin/main into feat/incident-scenarios
 
 - **Changed:** Integrates #92 (select on the first click, switch off on the second) and #97/#99 (prepared scenarios, `prepare_scenario`) with the incident scenarios.

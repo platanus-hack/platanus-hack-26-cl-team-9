@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import type { Pick } from "./clicks";
+import { factorOf, type Edits, type Target } from "./edits";
+import type { Prepared, Supply } from "./gridsApi";
 import { loadColor } from "./layers";
 import { lineStateAt } from "./simulation";
 import { formatPeople, int, lineName, pct, placeName, zoneName } from "./text";
@@ -10,6 +13,47 @@ interface Props {
   /** True when the selected substation is shut down (every one of its lines open). */
   shutDown: boolean;
   select(pick: Pick): void; clear(): void; cutLine(id: string): void; restore(): void; shutdown(nodeId: string): void; powerOn(nodeId: string): void;
+  /** The user's changes, to edit this component in place; null where components cannot be edited. */
+  edits: Edits | null;
+  /** The prepared grid of the changes (POST /grids/prepare) and the supply after the last simulation, if any. */
+  prepared: Prepared | null; supply: Supply | null;
+  setFactor(target: Target, id: string, factor: number): void;
+}
+
+const MAX_FACTOR = 5; // the backend's bound (docs/stress.md)
+const PREPARED_TIP = "Valor de la red preparada con tus cambios (POST /grids/prepare), antes de cualquier falla. La demanda sube 0,389 × demanda del punto / población por persona agregada (supuesto, docs/stress.md).";
+const SUPPLY_TIP = "Personas que esta subestación debería alimentar antes de la falla y las que sigue alimentando cuando la cascada se asienta (POST /grids/simulate, reparto por flujo DC). Supuesto del modelo.";
+
+/** The value of `key` of a bus after every change of the prepared scenario, or null when no change touched it. */
+function preparedValue(prepared: Prepared | null, id: string, key: "load_mw" | "gen_mw" | "people"): number | null {
+  let out: number | null = null;
+  for (const c of prepared?.changes ?? []) {
+    for (const e of c.elements ?? []) {
+      if (e.id !== id) continue;
+      const v = e[key];
+      if (typeof v === "number") out = v;
+      else if (Array.isArray(v)) out = v[1];
+    }
+  }
+  return out;
+}
+
+/** A factor typed in place; it applies on Enter or when the field loses focus, so each keystroke does not simulate. */
+function FactorInput({ label, value, set }: { label: string; value: number; set(f: number): void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  const commit = () => {
+    const f = Number(text.replace(",", "."));
+    if (Number.isFinite(f) && f >= 0 && f <= MAX_FACTOR) set(f);
+    else setText(String(value));
+  };
+  return (
+    <label className="factor-input">
+      <span>{label}</span>
+      <span className="value-row">×<input type="number" min={0} max={MAX_FACTOR} step={0.1} value={text} aria-label={`Factor de ${label.toLowerCase()}`}
+        onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} /></span>
+    </label>
+  );
 }
 
 const TOPOLOGY_TIP = (year: number | undefined) =>
@@ -68,6 +112,13 @@ function LineCard(p: Props & { line: NetLine }) {
           </button>
         );
       })}
+      {p.edits && (
+        <div className="edit-block">
+          <div className="list-head"><span>Modificar</span><span>factor</span></div>
+          <FactorInput label="Capacidad" value={factorOf(p.edits, "lines", line.id)} set={(f) => p.setFactor("lines", line.id, f)} />
+          <p className="meta">Multiplica la capacidad de la línea antes de cualquier falla. 1 la deja como está.</p>
+        </div>
+      )}
       <div className="actions">
         {isCut
           ? <button className="primary-btn" onClick={p.restore}>Volver a conectar</button>
@@ -97,6 +148,17 @@ function NodeCard(p: Props & { node: string }) {
         <div><div className="value-row"><b>{int(b?.load_mw ?? 0)} <small>MW</small></b><Info tip={opTip("Demanda")} /></div><span>demanda</span></div>
         <div><div className="value-row"><b>{formatPeople(b?.people ?? 0)}</b><Info tip={opTip("Personas asignadas")} /></div><span>personas</span></div>
       </div>
+      <PreparedFigures p={p} id={n.id} />
+      <SupplyRow p={p} id={n.id} />
+      {p.edits && (
+        <div className="edit-block">
+          <div className="list-head"><span>Modificar</span><span>factor</span></div>
+          <FactorInput label="Personas" value={factorOf(p.edits, "population", n.id)} set={(f) => p.setFactor("population", n.id, f)} />
+          <FactorInput label="Demanda" value={factorOf(p.edits, "demand", n.id)} set={(f) => p.setFactor("demand", n.id, f)} />
+          <FactorInput label="Generación" value={factorOf(p.edits, "generation", n.id)} set={(f) => p.setFactor("generation", n.id, f)} />
+          <p className="meta">Más personas suben la demanda de hogares y comercio; la de minería e industria no cambia. La demanda también puede cambiar sola. La isla redespacha lo que falte. 1 deja el valor como está.</p>
+        </div>
+      )}
       <div className="list-head"><span>Líneas conectadas · {lines.length}</span><span>carga</span></div>
       {lines.map((l) => {
         const e = p.frame?.edges[l.id];
@@ -118,3 +180,31 @@ function NodeCard(p: Props & { node: string }) {
     </div>
   );
 }
+
+/** The prepared values of the bus when a change touched it, next to the base ones above. */
+function PreparedFigures({ p, id }: { p: Props; id: string }) {
+  const gen = preparedValue(p.prepared, id, "gen_mw");
+  const load = preparedValue(p.prepared, id, "load_mw");
+  const people = preparedValue(p.prepared, id, "people");
+  if (gen === null && load === null && people === null) return null;
+  return (
+    <div className="mini-figures prepared">
+      <div><div className="value-row"><b>{gen === null ? "=" : <>{int(gen)} <small>MW</small></>}</b><Info tip={PREPARED_TIP} /></div><span>generación preparada</span></div>
+      <div><div className="value-row"><b>{load === null ? "=" : <>{int(load)} <small>MW</small></>}</b><Info tip={PREPARED_TIP} /></div><span>demanda preparada</span></div>
+      <div><div className="value-row"><b>{people === null ? "=" : formatPeople(people)}</b><Info tip={PREPARED_TIP} /></div><span>personas preparadas</span></div>
+    </div>
+  );
+}
+
+/** People this generating substation should feed against the people it still feeds after the last simulation. */
+function SupplyRow({ p, id }: { p: Props; id: string }) {
+  const row = p.supply?.sources.find((r) => r.id === id);
+  if (!row) return null;
+  return (
+    <div className="value-row status-row">
+      <span>Debería alimentar a <b>{formatPeople(row.should_feed)}</b> personas y alimenta a <b className={row.pct_fed < 100 ? "fault" : ""}>{formatPeople(row.feeds)}</b> ({row.pct_fed.toFixed(2)} %).</span>
+      <Info tip={SUPPLY_TIP} />
+    </div>
+  );
+}
+

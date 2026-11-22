@@ -6,6 +6,60 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/grids/simulate": {
+      "post": {
+        "tags": [
+          "grids",
+          "grid-stress"
+        ],
+        "summary": "Simulate failures on the default grid, optionally prepared",
+        "description": "Runs the cascade of the failures (at least one line or substation out) on the grid prepared with `changes`. Returns the timeline, the direct loss and `supply`: per generating substation (by id) and per zone, the people it should feed before the failure against the people it still feeds.",
+        "operationId": "simulate_grid",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The cascade of the failures on the prepared grid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulateOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown point, bus, line, comuna or zone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid change or over the overlay limits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
     "/api/v1/grids/prepare": {
       "post": {
         "tags": [
@@ -7051,6 +7105,122 @@
         ],
         "title": "SessionWarningOut",
         "description": "A warning about the edited network."
+      },
+      "SimulateOut": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "open_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Open Lines",
+            "description": "Cuts that applied."
+          },
+          "out_buses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Out Buses",
+            "description": "Substations out of service."
+          },
+          "dropped_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dropped Lines",
+            "description": "Lines that went with their substation."
+          },
+          "direct": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Direct",
+            "description": "Load, generation and people the outages take away before the cascade."
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Overlay warnings."
+          },
+          "timeline": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Timeline",
+            "description": "Cascade timeline: events, frames, frequency and summary."
+          },
+          "supply": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Supply",
+            "description": "Per generating substation (by id) and per zone: should_feed, feeds, pct_fed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "point",
+          "open_lines",
+          "out_buses",
+          "dropped_lines",
+          "direct",
+          "warnings",
+          "timeline",
+          "supply"
+        ],
+        "title": "SimulateOut",
+        "description": "The cascade of the failures on the prepared grid."
+      },
+      "SimulateRequest": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "open_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Open Lines",
+            "description": "Lines out of service (R###).",
+            "default": []
+          },
+          "out_buses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Out Buses",
+            "description": "Substations out of service (B###).",
+            "default": []
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/StressChange"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Changes",
+            "description": "A scenario from /grids/prepare, applied before the failures.",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "point"
+        ],
+        "title": "SimulateRequest",
+        "description": "Failures to simulate on the default grid, optionally prepared with `changes`."
       },
       "StepIn": {
         "properties": {

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { Supply } from "./gridsApi";
 import { withstandsAt, type Impact, type IslandFrequency } from "./simulation";
 import { cutName, hz, index2, int, narrate, pct, placeName, secs, usdM } from "./text";
 import type { EventCost, HealthReport, N1Cost, Network, Timeline } from "./types";
@@ -9,6 +10,8 @@ interface Props {
   seek(t: number): void; openSources(): void; restore(): void; source: string;
   /** Pre-fault health of the point (`<point>/health.json`); null in an old cache or in a session. */
   health: HealthReport | null;
+  /** People the generators should feed against the people they still feed (server simulation only). */
+  supply: Supply | null;
 }
 
 /** Tab "Simulación" (Design v5, V2 and V3): people without supply, lost load, and the numbered event history. */
@@ -18,6 +21,7 @@ export function SimulationPanel(p: Props) {
   return (
     <>
       {edited ? <ImpactCard {...p} /> : <EmptyCard health={p.health} />}
+      {edited && p.supply && <SupplyCard supply={p.supply} />}
       {edited && <History {...p} />}
       {p.timeline.truncated && <p className="note">La cascada llegó al tope de 20 etapas: el resultado puede ser mayor.</p>}
       <button className="assumptions-row" onClick={p.openSources}>
@@ -173,3 +177,25 @@ function History(p: Props) {
     </div>
   );
 }
+
+const ZONE_NAME: Record<string, string> = { NG: "Norte Grande", NC: "Norte Chico", CE: "Centro", CS: "Centro-sur", SU: "Sur" };
+const SUPPLY_TIP = "Por zona: personas que sus subestaciones generadoras deberían alimentar antes de la falla y las que siguen alimentando cuando la cascada se asienta, con el porcentaje (POST /grids/simulate, reparto por flujo DC; supuesto del modelo). Sobre 100 % significa que esa zona toma gente que antes alimentaban otras. Se muestra por zona, nunca como ranking de subestaciones (docs/cyber.md 8.2).";
+
+/** Supply per zone after the cascade: who the generators should feed against who they still feed. */
+function SupplyCard({ supply }: { supply: Supply }) {
+  const zones = Object.entries(supply.by_zone);
+  if (!zones.length) return null;
+  return (
+    <div className="card state-list">
+      <div className="card-head"><div className="title"><h3>Abastecimiento por zona</h3></div><Info tip={SUPPLY_TIP} /></div>
+      <div className="list-head"><span>Zona · debería → alimenta</span><span>%</span></div>
+      {zones.map(([z, v]) => (
+        <div className="state-row" key={z}>
+          <span className="ellipsis">{ZONE_NAME[z] ?? z} · {int(v.should_feed)} → {int(v.feeds)}</span>
+          <span className={v.pct_fed < 100 ? "num fault" : "num"}>{v.pct_fed.toFixed(2)} %</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+

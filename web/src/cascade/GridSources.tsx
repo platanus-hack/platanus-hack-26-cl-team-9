@@ -1,29 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { loadCatalog, type Catalog } from "./gridsApi";
 import { Chevron, Icon } from "./ui";
 
+/** A ticked network: its country and the stored context document it is composed from (null for Chile). */
+export interface SourcePick { country: string; key: string | null }
+
 /**
- * "Fuentes de la grilla" in the nav rail: opens downward as a list of the networks the backend stores, each with its
- * status (Complete: it can be simulated; Partial: it is only drawn). One network is on the map at a time (issue #49), so a
- * row is a choice, not a tick: choosing it composes that network from the stored documents and shows it alone, the same
- * as choosing it in the panel header. The marked row is the network on the map. The hour comes from "Escenarios".
+ * "Fuentes de la grilla" in the nav rail: opens downward as a list of the networks the backend stores, each with a
+ * checkbox and its status (Complete: it can be simulated; Partial: it is only drawn). Tick as many as wanted: with
+ * Chile ticked, Chile is the simulated network and the others are drawn around it as context; without Chile, the
+ * ticked countries are shown together, view only. Each tick composes the grid at once. The hour comes from "Escenarios".
  */
 export function GridSources({ current, composed, busy, apply, reset, locked }: {
-  current: string; composed: string | null; busy: boolean; apply(country: string, key: string | null): void; reset(): void; locked: boolean;
+  current: string; composed: string | null; busy: boolean; apply(picks: SourcePick[]): void; reset(): void; locked: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set([current]));
+  useEffect(() => { if (!composed) setChecked(new Set([current])); }, [current, composed]); // back to the cache: the network on the map
 
   function toggleOpen() {
     setExpanded(!expanded);
     if (catalog || error) return;
     loadCatalog().then(setCatalog).catch((e) => setError(String(e.message)));
   }
-  /** A click on the marked row composes it from the backend when it came from the app files; on a composed one it does nothing. */
-  function choose(country: string, key: string | null) {
-    if (busy || locked || composed === country) return;
-    apply(country, key);
+  function tick(country: string) {
+    if (!catalog || busy || locked) return;
+    const next = new Set(checked);
+    if (next.has(country)) next.delete(country); else next.add(country);
+    if (next.size === 0) return; // at least one network stays on the map
+    setChecked(next);
+    apply(catalog.grids.filter((g) => next.has(g.country)).map((g) => ({ country: g.country, key: g.key })));
   }
 
   return (
@@ -33,12 +41,12 @@ export function GridSources({ current, composed, busy, apply, reset, locked }: {
         <span className="rail-chevron"><Chevron dir={expanded ? "down" : "right"} color="currentColor" /></span>
       </button>
       {expanded && (
-        <div className="scenarios sources" role="radiogroup" aria-label="Red de la grilla">
+        <div className="scenarios sources" role="group" aria-label="Redes de la grilla">
           {error && <p className="source-note">{error}</p>}
           {!error && !catalog && <p className="source-note">Leyendo el catálogo…</p>}
           {catalog?.grids.map((g) => (
             <label className="source-row" key={g.country} title={locked ? "En una sesión compartida la grilla está fija" : undefined}>
-              <input type="radio" name="grid-source" checked={current === g.country} disabled={busy || locked} onChange={() => choose(g.country, g.key)} onClick={() => current === g.country && choose(g.country, g.key)} />
+              <input type="checkbox" checked={checked.has(g.country)} disabled={busy || locked} onChange={() => tick(g.country)} />
               <span className="ellipsis">{g.name}</span>
               <span className={`source-status ${g.status.toLowerCase()}`}>{g.status}</span>
             </label>
