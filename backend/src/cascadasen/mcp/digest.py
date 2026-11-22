@@ -278,3 +278,19 @@ def _incident_digest(inc: dict[str, Any] | None) -> dict[str, Any]:
         return {}
     keys = ("id", "title", "kind", "verified", "mitigations", "notes", "consequence_card")
     return {"incident": {k: inc[k] for k in keys if k in inc}}
+
+
+def prepare_digest(out: dict[str, Any], changes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Counts and totals per change, the prepared totals, how many lines start over their limit and the per-zone
+    stat; no per-substation list (docs/cyber.md section 8.2). `changes` is echoed so the scenario can be reused."""
+    return {
+        "point": out["point"],
+        "changes": [{k: v for k, v in c.items() if k != "elements"} for c in out["changes"]],
+        "totals": out["totals"],
+        "overloaded_lines": len(out["overloaded_lines"]),
+        "should_feed_by_zone": out["should_feed"]["by_zone"],
+        "per_capita_w": out["per_capita_w"],
+        "scenario": changes,
+        "assumptions": [a["text"] for a in out["assumptions"]],
+        "notice": NOTICE,
+    }

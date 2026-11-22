@@ -6,6 +6,60 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/grids/prepare": {
+      "post": {
+        "tags": [
+          "grids",
+          "grid-stress"
+        ],
+        "summary": "Prepare a scenario: population, demand, generation and lines by filters",
+        "description": "Resolves the filters and returns the prepared grid with no failure: what each change touches, lines already over their limit, and the people each generator should feed. It does not simulate. Send the same `changes` with /grids/simulate, /grids/dependency or /grids/cost to run a failure on it.",
+        "operationId": "prepare_scenario",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The prepared grid with no failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepareOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown point, bus, line, comuna or zone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid change or over the overlay limits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
     "/api/v1/sim/network": {
       "get": {
         "tags": [
@@ -5635,6 +5689,118 @@
         "type": "object",
         "title": "LoadPatch"
       },
+      "PrepareIn": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/StressChange"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Changes",
+            "description": "Changes, applied in order."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "point",
+          "changes"
+        ],
+        "title": "PrepareIn",
+        "description": "Changes that prepare a scenario. Nothing runs and nothing is stored: send the same `changes` with\n/grids/simulate, /grids/dependency or /grids/cost to run a failure on the prepared grid."
+      },
+      "PrepareOut": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Changes",
+            "description": "Per change: matched count, deltas and the elements."
+          },
+          "per_capita_w": {
+            "type": "number",
+            "title": "Per Capita W",
+            "description": "Demand per added person at this point, W (assumption)."
+          },
+          "totals": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Totals",
+            "description": "People, demand and generation of the prepared grid."
+          },
+          "overloaded_lines": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Overloaded Lines",
+            "description": "Lines over the cascade's limit with no failure, by id: a simulation starts with them."
+          },
+          "should_feed": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Should Feed",
+            "description": "Per generating substation (by id) and per zone: the people it should feed."
+          },
+          "redispatch": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Redispatch",
+            "description": "Generation the island's synchronous units moved."
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Overlay warnings (isolated buses, no synchronous units)."
+          },
+          "assumptions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Assumptions",
+            "description": "Assumptions behind the numbers."
+          }
+        },
+        "type": "object",
+        "required": [
+          "point",
+          "changes",
+          "per_capita_w",
+          "totals",
+          "overloaded_lines",
+          "should_feed",
+          "redispatch",
+          "warnings",
+          "assumptions"
+        ],
+        "title": "PrepareOut",
+        "description": "The prepared grid with no failure."
+      },
       "RepairIn": {
         "properties": {
           "lines": {
@@ -6903,6 +7069,131 @@
         "type": "object",
         "title": "StepIn"
       },
+      "StressChange": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "population",
+              "demand",
+              "generation",
+              "lines"
+            ],
+            "title": "Target",
+            "description": "population (people; demand follows), demand (MW alone), generation (MW), lines (capacity)."
+          },
+          "buses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Buses",
+            "description": "Substation ids B###.",
+            "default": []
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zones",
+            "description": "Zones NG, NC, CE, CS, SU.",
+            "default": []
+          },
+          "areas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Areas",
+            "description": "Operating areas A01-A13.",
+            "default": []
+          },
+          "comunas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Comunas",
+            "description": "Comunas by CUT code or name (population and demand only).",
+            "default": []
+          },
+          "tech": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tech",
+            "description": "Generation only: hidro, solar, eolica, carbon, gas, diesel, bioenergia, geotermica, termica (carbon + gas + diesel).",
+            "default": []
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lines",
+            "description": "Lines only: line ids R###.",
+            "default": []
+          },
+          "kv": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Kv",
+            "description": "Lines only: voltage levels (66, 110, 154, 220, 500).",
+            "default": []
+          },
+          "factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factor",
+            "description": "Multiplies the value (lines: capacity)."
+          },
+          "add": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Add",
+            "description": "Adds this total (people for population, MW otherwise); negative lowers it."
+          },
+          "x_factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Factor",
+            "description": "Lines only: multiplies the reactance x_pu."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "title": "StressChange",
+        "description": "One change, applied to every element the filters pick. Filters combine (all must hold); none: the whole\ncountry. `factor` multiplies each element; `add` is one total for the filter, split by the current value."
+      },
       "TheaterNetworkOut": {
         "properties": {
           "point": {
@@ -7020,6 +7311,10 @@
     {
       "name": "global-runs",
       "description": "Strategic runs over the default dataset, and its network."
+    },
+    {
+      "name": "grid-stress",
+      "description": "Stress the default grid per request: population, demand, generation and lines by filters."
     }
   ]
 }

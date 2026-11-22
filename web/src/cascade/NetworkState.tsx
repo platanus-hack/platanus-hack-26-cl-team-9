@@ -20,7 +20,7 @@ export function NetworkState({ network, buses, point, edits, result, timeline, r
     return (
       <div className="card empty">
         <h3>Sin cambios</h3>
-        <p>La red está como en el punto de operación elegido. Haz doble clic en una línea del mapa para sacarla de servicio, o en una subestación para apagarla. Cada cambio se suma a los anteriores y queda en esta lista.</p>
+        <p>La red está como en el punto de operación elegido. Haz clic en una línea o una subestación del mapa para ver su detalle, y clic otra vez para sacarla de servicio o apagarla. Cada cambio se suma a los anteriores y queda en esta lista.</p>
       </div>
     );
   }
@@ -54,7 +54,7 @@ export function NetworkState({ network, buses, point, edits, result, timeline, r
       {result && edits.buses.length > 0 && (
         <p className="meta">Apagar {edits.buses.length === 1 ? "esa subestación" : "esas subestaciones"} deja sin suministro a {formatPeople(result.direct.people)} personas y quita {int(result.direct.load_mw)} MW de demanda y {int(result.direct.gen_mw)} MW de generación, antes de la cascada.</p>
       )}
-      {result?.warnings.map((w) => <p className="note" key={w.code + w.message}>{w.message}</p>)}
+      {result?.warnings.map((w, i) => <p className="note" key={`${w.code}-${i}`}>{w.message}</p>)}
       <p className="source">Con una sola línea se lee la simulación precalculada; con más cambios la calcula el motor en el servidor, todos juntos.</p>
     </>
   );
