@@ -1,6 +1,11 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · chore(backend): remove nine unreferenced methods
+- **Changed:** Removed `ProcessedWorld.labels`, `LogisticsAgent.freedom`, `Grid.add_inertia`, `Grid.totals` (simulation grid), `Decision.param`, `Belief.trust_of`, `Action.param` (execution), `TheaterGrid.island_inertia_mws` and `TheaterGrid.release_hold`. 40 lines deleted, none added.
+- **Why:** Review B-13. `vulture` flags them, and `git grep` finds no caller in `backend/src`, `backend/tests`, `web/src`, `docs` or the OpenAPI specs (only CHANGELOG history mentions `island_inertia_mws`). None is reached through `getattr` (the `getattr` sites use fixed names or tool/route names).
+- **Agents:** `api/static/map.html` stays: it serves `/map`. Only these nine locations were re-checked on this base (the review counted 11).
+- **Files:** `backend/src/cascadasen/{application/theater_world.py,domain/agents/logistics.py,domain/simulation/grid.py,domain/theater/{decisions,execution,grid}.py}`.
 ## 2026-11-22 · chore(deps): add a `data` dependency group with scipy
 - **Changed:** `backend/pyproject.toml` gets `[dependency-groups] data = ["scipy"]` and `backend/uv.lock` adds scipy 1.18.1 (75 added lines, no other package changed). `docs/mapa3.md` now says `cd backend && uv sync --group data`.
 - **Why:** Review R-23: `data/scripts/build_baseline_opf.py` imports scipy, which was in no dependency list. openpyxl is already a main dependency.

@@ -75,9 +75,6 @@ class EventRequest:
     source: str = "user"
     cause: str = "intentional"
 
-    def param(self, name: str, default: Any = None) -> Any:
-        return dict(self.params).get(name, default)
-
     def as_dict(self) -> dict[str, Any]:
         return {
             "type": self.type,

@@ -28,9 +28,6 @@ class ProcessedWorld:
     def points(self) -> list[str]:
         return list(self._points)
 
-    def labels(self) -> dict[str, str]:
-        return {pid: p["label"] for pid, p in self._points.items()}
-
     def load(self, point_id: str) -> tuple[TheaterNetwork, OperatingPoint]:
         if point_id not in self._loaded:
             year = int(self._points[point_id]["snapshot"][:4])
