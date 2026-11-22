@@ -4,7 +4,7 @@ Browser app for the demo: a 2D map of Chile with the SEN grid standing in 3D on 
 
 ## Run locally (guide for people and agents)
 
-Requirements: Node 20 or newer and npm. Tested with Node 22.23 and npm 10.9 on macOS. No backend, API key, cloud account or internet connection is needed once dependencies are installed, except for session mode (`?sesion=`), which needs the backend.
+Requirements: Node 20 or newer and npm (the component tests need jsdom, which wants Node 22.22 or newer: `npm ci` warns on an older Node). Tested with Node 22.23 and npm 10.9 on macOS. No backend, API key, cloud account or internet connection is needed once dependencies are installed, except for session mode (`?sesion=`), which needs the backend.
 
 ```bash
 cd web
@@ -16,7 +16,7 @@ Other commands:
 
 | Command | What it does |
 |---|---|
-| `npm test` | Vitest unit tests (`src/**/*.test.ts`) |
+| `npm test` | Vitest unit tests (`src/**/*.test.ts`) and component tests (`src/**/*.test.tsx`: `@testing-library/react` on jsdom, selected per file with `// @vitest-environment jsdom`; the rest run in node) |
 | `npm run build` | Type check (`tsc --noEmit`) and production build into `web/dist/` |
 | `npm run preview` | Serve `web/dist/` at http://localhost:4173 |
 
