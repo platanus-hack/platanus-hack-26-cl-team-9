@@ -2,6 +2,13 @@
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
 
+## 2026-11-22 · feat(web): draw the other countries like Chile
+
+- **Changed:** `buildRegionalLayers` has no power-plant layer (nor its tooltip), lines highlight on hover and substations get Chile's soft white outline. The regional legend drops the plants count.
+- **Why:** the other countries looked different from Chile.
+- **Agents:** `regional-plants` no longer exists; the plants stay in the data files.
+- **Files:** `web/src/map/{regional.ts,regional.test.ts}`, `web/src/cascade/Legend.tsx`.
+
 ## 2026-11-22 · feat(web): free map camera, no bounds or land snap-back
 
 - **Changed:** `baseMap.ts` no longer limits the camera: no `maxBounds`, no minimum zoom, no snap-back to land (`_keepOverLand` removed); only `maxZoom` 13 stays.
