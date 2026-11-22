@@ -4,6 +4,7 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 
 - **Changed:** `origin/main` merged into `fix/review-sub50` (PR #120). Kept both sides: `LINE_OUT_HINT` next to the new `substation` target in `grid_stress.py`; the `prepare_scenario` docstring describes the new substation and says a named line comes from `find_line`; the `SYSTEM` prompt says prepare_scenario and find_line use no session, and `TOOL_GUIDE` (from #134) says a line named by its substations is resolved with `find_line`.
 - **Why:** #132-#135 rewrote the assistant prompt and the prepared-scenario code while this PR was open; ten files conflicted.
+- **Changed (second merge):** #147 fixed the 25F "50 Hz" panel on its own (`systemFrequency`, `voltageCollapse`), so this PR's web fix (`frequencyAt` voltage islands) is dropped and the four web files plus `docs/mapa3.md` are taken from main. The PR is backend only: `find_line`, the `factor` 0 error and the prompt. `docs/stress.md` keeps both 422 rows (overlay limit from #140, `factor` 0).
 - **Agents:** `file:line` references to `assistant_routes.py`, `grid_stress.py`, `mcp/tools.py` and `mcp/toolbox.py` in `docs/{README,code-map,for-reviewers}.md` now point at the `def`/`class` line (several were already stale on main after #132-#135). Index regenerated.
 - **Files:** `backend/src/cascadasen/{api/assistant_routes.py,application/grid_stress.py,mcp/tools.py}`, `backend/tests/unit/test_grid_stress.py`, `docs/{README,assistant,code-map,for-reviewers}.md`, `docs/index/repo-index.json`, `CHANGELOG.md`.
 
@@ -35,13 +36,82 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** A line out of service is a failure (`open_lines`), never a capacity change. Other targets keep `factor` 0 (no hydro, for example). `docs/openapi/agents.openapi.json` regenerated (the `factor` description). `docs/stress.md` sections 7 and 8.
 - **Files:** `backend/src/cascadasen/{application/grid_stress.py,api/stress_schemas.py}`, `backend/tests/{unit/test_grid_stress.py,integration/test_assistant_api.py}`, `docs/stress.md`, `docs/openapi/agents.openapi.json`.
 
-## 2026-11-22 · fix(web): show "apagón", not 50 Hz, when islands collapse by the voltage rule
+## 2026-11-22 · chore(web): merge main into the UI audit branch (#142), the audit wins on conflicts
 
-- **Changed:** `frequencyAt` (`web/src/cascade/simulation.ts`) lists each `island_blackout` with `reason: "voltage"` as an island with no curve (`hz: null`), started and collapsed from its event on. The Simulación figure and the timeline readout therefore say "apagón" for 25F (`feb2025-1500`, R239), where `frequency_hz` is `{}` and 18.2 M people are dark. Two unit tests; the tips mention the no-curve case.
-- **Why:** With no curve, the panel fell back to 50 Hz and the readout to "País 50,00 Hz" while the whole country was dark.
-- **Agents:** Voltage-collapse islands are named after the curve islands (`Isla N+1`...) with ids `V1`, `V2`; their `minHz` is `NaN`. Islands with a curve (Ancoa, `nov2026-2000` R006) behave as before. Before the first island forms the readout still says "País 50,00 Hz".
-- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,SimulationPanel.tsx,Timeline.tsx}`, `docs/mapa3.md`.
+- **Changed:** every file that conflicted keeps #142's version; main's non-conflicting work stays. To compile: `loadDependency` gets `criticality: heat === "criticality"`, `TARGET_NAME` gets `substation`, `HEAT_ENDS` gets `affected`; `assistant/GridHealth.tsx` (main's Salud de la red tab) is removed because #142's panels do not use it.
+- **Why:** user decision: #142 has precedence over main; revert this merge if something regressed.
+- **Agents:** main's Asistente "Salud de la red" tab and main's versions of the conflicting docs are gone. `affected.test.ts` expects the accented name `Charrúa` from #142's name formatting.
+- **Files:** `web/src/cascade/{CascadeApp.tsx,NetworkState.tsx,heat.ts,affected.test.ts}`, `web/src/assistant/GridHealth.tsx` (removed), `CHANGELOG.md`, `docs/index/repo-index.json`.
 
+## 2026-11-22 · style(map): flat gray land on the Mapbox basemap and no camera flights with reduced motion
+
+- **Changed:** `web/src/map/baseMap.ts` adds one fill layer to the Mapbox Standard style on `style.load`: Mapbox's public country polygons (`mapbox://mapbox.country-boundaries-v1`, source layer `country_boundaries`) in the style's `bottom` slot, colour `LAND_FILL` (#3A3B3F, the offline map's gray), with `fill-emissive-strength: 1` so the night light preset does not darken it. Camera animations (flights between networks, zoom buttons, "Ver toda la red", the snap back over land) use duration 0 when `prefers-reduced-motion: reduce` is set (`motion()`).
+- **Why:** The audit's visual review found land and sea nearly the same black, so Chile's coastline was hard to read; the design asks for flat neutral gray land with neighbours drawn (Electricity Maps look). The style's own options cannot do it (previous entry), a layer of ours can.
+- **Agents:** The fill sits above the style's land, landcover and water polygons and below its roads, borders and labels, so inland lakes and rivers are covered (the flat look) and the coast is the tileset's, slightly simplified at city zoom. The sea stays the style's near black. Without a token the offline outline is unchanged. This supersedes the "basemap is unchanged" note of the previous entry; `docs/design.md` section 7 has the detail.
+- **Files:** `web/src/map/baseMap.ts`, `docs/design.md`, `docs/mapa3.md`.
+
+## 2026-11-22 · style(web): no developer text, dark controls, tidier cards and other countries in voltage colours
+
+- **Changed:** Fixes from the UI audit, work package 3 of 4 (content and visual polish).
+  - **Text:** no file paths, commands, routes, HTTP codes or JSON field names reach the screen (`errorText` in `text.ts` strips them from server messages; the missing-cache file name goes to the console). 23 place names get their accents back on screen only ("Azúcar"). Ayuda is four numbered steps, "En el mapa" and a glossary; Fuentes y supuestos is three plain lines, the sources as links (only URLs from `docs/datasets.md` section 7) and the assumptions as rows that open.
+  - **Controls:** `color-scheme: dark` on the shell; Tensión/Carga and 1x/2x/4x are segmented controls instead of native selects; checkboxes, radios and ranges are drawn square without browser blue; one shared disabled style for `.primary-btn` and `.secondary-btn`.
+  - **Cards and map:** the selection card reads figures, load bar, action, lists, then a closed "Modificar valores"; the callout sits on the top gap with a 1 px leader to its pin and hides under the layers popover; the history card has no half row under its header; the network picker and info tips stay inside the panel (tips close with Escape); "recién sin suministro" is a regular legend cell.
+  - **Other countries:** lines in voltage colours, a compact legend (tiers and plant technologies), no red plant disc (thermal is `#9C8068`), "Volver a Chile" next to the view-only note.
+  - **Handover fixes:** a cut removes a cyber cascade from the map and an incident and a cyber cascade no longer mask each other; the map keeps its last frame while a simulation loads or fails; Simulación shows the impact of an incident or cyber cascade with "Volver al incidente"; upload errors sit under their own field.
+- **Why:** The audit found developer text in seven places, native light controls where unchecked boxes looked checked, a callout floating 300 px from its pin, and Peru drawn in gray with red plant discs (red is reserved for failures).
+- **Agents:** The Mapbox basemap is unchanged: with the night preset the Standard style darkens every colour and the monochrome theme ignores `colorLand`; `docs/design.md` section 7 records what was tried. Segmented controls are pressed buttons in a group; their arrow-key pattern, the tabs' and the info icons' semantics come with the next package. `nodeDetail.ts` (deprecated mapa 2) still prints coordinates with a decimal point. The `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` are still not re-pointed (next package).
+- **Files:** `web/src/cascade/*`, `web/src/map/{layers,regional,upload}.ts`, CSS in `web/src/{incidents,cyber,assistant,session}`, `docs/{mapa3,design,regional}.md`, `web/README.md`.
+
+## 2026-11-22 · feat(web): autoplay, colour by tab, a cold start card and honest readouts in the map shell
+
+- **Changed:** Fixes from the UI audit, work package 1 of 4 (the map shell, `web/src/cascade` and `web/src/map`).
+  - **Behaviour:** a cut, a shutdown, a Desastres entry, a `?cut=` link or a new hour with changes in force now plays by itself (paused after Prender todo, Reponer, Restaurar and with `prefers-reduced-motion`). Line colour follows the tab (Red is Tensión, Simulación is Carga, Cambios keeps it; other countries always Tensión). A bare `/` opens on Simulación with a first card: the question, a search field for lines and substations (`search.ts`, also the keyboard route to a cut) and "Ver el apagón del 25 feb 2025".
+  - **Names:** tabs are "Simulación | Red | Cambios" ("Estado de la red" renamed, with a count); the rail folder "Benchmark" is "Condiciones" (accessible name "Condiciones de operación"); "Fuentes de la grilla" is "Redes disponibles"; rail order is Mapa, Escenarios, Incidentes, Ciberataque, Asistente, then Redes disponibles, Fuentes y supuestos, Ayuda. "Mapa" is highlighted only when no rail view is open.
+  - **Readouts:** "apagón" replaces "50,00 Hz" when every bus is dark; "Apagón 25F" shows 25 feb 2025 · 15:16; cost and index sit under "Al final de la simulación" with the real hours ("7,34 h calibradas"); a row gives the real event's figure for each Desastres entry; clock and position share one rounding; each island has its own stroke pattern.
+  - **Bugs:** `?point=xxx`, an unknown `?pais=` or `?cut=` show a notice and a normalised URL instead of hanging; a single shutdown is kept in the URL as `cut=sub-<id>`; a failed simulation leaves the loading state with "Reintentar"; the Red tab no longer renders empty; a blank factor no longer commits 0; the chosen history row stays current; saved changes no longer come back on a bare `/` (a notice offers "Restaurar").
+  - The timeline card and "Prender todo" are not rendered when there is nothing to play or restore; the impact card has "Copiar enlace".
+- **Why:** The audit's top findings: the flagship 25F case opened paused on "0 personas", showed a healthy frequency during a total blackout and a wrong date, and the Red tab's voltage key sat next to a map coloured by load. Baseline scores were UI 6.3, UX 5.1, usability 5.2 of 10.
+- **Agents:** The rules above replace older text: `docs/mapa3.md` sections 2 to 5 and 11, `docs/design.md` and `web/README.md` are updated, and `docs/mapa3.md` also carries the incident, cyber and session text of the previous commit. `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` are NOT re-pointed yet: two more packages (visual polish, accessibility and small windows) will move the same files, and the last one re-points them. `pickAll` on the base map returns every element under a click. "Copiar enlace" hides when the URL cannot describe the view (several changes).
+- **Files:** `web/src/cascade/*` (new `search.ts`), `web/src/map/baseMap.ts`, `docs/{mapa3,design,grids,stress,dependency,engine,code-map}.md`, `web/README.md`.
+
+## 2026-11-22 · fix(web): incident, cyber, assistant and session views after the UI audit
+
+- **Changed:** Fixes from a UI audit (browser testers and design reviewers), work package 2 of 4.
+  - **Incidentes:** the result shows the policy that was submitted, not the one selected now; cards are a radio group with a visible mark; the policy row and a white "Simular incidente" stay pinned at the panel bottom; when a run ends the result takes focus and its first cascade plays on the map ("Quitar del mapa" removes it); an absorbed incident is titled "El sistema absorbió el efecto"; cycles without effects fold behind "Ver los N ciclos"; a failed catalog shows "No se pudo conectar con el servidor." with "Reintentar".
+  - **Ciberataque:** order is description, defence ("A · Reactiva", "B · Preventiva", "C · Adaptativa", "Comandante IA"), "Simular escenario", then a closed "Parámetros (supuestos)" with "Restablecer parámetros"; fields keep what the user types and validate on blur with the field's own label; one launch at a time; "Ciclo N de M · simulando" with a progress bar; the outcome leads the result and is worded without "ataque gana"; the first cascade goes on the map.
+  - **Asistente:** availability is probed when the view opens (the conversation endpoint answers 503 when the assistant is off); one "no disponible" notice, input disabled.
+  - **Session:** "Copiar enlace" is removed (`?sesion=` is not read on load, so the link opened the plain map); "Salir de la sesión" leaves; the strip no longer overflows. **Datos:** one write at a time, Spanish validation next to each field (`forms.ts`), decimals kept.
+- **Why:** The audit scored these views between 3.5 and 6.5 of 10. The policy shown in an incident result was wrong when the selection changed during the run, cyber fields rewrote input while typing and reported raw keys (`spread_cooldown`), and the session link could not be opened.
+- **Agents:** Backend text is cleaned in the browser by `plainText` and `sourceOf` in `web/src/incidents/incidents.ts` (area codes to names from `/sim/catalog`, no bracket footnotes, no file names): extend them rather than printing API text raw. User-facing wording is "personas sin suministro". `web/src/session/forms.ts` holds the Datos field rules and mirrors the API bounds; keep both in step. `.shell .btn` in `session.css` is unused. `docs/mapa3.md` sections 4.2, 4.3 (new, Ciberataque) and 11 describe this and land with the next commit, which shares that file.
+- **Files:** `web/src/incidents/*`, `web/src/cyber/*`, `web/src/assistant/*`, `web/src/session/*`, `docs/assistant.md`, `docs/attack-sim.md`.
+
+## 2026-11-22 · feat(web): draw the other countries like Chile
+
+- **Changed:** `buildRegionalLayers` has no power-plant layer (nor its tooltip), lines highlight on hover and substations get Chile's soft white outline. The regional legend drops the plants count.
+- **Why:** the other countries looked different from Chile.
+- **Agents:** `regional-plants` no longer exists; the plants stay in the data files.
+- **Files:** `web/src/map/{regional.ts,regional.test.ts}`, `web/src/cascade/Legend.tsx`.
+
+## 2026-11-22 · feat(web): free map camera, no bounds or land snap-back
+
+- **Changed:** `baseMap.ts` no longer limits the camera: no `maxBounds`, no minimum zoom, no snap-back to land (`_keepOverLand` removed); only `maxZoom` 13 stays.
+- **Why:** the lock kept users from leaving a country's box.
+- **Agents:** `cameraTarget` still returns `maxBounds` and `land` but only `frame` is used by the basemap. `docs/mapa3.md` updated.
+- **Files:** `web/src/map/baseMap.ts`, `docs/{mapa3.md,code-map.md}`.
+
+## 2026-11-22 · fix(web): side panel fills the height down to the timeline card
+- **Changed:** `.shell .panel` drops the 742 px cap: `max-height` is now `calc(100% - var(--timeline-h) - 3 * var(--gap))`, so a long panel (Estado de la red with many consequences) grows until 12 px above the timeline card instead of leaving an empty band on tall screens.
+- **Why:** user request: on a 951 px tall viewport the panel stopped at 742 px and left a visible gap above the timeline.
+- **Agents:** the panel is still as tall as its content; only the upper bound changed. `docs/design.md` section on the grid no longer says "max 742 px". No test asserts the old cap. Not checked in a browser.
+- **Files:** `web/src/cascade/cascade.css`, `docs/design.md`, `docs/index/repo-index.json`.
+
+## 2026-11-22 · feat(assistant): siempre sobre la grilla cargada, sin tope de MW, pestaña Salud de la red e historial ubicable (#139)
+
+- **Changed:** the web sends `grid` (point, changes, open lines, substations off) with every chat message; the backend appends it to the system prompt for that turn (`grid_context`) and the prompt says every request is about it, never ask for the point. The overlay's 5000 MW total cap is gone and one element or bus override goes up to 20000 MW. `/grids/prepare` returns `health` (prefault index of the prepared grid, no N-1) and the assistant digest carries it.
+- **Changed (web):** Asistente has tabs Chat and Salud de la red (`assistant/GridHealth.tsx`). Historial de cambios names the technology and scope of a change ("× 0 carbón en toda la red"), merges a new factor on the same scope into one "Cambio" entry, attaches the substations `/grids/prepare` resolved (the name when there is one), and a click frames them on the map and selects the first.
+- **Why:** the model asked which operating point to use, split changes to dodge the 5000 MW cap, and said it "turned off" substations when it only zeroed generation (nothing turns red without a failure). The prompt now says that turning a substation off is `out_buses`.
+- **Agents:** `ChatIn.grid` is optional (MCP and curl clients keep working). `labels.changeText` is shared by the tool card and the history. `docs/openapi/agents.openapi.json` regenerated.
+- **Files:** backend/src/cascadasen/api/{assistant_routes,stress_schemas,session_schemas}.py, application/{assistant,grid_stress}.py, domain/cascade/overlay.py, mcp/digest.py, web/src/assistant/*, web/src/changelog/*, web/src/cascade/{CascadeApp.tsx,gridsApi.ts,SimulationPanel.tsx}, docs/{assistant,stress,sessions-api,stack}.md.
 ## 2026-11-22 · feat(web): el asistente muestra un spinner y colapsa los pasos de herramientas (#126)
 
 - **Changed:** `AssistantTurnView` (exportado) muestra solo "Pensando…" con spinner mientras el turno está en curso. Al terminar muestra la respuesta y los pasos (textos y tarjetas) dentro de un `<details>` cerrado "Detalles del trabajo (N herramientas)".
@@ -653,7 +723,6 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** Issue #42 phase A: a line could be cut before its data was seen. User decision: phase A only, values stay plain text.
 - **Agents:** Switching back on is only from the card; a second click on something already off does nothing. Without a session a substation is off when it is in `edits.buses` (its lines are not off by themselves); in a session when all its lines are open. A double click on an element that is already selected switches it off on its first click (that click is a second click on the selection). Open: phase B (editing generation, demand, people). `docs/plan-2.0.md`, cited by the issue, does not exist.
 - **Files:** `web/src/cascade/{clicks.ts,clicks.test.ts,outage.ts,outage.test.ts,CascadeApp.tsx,SelectionCard.tsx,SimulationPanel.tsx,NetworkState.tsx,Timeline.tsx,Legend.tsx}`.
-
 
 ## 2026-11-22 · fix(web): changing scenario stops and restarts the timeline (#95)
 
@@ -1482,7 +1551,6 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** The team needs material for the pitch.
 - **Agents:** `docs/pitch_idea.md` is pitch material, in Spanish. Costs of the measures (e.g. US$ per MW of battery) are assumed values, not sourced data. The note in the doc says no user has been interviewed yet; do not turn the benefits into claims of validated demand.
 - **Files:** `docs/pitch_idea.md`, `CHANGELOG.md`.
-
 
 ## 2026-11-21 · fix(web): the event callout is docked in a quiet corner (#52)
 

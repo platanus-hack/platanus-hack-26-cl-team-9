@@ -13,10 +13,10 @@ from cascadasen.api.simulation_schemas import TheaterNetworkOut
 Tech = Literal["hidro", "termica", "bioenergia", "geotermica", "solar", "eolica"]
 LoadKind = Literal["datacenter", "consumo"]
 
-_MW: dict[str, Any] = {"gt": 0, "le": 3000}
+_MW: dict[str, Any] = {"gt": 0, "le": 20000}
 _LAT: dict[str, Any] = {"ge": -56, "le": -17}
 _LON: dict[str, Any] = {"ge": -76, "le": -66}
-_BUS_MW_MAX = 20000  # coarse schema guard; the overlay checks base value + MAX_ELEMENT_MW
+_BUS_MW_MAX = 40000  # coarse schema guard; the overlay checks base value + MAX_ELEMENT_MW
 
 
 class _Body(BaseModel):
@@ -55,14 +55,14 @@ class BusPatch(_Body):
         None,
         ge=0,
         le=_BUS_MW_MAX,
-        description="Bus demand in MW (replaces the base value; at most the base value + 3000 MW).",
+        description="Bus demand in MW (replaces the base value; at most the base value + 20000 MW).",
         examples=[150],
     )
     gen_mw: float | None = Field(
         None,
         ge=0,
         le=_BUS_MW_MAX,
-        description="Bus generation in MW (replaces the base value; at most the base value + 3000 MW). "
+        description="Bus generation in MW (replaces the base value; at most the base value + 20000 MW). "
         "The bus keeps this value: it takes no share of the redispatch.",
         examples=[300],
     )
@@ -110,7 +110,7 @@ class LinePatch(_Body):
 
 class LoadIn(_Body):
     bus: str = Field(description="Bus id (B###) the load connects to.", examples=["B010"])
-    mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 3000).", examples=[120])
+    mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 20000).", examples=[120])
     kind: LoadKind = Field(description="datacenter or consumo (other consumption).", examples=["datacenter"])
     name: str = Field(max_length=80, description="Display name.", examples=["Datacenter Quilicura"])
 
@@ -124,7 +124,7 @@ class LoadPatch(_Body):
 
 class GeneratorIn(_Body):
     bus: str = Field(description="Bus id (B###) the generator connects to.", examples=["B020"])
-    mw: float = Field(**_MW, description="Dispatched generation in MW (0 < mw ≤ 3000).", examples=[250])
+    mw: float = Field(**_MW, description="Dispatched generation in MW (0 < mw ≤ 20000).", examples=[250])
     tech: Tech = Field(
         description="Technology; hidro, termica, bioenergia and geotermica are synchronous.",
         examples=["solar"],
@@ -223,12 +223,12 @@ class SessionWarningOut(AgentOut):
 
 
 class SubstationLoad(_Body):
-    mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 3000).", examples=[80])
+    mw: float = Field(**_MW, description="Demand in MW (0 < mw ≤ 20000).", examples=[80])
     kind: LoadKind = Field(description="datacenter or consumo.", examples=["datacenter"])
 
 
 class SubstationGenerator(_Body):
-    mw: float = Field(**_MW, description="Generation in MW (0 < mw ≤ 3000).", examples=[150])
+    mw: float = Field(**_MW, description="Generation in MW (0 < mw ≤ 20000).", examples=[150])
     tech: Tech = Field(
         description="Technology; hidro, termica, bioenergia, geotermica are synchronous.", examples=["solar"]
     )

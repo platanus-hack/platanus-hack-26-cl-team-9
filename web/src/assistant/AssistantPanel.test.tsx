@@ -1,25 +1,33 @@
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { AssistantTurnView } from "./AssistantPanel";
-import type { AssistantTurn } from "./steps";
+// @vitest-environment jsdom
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AssistantPanel } from "./AssistantPanel";
+import { EMPTY } from "./steps";
+import type { Assistant } from "./useAssistant";
 
-const steps: AssistantTurn["steps"] = [
-  { step: 1, items: [{ kind: "text", text: "Reviso la red." }, { kind: "tool", card: { id: "t1", name: "describe_network", arguments: {}, status: "ok", result: {} } }] },
-];
-const render = (turn: AssistantTurn) => renderToStaticMarkup(<AssistantTurnView turn={turn} last busy={false} onContinue={() => {}} />);
+afterEach(cleanup);
+Element.prototype.scrollIntoView = vi.fn();
 
-describe("assistant turn", () => {
-  it("shows only a spinner while the model works, with no thoughts or tool cards", () => {
-    const html = render({ role: "assistant", status: "streaming", steps });
-    expect(html).toContain("Pensando…");
-    expect(html).not.toContain("Reviso la red.");
-    expect(html).not.toContain("tool-card");
+const assistant = (over: Partial<Assistant> = {}): Assistant => ({
+  state: EMPTY, busy: false, enabled: true, restoring: false, probe: vi.fn(), send: vi.fn(async () => {}), reset: vi.fn(async () => {}), ...over,
+});
+
+describe("AssistantPanel", () => {
+  it("asks once whether the assistant is available when the view opens, and repeats no title", () => {
+    const a = assistant();
+    render(<AssistantPanel a={a} />);
+    expect(a.probe).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("heading", { name: "Asistente" })).toBeNull();
+    expect(screen.getByText("Enter envía · Shift+Enter, nueva línea")).toBeTruthy();
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).placeholder).not.toMatch(/\bR\d{3}\b/);
   });
 
-  it("shows the reply and keeps the steps in a collapsed details block once done", () => {
-    const html = render({ role: "assistant", status: "done", steps, reply: "Listo." });
-    expect(html).not.toContain("Pensando…");
-    expect(html).toContain("Listo.");
-    expect(html).toMatch(/<details class="chat-restored"><summary>Detalles del trabajo \(1 herramienta\)<\/summary>/);
+  it("shows one notice when it is not available, with the box and the button disabled and no shortcut hint", () => {
+    const failed = { ...EMPTY, turns: [{ role: "user" as const, text: "hola" }, { role: "assistant" as const, steps: [], status: "error" as const, error: { status: 503, detail: null } }] };
+    render(<AssistantPanel a={assistant({ enabled: false, state: failed as unknown as Assistant["state"] })} />);
+    expect(screen.getAllByText(/no está disponible en este servidor/).length).toBe(1);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Enviar" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("Enter envía · Shift+Enter, nueva línea")).toBeNull();
   });
 });

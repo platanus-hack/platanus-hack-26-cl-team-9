@@ -119,9 +119,17 @@ export function subscribe(id: string, onRevision: (e: RevisionEvent) => void, op
   return { get mode() { return mode; }, close() { closed = true; es?.close(); clearTimeout(timer); } };
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  name: "Nombre", kv: "kV", lat: "Latitud", lon: "Longitud", mw: "MW", bus: "Barra", a: "Barra A", b: "Barra B", capacity_mw: "Capacidad MW",
+  x_pu: "Reactancia", load_mw: "Demanda MW", gen_mw: "Generación MW", sync_mw: "Sincrónica MW", inertia_mws: "Inercia MWs", kind: "Tipo", tech: "Tecnología",
+};
 function errorText(status: number, detail: unknown): string {
   if (typeof detail === "string") return detail;
-  if (Array.isArray(detail)) return detail.map((d) => (d as { msg?: string }).msg ?? JSON.stringify(d)).join("; ");
+  // A validation error lists the fields it refused; name them as the Datos forms do.
+  if (Array.isArray(detail)) {
+    const fields = [...new Set(detail.map((d) => FIELD_LABELS[String((d as { loc?: unknown[] }).loc?.at(-1) ?? "")] ?? "un valor"))];
+    return `El servidor no aceptó ${fields.length === 1 ? "este campo" : "estos campos"}: ${fields.join(", ")}.`;
+  }
   if (detail && typeof detail === "object" && "message" in detail) return String((detail as { message: unknown }).message);
   return `Error ${status} del servidor de sesiones.`;
 }

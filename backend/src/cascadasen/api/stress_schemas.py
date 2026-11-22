@@ -136,6 +136,9 @@ class PrepareOut(BaseModel):
         description="Per generating substation (by id) and per zone: the people it should feed."
     )
     redispatch: list[dict[str, Any]] = Field(description="Generation the island's synchronous units moved.")
+    health: dict[str, Any] | None = Field(
+        None, description="Health index of the prepared grid before any failure (docs/health.md, no N-1)."
+    )
     warnings: list[dict[str, Any]] = Field(
         description="Overlay warnings (isolated buses, no synchronous units)."
     )

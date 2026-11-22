@@ -39,7 +39,7 @@ describe("labels", () => {
 
   it("explains errors by status", () => {
     expect(errorMessage(429, 12)).toBe("Demasiados mensajes; espera 12 s.");
-    expect(errorMessage(503)).toBe("El asistente no está habilitado en este servidor.");
+    expect(errorMessage(503)).toBe("El asistente no está disponible en este servidor. El resto del mapa funciona sin él.");
     expect(errorMessage(422)).toBe(errorMessage(413));
     expect(errorMessage(500)).toBe("El asistente falló; reintenta.");
     expect(truncatedText("deadline")).toContain("tiempo máximo");

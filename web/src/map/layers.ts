@@ -15,13 +15,19 @@ export const KV_COLORS: [number, Rgb][] = [
 ];
 export const LOW_KV_COLOR: Rgb = [110, 120, 140];
 
+// Red is reserved for failures (docs/design.md section 3): thermal is a grayish brown, never red or purple.
 export const TECH_COLORS: Record<string, Rgb> = {
   solar: [255, 196, 0],
   eolica: [140, 230, 255],
   hidro: [40, 120, 255],
-  termica: [230, 70, 50],
+  termica: [156, 128, 104],
   bioenergia: [90, 200, 90],
   geotermica: [220, 90, 220],
+  nuclear: [170, 160, 235],
+};
+/** Spanish names of the technologies, for legends and tooltips. */
+export const TECH_NAMES: Record<string, string> = {
+  solar: "Solar", eolica: "Eólica", hidro: "Hidroeléctrica", termica: "Térmica", bioenergia: "Bioenergía", geotermica: "Geotérmica", nuclear: "Nuclear",
 };
 const OTHER_TECH_COLOR: Rgb = [200, 200, 200];
 

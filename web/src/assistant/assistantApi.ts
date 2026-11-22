@@ -1,3 +1,4 @@
+import type { StressChange } from "../cascade/edits";
 import { AGENT } from "../session/sessionApi";
 import { errorMessage } from "./labels";
 import { createSseParser, type SseEvent } from "./sse";
@@ -5,8 +6,6 @@ import { createSseParser, type SseEvent } from "./sse";
 /** Client of the in-app assistant (docs/assistant.md sections 2 and 2b). */
 export const ASSISTANT_BASE = "/api/v1/assistant";
 export const MAX_MESSAGE = 2000;
-
-import type { StressChange } from "../cascade/edits";
 
 /** The scenario on the map: the assistant starts from it (docs/assistant.md section 2d). */
 export interface ChatGrid { point: string; changes: StressChange[]; open_lines: string[]; out_buses: string[] }
@@ -62,6 +61,22 @@ export async function streamChat(body: ChatBody, onEvent: (e: SseEvent) => void,
     return finished; // the connection dropped mid-stream
   }
   return finished;
+}
+
+/**
+ * Whether the assistant can answer, asked without sending a message: reading a conversation that does not exist answers
+ * 503 when the LLM is not configured and 404 when it is (`get_assistant` runs before the lookup in
+ * `api/assistant_routes.py`). `null` when the answer says neither (network failure, rate limit).
+ */
+export const PROBE_CID = "sub50-web-probe-000000"; // 22 characters, the conversation id pattern
+export async function probeAssistant(): Promise<boolean | null> {
+  try {
+    await call("GET", PROBE_CID);
+    return true;
+  } catch (e) {
+    const status = e instanceof AssistantError ? e.status : 0;
+    return status === 503 ? false : status === 404 ? true : null;
+  }
 }
 
 export async function getConversation(cid: string): Promise<ConversationView> {

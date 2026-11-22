@@ -1,6 +1,6 @@
 import type { RegionalCountry, RegionalLine, RegionalPlant, RegionalSubstation } from "../map/regional";
 import type { StressChange } from "./edits";
-import type { BusState, DependencyNode, Network, Timeline } from "./types";
+import type { BusState, DependencyNode, HealthReport, Network, Timeline } from "./types";
 
 /** Grid documents served by the backend from S3 (docs/grids.md): catalogue, compose and the context documents. */
 export interface CatalogPoint { key: string; point: string; label: string; year: number; snapshot: string }
@@ -20,7 +20,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api/v1/grids/${path}`, init);
   if (!r.ok) {
     const detail = await r.json().then((b) => b.detail).catch(() => null);
-    throw new Error(typeof detail === "string" ? detail : `No se pudo leer las fuentes (${r.status}).`);
+    throw new Error(typeof detail === "string" ? detail : "No se pudo leer las redes del servidor.");
   }
   return r.json();
 }
@@ -58,7 +58,7 @@ export interface OutageCost {
 export async function loadOutageCost(body: GridChanges): Promise<OutageCost | null> {
   const r = await fetch("/api/v1/grids/cost", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   if (r.status === 404 || r.status === 405) return null;
-  if (!r.ok) throw new Error(`No se pudo calcular el costo (${r.status}).`);
+  if (!r.ok) throw new Error("No se pudo calcular el costo.");
   return r.json();
 }
 
@@ -83,6 +83,8 @@ export interface Prepared {
   overloaded_lines: { id: string; kv: number; loading_pct: number }[];
   should_feed: Supply;
   assumptions: { id: string; text: string; source?: string; is_assumption: boolean }[];
+  /** Health index of the prepared grid before any failure (no N-1); absent from an older backend. */
+  health?: HealthReport;
 }
 export const prepareScenario = (body: { point: string; changes: StressChange[] }) =>
   request<Prepared>("prepare", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

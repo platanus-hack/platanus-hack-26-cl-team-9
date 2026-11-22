@@ -43,7 +43,7 @@ describe("affected population by comuna", () => {
 
   it("a dark bus without comuna rows becomes a row named after its substation, estimated", () => {
     const a = affectedByComuna(new Set(["B001"]), buses, net, null);
-    expect(a).toEqual({ people: 100, rows: [{ key: "bus:B001", name: "Charrua", people: 100, total: 100, is_assumption: true }] });
+    expect(a).toEqual({ people: 100, rows: [{ key: "bus:B001", name: "Charrúa", people: 100, total: 100, is_assumption: true }] });
   });
 
   it("no dark buses: nobody affected", () => {

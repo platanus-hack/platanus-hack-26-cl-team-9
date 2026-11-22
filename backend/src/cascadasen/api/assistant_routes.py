@@ -74,6 +74,15 @@ SYSTEM = (
     "de describe_network), ejecuta y luego di qué elegiste, por qué y que el valor es un supuesto tuyo. No "
     "le devuelvas preguntas técnicas ni una lista de opciones. Pregunta solo si la petición es imposible de "
     "interpretar o si una tecnología no existe en la lista.\n"
+    "- Toda petición es sobre la grilla cargada en el mapa (sección «Grilla cargada» al final). Nunca "
+    "preguntes qué punto de operación o qué red usar: usa ese punto y conserva sus cambios, líneas abiertas "
+    "y subestaciones apagadas, y súmale lo que pide el usuario. «Apaga las termoeléctricas» es generación "
+    "de esas tecnologías con factor 0 en toda la red; hazlo sin preguntar. Cambia de punto solo si el "
+    "usuario lo pide.\n"
+    "- Puedes agregar o quitar la carga y la generación que haga falta: no hay tope total de MW.\n"
+    "- «Apagar una subestación» es out_buses (B###): sale de servicio, se simula la cascada y el mapa la "
+    "muestra en rojo. Bajar la generación o la demanda (factor 0) no apaga subestaciones: la red se "
+    "redespacha y nada queda en rojo si no hay falla; dilo así y no digas que la apagaste.\n"
     "- El mapa muestra solo lo que fija prepare_scenario. Para poner un punto (datacenter, central, parque, "
     "batería) o cortar líneas usa prepare_scenario: el lugar va tal como lo escribió el usuario en `places` "
     "(una ciudad o «cerca de X» basta; nunca pidas área, barra ni subestación) y la potencia en `add`. Cada "
@@ -106,8 +115,8 @@ class GridIn(BaseModel):
 
     point: str = Field(max_length=40)
     changes: list[StressChange] = Field(default=[], max_length=20)
-    open_lines: list[str] = Field(default=[], max_length=40)
-    out_buses: list[str] = Field(default=[], max_length=40)
+    open_lines: list[str] = Field(default=[], max_length=500)  # a stressed map can hold many failures (#139)
+    out_buses: list[str] = Field(default=[], max_length=500)
 
     def context(self) -> dict[str, Any]:
         return {

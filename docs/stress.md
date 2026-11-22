@@ -208,7 +208,7 @@ Ids: `find_line` (a line by its substations, section 3.2), `describe_network` or
 |---|---|---|
 | 422 | `factor` and `add` together, or a filter that does not apply to the target | `demand: indica factor o add, no ambos` · `generation: filtra por buses, zones, areas o tech` |
 | 422 | Unknown technology | `changes[0]: tecnologías desconocidas: nuclear (válidas: …)` |
-| 422 | Over the overlay limits | `Máximo 5000 MW agregados o cambiados (carga + generación).` |
+| 422 | Over the overlay limits | One element or bus override over 20000 MW (there is no total MW cap since 2026-11-22). |
 | 422 | A `lines` change with `factor` 0 (a line with no capacity is a line out of service) | `lines: factor 0 no saca una línea de servicio (la capacidad debe ser mayor que 0). Para sacarla de servicio pon su id R### en open_lines y no agregues un cambio de lines para ella.` |
 | 422 | `/simulate` with no failure | `Indica al menos una línea o una subestación` |
 | 404 | Unknown point, bus, line, comuna, zone or area | `changes[0]: comuna desconocida: Atlantis (usa el código CUT o el nombre)` |
@@ -226,9 +226,9 @@ Ids: `find_line` (a line by its substations, section 3.2), `describe_network` or
 ## 10. Web map
 
 - **Edit in place.** The card of a selected substation has factors for Personas, Demanda and Generación. The card of a line has one for Capacidad. A factor applies on Enter or when the field loses focus, and 1 removes it. Each one writes a change for that component alone (`{"target": "population", "buses": ["B062"], "factor": 2}`), kept with the cuts in `Edits.changes` (`web/src/cascade/edits.ts`, also in localStorage).
-- **Batch changes only from the assistant.** "Estado de la red" lists every change, with "Quitar" on each.
+- **Batch changes only from the assistant.** The Cambios tab lists every change, with "Quitar" on each.
 - **Simulation.** With changes, the web never reads the precalculated cache: `/grids/simulate`, `/dependency` and `/cost` get `changes`. With changes and no failure, the map shows the base case, and the panel shows the prepared grid: totals, lines already over their limit, and the prepared values in the card. "Simulación" shows `supply` per zone, and a generating substation's card shows its own numbers.
-- **Reset.** Opening a disaster or a Benchmark condition drops the changes. "Prender todo" drops everything.
+- **Reset.** Opening a disaster or an operating condition drops the changes. "Prender todo" drops everything.
 - **Assistant.** A `prepare_scenario` result sets the map's point, changes and failures, paused at 0 (`useAssistant(s, onScenario)`, `scenarioOf()`). The chat stays open beside the map (before, the view jumped to the tabs and hid the reply).
-- **Pins.** Each change that adds demand or generation (`add` over 0) at one to five substations gets a pin at each substation the prepared grid reports (`placed.ts`, drawn in `MapOverlays`): "+120 MW de demanda · S/E ANTOFAGASTA". A plant is a disc in its technology color (`TECH_COLORS`), a load a white ring. "Estado de la red" lists the change with "en S/E …".
+- **Pins.** Each change that adds demand or generation (`add` over 0) at one to five substations gets a pin at each substation the prepared grid reports (`placed.ts`, drawn in `MapOverlays`): "+120 MW de demanda · S/E ANTOFAGASTA". A plant is a disc in its technology color (`TECH_COLORS`), a load a white ring. The Cambios tab lists the change with "en S/E …".
 - **Shared sessions are hidden from the web for now** (#101). There is no rail button, `?sesion=` is ignored and the assistant no longer joins its session. The session code stays in place, inactive.

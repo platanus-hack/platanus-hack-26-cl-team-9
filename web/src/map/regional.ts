@@ -3,7 +3,7 @@ import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import { hex, NODE_COLOR, tierOf, type ColorMode } from "../cascade/layers";
 import chileUrl from "../../../data/processed/chile.geojson?url";
 import { outlineOf } from "./countryBounds";
-import { TECH_COLORS, type Rgb } from "./layers";
+import { TECH_COLORS, TECH_NAMES, type Rgb } from "./layers";
 
 type OutlineFile = Parameters<typeof outlineOf>[0];
 
@@ -102,27 +102,34 @@ export function buildRegionalLayers(grid: RegionalGrid, colorMode: ColorMode = "
       id: "regional-substations", data: grid.substations, pickable: true, radiusUnits: "pixels", getPosition: (s) => s.position,
       getRadius: (s) => (s.kv >= 500 ? 3 : 2), getFillColor: hex(NODE_COLOR, 200),
     }),
+    // Plants are solid discs in their technology colour with a dark rim (docs/design.md section 3), smaller than before so
+    // they never hide the lines; none of the colours is red, which means failure (E-28, G-06).
     new ScatterplotLayer<RegionalPlant>({
       id: "regional-plants", data: grid.plants, pickable: true, radiusUnits: "pixels", getPosition: (p) => p.position,
-      getRadius: (p) => Math.min(14, 2 + Math.sqrt(p.mw) * 0.28), getFillColor: (p) => withAlpha(TECH_COLORS[p.tech ?? ""] ?? OTHER_TECH, 120),
+      getRadius: (p) => Math.min(8, 2 + Math.sqrt(p.mw) * 0.16), getFillColor: (p) => withAlpha(TECH_COLORS[p.tech ?? ""] ?? OTHER_TECH, 235),
+      stroked: true, lineWidthUnits: "pixels", getLineWidth: 1, getLineColor: [24, 25, 27, 255],
     }),
   ];
 }
 
 const FOOT = "Red solo para ver: no se simula";
+const num = (n: number) => n.toLocaleString("es-CL", { maximumFractionDigits: 1 });
+/** "EPE WebMap capa 17; EPE WebMap capa 18" -> "Fuente: EPE WebMap": the publisher, not its layer numbers (D11). */
+const sourceLine = (s: string) => `Fuente: ${[...new Set(s.split(";").map((x) => x.replace(/\s*capa \d+\s*$/i, "").trim()).filter(Boolean))].join(", ")}`;
 
 export function regionalTooltip(layerId: string, object: unknown): string | null {
   if (layerId === "regional-lines") {
     const l = object as RegionalLine;
-    return `Línea de ${l.kv} kV${l.circuits && l.circuits > 1 ? ` · ${l.circuits} circuitos` : ""}${l.lengthKm ? ` · ${Math.round(l.lengthKm)} km` : ""}\n${l.source}\n${FOOT}`;
+    return `Línea de ${num(l.kv)} kV${l.circuits && l.circuits > 1 ? ` · ${l.circuits} circuitos` : ""}${l.lengthKm ? ` · ${num(Math.round(l.lengthKm))} km` : ""}\n${sourceLine(l.source)}\n${FOOT}`;
   }
   if (layerId === "regional-substations") {
     const s = object as RegionalSubstation;
-    return `${s.name || (s.kind === "junction" ? "Derivación de línea" : "Subestación")}\n${s.kv} kV\n${s.source}\n${FOOT}`;
+    return `${s.name || (s.kind === "junction" ? "Derivación de línea" : "Subestación")}\n${num(s.kv)} kV\n${sourceLine(s.source)}\n${FOOT}`;
   }
   if (layerId === "regional-plants") {
     const p = object as RegionalPlant;
-    return `${p.name || "Generación"}\n${p.count} ${p.count === 1 ? "central" : "centrales"} · ${p.tech ?? "otra"} · ${Math.round(p.mw)} MW\n${p.source}\n${FOOT}`;
+    const tech = p.tech ? (TECH_NAMES[p.tech] ?? p.tech).toLowerCase() : "otra tecnología";
+    return `${p.name || "Generación"}\n${p.count} ${p.count === 1 ? "central" : "centrales"} · ${tech} · ${num(Math.round(p.mw))} MW\n${sourceLine(p.source)}\n${FOOT}`;
   }
   return null;
 }

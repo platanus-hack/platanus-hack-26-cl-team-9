@@ -5074,7 +5074,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -5082,7 +5082,7 @@
               }
             ],
             "title": "Load Mw",
-            "description": "Bus demand in MW (replaces the base value; at most the base value + 3000 MW).",
+            "description": "Bus demand in MW (replaces the base value; at most the base value + 20000 MW).",
             "examples": [
               150
             ]
@@ -5091,7 +5091,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -5099,7 +5099,7 @@
               }
             ],
             "title": "Gen Mw",
-            "description": "Bus generation in MW (replaces the base value; at most the base value + 3000 MW). The bus keeps this value: it takes no share of the redispatch.",
+            "description": "Bus generation in MW (replaces the base value; at most the base value + 20000 MW). The bus keeps this value: it takes no share of the redispatch.",
             "examples": [
               300
             ]
@@ -5108,7 +5108,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 20000.0,
+                "maximum": 40000.0,
                 "minimum": 0.0
               },
               {
@@ -5125,7 +5125,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 200000.0,
+                "maximum": 400000.0,
                 "minimum": 0.0
               },
               {
@@ -5561,10 +5561,10 @@
           },
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Dispatched generation in MW (0 < mw ≤ 3000).",
+            "description": "Dispatched generation in MW (0 < mw ≤ 20000).",
             "examples": [
               250
             ]
@@ -5649,7 +5649,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 3000.0,
+                "maximum": 20000.0,
                 "exclusiveMinimum": 0.0
               },
               {
@@ -6085,10 +6085,10 @@
           },
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Demand in MW (0 < mw ≤ 3000).",
+            "description": "Demand in MW (0 < mw ≤ 20000).",
             "examples": [
               120
             ]
@@ -6131,7 +6131,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 3000.0,
+                "maximum": 20000.0,
                 "exclusiveMinimum": 0.0
               },
               {
@@ -6329,6 +6329,19 @@
             "type": "array",
             "title": "Redispatch",
             "description": "Generation the island's synchronous units moved."
+          },
+          "health": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health",
+            "description": "Health index of the prepared grid before any failure (docs/health.md, no N-1)."
           },
           "warnings": {
             "items": {
@@ -8108,10 +8121,10 @@
         "properties": {
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Generation in MW (0 < mw ≤ 3000).",
+            "description": "Generation in MW (0 < mw ≤ 20000).",
             "examples": [
               150
             ]
@@ -8261,10 +8274,10 @@
         "properties": {
           "mw": {
             "type": "number",
-            "maximum": 3000.0,
+            "maximum": 20000.0,
             "exclusiveMinimum": 0.0,
             "title": "Mw",
-            "description": "Demand in MW (0 < mw ≤ 3000).",
+            "description": "Demand in MW (0 < mw ≤ 20000).",
             "examples": [
               80
             ]
