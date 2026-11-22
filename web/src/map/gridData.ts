@@ -1,3 +1,4 @@
+import { fetchJson } from "../lib/fetchJson";
 import chileUrl from "../../../data/processed/chile.geojson?url";
 import linesUrl from "../../../data/processed/geo/lines.geojson?url";
 import plantsUrl from "../../../data/processed/geo/plants.geojson?url";
@@ -23,9 +24,9 @@ interface Collection<G, P> { features: Feature<G, P>[] }
 /** Why: the map reads the processed grid files from the repo (data/processed/geo), no physics here. */
 export async function loadGridDataWorkflow(): Promise<GridData> {
   const [lines, substations, plants] = await Promise.all([
-    _fetchJson<Collection<{ coordinates: LonLat[] }, { name: string; kv: number | null }>>(linesUrl),
-    _fetchJson<Collection<{ coordinates: LonLat }, { id: string; name: string; kv: number | null; in_main_grid: boolean }>>(substationsUrl),
-    _fetchJson<Collection<unknown, Plant>>(plantsUrl),
+    fetchJson<Collection<{ coordinates: LonLat[] }, { name: string; kv: number | null }>>(linesUrl),
+    fetchJson<Collection<{ coordinates: LonLat }, { id: string; name: string; kv: number | null; in_main_grid: boolean }>>(substationsUrl),
+    fetchJson<Collection<unknown, Plant>>(plantsUrl),
   ]);
   const mainGrid = _mainGridSubstations(substations);
   return {
@@ -54,12 +55,6 @@ export function aggregatePlantsByNode(plants: Plant[], substations: Substation[]
     const { name, position } = byId.get(node)!;
     return { id: node, name, position, tech, mw: [...techs.values()].reduce((a, b) => a + b, 0) };
   });
-}
-
-async function _fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`No se pudo cargar ${url}: ${response.status}`);
-  return response.json() as Promise<T>;
 }
 
 function _toLines(collection: Collection<{ coordinates: LonLat[] }, { name: string; kv: number | null }>): Line[] {

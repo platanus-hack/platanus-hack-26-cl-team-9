@@ -2,6 +2,12 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · refactor(web): lib/format.ts and lib/fetchJson.ts, DataPanel uses Kind, NetworkPanel uses ZONES
+
+- **Changed:** New `web/src/lib/format.ts` (`fmt`, `formatNumber`, `formatPeople`) and `lib/fetchJson.ts`. `formatPeople` left `cascade/text.ts` and `formatNumber` left `map/nodeDetail.ts`; `gridData.test.ts` imports them from `lib/format`. `gridData.ts` and `cascade/networkSummary.ts` call the shared `fetchJson` instead of their private copies. `DataPanel` drops its `Sub` type for `Kind` from `sessionApi.ts` and its own `fmt`; `NetworkPanel` drops its `fmt` and reads the zone label from the now exported `ZONES` (`ZONES[n.zone] ?? ZONES.centro_sur`, same output as the old ternary).
+- **Why:** F13 of the duplication report. No output changes. The three geojson URL imports stay in both modules (not shared).
+- **Agents:** Put number formatting in `lib/format.ts`. Verification: web `tsc --noEmit` pass, `vitest run` 5 files 22 tests pass, `npm run build` pass (chunk-size warning only), same as baseline.
+- **Files:** `web/src/lib/{format,fetchJson}.ts`, `cascade/{text,NetworkPanel,networkSummary,CascadeApp}`, `map/{gridData,gridData.test,nodeDetail}`, `session/DataPanel.tsx`.
 ## 2026-11-22 · refactor(web): map/constants.ts and map/tooltip.ts shared by the three map modules
 
 - **Changed:** New `web/src/map/constants.ts` (`SEN_BOUNDS`, `PITCH_DEGREES`, `MAPBOX_STYLE`) and `map/tooltip.ts` (`gridTooltip`). `chileMap.ts`, `mapboxMap.ts` and `baseMap.ts` import them instead of keeping their own copies. The panel clearances stay local: 400 in `chileMap.ts`/`mapboxMap.ts`, 640 in `baseMap.ts`.

@@ -1,23 +1,22 @@
 import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { lineName } from "../cascade/text";
+import { fmt } from "../lib/format";
 import type { SessionNetwork } from "../cascade/types";
 import { nearestBus } from "./geo";
 import { addElement, deleteElement, resetSession, updateElement, type Kind } from "./sessionApi";
 import type { Edit } from "./useSession";
 
-type Sub = "buses" | "lines" | "generators" | "loads";
-const SUBS: [Sub, string][] = [["buses", "Barras"], ["lines", "Líneas"], ["generators", "Generadores"], ["loads", "Cargas y datacenters"]];
+const SUBS: [Kind, string][] = [["buses", "Barras"], ["lines", "Líneas"], ["generators", "Generadores"], ["loads", "Cargas y datacenters"]];
 const TECHS = ["solar", "eolica", "hidro", "termica", "bioenergia", "geotermica"];
 const LIMIT = 60;
 type Values = Record<string, string>;
 type FieldType = "text" | "number" | "kv" | "tech" | "kind";
 interface Spec { key: string; label: string; type?: FieldType }
 export type Pick = (onPoint: (lon: number, lat: number) => void) => void;
-const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
 
 /** Tab "Datos": the session's editable copy of the 188-bus network. Every value it adds is an assumption. */
 export function DataPanel(p: { network: SessionNetwork; edit: Edit; pick: Pick; picking: boolean }) {
-  const [sub, setSub] = useState<Sub>("loads");
+  const [sub, setSub] = useState<Kind>("loads");
   const n = p.network;
   const kvs = [...new Set(n.nodes.map((x) => x.kv))].sort((a, b) => a - b);
   const reset = () => { if (confirm("¿Borrar todos los cambios de esta sesión? Afecta a todos sus participantes.")) p.edit((sid, rev) => resetSession(sid, rev)); };

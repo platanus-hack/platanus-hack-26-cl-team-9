@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { loadNetworkSummary, VOLTAGE_BANDS, type NetworkSummary } from "./networkSummary";
-import { formatPeople, lineName } from "./text";
+import { fmt, formatPeople } from "../lib/format";
+import { lineName, ZONES } from "./text";
 import type { BusState, Frame, Network } from "./types";
 
-const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
 
 /** Tab "Red": size of the grid by voltage, and the detail of the selected substation or cut line. */
 export function NetworkPanel(p: { network: Network; buses: Record<string, BusState>; frame: Frame | undefined; node: string | null; line: string | null; clearNode(): void; cutLine(id: string): void }) {
@@ -46,7 +46,7 @@ function NodeCard(p: { network: Network; buses: Record<string, BusState>; frame:
   return (
     <div className="card">
       <div className="card-head"><h3>{n.name}</h3><button className="link" onClick={p.clearNode}>Cerrar</button></div>
-      <p className="muted">{Math.round(n.kv)} kV · {n.zone === "norte_grande" ? "Norte Grande" : "centro-sur"}{dark ? " · sin energía" : ""}</p>
+      <p className="muted">{Math.round(n.kv)} kV · {ZONES[n.zone] ?? ZONES.centro_sur}{dark ? " · sin energía" : ""}</p>
       <div className="stats"><div><b>{fmt(b?.gen_mw ?? 0)} MW</b><span>generación</span></div><div><b>{fmt(b?.load_mw ?? 0)} MW</b><span>demanda</span></div><div><b>{formatPeople(b?.people ?? 0)}</b><span>personas</span></div></div>
       <h4>Líneas conectadas · {lines.length}</h4>
       {lines.map((l) => {

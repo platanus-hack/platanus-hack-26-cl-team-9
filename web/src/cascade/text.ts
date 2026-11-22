@@ -1,6 +1,6 @@
 import type { Event, Network } from "./types";
 
-const ZONES: Record<string, string> = { centro_sur: "centro-sur", norte_grande: "Norte Grande" };
+export const ZONES: Record<string, string> = { centro_sur: "centro-sur", norte_grande: "Norte Grande" };
 const REASONS: Record<string, string> = {
   no_generation: "queda sin generación", no_load: "queda sin demanda y su generación se desconecta",
   no_inertia: "no tiene inercia sincrónica", frequency: "la frecuencia sale del rango",
@@ -27,6 +27,3 @@ export function narrate(event: Event, network: Network): string {
   }
 }
 
-export function formatPeople(n: number): string {
-  return n >= 1e6 ? `${(n / 1e6).toLocaleString("es-CL", { maximumFractionDigits: 1 })} millones` : n.toLocaleString("es-CL");
-}
