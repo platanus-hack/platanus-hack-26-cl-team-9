@@ -13,6 +13,7 @@ uv run cascadasen-build                  # download (cached in data/raw/) and un
 uv run cascadasen-build --refresh        # force a new download of every source
 uv run cascadasen-api                    # http://localhost:8000/map  (docs: /docs)
 uv run cascadasen-regional                 # other countries (BRA PER ARG BOL) -> data/processed/latam/ (docs/regional.md)
+uv run cascadasen-regional --countries BRA --ons  # also Brazil's flow network from ONS -> latam/BRA/network.json (docs/network-format.md)
 uv run pytest
 ```
 
