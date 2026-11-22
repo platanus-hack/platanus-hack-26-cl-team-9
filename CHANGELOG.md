@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(mapa3): document the select-then-cut flow and substation off
+
+- **Changed:** `docs/mapa3.md` sections 1.1 (A9), 1.2 (A9), 4 items 4 and 9 (two clicks on top of the substation outage of #67 and #70, buttons renamed), 8 (`clicks.ts`, new `outage.ts`), 9 (troubleshooting rows "Click does nothing", "Double click does not cut") and 11 ("Cuts in a session": substation off in batches of 3, on). `web/README.md` usage line.
+- **Why:** The docs still described the double-click cut removed in the previous commit, and the one-call session shutdown.
+- **Agents:** Seen in a browser: after a cut, the event pin (`MapOverlays`, `button.pin`) covers a short cut line, so the line cannot be clicked again; the impact card's **Volver a conectar** still works. Not changed here.
+- **Files:** `docs/mapa3.md`, `web/README.md`.
+
 ## 2026-11-21 · feat(web): select on the first click, switch off on the second
 
 - **Changed:** Mapa 3 map clicks (`clicks.ts`): the first click selects a line or substation, a second click on the selected one switches it off (`toggle`), and a fast double click (tapCount >= 2 or two clicks on the same element within 400 ms) does nothing, not even re-selecting after a cut. The double-click cut (lines and, since #70, substations) is gone. `interpretClick` takes the current selection, so a selection made from a card is switched off by one map click.
