@@ -8,6 +8,7 @@ from cascadasen.application.sessions import (
     SessionNotFoundError,
     SessionService,
 )
+from cascadasen.domain.cascade.overlay import OverlayError
 from cascadasen.domain.ports import ConflictError
 from cascadasen.domain.simulation.grid import Physics
 from cascadasen.infrastructure.document_store import MemoryDocumentStore
@@ -155,3 +156,41 @@ def test_an_external_action_runs_in_the_next_cycle(service):
     snap = service.run_command(sid, rid, "step", 1)["snapshots"][0]
     assert any(e["action"] == "restore_element" and e["target"] == "T2-T3" for e in snap["executed"])
     assert service.run_command(sid, rid, "trace")["verified"] is True
+
+
+SUB = {"name": "SE Nueva", "lat": -31.1, "lon": -71.0, "kv": 220, "connections": [{"to": "B002"}]}
+
+
+def test_a_substation_is_one_revision_and_survives_further_edits(service):
+    sid = service.create()["session_id"]
+    out = service.add_substation(sid, SUB)
+    assert (out["id"], out["line_ids"], out["revision"]) == ("B006", ["U001"], 1)
+    assert service.get(sid)["last_op"]["ids"] == ["B006", "U001"]
+    service.add(sid, "load", DC)
+    view = service.network_view(sid)
+    assert "B006" in view["buses"] and any(ln["id"] == "U001" for ln in view["lines"])
+
+
+def test_a_failed_substation_changes_nothing(service):
+    sid = service.create()["session_id"]
+    with pytest.raises(OverlayError):
+        service.add_substation(sid, {**SUB, "connections": [{"to": "B002"}, {"to": "B999"}]})
+    assert service.get(sid)["revision"] == 0
+
+
+def test_reset_with_a_scenario_replaces_what_the_session_added(service, toy_world):
+    LINE = toy_world.load("nov2026-1300")[0].buses.lines[0].id
+    sid = service.create()["session_id"]
+    service.add_substation(sid, SUB)
+    out = service.reset(sid, scenario={"changes": [], "open_lines": [LINE], "out_buses": ["B004"]})
+    assert out["revision"] == 2
+    doc = service.get(sid)
+    assert doc["overlay"]["buses"] == [] and doc["overlay"]["bus_overrides"]["B004"] == {"in_service": False}
+    assert doc["open_lines"] == [LINE]
+
+
+def test_reset_with_a_scenario_of_another_point_is_refused(service):
+    sid = service.create()["session_id"]
+    with pytest.raises(OverlayError):
+        service.reset(sid, scenario={"point": "feb2025-1500"})
+    assert service.get(sid)["revision"] == 0

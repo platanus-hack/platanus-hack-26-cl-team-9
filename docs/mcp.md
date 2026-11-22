@@ -36,7 +36,7 @@ A session serves one request at a time (`sessions-api.md` section 7), so a tool 
 | Group | Tools |
 |---|---|
 | Session | `start_session`, `join_session`, `end_session`, `list_options`, `describe_network` |
-| Network edits | `add_datacenter`, `add_generator`, `add_line`, `add_bus`, `edit_element`, `remove_element`, `reset_network` |
+| Network edits | `add_datacenter`, `add_generator`, `add_line`, `add_bus`, `add_substation`, `edit_element`, `remove_element`, `reset_network` (optional `scenario` loads a grid configuration) |
 | Sandbox | `cut_lines` (1-3 lines), `repair_lines`, `get_grid_state` |
 | Incidents | `list_incident_scenarios`, `start_incident_run` |
 | Strategic runs | `start_run`, `inject_event`, `step`, `submit_action`, `run_status`, `run_report`, `after_action`, `replay` |

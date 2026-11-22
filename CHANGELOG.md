@@ -47,6 +47,19 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Why:** issue #109. Area level keeps `cyber.md` section 8: no buses or lines as targets, no ranking.
 - **Agents:** no new route: use `POST /sessions/{sid}/runs` with `template: "ciberataque"`. The LLM defence is the existing `llm_commander`. `Simulation.finished` is now also true when a propagation run has an `outcome`. Other templates behave as before.
 - **Files:** `domain/agents/{propagation,operations,commander,base}.py`, `domain/theater/{cycle,config}.py`, `domain/theater/params/{theater,templates,narrative_es}.yaml`, `application/run_experiment.py`, `api/simulation_schemas.py`, `web/src/cyber/*`, `web/src/cascade/CascadeApp.tsx`, `web/src/session/sessionApi.ts`, `docs/attack-sim.md`, `docs/openapi/agents.openapi.json`, `backend/tests/unit/test_cyber_attack.py`.
+## 2026-11-22 · feat(sessions): add_substation and reset with a scenario (#105)
+
+- **Changed:** `POST /sessions/{sid}/substations` creates a bus, 1 to 6 lines to existing buses of the same voltage and an optional load and generator in one write (all or nothing, one revision). Missing `capacity_mw` takes the median of the lines at the other end; `coherence` reports odd capacity, lines over 300 km and MW above the lines. `POST /sessions/{sid}/reset` takes an optional `scenario` (the `prepare_scenario` shape) and replaces the overlay with that configuration, its failed buses and its open lines. `MAX_ADDED` goes from 50 to 80. New agent tool `add_substation`; `reset_network` takes `scenario`.
+- **Why:** the agent needs to build a substation without leaving an orphan bus when a line fails, and a loaded configuration must drop what a previous scenario added while plain edits keep it.
+- **Agents:** `add_substation` refuses `load_mw`, `generator_mw` and `capacity_mw` the user never wrote, like `add_datacenter`. `people` changes of a scenario are not stored (the overlay has no people field): only their demand. A scenario `point` that differs from the session's is 422; create another session.
+- **Files:** `domain/cascade/overlay.py`, `application/sessions.py`, `api/session_routes.py`, `api/session_schemas.py`, `mcp/tools.py`, `mcp/toolbox.py`, `web/src/assistant/labels.ts`, `docs/sessions-api.md`, `docs/mcp.md`, `docs/openapi/agents.openapi.json`, tests.
+
+## 2026-11-22 · ops(infra): serve www.sub50.cl next to the apex (#101)
+
+- **Changed:** CloudFront alias `www.sub50.cl` and Route 53 `www` A and AAAA aliases to the distribution, applied by hand with the AWS CLI. `cloudfront.tf` and `route53.tf` have the same change.
+- **Why:** `www.sub50.cl` had no DNS record, so the browser said "This site can't be reached".
+- **Agents:** verified `https://www.sub50.cl/` and `/api/v1/health` answer 200 with a valid certificate. Import the www records before the next `terraform apply` (`docs/infrastructure.md`, "www subdomain").
+- **Files:** `infrastructure/cloudfront.tf`, `infrastructure/route53.tf`, `docs/infrastructure.md`.
 
 ## 2026-11-22 · Merge origin/main (#101, #102) into feature/90-cascada-tiempos
 

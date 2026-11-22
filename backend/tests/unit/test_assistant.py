@@ -335,3 +335,26 @@ def test_a_longer_deadline_can_be_given_per_message():
     a = make(model, deadline_s=25, clock=lambda: next(now))
     out = a.chat("x", None, None, lambda s, r, t: FakeBox(), deadline_s=90)
     assert out["reply"] == "listo" and out["truncated"] is None
+
+
+def test_add_substation_refuses_mw_the_user_never_wrote():
+    from cascadasen.domain.ports import ToolCall
+    from cascadasen.mcp.toolbox import SessionTools
+
+    class Tools:
+        state = type("S", (), {"session_id": "x", "run_id": None})()
+
+        def add_substation(self, **kw):
+            return {"ok": True}
+
+    box = SessionTools.__new__(SessionTools)
+    box.tools, box.exclude, box.said, box.names = (
+        Tools(),
+        frozenset(),
+        "crea una subestación con 80 MW",
+        {"add_substation"},
+    )
+    args = {"name": "SE", "lat": -23, "lon": -70, "kv": 220, "connections": [{"to": "B001"}]}
+    ok, _ = box.run(ToolCall(id="1", name="add_substation", arguments={**args, "load_mw": 80}))
+    bad, out = box.run(ToolCall(id="2", name="add_substation", arguments={**args, "load_mw": 500}))
+    assert ok and not bad and "500" in out["error"]
