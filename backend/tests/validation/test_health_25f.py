@@ -1,12 +1,22 @@
 """The health index separates the 25F reference from a healthy operating point of the same network
-(docs/health.md): `feb2025-1500` (25F) against `feb2025-0300` (minimum demand), before and after cutting R239."""
+(docs/health.md): `feb2025-1500` (25F) against `feb2025-0300` (minimum demand), before and after cutting R239.
+
+Cost (ASSUMPTION, only to order magnitudes, docs/health.md "Cost"): the model values the 25F cut at about
+US$ 69 M (1,972 MW x 4 h x 8.79 US$/kWh) and a full national blackout at about US$ 390 M. The press estimate of
+the 25F loss is US$ 984 M (datasets.md [44], not verified); a full blackout would need about 10 h of average
+unserved energy to reach it. The gap comes from the voltage collapse of the 25F being documented, not computed
+(`voltage_limited`, docs/engine.md: the model loses 1,972 MW, not the whole system), and from the assumed
+duration. These tests pin the figures; they do not tune the duration to match.
+"""
 
 import pytest
 
 from cascadasen.application.grid_health import DEFAULT_CUT, compare_workflow
+from cascadasen.domain.cascade.engine import failure_cost
 from cascadasen.infrastructure.settings import get_settings
 
 PROCESSED = get_settings().processed_dir
+PRESS_LOSS_25F_USD = 984e6  # press estimate, not verified (datasets.md [44]); never shown in the UI
 pytestmark = pytest.mark.skipif(
     not (PROCESSED / "operating_points.json").exists() or not (PROCESSED / "grid_snapshot.json").exists(),
     reason="needs data/processed (cascadasen-build and the data scripts)",
@@ -41,3 +51,33 @@ def test_25f_after_the_cut_is_less_healthy_and_uncertain(reports):
     assert bad.index < good.index
     assert bad.uncertain
     assert not good.uncertain
+
+
+def test_25f_cut_cost_is_a_floor_of_about_69_million(reports):
+    cost = reports[("feb2025-1500", "event")].extra["cost"]
+    print(f"\n25F R239: US$ {cost['cost_usd'] / 1e6:.1f} M, {cost['unserved_energy_mwh']:.0f} MWh, floor")
+    assert cost["cost_usd"] == pytest.approx(69e6, rel=0.05)
+    assert cost["outage_duration_h"] == {"value": 4.0, "is_assumption": True}
+    assert cost["is_floor"]  # the voltage collapse is documented, not computed
+
+
+def test_full_blackout_and_the_hours_behind_the_press_estimate(reports):
+    total_mw = 11096.0  # load of feb2025-1500 (docs/health.md)
+    blackout = failure_cost(total_mw)["failure_cost_usd"]
+    hours = PRESS_LOSS_25F_USD / (total_mw * 1000 * 8.79)
+    print(f"\nfull blackout 4 h: US$ {blackout / 1e6:.0f} M; US$ 984 M needs {hours:.1f} h of full blackout")
+    assert blackout == pytest.approx(390e6, rel=0.02)
+    assert hours == pytest.approx(10.1, abs=0.2)
+    assert reports[("feb2025-1500", "event")].extra["cost"]["cost_usd"] < PRESS_LOSS_25F_USD
+
+
+def test_n1_cost_before_the_fault(reports):
+    cost = reports[("feb2025-1500", "prefault")].extra["cost"]
+    print(
+        f"\n25F N-1: expected US$ {cost['n1_expected_cost_usd'] / 1e6:.1f} M, "
+        f"worst US$ {cost['n1_worst_cost_usd'] / 1e6:.1f} M, {cost['n1_cuts_with_cost']} of {cost['n1_cuts']}"
+    )
+    assert cost["n1_cuts"] == 273
+    assert 0 < cost["n1_expected_cost_usd"] <= cost["n1_worst_cost_usd"]
+    assert cost["n1_expected_cost_usd"] == pytest.approx(3.5e6, rel=0.1)
+    assert cost["n1_worst_cost_usd"] == pytest.approx(72.6e6, rel=0.05)

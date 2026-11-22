@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · test(health): 25F cost validation
+
+- **Changed:** `tests/validation/test_health_25f.py` pins the cost figures: R239 at `feb2025-1500` about US$ 69 M (a floor, uncertain), a full blackout of 11,096 MW x 4 h about US$ 390 M, about 10.1 h of full blackout to reach the press estimate of US$ 984 M, and N-1 expected US$ 3.5 M / worst US$ 72.6 M. Run with `-s` to print them.
+- **Changed:** `docs/datasets.md` adds source [44] (revistaei.cl via `pitch_idea.md`, US$ 984 M, "press estimate, not verified") and a bullet in section 4.4.
+- **Why:** Issue #72 asks to write down the gap between the model cost and the 25F estimate without tuning the duration to match.
+- **Agents:** The US$ 984 M figure lives only in this test and the docs, never in the UI (user decision). The gap is the documented-not-computed voltage collapse plus the assumed 4 h; do not tune `default_outage_h` to close it.
+- **Files:** `backend/tests/validation/test_health_25f.py`, `docs/datasets.md`.
+
 ## 2026-11-21 · feat(health): cost in cascadasen-health
 
 - **Changed:** `application/grid_health.py`: `format_cost` adds a `$` line under each report. Pre-fault: "Dinero en riesgo N-1 (modelo): esperado US$ X M, peor US$ Y M; k de 273 cortes con costo, los 5 más caros suman <banda>". After a cut: "Costo estimado: US$ X M (costo de falla CNE [19], 4 h supuestas; piso, no estimación)" when uncertain. `--json` carries the `cost` object through `extra`.
