@@ -54,6 +54,7 @@ Dependency rule: `domain/` imports nothing from `api/`, `application/` or `infra
 | `Interpreter` | Narration and after-action review | `domain/theater/narrative.py` (`TemplateInterpreter`), `infrastructure/llm.py` (`ClaudeInterpreter`) |
 | `CommanderAdvisor` | An LLM that picks among validated COAs for C2 | `infrastructure/llm.py` (Claude API, Bedrock, Bedrock Converse) |
 | `DocumentStore` | JSON documents by key with conditional writes (`if_match`, `if_none_match`; a lost race raises `ConflictError`) for run records and sessions | `infrastructure/document_store.py` (memory, file, S3) |
+| `GridStore` | Grid documents (docs/grids.md) as bytes under a prefix; `write` never overwrites (`ConflictError`) | `infrastructure/grid_store.py` (local, S3) |
 
 Adding a data source means writing one adapter and registering it in `container.py`; domain and application do not change.
 

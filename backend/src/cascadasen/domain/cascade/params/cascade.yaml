@@ -77,10 +77,6 @@ edac:
   norte_grande:
     value: [[48.9, 52.0], [48.8, 102.9], [48.7, 90.9], [48.6, 104.8], [48.5, 117.9], [48.4, 119.7], [48.3, 119.2]]
     source: "[4] Table 3-9 (step 1 at 49.0 Hz is disabled)"
-  extreme:
-    value: {zone: centro_sur, threshold_hz: 49.5, gradients_hz_s: [-0.9, -1.2, -1.9], mw: 671.55}
-    source: "[4] Tables 3-10 and 3-11 (stack.md 4.4)"
-    note: "Split in three equal tranches, one per gradient stage (assumption)"
 
 cascade:
   overload_factor: {value: 1.2, source: "stack.md 4.3 (120 % of capacity, parameter)"}

@@ -76,9 +76,12 @@ def test_event_margins_take_the_worst_island_frequency():
     assert not uncertain
 
 
-def test_event_margins_voltage_limited_island_scores_zero_and_is_uncertain():
-    islands = [{"result": "voltage_limited", "min_hz": 50.0}, {"result": "maintains", "min_hz": 49.9}]
-    margins, uncertain = event_margins(_summary(2000.0, islands, uncertain=True))
+def test_event_margins_voltage_collapse_scores_zero_and_is_uncertain():
+    islands = [
+        {"result": "blackout", "min_hz": None, "reason": "voltage"},
+        {"result": "maintains", "min_hz": 49.9},
+    ]
+    margins, uncertain = event_margins(_summary(2000.0, islands))
     assert {m.key: m for m in margins}["frequency_islands"].value == 0.0
     assert uncertain
 

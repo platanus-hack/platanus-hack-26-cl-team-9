@@ -112,7 +112,7 @@ function NodeCard(p: Props & { node: string }) {
           {p.shutDown
             ? <button className="primary-btn" onClick={() => p.powerOn(n.id)}>Encender subestación</button>
             : <button className="primary-btn" onClick={() => p.shutdown(n.id)}>Apagar esta subestación</button>}
-          <span className="meta">{p.shutDown ? "Vuelve al caso base en este punto de operación." : `Abre ${lines.length === 1 ? "su línea" : `sus ${lines.length} líneas`} en t = 0.`}</span>
+          <span className="meta">{p.shutDown ? "Vuelve a operar con sus líneas." : "Sale de servicio con su demanda y su generación. O doble clic en el mapa."}</span>
         </div>
       )}
     </div>

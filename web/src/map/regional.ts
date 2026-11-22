@@ -41,6 +41,16 @@ export async function loadRegionalGrid(): Promise<RegionalGrid | null> {
   return grid;
 }
 
+/** The same grid from the context documents the backend composed (docs/grids.md): already in this shape, only joined. */
+export function regionalFromDocuments(docs: { meta: RegionalCountry; lines: RegionalLine[]; substations: RegionalSubstation[]; plants: RegionalPlant[] }[]): RegionalGrid {
+  return {
+    countries: docs.map((d) => d.meta),
+    lines: docs.flatMap((d) => d.lines),
+    substations: docs.flatMap((d) => d.substations),
+    plants: docs.flatMap((d) => d.plants),
+  };
+}
+
 const withAlpha = (c: Rgb, a: number): [number, number, number, number] => [c[0], c[1], c[2], a];
 const OTHER_TECH: Rgb = [200, 200, 200];
 /** Not part of the load ramp (green to red), so it reads as "no data" in the Simulación view. */

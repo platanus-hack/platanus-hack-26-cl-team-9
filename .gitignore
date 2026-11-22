@@ -2,6 +2,7 @@
 data/raw/
 # local session and run records (CASCADASEN_SESSION_STORE=file)
 data/sessions/
+data/grids/
 __pycache__/
 .pytest_cache/
 .ruff_cache/

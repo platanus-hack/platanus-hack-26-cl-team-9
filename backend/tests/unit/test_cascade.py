@@ -134,11 +134,8 @@ def test_edac_totals_match_the_25f_report():
     high = sum(r[1] for rows in CENTRO_SUR_ZONES.values() for r in rows)
     assert low == pytest.approx(1139, abs=5) and high == pytest.approx(2053, abs=10)
     tables = edac_tables({"centro_sur": 8000.0, "norte_grande": 1500.0}, 9500.0)
-    # six frequency steps plus the three extreme-contingency (df/dt) stages of [4] Tables 3-10/3-11
-    assert len(tables["centro_sur"]) == 9 and len(tables["norte_grande"]) == 7
-    extreme = [st for st in tables["centro_sur"] if st.gradient_hz_s is not None]
-    assert [st.gradient_hz_s for st in extreme] == [-0.9, -1.2, -1.9]
-    assert sum(st.fraction for st in extreme) * 8000.0 == pytest.approx(671.55, abs=0.1)
+    # the six frequency steps of the centro-sur table; the extreme-contingency EDAC is not modelled
+    assert len(tables["centro_sur"]) == 6 and len(tables["norte_grande"]) == 7
 
 
 def test_secure_base_case_has_no_cascade():
@@ -247,35 +244,6 @@ def test_reserve_follows_the_droop_and_saturates_at_the_cap():
     assert big.reserve_mw == pytest.approx(240.0, rel=0.02)
 
 
-def test_extreme_edac_acts_on_frequency_and_gradient_together():
-    tables = edac_tables({"centro_sur": 8000.0, "norte_grande": 0.0}, 9500.0)
-    extreme = {"centro_sur": [st for st in tables["centro_sur"] if st.gradient_hz_s is not None]}
-    fast = simulate_island(
-        _deficit_island(
-            inertia_mws=10000.0,
-            load_mw=8000.0,
-            gen_mw=6000.0,
-            zone_load_mw={"centro_sur": 8000.0},
-            edac=extreme,
-        )
-    )
-    assert sorted(st["step"] for st in fast.steps if st.get("extreme")) == [
-        1,
-        2,
-        3,
-    ]  # -5 Hz/s fires all three
-    slow = simulate_island(
-        _deficit_island(
-            inertia_mws=200000.0,
-            load_mw=8000.0,
-            gen_mw=7800.0,
-            zone_load_mw={"centro_sur": 8000.0},
-            edac=extreme,
-        )
-    )
-    assert not slow.steps  # -0.05 Hz/s never reaches the first gradient stage
-
-
 def test_deployed_reserve_stays_synchronous():
     from cascadasen.domain.cascade.engine import run_cascade_state
 
@@ -293,7 +261,7 @@ def test_islands_carry_rocof_inertia_and_bus_indices():
     timeline, state = run_cascade_state(net, _toy_point(gen=(300.0, 0.0, 0.0), load=(0.0, 160.0, 160.0)), [])
     isl = timeline["summary"]["islands"][0]
     assert isl["inertia_mws"] == 30000 and isl["rocof_hz_s"] < 0 and isl["final_hz"] < 50.0
-    assert state.islands[0]["bus_idx"] == [0, 1, 2] and timeline["summary"]["uncertain"] is False
+    assert state.islands[0]["bus_idx"] == [0, 1, 2]
 
 
 @pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
@@ -322,19 +290,22 @@ def test_inertia_falls_with_solar():
 
 
 @pytest.mark.skipif(not (PROCESSED / "baseline_opf.json").exists(), reason="processed data not built")
-def test_loaded_25f_corridor_cut_is_voltage_limited():
-    """stack.md 4.6: opening the 25F boundary with more than 1,600 MW N->S before the fault gives an uncertain
-    (voltage-limited) verdict, not a frequency one. At 03:00 the corridor flows S->N below 1,000 MW: no flag."""
-    from cascadasen.domain.cascade.engine import boundary_lines
-
+def test_loaded_25f_corridor_cut_collapses_both_ends_by_voltage():
+    """stack.md 4.6: separating the 25F corridor with more than 1,600 MW N->S before the fault collapses the islands at
+    both ends by voltage. At 03:00 the corridor flows S->N below 1,000 MW: the frequency verdict stands."""
     net, point = load_network_and_point(PROCESSED, "feb2025-1500")
-    cut = [lid for lid, _ in boundary_lines(net)]
-    loaded = run_cascade_workflow(net, point, cut)
-    assert loaded["summary"]["uncertain"] and loaded["summary"]["prefault_boundary_mw"] > 1600
-    assert any(i["result"] == "voltage_limited" for i in loaded["summary"]["islands"])
+    loaded = run_cascade_workflow(net, point, ["R239"])
+    assert loaded["summary"]["prefault_boundary_mw"] > 1600
+    voltage = [
+        e for e in loaded["events"] if e["type"] == "island_blackout" and e["params"]["reason"] == "voltage"
+    ]
+    assert len(voltage) == 2
+    assert loaded["summary"]["load_shed_mw"] == loaded["summary"]["load_total_mw"]  # the whole SEN goes dark
     net3, night = load_network_and_point(PROCESSED, "feb2025-0300")
-    light = run_cascade_workflow(net3, night, [lid for lid, _ in boundary_lines(net3)])
-    assert not light["summary"]["uncertain"]
+    light = run_cascade_workflow(net3, night, ["R239"])
+    assert all(
+        e["params"].get("reason") != "voltage" for e in light["events"] if e["type"] == "island_blackout"
+    )
 
 
 def test_cascade_parameters_carry_provenance(tmp_path):
