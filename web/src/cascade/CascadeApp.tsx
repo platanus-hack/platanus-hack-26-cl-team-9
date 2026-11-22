@@ -22,7 +22,7 @@ import { NetworkPicker } from "./NetworkPicker";
 import { summaryFromGrid, summaryFromManifest } from "./networkSummary";
 import { NetworkState } from "./NetworkState";
 import { batches, isSwitchedOff } from "./outage";
-import { activeDisaster, DISASTERS, ScenarioTree, type ScenarioChoice, type ScenarioKind } from "./Scenarios";
+import { activeDisaster, ScenarioTree, type ScenarioChoice, type ScenarioKind } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { PrefaultHealth, SimulationPanel } from "./SimulationPanel";
 import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
