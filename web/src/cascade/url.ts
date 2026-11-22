@@ -1,4 +1,3 @@
-import type { ViewMode } from "../map/baseMap";
 import { DEFAULT_COUNTRY } from "../map/country";
 
 /** The operating point a bare `/` opens. */
@@ -7,7 +6,6 @@ export const DEFAULT_POINT = "nov2026-1300";
 export interface UrlState {
   pointId: string;
   cut: string | null;
-  mode: ViewMode;
   sid: string | null;
   /** ISO3 of the network shown; uploaded networks live only in this browser and pass the default. */
   country?: string;
@@ -19,7 +17,7 @@ export interface UrlState {
  * `pais` names a network other than Chile's; a session is always Chile's.
  * Returns "" when nothing is left, so the default view is a bare `/`.
  */
-export function syncedSearch(search: string, { pointId, cut, mode, sid, country = DEFAULT_COUNTRY }: UrlState): string {
+export function syncedSearch(search: string, { pointId, cut, sid, country = DEFAULT_COUNTRY }: UrlState): string {
   const q = new URLSearchParams(search);
   if (!sid && country !== DEFAULT_COUNTRY) q.set("pais", country);
   else q.delete("pais");
@@ -27,8 +25,7 @@ export function syncedSearch(search: string, { pointId, cut, mode, sid, country 
   else q.delete("point");
   if (!sid && cut) q.set("cut", cut);
   else q.delete("cut");
-  if (mode === "3d") q.set("vista", "3d");
-  else q.delete("vista");
+  q.delete("vista"); // the 3D view was removed: an old ?vista=3d link opens the 2D map
   const s = q.toString();
   return s ? `?${s}` : "";
 }
