@@ -64,7 +64,7 @@ All paths are under `/api/v1/sessions`. Mutations accept `If-Match: "<revision>"
 | `GET /{sid}/state` | `get_cut_state` | | same | 200, 404, 409 |
 | `GET /{sid}/events` | (not an agent tool) | | `text/event-stream` (section 6) | 200, 404, 429 |
 | `POST /{sid}/runs` | `create_run` | the `POST /sim/runs` body (`template, policy, seed, horizon, adversary, capabilities, initial_events, auto_run, stochastic, llm_commander`) | run summary + `session_revision` | 201, 404, 409, 422, 429 |
-| `POST /{sid}/attacks/runs` | `start_incident_run` | `{scenario, policy?, seed?, duration_h?, uncertainty?, stochastic?, adversary?}` (`scenario` from `GET /api/v1/attacks/catalog`; `attack-sim.md` section 3.1) | run summary + `session_revision` | 201, 404, 409, 422, 429 |
+| `POST /{sid}/attacks/runs` | `start_incident_run` | `{scenario, policy?, seed?, duration_h?, uncertainty?, stochastic?, adversary?}` (`scenario` from `GET /api/v1/attacks/catalog`; `attack-sim.md` section 3.1). The session's `point` must equal the incident's `operating_point`, else 422 with that point in `valid` | run summary + `session_revision` | 201, 404, 409, 422, 429 |
 | `GET /{sid}/runs/{rid}` | `get_run` | | `{run, latest, resources, series}` | 200, 404, 409 |
 | `POST /{sid}/runs/{rid}/events` | `inject_run_event` | `{type, target, params?, cause?}` | resolved target, `run`, `session_revision` | 200, 404, 409, 422, 429 |
 | `POST /{sid}/runs/{rid}/step` | `step_run` | `{cycles: 1-72}` | `{run, snapshots, session_revision}` | 200, 404, 409, 422, 429 |

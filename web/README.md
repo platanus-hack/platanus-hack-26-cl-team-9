@@ -59,6 +59,8 @@ Session mode: `?sesion=<sid>` (or the **Sesión compartida** rail item) opens a 
 
 Assistant: the **Asistente** rail item opens a chat where you ask in natural language ("Agrega un datacenter de 120 MW en Antofagasta y corta R014") and see each step of the model live: what it writes, each tool call with its state and result, and the final reply. The map joins the session the assistant edits and refreshes after each tool. It needs the backend with `CASCADASEN_LLM_ENABLED=true` and a Bedrock model (`docs/assistant.md` section 1); otherwise the panel says the assistant is not enabled. The conversation id is kept in `localStorage` (`sub50.assistant.cid`). Details: [`docs/assistant.md`](../docs/assistant.md) section 2c.
 
+Incidents: the **Incidentes** rail item lists the documented incidents (`GET /api/v1/attacks/catalog`, in file order) and simulates one: it creates or reuses a session at the incident's hour, runs it with the chosen policy and outage hours (an assumption), and shows the consequence card, the agents' response (experimental indicators), what would have prevented it, the cycles and both notices. **Ver cascada en el mapa** plays a cycle's cascade with the timeline. It needs the backend. Details: [`docs/mapa3.md`](../docs/mapa3.md) section 4.2.
+
 Deep links: `?mapa=3&point=feb2025-1500&cut=R239` opens the 25F corridor cut. It uses Mapbox when `VITE_MAPBOX_TOKEN` is set and the offline outline otherwise.
 
 Mapa 3 keeps the camera near Chile (`maxBounds` lon -110 to -35, lat -62 to -5, wide enough that the whole country fits at 1440 px; zoom 4 to 13, constants in `src/map/baseMap.ts`) and turns off 3D buildings, points of interest, transit and pedestrian roads in the Mapbox Standard style. The camera center must also stay on land or near it (`src/map/regionLimit.ts`: the margin is a quarter of the shorter viewport side, so it shrinks as you zoom in); after a move that ends too far offshore, the map snaps back to the last valid center. To allow another country, add its land GeoJSON URL to `LAND_URLS` in `baseMap.ts`. Add `?limite=0` to remove all of it and compare performance.
@@ -78,6 +80,7 @@ Mapa 3 keeps the camera near Chile (`maxBounds` lon -110 to -35, lat -62 to -5, 
 | `src/session/sessionApi.ts` | Sessions API client: typed calls, `ApiError`, `sessionIdFrom`, `subscribe` (SSE or polling) |
 | `src/session/useSession.ts`, `loader.ts`, `SessionBar.tsx`, `SessionCut.tsx`, `DataPanel.tsx`, `session.css` | Session state and refetch, the **Sesión compartida** view and panel-head strip, the open lines in **Simulación**, the **Datos** tab, and their styles |
 | `src/assistant/` | In-app assistant chat (**Asistente** rail item): SSE parser, event reducer, Spanish labels, API client, `useAssistant` hook and the panel; see `docs/assistant.md` section 2c |
+| `src/incidents/` | Documented incidents (**Incidentes** rail item): pure helpers (`incidents.ts`), the `useIncident` hook owned by `CascadeApp`, the panel and its styles; see `docs/mapa3.md` section 4.2 |
 | `src/session/geo.ts` | Nearest bus of at least 220 kV (great-circle distance only, no physics) |
 
 Data files are imported with Vite `?url` from `../data/processed/`, so they are bundled into the build and the deployed site works offline:

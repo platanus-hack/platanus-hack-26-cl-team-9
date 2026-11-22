@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(web): document the Incidentes view
+
+- **Changed:** `mapa3.md` has a new section 4.2 (catalog, options, own session per incident, result, cascade on the map, what is not built) and a `web/src/incidents/` row in section 8; section 10 says the Incidentes view is the only part of the theatre the web uses. `web/README.md` gains the view's paragraph and the `src/incidents/` row. `attack-sim.md` section 3.1 and `sessions-api.md` section 4 record the 422 when the session point differs from the incident's, and that the web consumes the API.
+- **Why:** AGENTS.md: behaviour changes are documented in the same delivery.
+- **Agents:** The "web has no run viewer" comment in `assistant/useAssistant.ts` is still true for generic runs; only incident cascades are played. Still open (`plan.md` section 9 item 10): team confirmation of the reversal and whether to expose the API.
+- **Files:** `docs/{mapa3,attack-sim,sessions-api}.md`, `web/README.md`.
+
 ## 2026-11-22 · feat(web): Incidentes view with consequence card and cascade on the map
 
 - **Changed:**
