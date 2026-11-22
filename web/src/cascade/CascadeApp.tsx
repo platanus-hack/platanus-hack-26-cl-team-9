@@ -943,6 +943,7 @@ export function CascadeApp() {
   const shareable = !s.sid && isChile && !external && urlCutOf(edits) !== null;
   const failed = simError?.key === timelineKey ? simError.message : null;
   const showTimeline = isChile && edited; // nothing to play: no card (D9)
+  const timelineOn = showTimeline || (isChile && view === "cyber"); // the Ciberataque always has its cycle card
   const darkNow = timeline ? frame?.dark.length ?? 0 : 0;
   const blackout = !!network && network.nodes.length > 0 && darkNow >= network.nodes.length;
   // In a session the selected line is "cut" when it is open, and restoring it repairs that line alone.
@@ -956,7 +957,7 @@ export function CascadeApp() {
   const shownOrigin = shownGrid ? originOf(current, shownGrid) : undefined;
 
   return (
-    <div className={showTimeline ? "shell" : "shell no-timeline"}>
+    <div className={timelineOn ? "shell" : "shell no-timeline"}>
       <div className="map" ref={mapRef} />
       <div className="map-overlays" ref={overlayRef}>
         {isChile && network && <MapOverlays markers={located} states={mapStates} visible={visible} network={network} impact={impact} showCities={!hasLabels} placed={placed} select={seek} />}
@@ -1062,7 +1063,7 @@ export function CascadeApp() {
         </div>
       </section>
 
-      {(showTimeline || (isChile && view === "cyber")) && <TimelineCard cycles={view === "cyber" ? cyberCycles(cyb) : null} timeline={timelineReady ? timeline : null} loading={!timelineReady && !failed} failed={!!failed} blackout={timelineReady && blackout} markers={markers} warp={warp} t={t}
+      {timelineOn && <TimelineCard cycles={view === "cyber" ? cyberCycles(cyb) : null} timeline={timelineReady ? timeline : null} loading={!timelineReady && !failed} failed={!!failed} blackout={timelineReady && blackout} markers={markers} warp={warp} t={t}
         clock={clock(point?.snapshot, t).tenths} islands={islands} playing={playing} speed={speed}
         setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />}
 
