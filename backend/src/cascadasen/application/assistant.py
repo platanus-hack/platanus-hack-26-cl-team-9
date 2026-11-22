@@ -51,6 +51,22 @@ def announces(text: str) -> bool:
     return bool(FUTURE_ACTION.search(text)) and not OFFER.search(text) and not text.rstrip().endswith("?")
 
 
+class Emitter:
+    """Calls the streaming callback, if any. A failing callback (a client that went away) never stops
+    the loop: the conversation still runs to the end and is saved."""
+
+    def __init__(self, callback: Callable[[str, dict[str, Any]], None] | None) -> None:
+        self.callback = callback
+
+    def __call__(self, kind: str, data: dict[str, Any]) -> None:
+        if self.callback is None:
+            return
+        try:
+            self.callback(kind, data)
+        except Exception:
+            self.callback = None
+
+
 class ConversationNotFoundError(KeyError):
     pass
 
@@ -143,10 +159,14 @@ class Assistant:
         conversation_id: str | None,
         session_id: str | None,
         toolbox_for: Callable[[str | None, str | None, str], ToolBox],
+        on_event: Callable[[str, dict[str, Any]], None] | None = None,
+        deadline_s: float | None = None,
     ) -> dict[str, Any]:
         """Run one user message. `toolbox_for(session_id, run_id, said)` builds the tools of this request;
         `said` is everything the user wrote in the conversation, so tools can check that values such as
-        megawatts come from the user and not from the model."""
+        megawatts come from the user and not from the model. `on_event(kind, data)` receives the steps
+        as they happen (`start`, `assistant_text`, `tool_call`, `tool_result`) for streaming clients;
+        `deadline_s` overrides the default deadline (a stream keeps the connection alive longer)."""
         if session_id is not None and not SESSION_ID.match(session_id):
             raise AssistantInputError("El id de sesión no es válido.")
         if conversation_id is None:
@@ -170,9 +190,11 @@ class Assistant:
         messages = trim_history(doc["messages"], self.history)
         messages.append({"role": "user", "text": message})
         start = len(messages) - 1  # this turn's messages, for the trace
+        emit = Emitter(on_event)
+        emit("start", {"conversation_id": cid, **toolbox.context()})
         failure: ToolChatError | None = None
         try:
-            reply, truncated, steps = self.loop(messages, toolbox)
+            reply, truncated, steps = self.loop(messages, toolbox, emit, deadline_s or self.deadline_s)
         except ToolChatError as exc:  # keep the turn so the user can retry; roles keep alternating
             failure = exc
             messages.append({"role": "assistant", "text": FAILED_TURN})
@@ -194,13 +216,20 @@ class Assistant:
             "notice": self.notice,
         }
 
-    def loop(self, messages: list[dict[str, Any]], toolbox: ToolBox) -> tuple[str, str | None, int]:
+    def loop(
+        self,
+        messages: list[dict[str, Any]],
+        toolbox: ToolBox,
+        emit: Emitter | None = None,
+        deadline_s: float | None = None,
+    ) -> tuple[str, str | None, int]:
+        emit, deadline_s = emit or Emitter(None), deadline_s or self.deadline_s
         started, specs, nudged, durations = self.clock(), toolbox.specs(), False, []
         for step in range(1, self.max_steps + 1):
             # do not start a model call that would likely end past the deadline (mean of this turn's calls;
             # the slowest one alone is too pessimistic after a single outlier)
             expected = sum(durations) / len(durations) if durations else 0.0
-            if self.clock() - started + expected > self.deadline_s:
+            if self.clock() - started + expected > deadline_s:
                 return self.stop(messages, "deadline", step - 1)
             call_started = self.clock()
             turn = self.model.turn(self.system, messages, specs)
@@ -220,10 +249,25 @@ class Assistant:
                     messages.append({"role": "user", "text": NUDGE, "hidden": True})
                     continue
                 return turn.text, None, step
+            if turn.text:  # what the model says while it works ("abro el corredor…")
+                emit("assistant_text", {"step": step, "text": turn.text})
             for call in turn.tool_calls:
+                emit(
+                    "tool_call", {"step": step, "id": call.id, "name": call.name, "arguments": call.arguments}
+                )
                 ok, result = toolbox.run(call)
-                messages.append(
-                    {"role": "tool", "tool_call_id": call.id, "ok": ok, "result": trim_result(result)}
+                trimmed = trim_result(result)
+                messages.append({"role": "tool", "tool_call_id": call.id, "ok": ok, "result": trimmed})
+                emit(
+                    "tool_result",
+                    {
+                        "step": step,
+                        "id": call.id,
+                        "name": call.name,
+                        "ok": ok,
+                        "result": trimmed,
+                        **toolbox.context(),  # where to fetch the full data: session and run ids
+                    },
                 )
         return self.stop(messages, "steps", self.max_steps)
 

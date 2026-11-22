@@ -1,6 +1,28 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(assistant): document the step stream for map clients
+
+- **Changed:** `docs/assistant.md` section 2b: the events of `POST /chat/stream` with examples, which session routes to fetch after each tool to draw, pings and the 90 s stream deadline, disconnect behaviour, a `fetch` reader for browsers (`EventSource` only does GET) and a `curl -N` example. `docs/stack.md` 7.3 lists the route.
+- **Why:** The frontend will build partial map views on these events.
+- **Agents:** Live check on Bedrock reached only the error path (the temporary credentials had expired): `start` arrives at once and the model failure arrives as an `error` event. The full flow is covered by the toy-world tests.
+- **Files:** `docs/assistant.md`, `docs/stack.md`.
+
+## 2026-11-21 · feat(api): stream the assistant's steps as Server-Sent Events
+
+- **Changed:** `POST /api/v1/assistant/chat/stream` takes the `/chat` body and answers `text/event-stream`: `start`, `assistant_text`, `tool_call`, `tool_result` (compact result plus `session_id` and `run_id`), then `done` (the `/chat` fields without the trace) or `error` (`status`, `detail`). A `: ping` comment goes out after `assistant_stream_ping_s` (10 s) without events. The loop runs in a worker thread and keeps going, and saves the conversation, if the client disconnects. `/chat` is unchanged; both share the rate limit (`admit`) and the tool wiring (`toolbox_factory`).
+- **Changed:** New settings `assistant_stream_deadline_s` (90 s: events and pings keep CloudFront's 30 s origin read timeout from firing) and `assistant_stream_ping_s`.
+- **Why:** The web will draw partial results on the map while the assistant works. Events stay light and point to the existing routes for the full data: after `cut_lines` `GET /sessions/{sid}/state` (timeline with frames), after `step` `GET /sessions/{sid}/runs/{rid}/snapshots?start=N`, after an edit `GET /sessions/{sid}/network` (user decision: references, not map data inside the events).
+- **Agents:** Errors found before streaming (422, 404 conversation, 429, 503) are plain HTTP errors; later ones are `error` events. The route is not marked `x-sub50-agent`. Verification: `uv run --extra mcp pytest -q` 349 passed, 2 skipped; lint clean. Not tried against Bedrock yet.
+- **Files:** `backend/src/cascadasen/api/assistant_routes.py`, `backend/src/cascadasen/infrastructure/settings.py`, `backend/tests/integration/test_assistant_api.py`.
+
+## 2026-11-21 · feat(assistant): emit each step of the tool loop through a callback
+
+- **Changed:** `Assistant.chat` takes `on_event(kind, data)` and `deadline_s`. It emits `start` (`conversation_id`, `session_id`, `run_id`), `assistant_text` (`step`, `text`) when the model talks while calling tools, `tool_call` (`step`, `id`, `name`, `arguments`) and `tool_result` (`step`, `id`, `name`, `ok`, `result`, plus the current `session_id` and `run_id`). `Emitter` drops a callback that raises, so a client that goes away never stops the loop or the save.
+- **Why:** The web wants to draw partial results on the map while the assistant works (next commit streams these events over SSE).
+- **Agents:** Without `on_event` nothing changes for `/chat`. `deadline_s` overrides `assistant_deadline_s` for one message.
+- **Files:** `backend/src/cascadasen/application/assistant.py`, `backend/tests/unit/test_assistant.py`.
+
 ## 2026-11-22 · fix(infra): bake data/processed at /data/processed in the backend image
 - **Changed:** `backend.Dockerfile` copies `data/processed` to `/data/processed` (it copied it to `/data`). `docs/infrastructure.md` says so.
 - **Why:** The code reads `CASCADASEN_DATA_DIR/processed/grid_snapshot.json`, so with the old layout production answered 503 "No hay snapshot de la red" on `/api/v1/nodes`, `/sim/*` and `/sessions` (health said `sin snapshot`). Local compose mounts `./data` at `/data`, so it never showed. Mapa 3 reads the static cache and was not affected.

@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     assistant_call_timeout_s: float = 20.0  # one Bedrock call
     assistant_history_messages: int = 30
     rate_assistant_per_minute: int = 10
+    assistant_stream_deadline_s: float = 90.0  # /chat/stream sends events and pings, so CloudFront waits
+    assistant_stream_ping_s: float = 10.0  # comment line sent when no event happened for this long
 
     # shared sessions and persisted runs (docs/stack.md 7.1): "memory" (one process), "file"
     # (`sessions_dir`, one machine) or "s3" (`session_bucket`, several instances)
