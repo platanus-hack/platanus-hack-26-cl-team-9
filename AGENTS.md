@@ -6,6 +6,11 @@ These rules apply to every coding agent (Claude Code, Codex, Cursor, others) and
 
 Do this before each plan and before each change, not only at the start of a session.
 
+0. Find your way first (navigation, it does not replace the list below):
+   - `llms.txt`: the repository in one page: what Sub50 is, then links grouped by topic (the llmstxt.org format).
+   - `docs/README.md`: every doc with its purpose, when to read it and whether it is current, plus a "where is X" table.
+   - `docs/code-map.md`: backend and web module by module, with file:line entry points, the data flow of a line cut, a session edit, an incident run and the assistant loop, and the tests that cover each module. Use `docs/for-reviewers.md` to check a claim.
+   - `docs/index/repo-index.json`: look up a file, symbol, route, doc heading or covering test with `jq` instead of reading the tree (queries in `docs/index/README.md`). Regenerate it before you commit a change to a source, doc or test file, a route or `CHANGELOG.md`: `cd backend && uv run python ../scripts/build_index.py` (section 2).
 1. Read the docs that apply, in this order:
    1. `docs/idea.md`: product, scope, limits, risks (and `docs/architecture.md` for how the system is built)
    2. `docs/cyber.md`: main objective of the simulation (consequences of cyberattacks) and its guardrails

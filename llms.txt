@@ -1,0 +1,73 @@
+# Sub50
+
+> Sub50 is an open, interactive blackout simulator for the Chilean national power grid (SEN) that runs in the browser. The user cuts a transmission line or a plant on a map of Chile and sees which zones lose power, how many people are affected and why. The engine is a DC power flow on a 188-bus reduction of the PyPSA-CL network, with island frequency (primary reserve, batteries, under-frequency load shedding) and an overload cascade. A strategic theatre on the same network runs events, defensive actions and agents; shared sessions, an MCP server and an in-app assistant drive the same engine. The main objective is to estimate the consequences of cyberattacks on this infrastructure: it models the effect of an attack, never the technique. Validation cases V1-V10 are tests against published figures of the 25 February 2025 blackout; V6 and V9 are skipped for lack of reference data, and the results are consequence estimates, not predictions. Python package and commands are named `cascadasen` (the earlier product name). Backend: Python 3.12, FastAPI, numpy, uv. Web: Vite, React, TypeScript, deck.gl. Deployed at https://sub50.cl.
+
+Links are relative to the repository root. On GitHub, prefix them with https://github.com/platanus-hack/platanus-hack-26-cl-team-9/blob/main/. The generated file `docs/index/repo-index.json` lists every file, public symbol with line number, API route, doc heading and covering test; query it with `jq` instead of reading the tree (`docs/index/README.md`).
+
+## Start here
+
+- [README.md](README.md): what Sub50 is, how to run it (`docker compose up --build`), what is validated and what is not, repository map.
+- [AGENTS.md](AGENTS.md): rules for coding agents: reading order, lint, tests, changelog entry per commit, conventions.
+- [docs/README.md](docs/README.md): index of every doc with purpose, when to read it and whether it is current, plus a "where is X" table.
+- [docs/code-map.md](docs/code-map.md): module-by-module map of backend and web, with file:line entry points, data flows (a line cut, a session edit, an incident run, the assistant loop) and tests per module.
+- [docs/for-reviewers.md](docs/for-reviewers.md): claims of the project paired with the test or command that verifies each, run commands, limitations and pending product decisions.
+- [CHANGELOG.md](CHANGELOG.md): what changed, newest first, written for agents.
+
+## Architecture
+
+- [docs/architecture.md](docs/architecture.md): ports and adapters, domain/application/infrastructure/api layers, simulation flows, frontend folders.
+- [docs/adr/README.md](docs/adr/README.md): decision records: two engines, the 188-bus network, DC flow with voltage as a rule, sessions by URL capability, hexagonal layering.
+- [backend/tests/unit/test_architecture.py](backend/tests/unit/test_architecture.py): the test that enforces the layering rule.
+- [docs/stack.md](docs/stack.md): decisions, simulation model, data contracts, conventions.
+
+## Engine and simulation
+
+- [docs/engine.md](docs/engine.md): the 188-bus cascade engine: steps, assumptions, measured results, failure cost.
+- [backend/src/cascadasen/domain/cascade/engine.py](backend/src/cascadasen/domain/cascade/engine.py): the cascade loop (`run_cascade_workflow`).
+- [backend/src/cascadasen/domain/simulation/engine.py](backend/src/cascadasen/domain/simulation/engine.py): the 13-area engine that serves `POST /api/v1/simulate` and validation cases V1-V10.
+- [backend/tests/validation/test_engine_cases.py](backend/tests/validation/test_engine_cases.py): validation cases V1-V10; the expected values are in [docs/plan.md](docs/plan.md) section 5.
+- [docs/strategy.md](docs/strategy.md): the strategic theatre: states, agents, cycle, indicators. [docs/agents.md](docs/agents.md): what the agents know about the physics.
+- [docs/health.md](docs/health.md): grid health index and failure cost. [docs/dependency.md](docs/dependency.md): who feeds whom and criticality.
+- [docs/attack-sim.md](docs/attack-sim.md): documented-incident scenarios over the theatre.
+- [docs/cyber.md](docs/cyber.md): the main objective and its guardrails (section 8: model effects, never techniques, never search for the worst attack).
+
+## APIs and contracts
+
+- [docs/sessions-api.md](docs/sessions-api.md): shared sessions and the agent API; the session id in the path is the credential.
+- [docs/openapi/agents.openapi.json](docs/openapi/agents.openapi.json): the agent-only OpenAPI spec, generated and checked by a test; conventions in [docs/openapi.md](docs/openapi.md).
+- [docs/mcp.md](docs/mcp.md): the MCP server and its 26 tools. [docs/assistant.md](docs/assistant.md): the in-app assistant (same tools behind `POST /api/v1/assistant/chat`).
+- [docs/stress.md](docs/stress.md): prepared scenarios (batch changes by filters). [docs/grids.md](docs/grids.md): grids as documents.
+- [docs/index/repo-index.json](docs/index/repo-index.json): the route table with handlers (`routes`), files, symbols and tests.
+
+## Data
+
+- [docs/datasets.md](docs/datasets.md): sources, the unified pipeline, the provenance rule (every number has a source or `is_assumption: true`).
+- [docs/network-format.md](docs/network-format.md): the contract to add or upload another country's network. [docs/regional.md](docs/regional.md): the regional context layer.
+- [docs/minimum-dataset.md](docs/minimum-dataset.md): what the engine needs to simulate a cut.
+- [data/processed/](data/processed/): the committed snapshot, operating points and base case. [data/scripts/](data/scripts/): scripts that build operating points and the secure base case.
+- [web/public/cache/](web/public/cache/): precomputed cuts per operating point, generated by `cascadasen-cache`.
+
+## Frontend
+
+- [web/README.md](web/README.md): run, commands, how the app is built.
+- [docs/mapa3.md](docs/mapa3.md): the main map: actors, how to use it, legend, file list. Section 11 says shared sessions are hidden in the web.
+- [web/src/cascade/CascadeApp.tsx](web/src/cascade/CascadeApp.tsx): the app shell and its state.
+- [docs/design.md](docs/design.md): visual direction.
+
+## Operations
+
+- [backend/README.md](backend/README.md): backend commands, type checking, endpoints, validation table, optional LLM.
+- [docs/docker.md](docs/docker.md): run locally with Docker. [docs/infrastructure.md](docs/infrastructure.md): AWS deployment and the deploy workflow.
+- [.github/workflows/checks.yml](.github/workflows/checks.yml): CI: pytest with a coverage floor, mypy, web tsc/vitest/build; the deploy needs it.
+- [.github/workflows/lint.yml](.github/workflows/lint.yml): ruff and the changelog check.
+
+## Evaluation
+
+- [docs/for-reviewers.md](docs/for-reviewers.md): where to verify each claim, honest limitations, pending decisions.
+- [backend/tests/](backend/tests/): unit, integration and validation tests.
+- [docs/idea.md](docs/idea.md): product, scope, honest limits (section 5) and risks (section 8).
+
+## Optional
+
+- [docs/plan.md](docs/plan.md): the hackathon plan, validation cases and open decisions (partly historical).
+- [docs/pitch_idea.md](docs/pitch_idea.md): an empty placeholder.
