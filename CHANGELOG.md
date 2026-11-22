@@ -1,5 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
+
+## 2026-11-22 · chore(index): regenerate after the assistant session fix and move its file:line references
+
+- **Changed:** `docs/index/repo-index.json` regenerated on this branch after merging `origin/main` (#108 brought the index). Seven `file:line` references in `docs/README.md`, `docs/code-map.md` and `docs/for-reviewers.md` follow `assistant_routes.py`, `mcp/toolbox.py` and `mcp/tools.py`; the toolbox row and guardrail row say the assistant also withholds the session edits and defers a first `start_session`.
+- **Why:** The `repo-index` job of PR #114 failed: the branch was cut before #108, so the merged tree had an index without its changes.
+- **Agents:** Nothing new: regenerate with `cd backend && uv run python ../scripts/build_index.py` after `git add`, as `docs/index/README.md` says.
+- **Files:** `docs/index/repo-index.json`, `docs/{README.md,code-map.md,for-reviewers.md}`, `backend/tests/unit/test_mcp_tools.py` (the exact digest test from #108 now also checks `overloaded_lines_note`).
 ## 2026-11-22 · test(mcp): follow #110 (places, named substations) and re-point the doc references
 - **Changed:** Three tests of `tests/unit/test_mcp_tools.py` that this branch added now match what #110 changed, with no change to `src/`: `prepare_digest` names up to five substations (`at`) and warns when a change touched none, `add_generator` resolves the place through `GET /grids/places`, and the substations of a change are dicts (`id`, `name`). 15 `file:line` references in `docs/code-map.md`, `docs/for-reviewers.md` and `docs/README.md` moved with `assistant_routes.py`, `llm_tools.py`, `mcp/digest.py` and `mcp/toolbox.py`. The index is regenerated.
 - **Why:** The merge of `main` brought #110. Upstream CI runs without the `mcp` extra, so tests for the MCP tools were skipped there and could not catch the change; this branch installs the extra, so they run.
