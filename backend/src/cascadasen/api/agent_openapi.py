@@ -57,6 +57,7 @@ TAGS = {
     "session-runs": "Strategic runs over a session's network.",
     "catalog": "What an agent can choose from: events, actions, policies, objectives, templates.",
     "global-runs": "Strategic runs over the default dataset, and its network.",
+    "grid-stress": "Stress the default grid per request: population, demand, generation and lines by filters.",
 }
 
 
