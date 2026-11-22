@@ -1,4 +1,4 @@
-import { DEAD_LINE, LOAD_BANDS, OPEN_LINE, VOLTAGE_TIERS, loadColor, type ColorMode } from "./layers";
+import { DEAD_LINE, FAULT, LOAD_BANDS, OPEN_LINE, VOLTAGE_TIERS, loadColor, type ColorMode } from "./layers";
 import type { Frame, Network } from "./types";
 import { Chevron } from "./ui";
 
@@ -6,7 +6,11 @@ import { Chevron } from "./ui";
  * Legend card at the bottom right (Design v5). It lists line samples, never a segmented bar. The load legend always
  * shows the same six items; items absent from the current frame keep a 40 % swatch.
  */
-export function MapLegend({ mode, setMode, network, frame }: { mode: ColorMode; setMode(m: ColorMode): void; network: Network; frame: Frame | undefined }) {
+export function MapLegend({ mode, setMode, network, frame, cascade = false, justDark = false }: {
+  mode: ColorMode; setMode(m: ColorMode): void; network: Network; frame: Frame | undefined;
+  /** A cut's timeline is on the map: show the ring for substations that just lost supply (`justDark`: one is pulsing now). */
+  cascade?: boolean; justDark?: boolean;
+}) {
   return (
     <section className="legend-card" aria-label="Leyenda">
       <div className="legend-head">
@@ -20,6 +24,7 @@ export function MapLegend({ mode, setMode, network, frame }: { mode: ColorMode; 
         </label>
       </div>
       {mode === "voltage" ? <VoltageSamples network={network} /> : <LoadSamples network={network} frame={frame} />}
+      {cascade && <div className="samples just-dark"><Sample label="recién sin suministro" absent={!justDark} fault ring /></div>}
       <p className="legend-foot">
         {mode === "voltage"
           ? `Red del modelo: ${network.lines.length} líneas entre ${network.nodes.length} subestaciones, en línea recta. El panel cuenta toda la red de IDE Energía.`
@@ -53,12 +58,14 @@ function LoadSamples({ network, frame }: { network: Network; frame: Frame | unde
   );
 }
 
-function Sample({ label, style, absent = false, fault = false, dashed = false }: { label: string; style?: React.CSSProperties; absent?: boolean; fault?: boolean; dashed?: boolean }) {
+function Sample({ label, style, absent = false, fault = false, dashed = false, ring = false }: { label: string; style?: React.CSSProperties; absent?: boolean; fault?: boolean; dashed?: boolean; ring?: boolean }) {
   return (
     <div className={absent ? "sample absent" : fault ? "sample fault" : "sample"}>
       {/* A fixed-height slot centers swatches of every thickness, so all labels sit on one line. */}
       <span className="swatch-slot">
-        {dashed
+        {ring
+          ? <svg width="28" height="6" viewBox="0 0 28 6" aria-hidden><circle cx="4" cy="3" r="2.4" fill="none" stroke={FAULT} strokeWidth="1.3" /></svg>
+          : dashed
           ? <svg width="28" height="4" viewBox="0 0 28 4" aria-hidden><path d="M0 2H28" fill="none" stroke={OPEN_LINE} strokeWidth="2" strokeDasharray="3 2.5" /></svg>
           : <span className="swatch" style={style} />}
       </span>

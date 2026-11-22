@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { darkAt, frequencyAt, groupEvents, impactAt, lineStateAt, MARKER_GAP_PX, markerLabel, MIN_GAP_VIEW_S, sample, TAIL_SHARE, timeWarp, withstandsAt } from "./simulation";
+import { darkAt, frequencyAt, groupEvents, impactAt, lineStateAt, MARKER_GAP_PX, markerLabel, MIN_GAP_VIEW_S, recentDarkAt, sample, TAIL_SHARE, timeWarp, withstandsAt } from "./simulation";
 import type { BusState, Event, NetLine, Timeline } from "./types";
 
 const ev = (t: number, type: string, params: Event["params"] = {}): Event => ({ t, type, ids: [], text_key: type, params });
@@ -117,6 +117,17 @@ describe("dark substations at the blackout's own time", () => {
     expect([...darkAt(twoBlackouts, 3.2)].sort()).toEqual(["B1", "B2", "B3", "B9"]);
   });
 
+  it("pulses only the substations that just went dark", () => {
+    const warp = timeWarp(twoBlackouts, 290);
+    expect([...recentDarkAt(twoBlackouts, 1.5, warp)]).toEqual(["B1"]);
+    expect([...recentDarkAt(twoBlackouts, 3.3, warp)].sort()).toEqual(["B2", "B3"]);
+    expect(recentDarkAt(twoBlackouts, 0.5, warp).size).toBe(0);
+    expect(recentDarkAt(twoBlackouts, twoBlackouts.duration_s, warp).size).toBe(0);
+  });
+
+  it("falls back to the frame when blackouts carry no ids", () => {
+    expect([...recentDarkAt(timeline, 4, timeWarp(timeline, 290))]).toEqual(["B1"]);
+  });
 });
 
 describe("line state", () => {

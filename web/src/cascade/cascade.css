@@ -231,6 +231,8 @@
 .shell .sample.absent .swatch, .shell .sample.absent svg { opacity: 0.4; }
 .shell .sample.absent > span:last-child { color: var(--muted); }
 .shell .sample.fault > span:last-child { color: var(--fault); }
+.shell .samples.just-dark { margin-top: 10px; }
+.shell .samples.just-dark .sample { width: auto; }
 .shell .impact .notice.truncated { margin: 12px 0 0; }
 .shell .legend-foot { margin: 0; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 16px; }
 

@@ -24,7 +24,7 @@ import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
 import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
-import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, timeWarp, type Marker } from "./simulation";
+import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, recentDarkAt, timeWarp, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
 import type { BusState, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
@@ -56,6 +56,7 @@ const AVAILABLE: NetworkInfo[] = BUILT_IN.filter((n) => n.id === DEFAULT_COUNTRY
 const SIM_TABS = new Set<Tab>(["estado", "sim"]);
 const FLOW_PERIOD_S = 3.0;
 const FLOW_CYCLE = 1 + 2 / 3;
+const PULSE_PERIOD_S = 0.9; // ring around the substations that just lost supply
 
 /**
  * Mapa 3 in the Design v5 shell: click selects, double click cuts a line, and the cascade computed by the engine plays.
@@ -138,6 +139,8 @@ export function CascadeApp() {
   const totalPeople = useMemo(() => Object.values(buses).reduce((s, b) => s + b.people, 0), [buses]);
   const warp = useMemo(() => timeWarp(timeline, TRACK_W), [timeline]);
   const markers = useMemo(() => (timeline && timeline.events.length > 0 ? groupEvents(timeline.events, warp, TRACK_W) : []), [timeline, warp]);
+  const recentList = timeline ? [...recentDarkAt(timeline, t, warp)].sort().join(",") : "";
+  const recent = useMemo(() => new Set(recentList ? recentList.split(",") : []), [recentList]);
   const located = useMemo(() => (timeline && network ? locate(markers, timeline, network) : []), [markers, timeline, network]);
   const visible = timeline?.events.filter((e) => e.t <= t + 1e-9).length ?? 0;
   const states = useMemo(() => new Map<Marker, MarkerState>(markers.map((m) => [m, stateOf(m, visible)])), [markers, visible]);
@@ -155,8 +158,8 @@ export function CascadeApp() {
   const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, colorMode) : []), [shownGrid, colorMode]);
 
   const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 0;
-  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile, warp });
-  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile, warp };
+  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile, warp, recent });
+  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile, warp, recent };
   const fitted = useRef<string | null>(null); // the network the camera last flew to
   const prevSid = useRef(s.sid);
   const clickMemory = useRef(NO_CLICK);
@@ -422,7 +425,8 @@ export function CascadeApp() {
         const time = ((now / 1000) / FLOW_PERIOD_S) % FLOW_CYCLE;
         const zoom = map.camera().zoom;
         const sel = v.selection;
-        map.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame: v.frame, time, colorMode: v.colorMode, selectedNode: sel?.kind === "node" ? sel.id : null,
+        const pulse = ((now / 1000) % PULSE_PERIOD_S) / PULSE_PERIOD_S;
+        map.setLayers(buildCascadeLayers({ network: v.network, buses: v.buses, frame: v.frame, time, recent: v.recent, pulse, colorMode: v.colorMode, selectedNode: sel?.kind === "node" ? sel.id : null,
           selectedLine: sel?.kind === "line" ? sel.id : null, mode: v.mode, zoom, toggles: v.toggles, heat: v.heatLayerList }));
         _placeOverlays(map);
       }
@@ -722,7 +726,7 @@ export function CascadeApp() {
 
       <div className="map-foot">
         <div className="scale" ref={scaleRef}><span className="scale-bar" /><span className="scale-label" /></div>
-        {isChile && network && <MapLegend mode={colorMode} setMode={setColorMode} network={network} frame={frame} />}
+        {isChile && network && <MapLegend mode={colorMode} setMode={setColorMode} network={network} frame={frame} cascade={hasCascade} justDark={recent.size > 0} />}
       </div>
       <TipLayer />
     </div>

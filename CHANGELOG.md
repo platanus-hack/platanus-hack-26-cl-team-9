@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(map): pulse buses that just lost power
+
+- **Changed:** New `recentDarkAt(timeline, t, warp)` in `simulation.ts` returns the buses of `island_blackout` events from the last 1.5 s of track time (`RECENT_WINDOW_VIEW_S`), and at most 3 simulated s ago (`RECENT_MAX_SIM_S`), so the squeezed tail does not keep pulsing. If a blackout has no ids it falls back to the `darkAt` difference.
+- **Changed:** `buildCascadeLayers` (`layers.ts`) takes `recent` and `pulse` and draws `nodes-just-dark`, a `FAULT` (#FF5A48) ring that grows from 5 to 14 px and fades. Radius and opacity are layer props, so the attributes are not rebuilt each tick. `CascadeApp` passes the set and a 0.9 s pulse phase. `MapLegend` shows "recién sin suministro" while a cut plays.
+- **Why:** Issue #90 part B: on the map, the buses of the current blackout must stand apart from those that went dark before.
+- **Agents:** Already-dark buses keep the red dot with a dark outline (`docs/mapa3.md` §5). Checked in headless Chrome on `nov2026-1300/R026` at 6.7 s: the ring marks only the 45 buses of the 6.59 s blackout.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,layers.ts,MapLegend.tsx,CascadeApp.tsx,cascade.css}`, `docs/mapa3.md`.
+
 ## 2026-11-22 · feat(timeline): non-linear track scale and warped playback
 
 - **Changed:** New `timeWarp(timeline, trackWidth)` in `simulation.ts` returns `{toView, toSim, viewDuration}`, piecewise linear and increasing. Its nodes are the instants of `line_cut`, `line_overload_open`, `island_formed` and `island_blackout`, plus the last `load_shed`.

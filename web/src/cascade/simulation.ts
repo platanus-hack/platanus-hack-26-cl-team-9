@@ -42,6 +42,24 @@ function frameDarkAt(tl: Timeline, t: number): Set<string> {
 }
 
 /**
+ * Buses whose blackout happened in the last `windowView` seconds of track time (view time, so the window is the same
+ * on screen wherever the track is stretched) and at most `RECENT_MAX_SIM_S` simulated seconds ago (the squeezed tail
+ * would otherwise keep the last blackout pulsing to the end). The map pulses them, apart from earlier dark buses.
+ */
+export function recentDarkAt(tl: Timeline, t: number, warp: TimeWarp, windowView = RECENT_WINDOW_VIEW_S): Set<string> {
+  const out = new Set<string>();
+  const now = warp.toView(t);
+  for (const e of tl.events) {
+    if (e.type !== "island_blackout" || e.t > t + 1e-9 || now - warp.toView(e.t) > windowView || t - e.t > RECENT_MAX_SIM_S) continue;
+    const ids = e.ids.length ? e.ids : [...darkAt(tl, e.t)].filter((id) => !darkAt(tl, e.t - 1e-3).has(id));
+    for (const id of ids) out.add(id);
+  }
+  return out;
+}
+export const RECENT_WINDOW_VIEW_S = 1.5;
+export const RECENT_MAX_SIM_S = 3;
+
+/**
  * Non-linear time scale of the track (issue #90). Simulated seconds `t` map to view seconds `v`, piecewise linear and
  * increasing. The nodes are the instants that cut, open or darken something (and the last load shed). Every gap between
  * two nodes gets at least `MIN_GAP_VIEW_S` and at least the view length that keeps their markers `MARKER_GAP_PX` apart on

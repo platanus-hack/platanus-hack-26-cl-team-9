@@ -207,6 +207,7 @@ Issue #49. The map draws **one network at a time**. The panel header names it ("
 | Line width | Always voltage: 500 kV, 154 to 345 kV, lower |
 | Moving white dots | Direction of flow. Only lines with 60 MW or more |
 | Substation dot | Light gray = with supply (larger: 500 kV), red with a dark outline = without supply |
+| Red ring that grows and fades | The substation lost supply in the last 1.5 s of track time (at most 3 simulated s), so the current blackout stands apart from earlier ones. Legend: "recién sin suministro", shown while a cut plays |
 | Cream disc or column | Demand of the substation (off by default) |
 | Numbered pins | Events, the same numbers as the history and the timeline |
 
