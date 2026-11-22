@@ -1,6 +1,12 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): side panel fills the height down to the timeline card
+- **Changed:** `.shell .panel` drops the 742 px cap: `max-height` is now `calc(100% - var(--timeline-h) - 3 * var(--gap))`, so a long panel (Estado de la red with many consequences) grows until 12 px above the timeline card instead of leaving an empty band on tall screens.
+- **Why:** user request: on a 951 px tall viewport the panel stopped at 742 px and left a visible gap above the timeline.
+- **Agents:** the panel is still as tall as its content; only the upper bound changed. `docs/design.md` section on the grid no longer says "max 742 px". No test asserts the old cap. Not checked in a browser.
+- **Files:** `web/src/cascade/cascade.css`, `docs/design.md`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · feat(assistant): siempre sobre la grilla cargada, sin tope de MW, pestaña Salud de la red e historial ubicable (#139)
 
 - **Changed:** the web sends `grid` (point, changes, open lines, substations off) with every chat message; the backend appends it to the system prompt for that turn (`grid_context`) and the prompt says every request is about it, never ask for the point. The overlay's 5000 MW total cap is gone and one element or bus override goes up to 20000 MW. `/grids/prepare` returns `health` (prefault index of the prepared grid, no N-1) and the assistant digest carries it.
