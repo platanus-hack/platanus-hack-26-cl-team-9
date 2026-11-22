@@ -30,13 +30,8 @@ export function AssistantPanel({ a, health }: { a: Assistant; health?: ReactNode
 
   return (
     <div className="assistant">
-      <div className="card">
-        <div className="card-head">
-          <h3>Asistente</h3>
-          <button className="text-btn" onClick={() => void a.reset()} disabled={!turns.length && !a.state.conversationId}>Nueva conversación</button>
-        </div>
-        <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, avanzar una corrida. El mapa muestra lo que el asistente cambia en la sesión.</p>
-      </div>
+      {/* The title and "Nueva conversación" live in the panel header, next to Cerrar (CascadeApp). */}
+      <p className="meta">Pide en lenguaje natural lo que quieres simular: agregar un datacenter, cortar líneas, apagar centrales. El mapa muestra lo que el asistente cambia.</p>
 
       <div className="cy-subtabs" role="tablist">
         {([["chat", "Chat"], ["salud", "Salud de la red"]] as const).map(([k, label]) => (

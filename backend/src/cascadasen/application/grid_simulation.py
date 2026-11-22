@@ -30,9 +30,10 @@ class GridSimulator:
     def simulate_workflow(
         self, point: str, open_lines: list[str], out_buses: list[str], changes: list[dict] | None = None
     ) -> dict:
-        """`changes`: a scenario prepared with `/grids/prepare` (docs/stress.md); the failure runs on it."""
+        """`changes`: a scenario prepared with `/grids/prepare` (docs/stress.md); the failure runs on it. With changes
+        and no failure the cascade starts from the lines the changes overloaded (all hydro off, for example)."""
         prepared, edited, kept, dropped = prepare_edits(
-            self.world, point, open_lines, out_buses, changes=changes
+            self.world, point, open_lines, out_buses, allow_empty=bool(changes), changes=changes
         )
         timeline, state = run_cascade_state(edited.net, edited.point, kept)
         supply = supply_workflow(self.world, point, prepared, edited, state)
@@ -57,7 +58,7 @@ def cost_workflow(
     changes: list[dict] | None = None,
 ) -> dict:
     """Failure cost of the user's changes, total and per hour of outage (docs/engine.md, "Cost"). No change: no cost."""
-    if not (open_lines or out_buses):
+    if not (open_lines or out_buses or changes):
         _load(simulator.world, point)  # still 404 for an unknown point
         return _cost_view(point, failure_cost(0.0, 0.0, 0.0), 0.0)
     summary = simulator.simulate_workflow(point, open_lines, out_buses, changes)["timeline"]["summary"]

@@ -11,7 +11,7 @@ import { loadBuses, loadComunas, loadHealth, loadIndex, loadNetwork, loadTimelin
 import { interpretClick, NO_CLICK, pickOf, type Pick } from "./clicks";
 import { buildCascadeLayers, type ColorMode, type Toggles } from "./layers";
 import { GridSources, type SourcePick } from "./GridSources";
-import { addBus, addLine, changesOf, countFailures, dropBus, dropChange, dropLine, editKey, fromCache, NO_EDITS, setFactor, type Edits, type StressChange, type Target } from "./edits";
+import { addBus, addLine, changesOf, countEdits, dropBus, dropChange, dropLine, editKey, fromCache, NO_EDITS, setFactor, type Edits, type StressChange, type Target } from "./edits";
 import { composeGrid, loadContextDocument, loadDependency, prepareScenario, simulateGrid, type Prepared, type SimulationResult } from "./gridsApi";
 import { HEAT_OPTIONS, heatLayers, heatPoints, heatRequestKey, needsDependency, type HeatKind } from "./heat";
 import { HelpPanel, SourcesPanel } from "./Legend";
@@ -154,8 +154,8 @@ export function CascadeApp() {
   const incidentTl = inc.playing != null ? inc.cascadeAt(inc.playing) : cyb.mapCycle != null ? cyb.cascadeAt(cyb.mapCycle) : null;
   // In a session the timeline is the session state's, keyed "session".
   // Zero or one line: the precalculated cascade; more changes or a prepared scenario: the server simulates them together.
-  // A prepared scenario with no failure has no cascade: the map shows the base case and the panel the prepared grid.
-  const cached = fromCache(edits) || countFailures(edits) === 0;
+  // A prepared scenario with no failure is simulated too: its cascade starts from the lines the changes overload.
+  const cached = fromCache(edits);
   const cut = cached ? edits.lines[0] ?? null : null;
   const timelineKey = s.sid ? "session" : cached ? `${pointId}/${cut ?? "baseline"}` : editKey(pointId, edits);
   const loadedReady = loaded?.key === timelineKey;
@@ -818,7 +818,10 @@ export function CascadeApp() {
           ) : (
             <div className="crumbs view-head">
               <h1>{VIEW_TITLES[view] ?? "Ayuda"}</h1>
-              <button className="text-btn" onClick={() => setView("tabs")}>Cerrar</button>
+              <div className="head-actions">
+                {view === "assistant" && <button className="text-btn" onClick={() => void a.reset()} disabled={!a.state.turns.length && !a.state.conversationId}>Nueva conversación</button>}
+                <button className="text-btn" onClick={() => setView("tabs")}>Cerrar</button>
+              </div>
             </div>
           )}
         </header>
@@ -826,7 +829,7 @@ export function CascadeApp() {
           {(s.error ?? error) && <p className="note">{s.error ?? error}{s.error && <> <button className="text-btn" onClick={s.clearError}>Cerrar</button></>}</p>}
           {view === "session" && <SessionBar s={s} />}
           {view === "assistant" && <AssistantPanel a={a} health={<GridHealth prepared={prepared?.value ?? null} timeline={loadedReady ? loaded.timeline : null}
-            failures={countFailures(edits) > 0} base={s.sid || composed ? null : health} />} />}
+            failures={countEdits(edits) > 0} base={s.sid || composed ? null : health} />} />}
           {view === "history" && <ChangePanel entries={historyEntries} locate={locateEntry} />}
           {view === "incidents" && <IncidentPanel inc={inc} sessionPoint={s.sid ? s.session?.point ?? null : null} />}
           {view === "cyber" && <CyberPanel c={cyb} prefault={cyberHealth ? <PrefaultHealth health={cyberHealth} /> : null}

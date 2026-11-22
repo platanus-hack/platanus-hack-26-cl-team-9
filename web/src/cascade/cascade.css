@@ -85,6 +85,7 @@
 .shell .row-btns { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .shell .upload-form .notice { flex-direction: column; }
 .shell .view-head { justify-content: space-between; height: 40px; padding: 0 12px 12px; }
+.shell .head-actions { display: flex; align-items: center; gap: 16px; }
 .shell .tabs { display: flex; gap: 4px; margin: 0; padding-top: 6px; border: 0; }
 .shell .tabs button { height: 38px; padding: 0 12px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--faint); font-size: 14px; line-height: 18px; white-space: nowrap; cursor: pointer; }
 .shell .tabs button:hover:not(.on):not([aria-disabled]) { color: var(--fg-2); }

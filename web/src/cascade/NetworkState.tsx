@@ -63,7 +63,7 @@ export function NetworkState({ network, buses, point, edits, result, timeline, t
           </div>
         ))}
         {prepared && changesOf(edits).length > 0 && countFailures(edits) === 0 && (
-          <p className="meta">La red está preparada: {formatPeople(prepared.totals.people_total)} personas, {int(prepared.totals.load_total_mw)} MW de demanda. Saca una línea o apaga una subestación para simularla.{prepared.overloaded_lines.length ? ` ${prepared.overloaded_lines.length} líneas ya superan su límite: la cascada parte con ellas.` : ""}</p>
+          <p className="meta">La red está preparada: {formatPeople(prepared.totals.people_total)} personas, {int(prepared.totals.load_total_mw)} MW de demanda.{prepared.overloaded_lines.length ? ` ${prepared.overloaded_lines.length} líneas superan su límite: la simulación parte abriéndolas. Presiona play en Simulación para verla.` : " Ninguna línea supera su límite: sin una falla, la red sigue en pie."}</p>
         )}
       </div>
       <CascadeLines network={network} timeline={timeline} t={t} />
