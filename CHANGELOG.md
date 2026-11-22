@@ -2,6 +2,11 @@
 
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · test(cascade): golden hashes of the cascade engine events, frames and theatre frame
+- **Changed:** New `backend/tests/unit/test_cascade_golden.py`: sha256 of the canonical JSON of `run_cascade_workflow` for the baseline, every single-line cut and one 3-line cut on the toy network and on the real network at `nov2026-1300` and `feb2025-0300` (skipped when `data/processed` is missing), plus the toy `TheaterGrid.frame()` after a corridor opening.
+- **Why:** F5 and F6 of the duplication report: the event dicts, `round(t, 2)` timestamps and frame/edge blocks must stay byte-identical when they move to shared helpers. The real-network case emits all seven cascade event kinds.
+- **Agents:** Test only. The hashes were taken on the unrefactored code. If you change cascade output on purpose, regenerate the constants at the bottom of the file. `web/public/cache` does not match current engine output (82 of 82 compared files differ), so it is not a usable golden; do not rely on it.
+- **Files:** `backend/tests/unit/test_cascade_golden.py`.
 ## 2026-11-22 · refactor(domain): one level_of rule and an AreaGraph mixin shared by the 13-area and theatre networks
 - **Changed:** `level_of(n_counted, n_collapsed, load_lost_mw)` in `domain/simulation/consequence.py` holds the L0-L3 ladder; `consequence_level` there and `theater/execution.py::consequence_level` map their data to the three numbers and call it.
 - **Changed:** `AreaGraph[A, C]` mixin in `domain/simulation/network.py` (`order`, `zones`, `zone_areas`, `incident`, no dataclass fields) is inherited by `ReducedNetwork` and `TheaterNetwork`; `_band` becomes `band_of` there and `theater/areas.py` imports it. `build_reduced_network` uses `_nearest_class(kv, X_PER_KM)` instead of the inline `min(...)`.
