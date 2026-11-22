@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · feat(web): assistant API client and hook
+
+- **Changed:** New `web/src/assistant/assistantApi.ts`: `streamChat(body, onEvent, signal)` reads `POST /api/v1/assistant/chat/stream` with `fetch` and the SSE parser and resolves whether the stream ended with `done`/`error`; `getConversation`, `deleteConversation`; `AssistantError(status, retryAfter, detail)` (status 0 = network) whose message is the Spanish text.
+- **Changed:** New `web/src/assistant/useAssistant.ts`: `useAssistant(session)` → `{state, busy, enabled, restoring, send, reset}`. Sends `session_id: s.sid` with every message, joins the `session_id` of `start`/`tool_result`/`done` when it differs from the one on screen, reloads the session 300 ms after each successful edit/cut/repair, and after `step` fetches the run snapshots and annotates the card. The conversation id lives in `localStorage` (`sub50.assistant.cid`) and is rebuilt on mount (404 forgets it).
+- **Why:** The chat panel (#73) needs the stream, persistence and the map following the assistant.
+- **Agents:** A 503 disables the chat (`enabled = false`). A stream that drops before `done` marks the turn interrupted and re-reads the conversation up to 5 times, 3 s apart. `reset()` aborts the stream, clears the chat and DELETEs the conversation (the session stays). `errorText` in `sessionApi.ts` was not exported: all assistant texts come from `labels.ts`. Tests: `assistantApi.test.ts`.
+- **Files:** `web/src/assistant/{assistantApi.ts,assistantApi.test.ts,useAssistant.ts}`.
+
 ## 2026-11-21 · feat(web): reduce assistant events to steps
 
 - **Changed:** New `web/src/assistant/steps.ts`: pure chat state (`ChatState`, turns, steps, `ToolCard`) with `begin`, `reduce(state, event)`, `interrupt`, `fail`, `annotate` and `fromConversation(view)`.
