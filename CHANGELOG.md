@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · chore(data): regenerate cache with health and cost
+
+- **Changed:** `web/public/cache/` regenerated with `uv run cascadasen-cache`: 4 new `<point>/health.json`, and every line and substation timeline rewritten with `summary.failure_cost_usd`, `unserved_energy_mwh`, `outage_duration_h` and `health`. Size went from 42 MB to 46 MB; `web/README.md`, `docs/engine.md` and `docs/mapa3.md` say so.
+- **Why:** The web shows the index and the cost from the cache (issue #72).
+- **Agents:** Checked: `feb2025-1500/R239.json` has `failure_cost_usd` 69,335,520 and `health.cost.is_floor` true; `feb2025-1500/health.json` has index 0.0 (`transfer_25f`), N-1 expected US$ 3,510,591 and worst US$ 72,605,400. A full run takes about 1.5 minutes.
+- **Files:** `web/public/cache/`, `web/README.md`, `docs/engine.md`, `docs/mapa3.md`.
+
 ## 2026-11-21 · feat(cache): health.json and event health per timeline
 
 - **Changed:** `cascadasen-cache` writes `<point>/health.json` = `prefault_health(net, op, n1_results=...)`, fed by the single-line runs `_build_point` already makes (no extra run). Every `<line>.json` and `sub-B###.json` gains `health`: the after-cut report with its `cost`.

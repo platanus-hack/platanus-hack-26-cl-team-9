@@ -111,7 +111,7 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder   # 
 cd ../web && npm install && npm run dev
 ```
 
-The cache (about 42 MB, 4 hours x (273 line cuts + 188 substation shutdowns)) is committed, because the deployed web image has no Python. Regenerate it with `cascadasen-cache` and commit it whenever the engine or `data/processed` change. If a file is missing the page shows "Falta la caché (...)".
+The cache (about 46 MB, 4 hours x (273 line cuts + 188 substation shutdowns + `health.json`)) is committed, because the deployed web image has no Python. Regenerate it with `cascadasen-cache` and commit it whenever the engine or `data/processed` change. If a file is missing the page shows "Falta la caché (...)".
 
 | URL | Opens |
 |---|---|
