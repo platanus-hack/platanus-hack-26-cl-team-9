@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(web): drop the committed node_modules symlink
+
+- **Changed:** removes `web/node_modules`, a symlink to a local path that merge `cf013db` committed by mistake, and makes `web/.gitignore` ignore `node_modules` as a file too, not only as a directory.
+- **Why:** `web.Dockerfile` runs `npm ci` and then `COPY web/ ./`, so the symlink could replace the installed packages in the image and break the build.
+- **Agents:** never symlink `node_modules` into a worktree and then `git add -A` there.
+- **Files:** `web/node_modules` (removed), `web/.gitignore`.
+
 ## 2026-11-22 · fix(cascade): voltage collapse brings the 25F down again; drop the extreme-contingency EDAC (#76)
 
 - **Changed:** the extreme-contingency EDAC (671.55 MW by df/dt) is removed from `frequency.py` and `cascade.yaml`. The voltage rule no longer marks islands `voltage_limited`/`uncertain`: when the 25F corridor separates with a pre-fault flow beyond 1,600 MW N→S or 1,000 MW S→N, both end islands collapse (`island_blackout`, `reason: "voltage"`); islands in `summary.islands` that went dark carry `reason`. `summary.uncertain` and `CascadeState.uncertain` are gone. Cache regenerated. Web: Estado de la red lists the consequences (lines opened by overload, islands that went dark, with their second) apart from the user's cuts.
