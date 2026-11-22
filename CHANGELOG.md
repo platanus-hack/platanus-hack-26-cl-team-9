@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · docs(incidents): attack-sim is implemented, with its API and tools
+
+- **Changed:** `attack-sim.md` has a new section 3.1 (catalog, results, API, card, tools) and a new status line; `strategy.md` section 6, `mcp.md` section 3, `sessions-api.md` section 4 and `plan.md` section 9 item 10 point to it.
+- **Why:** AGENTS.md: behaviour changes are documented in the same delivery (issue #74).
+- **Agents:** `attack-sim.md` sections 3 and 5 are the first proposal and are partly wrong now (no `plant_out`, `fleet_out` or `/attacks/simulate`; the API is not local-only, it follows the session rules). Still open (`plan.md` section 9 item 10): team confirmation of the reversal, whether to expose the API, and the Huatacondo battery in the dataset.
+- **Files:** `docs/{attack-sim,strategy,mcp,sessions-api,plan}.md`.
+
 ## 2026-11-22 · feat(mcp): incident scenario tools
 
 - **Changed:** `list_incident_scenarios` and `start_incident_run(scenario, policy, seed, duration_h)` in `mcp/tools.py` (and so in the assistant, which shares the specs). `run_report` and `after_action` digests carry the `incident` block. The server `INSTRUCTIONS` mention them.
