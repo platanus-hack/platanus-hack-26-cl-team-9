@@ -196,6 +196,26 @@ Issue #49. The map draws **one network at a time**. The panel header names it ("
 - **Storage:** IndexedDB in this browser only (`web/src/map/uploadStore.ts`, database `sub50`, store `uploaded-networks`); nothing is sent to a server. If the browser refuses to store it, the network still shows and a note says it will be lost on reload. Sharing it is for #34 / #44.
 - An upload is never simulated (phase 2 would need the inputs of `docs/minimum-dataset.md`).
 
+### 4.2 Documented incidents (Incidentes)
+
+Continuation of issue #74 (`attack-sim.md` section 3.1). The **Incidentes** rail item (below Asistente) replays a public incident as a simulated scenario on Chile's network. It needs the backend.
+- **Catalog:** one card per incident from `GET /api/v1/attacks/catalog`, in the order of the file, never sorted by damage. Each card shows title, date, the hour it runs at, the effects in text, the sources as links, and a tag `no verificado` (press only) or `referencia, no es ciber` (25F).
+- **Options:** defence policy A/B/C, outage hours (0.25-720, labelled "supuesto": it only scales MWh and cost) and **Simular incidente**.
+- **Own session:** an incident runs at its own hour (`operating_point`), and the API answers 422 when the session's hour differs. Without a session, or in one at another hour, the web creates a session at the incident's hour, labelled "Incidente: <título>", and enters it (asking first when it leaves another session). In a session at the same hour the run is added to it.
+- **Flow:** `POST /{sid}/attacks/runs`, then `step` to the horizon (the snapshots), then the report and the after-action.
+- **Result:**
+  1. Consequence card: level, people, MW, and MWh and cost with a tip "N h supuestas (editable)".
+  2. Agentic response from `report.indicators`, labelled "indicador experimental": time to understanding in cycles and minutes, mission continuity, unnecessary decisions, final reserve.
+  3. "Qué lo habría evitado".
+  4. The cycles (`after_action.timeline`).
+  5. Notes and sources.
+  6. Both notices: "Escenario hipotético: se modela el efecto, no el ataque." and "Consecuencia simulada en una red reducida, no una predicción."
+- **Cascade on the map:** a cycle whose snapshot `transient` sheds load, darkens buses or opens lines has **Ver cascada en el mapa**. The `transient` is a Timeline (same shape as a cut), so the timeline card, pins, callout and Carga colours play it like a cut. It takes priority over the session's own timeline. A double click cut, **Prender todo** (enabled while it plays), **Cerrar incidente** or leaving the session remove it.
+- **Not built:** a cycle-by-cycle viewer of `snapshot.grid`, the areas and the crews (section 10), injecting events from the web, comparing policies with replay.
+- **Language:** "incidente simulado" and "escenario", never "atacar" or "hackear".
+
+Code: `web/src/incidents/` (`incidents.ts` pure helpers, `useIncident.ts` state owned by `CascadeApp`, `IncidentPanel.tsx`).
+
 ## 5. Legend (what the map draws)
 
 | Element | Meaning |
@@ -280,6 +300,7 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/src/cascade/Legend.tsx` | "Ayuda" and "Fuentes y supuestos" views |
 | `web/src/cascade/text.ts` | Spanish narration of events, place names, number and clock formats |
 | `web/src/cascade/cascade.css` | Styles of the shell (Design v5 tokens) |
+| `web/src/incidents/` | **Incidentes** rail item: catalog, launch in a session at the incident's hour, consequence card, agentic response, prevention, cycles and their cascade on the map (section 4.2) |
 | `web/src/assistant/` | **Asistente** rail item: chat with the in-app assistant, its steps live, the map following its session (`docs/assistant.md` section 2c) |
 | `web/src/map/shapes.ts` | Outline of the rectangular bars |
 | `web/src/map/country.ts`, `countryBounds.ts` | Network catalog, `countryOf`, `?pais=`; camera frame, limits and land from the data (section 4.1) |
@@ -323,7 +344,7 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 
 ## 10. Operation mode: the strategic theatre on this map (backend contract)
 
-The strategic theatre (`docs/strategy.md`) now runs on the same network and engine as this map. A run lasts 24-36 cycles of 5 minutes. In each cycle, digital degradation (telemetry loss, delayed or unreliable data, communications loss, false alarms), an adaptive adversary acting by area, unplanned external events, and the defenders' decisions and field crews play out. A physical event runs the same cascade engine as a line cut here. This section is the contract for the frontend. **Backend only for now:** the API, the snapshots and the offline cache are done; the visual layer of mapa 3 is not part of this PR and is left to the frontend work. A user flow that fits it: pick hour, scenario, defence policy and adversary; play 5-minute cycles drawing `grid`, areas and crews; replay `transient` in seconds; click a line or substation to inject an event (`POST /events`, applied next cycle); end with the report, the after-action and a replay with another policy (`/replay` + `GET /snapshots`).
+The strategic theatre (`docs/strategy.md`) now runs on the same network and engine as this map. A run lasts 24-36 cycles of 5 minutes. In each cycle, digital degradation (telemetry loss, delayed or unreliable data, communications loss, false alarms), an adaptive adversary acting by area, unplanned external events, and the defenders' decisions and field crews play out. A physical event runs the same cascade engine as a line cut here. This section is the contract for the frontend. **Backend only for now:** the API, the snapshots and the offline cache are done; the visual layer of mapa 3 is not part of this PR and is left to the frontend work. The only part the web uses today is the Incidentes view (section 4.2), which plays a cycle's `transient` on the map. A user flow that fits it: pick hour, scenario, defence policy and adversary; play 5-minute cycles drawing `grid`, areas and crews; replay `transient` in seconds; click a line or substation to inject an event (`POST /events`, applied next cycle); end with the report, the after-action and a replay with another policy (`/replay` + `GET /snapshots`).
 
 **Sources.**
 - Live: the API under `/api/v1/sim/*` (`docs/stack.md` 7.1). Every run without `seed` is a different random run.

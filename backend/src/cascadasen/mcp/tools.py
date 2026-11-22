@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from cascadasen.api.stress_schemas import StressChange
 from cascadasen.mcp import digest
 from cascadasen.mcp.client import Sub50Client, ToolError
 from cascadasen.mcp.state import McpState
@@ -32,6 +33,8 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "cut_lines": ("cut_lines",),
     "repair_lines": ("repair_lines",),
     "get_grid_state": ("get_cut_state",),
+    "list_incident_scenarios": ("get_attack_catalog",),
+    "start_incident_run": ("start_incident_run",),
     "start_run": ("create_run",),
     "inject_event": ("inject_run_event",),
     "step": ("step_run",),
@@ -40,6 +43,7 @@ OPERATIONS: dict[str, tuple[str, ...]] = {
     "run_report": ("get_run_report",),
     "after_action": ("get_run_after_action",),
     "replay": ("replay_run",),
+    "prepare_scenario": ("prepare_scenario",),
 }
 TOOLS = tuple(OPERATIONS)
 
@@ -48,7 +52,11 @@ Sub50 simulates the consequences of events on the Chilean national grid (188 bus
 Work in this order: start_session (or join_session), describe_network to learn areas and ids, edit the
 network (add_datacenter, add_generator, add_line, edit_element) and/or open lines with cut_lines, then
 read the result. For strategic experiments use start_run, inject_event, step, run_report and after_action.
-Use list_options for valid event, action, policy and template ids.
+To replay a documented incident (Huatacondo, Poland, UK, 25F) use list_incident_scenarios and
+start_incident_run, then step, run_report and after_action; say each result is a simulated scenario.
+Use list_options for valid event, action, policy and template ids. To prepare a stressed scenario by filters
+("halve every hydro plant", "Puente Alto with twice the people") use prepare_scenario: it only prepares the grid
+and stores nothing; failures still run in the usual simulation.
 
 Rules. Every scenario is hypothetical: always say that Sub50 models the effect of an event, never the
 attack technique, and describe effects and prevention only. Do not look for the line or area whose loss
@@ -57,6 +65,7 @@ API rate-limits cuts. Values the model adds (redispatch, costs, thresholds) are 
 Answer in the user's language; the results are in Spanish.
 """
 
+DEFAULT_POINT = "nov2026-1300"
 ELEMENT_ROUTES = {"B": "buses", "R": "lines", "U": "lines", "D": "loads", "G": "generators"}
 
 
@@ -267,6 +276,40 @@ class Sub50Tools:
 
     # -- strategic runs ----------------------------------------------------------------------
 
+    def list_incident_scenarios(self) -> dict[str, Any]:
+        """List the documented incidents that can be replayed as a simulated run: id, title, date, whether
+        it is verified, sources and the effects the scenario applies. A short curated list, not ranked:
+        do not compare them to find the worst one."""
+        return digest.incident_catalog_digest(self.client.get("/attacks/catalog"))
+
+    def start_incident_run(
+        self,
+        scenario: str,
+        policy: Literal["A", "B", "C"] = "C",
+        seed: int | None = None,
+        duration_h: float | None = None,
+    ) -> dict[str, Any]:
+        """Start a strategic run from a documented incident (ids from list_incident_scenarios) in the
+        active session and make it the active run. The defensive agents respond with the chosen policy;
+        the adversary is off. Then call step (about 24 cycles), run_report (its `incident` has the
+        consequence card and mitigations) and after_action. `duration_h` is the outage length used for
+        MWh and cost: an assumption, say so. Describe effects and prevention only; never attribute.
+        Each incident runs at its own operating_point (see list_incident_scenarios): the session must
+        use it, e.g. 25f-referencia needs start_session(point="feb2025-1500"); otherwise a 422 lists
+        the valid point."""
+        body: dict[str, Any] = {"scenario": scenario, "policy": policy}
+        if seed is not None:
+            body["seed"] = seed
+        if duration_h is not None:
+            body["duration_h"] = duration_h
+        run = self.client.post(f"{self._base()}/attacks/runs", body)
+        self.state.run_id = run["run_id"]
+        return {
+            **digest.run_digest(run),
+            "notice": digest.NOTICE,
+            "scenario_notices": digest.INCIDENT_NOTICES,
+        }
+
     def start_run(
         self,
         template: str = "open_field",
@@ -358,7 +401,7 @@ class Sub50Tools:
         """The after-action review of the active run in Spanish: summary lines and key moments. Show the
         summary lines as they are (a list); do not add causes or lessons that are not written in them."""
         resp = self.client.get(f"{self._run()}/after_action")
-        return {k: resp.get(k) for k in ("summary", "moments", "narrative", "policy", "notice")}
+        return {k: resp.get(k) for k in ("summary", "moments", "narrative", "policy", "notice", "incident")}
 
     def replay(self, policy: Literal["A", "B", "C"] | None = None) -> dict[str, Any]:
         """Re-run the active run with the same seed and events under another policy, to compare policies.
@@ -367,3 +410,19 @@ class Sub50Tools:
         resp = self.client.post(f"{self._run()}/replay", body)
         self.state.run_id = resp["run_id"]
         return {**digest.run_digest(resp), "replay_of": resp.get("replay_of"), "notice": digest.NOTICE}
+
+    # -- scenario preparation (stateless, docs/stress.md) -------------------------------------------
+
+    def prepare_scenario(self, changes: list[StressChange], point: str | None = None) -> dict[str, Any]:
+        """Prepare a stressed scenario on the default grid without simulating a failure (nothing is stored):
+        population (demand follows at the point's per-capita value), demand alone, generation by technology or
+        place, and line capacity or reactance. Each change: target, filters and `factor` (multiply) or `add`
+        (total). Filters: buses B###, zones NG/NC/CE/CS/SU, areas A01-A13, comunas (CUT or name), tech (hidro,
+        solar, eolica, carbon, gas, diesel, bioenergia, geotermica, termica), lines R###, kv. Returns what each
+        change touches, lines the prepared grid already loads over their limit, and per zone the people the
+        generators should feed. `point` defaults to the active session's point, else nov2026-1300."""
+        if point is None and self.state.session_id:
+            point = self.client.get(f"/sessions/{self.state.session_id}")["point"]
+        rows = [c if isinstance(c, dict) else c.model_dump(exclude_none=True) for c in changes]
+        out = self.client.post("/grids/prepare", {"point": point or DEFAULT_POINT, "changes": rows})
+        return digest.prepare_digest(out, rows)

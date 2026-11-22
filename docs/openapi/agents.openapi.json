@@ -6,6 +6,60 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/grids/prepare": {
+      "post": {
+        "tags": [
+          "grids",
+          "grid-stress"
+        ],
+        "summary": "Prepare a scenario: population, demand, generation and lines by filters",
+        "description": "Resolves the filters and returns the prepared grid with no failure: what each change touches, lines already over their limit, and the people each generator should feed. It does not simulate. Send the same `changes` with /grids/simulate, /grids/dependency or /grids/cost to run a failure on it.",
+        "operationId": "prepare_scenario",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The prepared grid with no failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepareOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown point, bus, line, comuna or zone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid change or over the overlay limits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
     "/api/v1/sim/network": {
       "get": {
         "tags": [
@@ -4199,6 +4253,134 @@
         },
         "x-sub50-agent": true
       }
+    },
+    "/api/v1/attacks/catalog": {
+      "get": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "List the documented incidents that can be replayed",
+        "description": "Returns the bounded, curated catalog: each entry is a public incident with its linked sources, whether it is verified, and the effects (event type, area or zone, cycle) the scenario applies. Only effects are modelled, never techniques, and nobody is attributed. The list is not ranked. Read only.",
+        "operationId": "get_attack_catalog",
+        "responses": {
+          "200": {
+            "description": "Documented incidents that can be replayed as simulated runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentCatalogOut"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
+    },
+    "/api/v1/sessions/{sid}/attacks/runs": {
+      "post": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "Start a run from a documented incident",
+        "description": "Creates a strategic run in the session from one catalog incident, with the defensive agents and the chosen policy. The adversary is off unless asked. Step it with `step_run`, read `get_run_report` (its `incident` block has the consequence card and mitigations) and `get_run_after_action`. Only catalog ids are accepted (422 otherwise). The incident runs at its own `operating_point` (see the catalog): the session must have been created at that point, or the call answers 422 with the point in `valid`. Scenario: the effect is modelled, not the attack; the consequence is simulated on a reduced network, not a prediction.",
+        "operationId": "start_incident_run",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL.",
+              "examples": [
+                "Q2xhdWRlU2Vzc2lvbklkMQ"
+              ],
+              "title": "Sid"
+            },
+            "description": "Session id (22 URL-safe characters) returned by create_session or shared as ?sesion=<sid> in the browser URL."
+          },
+          {
+            "name": "X-Sub50-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Who makes the change (agent or user name); recorded in the session's last_op.",
+              "examples": [
+                "bot-1"
+              ],
+              "default": "anon",
+              "title": "X-Sub50-Agent"
+            },
+            "description": "Who makes the change (agent or user name); recorded in the session's last_op."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncidentRunIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Run summary of a session run, with the session revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRunOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The session, run or element does not exist, or the id is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: the element is still referenced, the run finished, another writer won, or the session is busy with another request for longer than the lock timeout (10 s by default) or has 10 waiting; retry after Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input: detail names the field and, when useful, the valid values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; wait the seconds in Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-sub50-agent": true
+      }
     }
   },
   "components": {
@@ -5135,6 +5317,115 @@
         "type": "object",
         "title": "GeneratorPatch"
       },
+      "IncidentCatalogOut": {
+        "properties": {
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "description": "Notices every result carries: hypothetical, not a prediction."
+          },
+          "default_duration_h": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Default Duration H",
+            "description": "Default outage hours, with is_assumption true."
+          },
+          "incidents": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Incidents",
+            "description": "id, title, date, kind (cyber_documented or reference_not_cyber), verified, sources, notes, mitigations, operating_point (the session point the incident needs) and the effects the scenario applies (cycle, event type, target, params)."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "notices",
+          "default_duration_h",
+          "incidents"
+        ],
+        "title": "IncidentCatalogOut",
+        "description": "Documented incidents that can be replayed as simulated runs."
+      },
+      "IncidentRunIn": {
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "title": "Scenario",
+            "description": "Incident id from `GET /api/v1/attacks/catalog`.",
+            "examples": [
+              "huatacondo-2026"
+            ]
+          },
+          "policy": {
+            "type": "string",
+            "title": "Policy",
+            "description": "Defensive policy: A reactive, B preventive, C adaptive.",
+            "default": "C"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "Random seed; omitted means a fresh one."
+          },
+          "duration_h": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 720.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration H",
+            "description": "Outage hours that scale unserved energy and cost in the incident card. Always an assumption; omitted uses the catalog default."
+          },
+          "uncertainty": {
+            "type": "number",
+            "title": "Uncertainty",
+            "description": "0 perfect information, 1 baseline, 2 degraded.",
+            "default": 1.0
+          },
+          "stochastic": {
+            "type": "boolean",
+            "title": "Stochastic",
+            "description": "False (default): the incident is the script, with its catalog sizes and no unplanned events, so the consequence card is the incident's own. True adds the theatre's chance (unplanned external events, defences that may not act), which then also counts in the card.",
+            "default": false
+          },
+          "adversary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdversaryIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional seeded abstract adversary. Off by default: the incident is the script."
+          }
+        },
+        "type": "object",
+        "required": [
+          "scenario"
+        ],
+        "title": "IncidentRunIn"
+      },
       "LineIn": {
         "properties": {
           "a": {
@@ -5397,6 +5688,118 @@
         "additionalProperties": false,
         "type": "object",
         "title": "LoadPatch"
+      },
+      "PrepareIn": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/StressChange"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Changes",
+            "description": "Changes, applied in order."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "point",
+          "changes"
+        ],
+        "title": "PrepareIn",
+        "description": "Changes that prepare a scenario. Nothing runs and nothing is stored: send the same `changes` with\n/grids/simulate, /grids/dependency or /grids/cost to run a failure on the prepared grid."
+      },
+      "PrepareOut": {
+        "properties": {
+          "point": {
+            "type": "string",
+            "title": "Point",
+            "description": "Operating point id (feb2025-1500, feb2025-0300, nov2026-1300, nov2026-2000)."
+          },
+          "changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Changes",
+            "description": "Per change: matched count, deltas and the elements."
+          },
+          "per_capita_w": {
+            "type": "number",
+            "title": "Per Capita W",
+            "description": "Demand per added person at this point, W (assumption)."
+          },
+          "totals": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Totals",
+            "description": "People, demand and generation of the prepared grid."
+          },
+          "overloaded_lines": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Overloaded Lines",
+            "description": "Lines over the cascade's limit with no failure, by id: a simulation starts with them."
+          },
+          "should_feed": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Should Feed",
+            "description": "Per generating substation (by id) and per zone: the people it should feed."
+          },
+          "redispatch": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Redispatch",
+            "description": "Generation the island's synchronous units moved."
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Overlay warnings (isolated buses, no synchronous units)."
+          },
+          "assumptions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Assumptions",
+            "description": "Assumptions behind the numbers."
+          }
+        },
+        "type": "object",
+        "required": [
+          "point",
+          "changes",
+          "per_capita_w",
+          "totals",
+          "overloaded_lines",
+          "should_feed",
+          "redispatch",
+          "warnings",
+          "assumptions"
+        ],
+        "title": "PrepareOut",
+        "description": "The prepared grid with no failure."
       },
       "RepairIn": {
         "properties": {
@@ -5887,6 +6290,19 @@
             "type": "array",
             "title": "After Action",
             "description": "Key moments by cycle."
+          },
+          "incident": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident",
+            "description": "Only for runs started from a documented incident: sources, notes, mitigations and the consequence card (level, people, MW shed, MWh and cost over an assumed duration)."
           },
           "trace_head": {
             "type": "string",
@@ -6653,6 +7069,131 @@
         "type": "object",
         "title": "StepIn"
       },
+      "StressChange": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "population",
+              "demand",
+              "generation",
+              "lines"
+            ],
+            "title": "Target",
+            "description": "population (people; demand follows), demand (MW alone), generation (MW), lines (capacity)."
+          },
+          "buses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Buses",
+            "description": "Substation ids B###.",
+            "default": []
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zones",
+            "description": "Zones NG, NC, CE, CS, SU.",
+            "default": []
+          },
+          "areas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Areas",
+            "description": "Operating areas A01-A13.",
+            "default": []
+          },
+          "comunas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Comunas",
+            "description": "Comunas by CUT code or name (population and demand only).",
+            "default": []
+          },
+          "tech": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tech",
+            "description": "Generation only: hidro, solar, eolica, carbon, gas, diesel, bioenergia, geotermica, termica (carbon + gas + diesel).",
+            "default": []
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lines",
+            "description": "Lines only: line ids R###.",
+            "default": []
+          },
+          "kv": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Kv",
+            "description": "Lines only: voltage levels (66, 110, 154, 220, 500).",
+            "default": []
+          },
+          "factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factor",
+            "description": "Multiplies the value (lines: capacity)."
+          },
+          "add": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Add",
+            "description": "Adds this total (people for population, MW otherwise); negative lowers it."
+          },
+          "x_factor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Factor",
+            "description": "Lines only: multiplies the reactance x_pu."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "title": "StressChange",
+        "description": "One change, applied to every element the filters pick. Filters combine (all must hold); none: the whole\ncountry. `factor` multiplies each element; `add` is one total for the filter, split by the current value."
+      },
       "TheaterNetworkOut": {
         "properties": {
           "point": {
@@ -6770,6 +7311,10 @@
     {
       "name": "global-runs",
       "description": "Strategic runs over the default dataset, and its network."
+    },
+    {
+      "name": "grid-stress",
+      "description": "Stress the default grid per request: population, demand, generation and lines by filters."
     }
   ]
 }
