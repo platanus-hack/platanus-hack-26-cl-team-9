@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(mcp): incident scenario tools
+
+- **Changed:** `list_incident_scenarios` and `start_incident_run(scenario, policy, seed, duration_h)` in `mcp/tools.py` (and so in the assistant, which shares the specs). `run_report` and `after_action` digests carry the `incident` block. The server `INSTRUCTIONS` mention them.
+- **Why:** Issue #74: an MCP client or the assistant must be able to replay a documented incident in natural language.
+- **Agents:** `OPERATIONS` maps them to `get_attack_catalog` and `start_incident_run`. `start_incident_run` sets the active run, like `start_run`. No tool takes free effects or lists targets.
+- **Files:** `backend/src/cascadasen/mcp/{tools,digest}.py`, `backend/tests/unit/test_mcp_tools.py`.
+
 ## 2026-11-22 · feat(incidents): documented-incident scenarios as agentic runs
 
 - **Changed:**
