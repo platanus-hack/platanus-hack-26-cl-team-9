@@ -73,6 +73,12 @@ Written for agents. Newest entry first. Each commit adds one entry at the top, u
 - **Agents:** One formula for both engines: never recompute the cost by hand, call `outage_cost`. The cascade cost uses the rounded `load_shed_mw`, so `failure_cost_usd = load_shed_mw x 4 x 1000 x 8.79` exactly. It is a regulatory valuation, not a measured loss. The cache is not regenerated yet.
 - **Files:** `backend/src/cascadasen/domain/simulation/consequence.py`, `backend/src/cascadasen/domain/cascade/engine.py`, `backend/tests/unit/{test_cascade.py,test_sim_engine.py}`.
 
+## 2026-11-22 · feat(web): Desastres adds the 2011 Ancoa blackout and the 2010 earthquake (S/E Charrúa) (#88)
+
+- **Changed:** `DISASTERS` in `Scenarios.tsx` lists Apagón 25F, Apagón 2011 · Ancoa (cut `R006` at `nov2026-2000`) and Terremoto 2010 · Charrúa (S/E Charrúa `B043` out of service at `nov2026-2000`). A scenario is now `{point, edits}`: a disaster replaces the changes of Estado de la red, a Benchmark condition keeps them. `activeDisaster` marks the entry whose hour and changes match exactly. The 25F tooltip named the wrong corridor (Alto Jahuel–Ancoa); it now says Nueva Maitencillo – Nueva Pan de Azúcar.
+- **Why:** the scenario plan (PR #33) had both events; the user asked for them in Desastres.
+- **Agents:** 2011 gives 3.2 M people (real 9.8 M) and 2010 gives 4.1 M (real more than 13 M): analogues, not reproductions (docs/mapa3.md, issue #35). Adding a disaster is one entry in `DISASTERS`.
+- **Files:** `web/src/cascade/{Scenarios.tsx,scenarios.test.ts,CascadeApp.tsx}`, `docs/mapa3.md`.
 ## 2026-11-21 · docs(assistant): document the web chat
 
 - **Changed:** `docs/assistant.md` gets section 2c "Web client" (files, which session a message uses, refresh rules, persistence key, rehydration limits, error texts, what was checked) and §5 drops "The web UI" in favour of the pending Bedrock check. `web/README.md` adds a paragraph on the **Asistente** rail item and a row for `src/assistant/`. `docs/mapa3.md` §8 and §11 mention the new rail item and folder.
