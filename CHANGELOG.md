@@ -1,6 +1,18 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(map): network catalog, camera bounds from data and ISO3 list
+
+- **Changed:** New pure modules:
+  - `web/src/map/country.ts`: `countryOf` (missing field reads as `CHL`), the `BUILT_IN` catalog (only CHL `simulable`), `networkFromParam` for `?pais=`, `VIEW_ONLY` text;
+  - `web/src/map/countryBounds.ts`: `cameraTarget(buses, outline)` returns the frame, `maxBounds` and land, plus `boundsOf`, `pad`, `outlineOf`;
+  - `web/src/map/iso3.ts`: ISO 3166-1 alpha-3 list with Spanish names through `Intl.DisplayNames`.
+- **Why:** Issue #49 part B: the camera boxes must come from the data, not be written by hand, and must work for uploaded networks too.
+- **Agents:**
+  - The frame is the box of the network's buses plus 4 %; `maxBounds` is buses ∪ outline, grown by its larger side (at least 8°).
+  - `countryBounds.test.ts` reads `web/public/cache/network-2026.json` and `data/processed/latam/<ISO3>/substations.geojson`. It checks that each frame holds all substations, that `maxBounds` holds the frame, and that over 90 % of the substations are on the country's land.
+- **Files:** `web/src/map/{country,countryBounds,iso3}.ts`, `web/src/map/{country,countryBounds}.test.ts`.
+
 ## 2026-11-22 · chore(data): regenerate Chile exports with country
 
 - **Changed:** `web/public/cache/network-{2025,2026}.json`, `data/processed/geo/*.geojson` and `data/processed/node_index.json` now carry `country: "CHL"` on every node, line and feature. No other value changed (checked by a JSON diff that ignores `country`).
