@@ -224,6 +224,7 @@ These fields support the scenario classes in `cyber.md` section 4. All are optio
 - New event types: `defense_disabled` (a defence that does not act) and `control_lost` (plants that stay online but give no dispatch or reserve).
 - `consequence_level`: `L0` absorbed, `L1` contained, `L2` regional blackout, `L3` national blackout.
 - `failure_cost_usd` = `unserved_energy_mwh` x 1,000 x 8.79 US$/kWh [19]. The value is a regulatory valuation and depends on the assumed duration.
+- One formula, two engines: `outage_cost` in `domain/simulation/consequence.py` serves the `/simulate` consequence card and the cascade timeline `summary` (map 3, cache, sessions), which also carries `unserved_energy_mwh`, `failure_cost_usd` and `outage_duration_h` since issue #72. The cascade uses the default 4 h (`physics.yaml`, assumption); only `/simulate` takes another duration. The health index sits next to the cost, never converted into dollars (`health.md` "Cost").
 
 ### 6.2 Session overlay
 A session edits the 188-bus engine network (`domain/cascade/network.py`) of one pinned operating point through a JSON overlay (`domain/cascade/overlay.py`). The base dataset is never changed. The session document `sessions/<sid>.json` (`application/sessions.py`) is:

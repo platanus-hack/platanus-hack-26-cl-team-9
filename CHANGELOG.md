@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-21 · docs(health): cost section
+
+- **Changed:** `docs/health.md` gets a "Cost" section: the figures table, the rules (no index in dollars, no ids of costly cuts, N-1 reuses the runs), the 25F and reference results and the US$ 984 M validation gap. "Run" adds the cache and `-s`; "Not done" drops the cache `health.json` and lists the cost items left out.
+- **Changed:** `docs/engine.md` item 7 (failure cost in the summary), `docs/stack.md` 6.1 (one formula for both engines), `docs/plan.md` 9.10 (4 h stays the default assumption, fixed in map 3), `docs/mapa3.md` (Simulación tab rows and the `health.json` cache file).
+- **Why:** Issue #72: the docs must match the code of the previous commits.
+- **Agents:** `docs/health.md` "Cost" is the reference for the cost fields and their rules. Plan 9.10 is answered for the duration; the team still owns the rest of that item.
+- **Files:** `docs/{health.md,engine.md,stack.md,plan.md,mapa3.md}`.
+
 ## 2026-11-21 · feat(web): health index and cost in the simulation panel
 
 - **Changed:** `SimulationPanel.tsx`: the impact card adds a ruled row with the after-cut "índice de margen operativo" (with "incierto") and "US$ X M · costo estimado" ("≥" and "piso" when the result is uncertain), captioned "Al final de la simulación. Índice de margen operativo (modelo) y valoración regulatoria (costo de falla CNE), 4 h supuestas." The empty card ("Escenario nuevo") shows the pre-fault index plus "en riesgo N-1, esperado" and "peor" from `health.json`.

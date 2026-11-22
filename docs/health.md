@@ -1,6 +1,6 @@
 # Grid health index (margin to the limit)
 
-Status: implemented in `backend/src/cascadasen/domain/cascade/health.py`, parameters in `domain/cascade/params/health.yaml`, command `cascadasen-health`, tests in `tests/unit/test_health.py` and `tests/validation/test_health_25f.py`.
+Status: implemented in `backend/src/cascadasen/domain/cascade/health.py` (with the failure cost next to it, section "Cost"), parameters in `domain/cascade/params/health.yaml`, command `cascadasen-health`, tests in `tests/unit/test_health.py` and `tests/validation/test_health_25f.py`.
 
 It is **our own model index**, not an indicator published by the Coordinador (CEN) or the SEC. In the UI call it "índice de margen operativo (modelo)", never "salud de la red" without that qualifier.
 
@@ -43,6 +43,36 @@ Reference for "healthy": `feb2025-0300`, the same 2025 network and month as the 
 
 Reading: the index separates the two cases mainly through the corridor transfer, which is the documented cause of the 25F. Inertia and the frequency after losing the largest unit do not limit either case. The reference is not "fully healthy" (0.35) because its corridor already carries 65% of its south-to-north limit.
 
+## Cost (issue #72)
+
+The index and the failure cost sit side by side, never merged: there is no "index in dollars" and money does not weight the margins (the weights would have no source, same rule as #59).
+
+| Figure | Where | How | Quality |
+|---|---|---|---|
+| `cost.cost_usd` (after a cut) | `event_report` / `event_health`, `extra["cost"]` | `failure_cost_usd` of the cascade summary: `load_shed_mw` x `outage_duration_h` x 1,000 x 8.79 US$/kWh, by `outage_cost` (`consequence.py`) | Modelled, regulatory valuation (CNE [19]) |
+| `cost.is_floor` | same | `true` when the report is `uncertain` (`voltage_limited`): the documented voltage collapse is not computed, so the cost is a floor | Modelled |
+| `cost.n1_expected_cost_usd` (before a cut) | `prefault_health`, `extra["cost"]` | Mean cost of the 273 single-line cuts, each line with the same weight | Modelled. ASSUMPTION: equal probability per line (no published failure rates) |
+| `cost.n1_worst_cost_usd` | same | Cost of the worst single cut | Modelled; the same artefact as `n1_worst` (a reduced line cuts a whole corridor) |
+| `cost.n1_cost_share` | same | Count (5) and a 20-point band of the share of the expected cost carried by the 5 costliest cuts | Modelled |
+| `outage_duration_h` | both | `physics.yaml` `default_outage_h` = 4 h, `is_assumption: true`; fixed in map 3 | Assumption |
+
+Rules:
+- The cost and `supply` come from the same MW lost: `cost = (1 - supply) x total load x h x 1,000 x 8.79`. The index is a minimum, so when `frequency_islands` binds the index drops without the cost moving. Show both; do not fuse them.
+- No line ids for the costliest cuts anywhere (`cyber.md` section 8): totals, counts and bands only. For the same reason the `n1_worst` margin no longer names its line.
+- The N-1 cost reuses the single-cut runs: `prefault_health(..., n1_results=...)` takes them from the cache builder, so no cut runs twice.
+- The cost is a valuation for planning, not "what the country lost". The UI says "valoración regulatoria (costo de falla CNE), 4 h supuestas".
+
+Result (2026-11-21, `cascadasen-health`, 4 h):
+
+| | 25F (`feb2025-1500`) | Reference (`feb2025-0300`) |
+|---|---|---|
+| After cutting R239 | US$ 69.3 M, a floor (1,972 MW, 7,888 MWh, uncertain) | US$ 22.2 M (631 MW) |
+| N-1 expected / worst | US$ 3.5 M / US$ 72.6 M; 55 of 273 cuts with cost, the 5 costliest carry 20-40 % | US$ 4.1 M / US$ 306.6 M; 42 of 273, the 5 costliest carry 80-100 % |
+
+Validation against the 25F (ASSUMPTION, only to order magnitudes; `tests/validation/test_health_25f.py`): a full blackout of 11,096 MW for 4 h is about US$ 390 M. The press estimate of the 25F loss is US$ 984 M (`datasets.md` [44], not verified); a full blackout would need about 10.1 h of average unserved energy to reach it. The gap comes from the voltage collapse being documented, not computed (the model loses 1,972 MW, not the whole system) and from the assumed duration. The test pins the figures and does not tune the duration. The US$ 984 M figure is not shown in the UI.
+
+Where it shows: `cascadasen-health` (a `$` line under each report, and `cost` in `--json`), the web cache (`<point>/health.json`, `health` in every cut timeline), the session sandbox timeline (`health`), and the map 3 Simulación tab (`mapa3.md` section 4, item 5).
+
 ## Cautions
 
 - Limits marked ASSUMPTION are placeholders until checked against the source. The index is only as good as the corridor limit, which is the one published figure.
@@ -56,10 +86,11 @@ Reading: the index separates the two cases mainly through the corridor transfer,
 cd backend
 uv run cascadasen-health                        # 25F against feb2025-0300, before and after R239
 uv run cascadasen-health --points nov2026-2000 --cut      # other points, pre-fault only
-uv run cascadasen-health --json
-uv run pytest tests/unit/test_health.py tests/validation/test_health_25f.py
+uv run cascadasen-health --json                 # includes the cost object of each report
+uv run cascadasen-cache                         # writes <point>/health.json and `health` in every cut timeline
+uv run pytest tests/unit/test_health.py tests/validation/test_health_25f.py -s   # -s prints the 25F cost figures
 ```
 
 ## Not done
 
-Per-node index, SCR, reserve margin, an HTTP endpoint and a `health.json` in the web cache, calibration of the weights and thresholds against the CEN account of the 25F.
+Per-node index, SCR, reserve margin, an HTTP endpoint, calibration of the weights and thresholds against the CEN account of the 25F. Cost: failure rates per line (the N-1 expected cost uses equal weights), a duration per consequence level, an editable duration in map 3, CLP, an economic model by region or sector. The pre-fault `health.json` describes the base network only, so a session with dataset edits shows no pre-fault row.
