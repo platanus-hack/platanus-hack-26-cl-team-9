@@ -76,7 +76,7 @@ export function CascadeApp() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const scaleRef = useRef<HTMLDivElement>(null);
   const baseMap = useRef<BaseMap | null>(null);
-  // ?point=<id>&cut=<line id | sub-<bus id>>&vista=3d&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
+  // ?point=<id>&cut=<line id | sub-<bus id>>&sesion=<sid>; the URL carries only values that differ from the defaults (url.ts)
   const params = useMemo(() => new URLSearchParams(location.search), []);
   const s = useSession();
   const a = useAssistant(s, (sc) => applyScenario(sc)); // owned here so the chat survives view changes
@@ -107,7 +107,7 @@ export function CascadeApp() {
   const [colorMode, setColorMode] = useState<ColorMode>("load"); // every scenario starts on Carga
   const [selection, setSelection] = useState<Pick | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [mode, setMode] = useState<ViewMode>(params.get("vista") === "3d" ? "3d" : "2d");
+  const mode: ViewMode = "2d"; // the map is 2D only (#115: the 3D view was removed)
   const [toggles, setToggles] = useState<Toggles>({ flow: true, demand: false });
   const [layersOpen, setLayersOpen] = useState(false);
   const [heat, setHeat] = useState<HeatKind>("none");
@@ -215,9 +215,8 @@ export function CascadeApp() {
     else if (incidentOn.current) { incidentOn.current = false; seek(0); setPlaying(false); }
   }, [incidentTl]);
   useEffect(() => _mountMap(), []);
-  useEffect(() => { baseMap.current?.setMode(mode); }, [mode]);
   useEffect(() => _animate(), []);
-  useEffect(() => { _syncUrl(); }, [pointId, edits, mode, s.sid, networkId]);
+  useEffect(() => { _syncUrl(); }, [pointId, edits, s.sid, networkId]);
   useEffect(() => _keyboard(), []);
   // A new selection opens at the top of the panel, so bring the top back into view if the panel was scrolled.
   useEffect(() => { if (selection) panelBodyRef.current?.scrollTo({ top: 0 }); }, [selection]);
@@ -399,7 +398,7 @@ export function CascadeApp() {
   function _syncUrl() {
     // Another country's network is view only: its URL names the country and carries no cut.
     const country = isUpload(networkId) ? DEFAULT_COUNTRY : networkId;
-    const search = syncedSearch(location.search, { pointId, cut: country === DEFAULT_COUNTRY ? cut : null, mode, sid: s.sid, country });
+    const search = syncedSearch(location.search, { pointId, cut: country === DEFAULT_COUNTRY ? cut : null, sid: s.sid, country });
     history.replaceState(null, "", location.pathname + search + location.hash);
   }
 
@@ -812,10 +811,6 @@ export function CascadeApp() {
         </button>
         {layersOpen && (
           <div className="layers-pop" role="dialog" aria-label="Capas">
-            <h3>Vista</h3>
-            <div className="seg" role="group" aria-label="Vista del mapa">
-              {(["2d", "3d"] as const).map((m) => <button key={m} className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setMode(m)}>{m.toUpperCase()}</button>)}
-            </div>
             <h3>Capas</h3>
             <label className="check"><input type="checkbox" checked={toggles.flow} onChange={(e) => setToggles({ ...toggles, flow: e.target.checked })} />Flujo de potencia</label>
             <label className="check"><input type="checkbox" checked={toggles.demand} onChange={(e) => setToggles({ ...toggles, demand: e.target.checked })} />Demanda por subestación</label>
