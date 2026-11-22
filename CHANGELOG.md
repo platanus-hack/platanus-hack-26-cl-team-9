@@ -1,6 +1,20 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · feat(timeline): non-linear track scale and warped playback
+
+- **Changed:** New `timeWarp(timeline, trackWidth)` in `simulation.ts` returns `{toView, toSim, viewDuration}`, piecewise linear and increasing. Its nodes are the instants of `line_cut`, `line_overload_open`, `island_formed` and `island_blackout`, plus the last `load_shed`.
+  - Each gap between nodes gets at least `MIN_GAP_VIEW_S` (1.5 s) and enough room for `MARKER_GAP_PX` (30 px).
+  - Long gaps keep their length.
+  - The tail after the last event with an effect is squeezed to about `TAIL_SHARE` (15 %), with at least 1.5 s.
+- **Changed:** `groupEvents(events, warp, width)` groups same-instant events. A cut, an opening, a new island or a blackout never joins an earlier marker; load shed and stable islands may. `Timeline.tsx` draws markers, curves and the played rail, and handles dragging and arrow keys, through the warp. The `CascadeApp` loop advances in view time (`v + dt x speed`, `t = toSim(v)`), so playback slows near each failure and runs fast through the tail.
+- **Why:** Issue #90 part B, user decision: a non-linear track with playback in view time; the clock keeps simulated seconds. Before, a cascade sat in the first few pixels and markers merged ("1–11").
+- **Agents:**
+  - Marker numbering still runs over `timeline.events`, the same list as "Historial de eventos" (test "numbers markers over the same event list as the history").
+  - With 9 or more nodes (5 cached cuts) the 30 px rule cannot hold and markers are packed side by side.
+  - `docs/design.md` §7 no longer lists the "1–11" deviation.
+- **Files:** `web/src/cascade/{simulation.ts,simulation.test.ts,Timeline.tsx,CascadeApp.tsx}`, `docs/{mapa3,design}.md`.
+
 ## 2026-11-22 · feat(timeline): exact darkAt and truncated notice
 
 - **Changed:** `darkAt` (`web/src/cascade/simulation.ts`) builds the dark set from the `ids` of every `island_blackout` with `e.t <= t`. Buses in the last frame's `dark` that no blackout lists (substations out of service from `/grids/simulate`) are dark from t = 0. Timelines whose blackouts have no ids fall back to the old frame rule (`frameDarkAt`).

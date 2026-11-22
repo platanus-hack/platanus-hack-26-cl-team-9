@@ -24,7 +24,7 @@ import { ScenarioTree, type ScenarioChoice } from "./Scenarios";
 import { SelectionCard } from "./SelectionCard";
 import { SimulationPanel } from "./SimulationPanel";
 import { UploadNetwork, type UploadedNetwork } from "./UploadNetwork";
-import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, type Marker } from "./simulation";
+import { darkAt, eventLocation, frameAt, frameIndexAt, frequencyAt, groupEvents, impactAt, timeWarp, type Marker } from "./simulation";
 import { clock, formatPeople, lineName, pct, placeName, shutdownNode, substationLines, zoneName } from "./text";
 import { stateOf, TimelineCard, TRACK_W, type MarkerState } from "./Timeline";
 import type { BusState, DependencyNode, HealthReport, Index, Network, Timeline } from "./types";
@@ -136,7 +136,8 @@ export function CascadeApp() {
   const impact = useMemo(() => (timeline ? impactAt(timeline, buses, t) : { people: 0, lostLoadMw: 0, lostGenMw: 0, share: 0 }), [timeline, buses, t]);
   const islands = useMemo(() => (timeline ? frequencyAt(timeline, t) : []), [timeline, t]);
   const totalPeople = useMemo(() => Object.values(buses).reduce((s, b) => s + b.people, 0), [buses]);
-  const markers = useMemo(() => (timeline && timeline.events.length > 0 ? groupEvents(timeline.events, timeline.duration_s, TRACK_W) : []), [timeline]);
+  const warp = useMemo(() => timeWarp(timeline, TRACK_W), [timeline]);
+  const markers = useMemo(() => (timeline && timeline.events.length > 0 ? groupEvents(timeline.events, warp, TRACK_W) : []), [timeline, warp]);
   const located = useMemo(() => (timeline && network ? locate(markers, timeline, network) : []), [markers, timeline, network]);
   const visible = timeline?.events.filter((e) => e.t <= t + 1e-9).length ?? 0;
   const states = useMemo(() => new Map<Marker, MarkerState>(markers.map((m) => [m, stateOf(m, visible)])), [markers, visible]);
@@ -154,8 +155,8 @@ export function CascadeApp() {
   const regionalLayers = useMemo<Layer[]>(() => (shownGrid ? buildRegionalLayers(shownGrid, colorMode) : []), [shownGrid, colorMode]);
 
   const hasCascade = edited && !!timeline && timelineReady && timeline.events.length > 0;
-  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile });
-  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile };
+  const live = useRef({ network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile, warp });
+  live.current = { network, buses, frame, colorMode, selection, mode, toggles, playing, speed, duration, t, regionalLayers, heatLayerList, heatKey, layersOpen, hasCascade, cutLine, outBus, isChile, warp };
   const fitted = useRef<string | null>(null); // the network the camera last flew to
   const prevSid = useRef(s.sid);
   const clickMemory = useRef(NO_CLICK);
@@ -404,7 +405,10 @@ export function CascadeApp() {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       if (v.playing && v.duration > 0) {
-        const next = Math.min(v.duration, v.t + dt * v.speed);
+        // Advance in track (view) time: near each failure the track is stretched, so the simulation runs slower there
+        // without pausing, and the quiet tail runs fast. The clock still reads simulated seconds.
+        const view = Math.min(v.warp.viewDuration, v.warp.toView(v.t) + dt * v.speed);
+        const next = view >= v.warp.viewDuration - 1e-9 ? v.duration : Math.min(v.duration, v.warp.toSim(view));
         live.current.t = next;
         setT(next);
         if (next >= v.duration) setPlaying(false);
@@ -679,7 +683,7 @@ export function CascadeApp() {
         </div>
       </section>
 
-      {isChile && <TimelineCard timeline={edited && timelineReady ? timeline : null} loading={edited && !timelineReady} markers={markers} t={t} clock={clock(point?.snapshot, t).tenths} islands={edited ? islands : []} playing={playing} speed={speed}
+      {isChile && <TimelineCard timeline={edited && timelineReady ? timeline : null} loading={edited && !timelineReady} markers={markers} warp={warp} t={t} clock={clock(point?.snapshot, t).tenths} islands={edited ? islands : []} playing={playing} speed={speed}
         setPlaying={setPlaying} togglePlay={togglePlay} seek={(x) => { setPlaying(false); seek(x); }} setSpeed={setSpeed} />}
 
       {isChile && <button className="power-all" aria-disabled={!canPower || undefined} onClick={() => canPower && powerAllOn()}

@@ -41,6 +41,67 @@ function frameDarkAt(tl: Timeline, t: number): Set<string> {
   return t + 1e-9 >= fires ? new Set(frame.dark) : prev;
 }
 
+/**
+ * Non-linear time scale of the track (issue #90). Simulated seconds `t` map to view seconds `v`, piecewise linear and
+ * increasing. The nodes are the instants that cut, open or darken something (and the last load shed). Every gap between
+ * two nodes gets at least `MIN_GAP_VIEW_S` and at least the view length that keeps their markers `MARKER_GAP_PX` apart on
+ * a track `trackWidth` wide, so each stage and each blackout has its own marker. Long gaps keep their real length, and the tail after the last
+ * event with an effect is squeezed to about `TAIL_SHARE` of the track. Playback advances in view time, so the
+ * simulation slows near each failure and runs fast through the tail; the clock still shows simulated seconds.
+ */
+export interface TimeWarp { toView(t: number): number; toSim(v: number): number; viewDuration: number }
+export const MARKER_GAP_PX = 30;
+export const TAIL_SHARE = 0.15;
+const MIN_TAIL_VIEW_S = 1.5;
+/** Every gap between two nodes lasts at least this long on the track, so at 1x each failure gets 1.5 s on screen. */
+export const MIN_GAP_VIEW_S = 1.5;
+const FALLBACK_GAP_VIEW_S = 1.5;
+const KEY_EVENTS = new Set(["line_cut", "line_overload_open", "island_formed", "island_blackout"]);
+
+export function timeWarp(tl: Timeline | null, trackWidth: number): TimeWarp {
+  const duration = tl?.duration_s ?? 0;
+  if (!tl || duration <= 0) return { toView: (t) => t, toSim: (v) => v, viewDuration: duration };
+  const nodes = [...new Set([0, ...tl.events.filter((e) => KEY_EVENTS.has(e.type)).map((e) => e.t)])].sort((a, b) => a - b);
+  const sheds = tl.events.filter((e) => e.type === "load_shed").map((e) => e.t);
+  const lastShed = sheds.length ? Math.max(...sheds) : 0;
+  if (lastShed > nodes[nodes.length - 1] + 1e-9) nodes.push(lastShed);
+  const end = Math.min(nodes[nodes.length - 1], duration);
+  const gaps = nodes.slice(1).map((n, i) => n - nodes[i]);
+  const simTail = duration - end;
+  const tailOf = (body: number) => Math.min(simTail, Math.max((body * TAIL_SHARE) / (1 - TAIL_SHARE), MIN_TAIL_VIEW_S));
+  const bodyOf = (m: number) => gaps.reduce((s, g) => s + Math.max(g, m), 0);
+  // Smallest view gap m with m / (body(m) + tail) x trackWidth >= MARKER_GAP_PX. When too many nodes share the track for
+  // that to exist (9 or more nodes on 290 px, 5 of the 1,848 cached cuts), each gap gets at least 1.5 s and the
+  // markers are packed side by side by `groupEvents`.
+  const k = MARKER_GAP_PX / trackWidth;
+  let m = 0;
+  if (gaps.length && (k * gaps.length) / (1 - TAIL_SHARE) < 0.98) {
+    m = MIN_GAP_VIEW_S;
+    for (let i = 0; i < 100; i++) m = Math.max(MIN_GAP_VIEW_S, k * (bodyOf(m) + tailOf(bodyOf(m))));
+  } else if (gaps.length) {
+    m = FALLBACK_GAP_VIEW_S;
+  }
+  const sim = nodes.filter((n) => n <= end);
+  const view = [0];
+  for (let i = 1; i < sim.length; i++) view.push(view[i - 1] + Math.max(sim[i] - sim[i - 1], m));
+  const bodyView = view[view.length - 1];
+  if (simTail > 1e-9) { sim.push(duration); view.push(bodyView + tailOf(bodyView)); }
+  return {
+    toView: (t) => interp(sim, view, t),
+    toSim: (v) => interp(view, sim, v),
+    viewDuration: view[view.length - 1],
+  };
+}
+
+/** Piecewise-linear interpolation of increasing knots, clamped at both ends. */
+function interp(xs: number[], ys: number[], x: number): number {
+  if (xs.length === 1 || x <= xs[0]) return ys[0] + (xs.length === 1 ? x - xs[0] : 0);
+  for (let i = 1; i < xs.length; i++) {
+    if (x <= xs[i]) return xs[i] === xs[i - 1] ? ys[i] : ys[i - 1] + ((ys[i] - ys[i - 1]) * (x - xs[i - 1])) / (xs[i] - xs[i - 1]);
+  }
+  return ys[ys.length - 1];
+}
+
 export interface Impact { people: number; lostLoadMw: number; lostGenMw: number; share: number }
 
 /**
@@ -103,20 +164,27 @@ export function sample(curve: [number, number][], t: number): number {
   return curve[curve.length - 1][1];
 }
 
-/** Events whose markers would overlap on the track share one marker ("1·2"). `left` is the marker's x on the track. */
+/**
+ * Track markers, one per event or per group of events. Events at the same instant always share a marker. A cut, an
+ * opening, a new island or a blackout never joins an earlier marker otherwise, so each cascade stage and each blackout
+ * keeps its own; load shed and stable-island events join the marker before them when they would overlap it (EDAC steps
+ * of one island can share a marker). `left` is the marker's x on the track, from the warped time.
+ */
 export interface Marker { first: number; last: number; t: number; events: Event[]; left: number; width: number }
 
 export const markerLabel = (m: Pick<Marker, "first" | "last">) => (m.first === m.last ? `${m.first}` : m.last === m.first + 1 ? `${m.first}·${m.last}` : `${m.first}–${m.last}`);
 const markerWidth = (m: Pick<Marker, "first" | "last">) => Math.max(20, 10 + 6.6 * markerLabel(m).length);
 const MARKER_SPACE_PX = 3;
 
-export function groupEvents(events: Event[], duration: number, trackWidth: number): Marker[] {
-  const x = (t: number) => (duration > 0 ? (Math.min(t, duration) / duration) * trackWidth : 0);
+export function groupEvents(events: Event[], warp: TimeWarp, trackWidth: number): Marker[] {
+  const x = (t: number) => (warp.viewDuration > 0 ? (Math.min(warp.toView(t), warp.viewDuration) / warp.viewDuration) * trackWidth : 0);
   const out: Marker[] = [];
   events.forEach((e, i) => {
     const g = out[out.length - 1];
     const n = i + 1;
-    if (g && x(e.t) - 10 < g.left + markerWidth({ first: g.first, last: n }) + MARKER_SPACE_PX) {
+    const sameInstant = g && Math.abs(e.t - g.events[g.events.length - 1].t) < 1e-6;
+    const overlaps = g && x(e.t) - 10 < g.left + markerWidth({ first: g.first, last: n }) + MARKER_SPACE_PX;
+    if (g && (sameInstant || (overlaps && !KEY_EVENTS.has(e.type)))) {
       g.last = n; g.events.push(e); g.width = markerWidth(g);
     } else {
       const left = Math.max(g ? g.left + g.width + MARKER_SPACE_PX : 0, x(e.t) - 10);
@@ -132,7 +200,6 @@ export function groupEvents(events: Event[], duration: number, trackWidth: numbe
   }
   return out;
 }
-
 
 /** Where an event happens on the map, when it has a place: the cut or opened line, the shed zone, or the dark area. */
 export function eventLocation(e: Event, tl: Timeline, network: Network): [number, number] | null {
