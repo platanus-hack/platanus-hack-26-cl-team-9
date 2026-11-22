@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · test(cascade): the golden mismatch prints the full digest
+
+- **Changed:** `test_real_cascade_is_byte_stable_for_every_single_cut` names the point and the full digest it got when it does not match.
+- **Why:** the golden hashes fail on CI since #148 while the cascade output is identical before and after #148 (same digest locally); the hash depends on the platform's floats (macOS and Linux differ), so the CI value is needed to update them.
+- **Agents:** the `REAL_CASCADE` values still have to be replaced with the CI (Linux) digests.
+- **Files:** `backend/tests/unit/test_cascade_golden.py`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · fix(web): every disaster and condition opens paused
 
 - **Changed:** `openScenario` sets `autoplay` to false for disasters too, and a cut opened from the URL no longer autoplays: the timeline waits at 0 until Play.
