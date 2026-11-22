@@ -73,3 +73,12 @@ def test_api_simulate():
     assert (
         client.post("/api/v1/grids/simulate", json={"point": "x", "open_lines": ["R239"]}).status_code == 404
     )
+
+
+@pytest.mark.parametrize("point, line", [("feb2025-1500", "R239"), ("nov2026-2000", "R001")])
+def test_the_committed_cache_matches_the_engine_for_a_single_cut(sim, point, line):
+    """The web reads the cache for one cut and this service for several: they must agree (regenerate with cascadasen-cache)."""
+    import json
+
+    cached = json.loads((REPO_ROOT / f"web/public/cache/{point}/{line}.json").read_text())
+    assert sim.simulate_workflow(point, [line], [])["timeline"] == cached

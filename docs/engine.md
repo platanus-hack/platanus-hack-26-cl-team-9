@@ -21,9 +21,9 @@ Click a line, get the consequences: islands, load shed, people in the dark and t
    - primary reserve with a 5% droop, capped at 4% of online synchronous MW, time constant 3 s; deployed reserve stays on synchronous units;
    - batteries in fast-frequency mode (theatre `battery_support`): start when f < 49.8 Hz, 200 ms delay, 300 ms ramp (`stack.md` 4.5);
    - load damping 1.5 %/Hz and over-frequency curtailment of solar and wind;
-   - EDAC with the real steps (centro-sur table and norte grande Table 3-9 of the CEN 25F report) plus the extreme-contingency EDAC of the centro-sur (671.55 MW in three tranches at f < 49.5 Hz and df/dt <= -0.9 / -1.2 / -1.9 Hz/s, [4] Tables 3-10/3-11).
+   - EDAC with the real steps (centro-sur table and norte grande Table 3-9 of the CEN 25F report). The extreme-contingency EDAC (671.55 MW by df/dt, [4] Tables 3-10/3-11) is not modelled: on its own it kept the centro-sur island above 47.5 Hz in the 25F, which the real system did not do, because the model has no voltage collapse or generator trips (removed 2026-11-22).
    Blackout below 47.5 Hz. Each island reports `min_hz`, `final_hz`, `rocof_hz_s` (initial df/dt), `inertia_mws`, `shed_mw` and `battery_mw`.
-6. **Voltage, not computed** (`engine.py`, `stack.md` 4.6): the DC model has no voltage. When a cut opens the 25F boundary (lines crossing between Nueva Maitencillo and Nueva Pan de Azúcar) with a pre-fault flow above 1,600 MW N→S or 1,000 MW S→N, the islands at its ends get `result: "voltage_limited"` and the summary `uncertain: true`. The UI reads it as "limitado por tensión (incierto), evento documentado, no calculado". It is the only corridor with published limits.
+6. **Voltage collapse, a rule** (`engine.py`, `stack.md` 4.6): the DC model has no voltage. When the 25F corridor separates (its two ends, Nueva Maitencillo and Nueva Pan de Azúcar, end up in different islands) with a pre-fault flow above 1,600 MW N→S or 1,000 MW S→N, both islands collapse by voltage: `island_blackout` with `reason: "voltage"`, and the island in `summary.islands` carries `reason: "voltage"`. It is the only corridor with published limits. The health index marks that report uncertain (a rule, not a calculation). There is no `voltage_limited` result or `summary.uncertain` any more.
 
 **25F check (V1 on this network, not hand-tuned):** at Feb 2025 15:00 the pre-fault DC flow is 1,905 MW on the 500 kV line and 287 MW on 220 kV (targets 1,800 and 314 MW, ±15%). Reactances are PyPSA-CL values, not calibrated; they are not real line data either.
 
@@ -41,12 +41,12 @@ The data scripts need the PyPSA-CL files in `data/raw/pypsa_cl/` (they download 
 
 | Hour | Cuts with no effect (of 273) | 25F corridor cut |
 |---|---|---|
-| Feb 2025 15:00 | 227 | 3.8 M people, 1,972 of 11,096 MW, 2 stages, `voltage_limited` (uncertain) |
-| Feb 2025 03:00 | 238 | 0.3 M people, 631 of 8,719 MW |
-| Nov 2026 13:00 | 219 | 5.6 M people, 2,649 of 10,836 MW, 3 stages, `voltage_limited` (uncertain) |
-| Nov 2026 20:00 | 222 | 3.9 M people, 1,825 of 10,934 MW |
+| Feb 2025 15:00 | 217 | 16.8 M people, 11,096 of 11,096 MW, 2 stages, both islands collapse by voltage at 2.0 s |
+| Feb 2025 03:00 | 231 | 0.3 M people, 631 of 8,719 MW (corridor S→N under 1,000 MW: no voltage collapse) |
+| Nov 2026 13:00 | 204 | 17.0 M people, 10,836 of 10,836 MW, 2 stages, voltage collapse |
+| Nov 2026 20:00 | 213 | 3.9 M people, 1,825 of 10,934 MW (1,287 MW N→S, under the limit) |
 
-The corridor result depends on how loaded it was: that matches the CEN account of the 25F. Do not present these numbers as a forecast. 2026-11-21: the 25F and Nov 2026 13:00 rows were re-run and differ from the 15.2 M people and 7,872 MW first documented (the code is the current state; the cause of the change was not investigated, and the "cuts with no effect" column was not re-run). A health index built on these results is in [`health.md`](health.md).
+Measured 2026-11-22. The real 25F left about 19 M people (98.5 %) without power (figure given by the team, source to cite). The model reaches 16.8 M because it assigns 18.16 M people in total and 23 substations over 20 MW have 0 people (`docs/minimum-dataset.md`). The corridor result depends on how loaded it was: that matches the CEN account of the 25F. Do not present these numbers as a forecast. A health index built on these results is in [`health.md`](health.md).
 
 ## Assumptions (also returned in every timeline)
 

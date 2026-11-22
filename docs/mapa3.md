@@ -174,13 +174,12 @@ The cache stores one frame per network stage and events with their own times (`w
 
 ![25F cut](images/mapa3-25f.jpg)
 
-EVIDENCE (engine output, `feb2025-1500`, cut `R239` Nueva Maitencillo-Nueva Pan de Azúcar 500 kV, 2,210 MVA). Re-measured 2026-11-21: 3.8 million people without power, 1,972 of 11,096 MW (18%), 2 stages, islands `voltage_limited` (uncertain). The bullets below and the figures 15.2 M and 7,872 MW come from an earlier run and are out of date (cause not investigated):
-- 15.2 million people without power, 7,872 of 11,096 MW (71%), 2 stages.
+EVIDENCE (engine output, `feb2025-1500`, cut `R239` Nueva Maitencillo-Nueva Pan de Azúcar 500 kV, 2,210 MVA; re-measured 2026-11-22):
 - 1.0 s: Pan de Azúcar-Punta Colorada 220 kV passes 120% and opens.
-- 2.0 s: Maitencillo-Pan de Azúcar 110 kV passes 120% and opens.
-- Two islands: centro-sur with a 2,205 MW deficit (the CEN report says 2,114 MW) and the north with a surplus.
-- The centro-sur island sheds load by EDAC and its frequency falls under 47.5 Hz.
-- The north's voltage collapse is not computed.
+- 2.0 s: Maitencillo-Pan de Azúcar 110 kV passes 120% and opens; the corridor separates into a centro-sur island (115 substations, 7,872 MW of load) and a north island (73 substations, 3,223 MW).
+- The pre-fault flow across the corridor was 2,209 MW N→S, over the 1,600 MW limit of the defence scheme, so both islands collapse by voltage (a rule, `engine.md` 6).
+- 16.8 million people without power, 11,096 of 11,096 MW (100%), 2 stages. The real 25F: about 19 M people (98.5%).
+- Estado de la red lists the user's cut apart from these consequences (lines opened by overload and islands that went dark, with their second).
 
 The same cut at `feb2025-0300` loses only 631 MW. Solar is off at night and coal and hydro run (EVIDENCE: carrier table above). ASSUMPTION: the corridor carries less and the system has more inertia, which explains the smaller loss. Do not present these numbers as a forecast.
 

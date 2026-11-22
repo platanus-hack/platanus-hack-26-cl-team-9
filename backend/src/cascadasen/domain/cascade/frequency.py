@@ -41,7 +41,6 @@ CENTRO_SUR_ZONES: dict[str, list[tuple[float, float]]] = {
 NORTE_GRANDE_STEPS: list[tuple[float, float]] = [(float(t), float(mw)) for t, mw in value(_E["norte_grande"])]
 GRADIENT_HZ_PER_S = float(value(_E["gradient_hz_s"]))
 GRADIENT_MAX_HZ = float(value(_E["gradient_max_hz"]))
-EXTREME_EDAC: dict[str, Any] = dict(value(_E["extreme"]))
 _LOW_DEMAND, _HIGH_DEMAND = float(value(_E["low_demand_mw"])), float(value(_E["high_demand_mw"]))
 _MAX_STEP_SHARE = float(value(_E["max_step_share"]))
 
@@ -65,7 +64,6 @@ class EdacStep:
     threshold_hz: float
     fraction: float  # share of the island's load in that zone that the step sheds
     gradient: bool
-    gradient_hz_s: float | None = None  # extreme-contingency steps: act on f < threshold and df/dt <= this
 
 
 @dataclass
@@ -98,8 +96,7 @@ class IslandResult:
 
 
 def edac_tables(zone_load_mw: dict[str, float], system_load_mw: float) -> dict[str, list[EdacStep]]:
-    """Each step's MW becomes a fraction of the zone's load at this operating point, so a smaller island sheds less.
-    The centro-sur zone also carries the extreme-contingency stages (df/dt) of [4] Tables 3-10/3-11."""
+    """Each step's MW becomes a fraction of the zone's load at this operating point, so a smaller island sheds less."""
     weight = min(1.0, max(0.0, (system_load_mw - _LOW_DEMAND) / (_HIGH_DEMAND - _LOW_DEMAND)))
     steps = []
     for k, threshold in enumerate(CENTRO_SUR_STEPS_HZ):
@@ -107,19 +104,8 @@ def edac_tables(zone_load_mw: dict[str, float], system_load_mw: float) -> dict[s
         high = sum(rows[k][1] for rows in CENTRO_SUR_ZONES.values())
         steps.append((threshold, low + weight * (high - low), CENTRO_SUR_GRADIENT[k]))
     cs_load = zone_load_mw.get("centro_sur", 0.0)
-    gradients = [float(g) for g in EXTREME_EDAC["gradients_hz_s"]]
-    tranche = float(EXTREME_EDAC["mw"]) / len(gradients)
-    extreme = [
-        EdacStep(
-            float(EXTREME_EDAC["threshold_hz"]),
-            min(_MAX_STEP_SHARE, tranche / cs_load) if cs_load > 0 else 0.0,
-            False,
-            g,
-        )
-        for g in gradients
-    ]
     return {
-        "centro_sur": [_step(t, mw, cs_load, g) for t, mw, g in steps] + extreme,
+        "centro_sur": [_step(t, mw, cs_load, g) for t, mw, g in steps],
         "norte_grande": [
             _step(t, mw, zone_load_mw.get("norte_grande", 0.0), False) for t, mw in NORTE_GRANDE_STEPS
         ],
@@ -189,21 +175,15 @@ def _trigger_edac(
 ) -> None:
     for zone, steps in island.edac.items():
         for j, step in enumerate(steps):
-            if step.gradient_hz_s is not None:  # extreme contingency: frequency and gradient together
-                hit = f < step.threshold_hz and dfdt <= step.gradient_hz_s
-            else:
-                hit = f <= step.threshold_hz or (
-                    step.gradient and dfdt <= GRADIENT_HZ_PER_S and f < GRADIENT_MAX_HZ
-                )
+            hit = f <= step.threshold_hz or (
+                step.gradient and dfdt <= GRADIENT_HZ_PER_S and f < GRADIENT_MAX_HZ
+            )
             if hit and (zone, j) not in done:
                 done.add((zone, j))
                 mw = step.fraction * island.zone_load_mw.get(zone, 0.0)
                 shed[zone] = shed.get(zone, 0.0) + mw
                 if mw >= 0.5:  # steps with nothing to shed in this island stay out of the narration
-                    entry = {"t": round(t, 2), "zone": zone, "step": j + 1, "mw": round(mw, 1)}
-                    if step.gradient_hz_s is not None:
-                        entry["extreme"] = True
-                    log.append(entry)
+                    log.append({"t": round(t, 2), "zone": zone, "step": j + 1, "mw": round(mw, 1)})
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:

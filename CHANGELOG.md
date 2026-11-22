@@ -1,6 +1,13 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-22 · fix(cascade): voltage collapse brings the 25F down again; drop the extreme-contingency EDAC (#76)
+
+- **Changed:** the extreme-contingency EDAC (671.55 MW by df/dt) is removed from `frequency.py` and `cascade.yaml`. The voltage rule no longer marks islands `voltage_limited`/`uncertain`: when the 25F corridor separates with a pre-fault flow beyond 1,600 MW N→S or 1,000 MW S→N, both end islands collapse (`island_blackout`, `reason: "voltage"`); islands in `summary.islands` that went dark carry `reason`. `summary.uncertain` and `CascadeState.uncertain` are gone. Cache regenerated. Web: Estado de la red lists the consequences (lines opened by overload, islands that went dark, with their second) apart from the user's cuts.
+- **Why:** the extreme EDAC alone kept the centro-sur island above 47.5 Hz (48.49 Hz), so the 25F fell from 15.2 M to 3.8 M people; the real 25F left about 19 M (98.5 %) without power. Measured by switching each change of 58f8b74 off one at a time: the voltage verdict changed no number.
+- **Agents:** 25F at `feb2025-1500` now gives 11,096 of 11,096 MW and 16.8 M people (the model only assigns 18.16 M). `test_the_committed_cache_matches_the_engine_for_a_single_cut` fails if the engine changes without `cascadasen-cache`. The strategic theatre's `voltage_limited` branches (`domain/theater`, `domain/agents`) no longer fire from this engine; the 13-area engine in `domain/simulation` is untouched.
+- **Files:** `backend/src/cascadasen/domain/cascade/{engine.py,frequency.py,health.py,params/cascade.yaml}`, `backend/tests/unit/{test_cascade.py,test_health.py,test_grid_simulation.py}`, `web/public/cache/`, `web/src/cascade/{NetworkState.tsx,text.ts,CascadeApp.tsx}`, `docs/{engine,stack,mapa3,health,minimum-dataset,grids}.md`.
+
 ## 2026-11-22 · feat(grids): "Estado de la red" tab, several cuts and substations together through the API (#70)
 
 - **Changed:** new `GridSimulator` use case and `POST /api/v1/grids/simulate` (`{point, open_lines, out_buses}`) that runs the cascade with all changes at once and returns a cache-shaped timeline. Web: first tab "Estado de la red" lists every change with Reponer and Reponer todo (`edits.ts`, `NetworkState.tsx`); a double click on a substation takes it out of service; a new cut adds to the list instead of replacing the last one; the rail's Escenarios no longer gets a "Corte ..." row. The two placeholder tabs are hidden to fit the panel.

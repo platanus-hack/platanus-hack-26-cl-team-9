@@ -135,7 +135,7 @@ Seed values (25F, centre-south):
 | Uncertain: outside what the model evaluates | Pre-failure flow on the lost north 500 kV corridor exceeds the validity range of the CEN north defence scheme (1,600 MW north-to-south, 1,000 MW south-to-north [4]; 1,700 MW per [6]); voltage may dominate there |
 | Not modelled | The case needs something the model lacks (e.g. an island without defence data) |
 
-In the 188-bus cascade engine (`engine.md`) the uncertain verdict is `result: "voltage_limited"` with `summary.uncertain: true`, raised when a cut opens the 25F boundary with a pre-fault flow outside that range. The UI label is "limitado por tensión (incierto), evento documentado, no calculado".
+In the 188-bus cascade engine (`engine.md`) the out-of-range case is not "uncertain": when the 25F corridor separates with a pre-fault flow outside that range, the islands at both ends collapse by voltage (`island_blackout`, `reason: "voltage"`). It is a rule, not a voltage calculation.
 
 Consequence levels L0-L3 (`cyber.md` section 5) aggregate these island results into one headline value per run.
 

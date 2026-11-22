@@ -31,7 +31,7 @@ Body `{point, open_lines: [R###], out_buses: [B###]}`, at most 50 changes in all
 
 Response: `timeline` (same shape as `web/public/cache/<point>/<cut>.json`), `open_lines`, `out_buses`, `dropped_lines` (lines that went with their substation: they are out already), `direct` (the load, generation and people the outage itself removes) and `warnings`. A substation out of service is dark in every frame, and its people and load are added to the summary. ASSUMPTION: the engine drops that bus before the cascade, so the cascade does not count it twice. Errors: 404 unknown point, line or substation; 422 no changes, more than 50, or an invalid overlay; 429 rate limit.
 
-The web (docs/mapa3.md, tab "Estado de la red") calls it only for two or more changes. **Known gap:** the cache was built before engine commit `58f8b74`, so a single cut read from the cache and the same cut simulated here can differ (the 25F: 15.2 M people in the cache, 3.8 M from the current engine, docs/escenarios.md section 6). Regenerate the cache with `cascadasen-cache` to make both agree.
+The web (docs/mapa3.md, tab "Estado de la red") calls it only for two or more changes. The committed cache and this endpoint run the same engine; `test_the_committed_cache_matches_the_engine_for_a_single_cut` fails when the engine changes and the cache was not regenerated (`cascadasen-cache`).
 
 ## Web: "Fuentes de la grilla"
 
