@@ -46,3 +46,27 @@ describe("labels", () => {
     expect(truncatedText(null)).toBeNull();
   });
 });
+
+describe("prepare_scenario in the chat", () => {
+  it("names the tool in Spanish and reads its changes instead of [object Object]", () => {
+    expect(toolName("prepare_scenario")).toBe("Preparar el mapa");
+    const args = {
+      changes: [
+        { target: "demand", places: ["Antofagasta"], add: 120 },
+        { target: "generation", places: ["Iquique"], tech: ["solar"], add: 80 },
+        { target: "generation", tech: ["hidro"], factor: 0.5 },
+      ],
+      open_lines: ["R239"],
+    };
+    expect(argsText("prepare_scenario", args)).toBe("+120 MW demanda en Antofagasta · +80 MW solar en Iquique · × 0,5 hidro · líneas fuera: R239");
+  });
+
+  it("says where each place went and when a change touched nothing", () => {
+    const result = {
+      prepared: { changes: [{ matched: 1, places: [{ bus_name: "S/E ANTOFAGASTA" }] }, { matched: 0 }] },
+      simulation: { with_changes: { people_without_power: 1200 } },
+    };
+    expect(resultText("prepare_scenario", true, result)).toBe("en S/E ANTOFAGASTA · 1 cambio no tocó ninguna subestación · 1.200 personas sin suministro");
+    expect(resultText("prepare_scenario", true, {})).toBe("mapa preparado");
+  });
+});

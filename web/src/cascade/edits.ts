@@ -6,6 +6,8 @@
 export interface StressChange {
   target: "population" | "demand" | "generation" | "lines";
   buses?: string[]; zones?: string[]; areas?: string[]; comunas?: string[]; tech?: string[]; lines?: string[]; kv?: number[];
+  /** Places as the person named them; the server resolves each to one substation (docs/stress.md section 3). */
+  places?: string[];
   factor?: number; add?: number; x_factor?: number;
 }
 export type Target = StressChange["target"];
@@ -31,7 +33,7 @@ export const editKey = (point: string, e: Edits) => `edit:${point}:${[...e.lines
 /** The change a component's own card wrote: one target on that bus or line alone, by factor. */
 const ownOf = (target: Target, id: string) => (c: StressChange) => {
   const ids = target === "lines" ? c.lines : c.buses;
-  const others = target === "lines" ? [c.buses, c.zones, c.areas, c.kv] : [c.lines, c.zones, c.areas, c.comunas, c.tech];
+  const others = target === "lines" ? [c.buses, c.zones, c.areas, c.kv, c.places] : [c.lines, c.zones, c.areas, c.comunas, c.tech, c.places];
   return c.target === target && ids?.length === 1 && ids[0] === id && c.factor !== undefined && others.every((x) => !x?.length);
 };
 

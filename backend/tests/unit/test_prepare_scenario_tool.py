@@ -55,3 +55,30 @@ def test_without_failures_nothing_is_simulated():
     calls = []
     out = tools_logging(calls).prepare_scenario([{"target": "demand", "zones": ["NG"], "add": 100}])
     assert [p.rsplit("/", 1)[-1] for p, _ in calls] == ["prepare"] and "simulation" not in out
+
+
+def test_a_change_that_touched_nothing_carries_a_warning_and_small_ones_say_where():
+    from cascadasen.mcp.digest import prepare_digest
+
+    out = prepare_digest(
+        {
+            **PREPARED,
+            "changes": [
+                {"target": "generation", "matched": 0, "elements": []},
+                {"target": "demand", "matched": 1, "elements": [{"id": "B010", "name": "S/E ANTOFAGASTA"}]},
+            ],
+        }
+    )
+    nothing, one = out["changes"]
+    assert "no digas que se aplicó" in nothing["warning"]
+    assert one["at"] == ["B010 S/E ANTOFAGASTA"] and "warning" not in one
+
+
+def test_technology_names_people_use_are_mapped_and_nuclear_is_said_to_be_an_assumption():
+    calls = []
+    change = {"target": "generation", "places": ["Mejillones"], "tech": ["Nuclear"], "add": 500}
+    out = tools_logging(calls).prepare_scenario([change, {**change, "tech": ["eólica", "BESS"]}])
+    sent = calls[0][1]["changes"]
+    assert sent[0]["tech"] == ["termica"] and sent[1]["tech"] == ["eolica", "bateria"]
+    assert out["scenario"]["changes"] == sent  # the web loads what was really sent
+    assert "térmica sincrónica" in out["notes"][0]

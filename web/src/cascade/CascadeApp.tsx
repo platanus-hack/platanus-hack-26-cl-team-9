@@ -16,6 +16,7 @@ import { HEAT_OPTIONS, heatLayers, heatPoints, needsDependency, type HeatKind } 
 import { HelpPanel, SourcesPanel } from "./Legend";
 import { MapLegend } from "./MapLegend";
 import { MapOverlays, type LocatedMarker } from "./MapOverlays";
+import { placedPoints } from "./placed";
 import { NetworkPanel, type Origin } from "./NetworkPanel";
 import { NetworkPicker } from "./NetworkPicker";
 import { summaryFromGrid, summaryFromManifest } from "./networkSummary";
@@ -160,6 +161,8 @@ export function CascadeApp() {
   const recentList = timeline ? [...recentDarkAt(timeline, t, warp)].sort().join(",") : "";
   const recent = useMemo(() => new Set(recentList ? recentList.split(",") : []), [recentList]);
   const located = useMemo(() => (timeline && network ? locate(markers, timeline, network) : []), [markers, timeline, network]);
+  // Points the prepared scenario added (the assistant's datacenters, plants, batteries), pinned where they went.
+  const placed = useMemo(() => placedPoints(changesOf(edits), prepared?.value ?? null, network), [edits, prepared, network]);
   const visible = timeline?.events.filter((e) => e.t <= t + 1e-9).length ?? 0;
   const states = useMemo(() => new Map<Marker, MarkerState>(markers.map((m) => [m, stateOf(m, visible)])), [markers, visible]);
   // On the map the highlighted pin is the latest event that has a place, even when the latest event overall has none.
@@ -643,7 +646,10 @@ export function CascadeApp() {
     setPointId(sc.point);
     setEdits({ lines: sc.open_lines, buses: sc.out_buses, ...(sc.changes.length ? { changes: sc.changes } : {}) });
     setColorMode("load");
-    chooseTab(sc.open_lines.length + sc.out_buses.length ? "sim" : "estado");
+    // The chat stays open: the map beside it shows the grid and its pins, and the reply (where each point went) and the
+    // next questions are in the chat. Before, the view jumped to the tabs and hid the reply.
+    setTab(sc.open_lines.length + sc.out_buses.length ? "sim" : "estado");
+    setView((v) => (v === "assistant" ? v : "tabs"));
   }
 
   function togglePlay() {
@@ -691,7 +697,7 @@ export function CascadeApp() {
     <div className="shell">
       <div className="map" ref={mapRef} />
       <div className="map-overlays" ref={overlayRef}>
-        {isChile && network && <MapOverlays markers={located} states={mapStates} visible={visible} network={network} impact={impact} showCities={!hasLabels} select={seek} />}
+        {isChile && network && <MapOverlays markers={located} states={mapStates} visible={visible} network={network} impact={impact} showCities={!hasLabels} placed={placed} select={seek} />}
       </div>
 
       <nav className="rail" aria-label="Navegación">
