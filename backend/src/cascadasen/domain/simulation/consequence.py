@@ -44,6 +44,41 @@ def outage_cost(
     }
 
 
+def blackout_cost(
+    dark_mw: float,
+    shed_mw: float,
+    total_mw: float,
+    voll_usd_per_kwh: float,
+    blackout_h: float,
+    shed_h: float,
+    total_multiplier: float,
+) -> dict[str, Any]:
+    """Failure cost that tells a total blackout from a slow grid (docs/engine.md, "Cost").
+
+        cost = VoLL x [ dark_MW x H_blackout x (1 + (k - 1) x dark_share) + shed_MW x H_shed ]
+
+    `dark_mw`: demand of the buses that went dark (islands that collapsed, substations out): they need a black start,
+    H_blackout hours at full outage. `shed_mw`: load cut by EDAC in islands that survive: back in H_shed. `k` adds the
+    cost of a total blackout beyond the unserved energy and grows with the share of the demand that went dark."""
+    share = min(1.0, dark_mw / total_mw) if total_mw > 0 else 0.0
+    factor = 1.0 + (total_multiplier - 1.0) * share
+    dark_mwh, shed_mwh = dark_mw * blackout_h, shed_mw * shed_h
+    usd_per_mwh = voll_usd_per_kwh * 1000.0
+    return {
+        "unserved_energy_mwh": round(dark_mwh + shed_mwh, 1),
+        "failure_cost_usd": round(usd_per_mwh * (dark_mwh * factor + shed_mwh)),
+        # what one hour of this outage costs while it lasts (dark and shed load both still out)
+        "cost_per_hour_usd": round(usd_per_mwh * (dark_mw * factor + shed_mw)),
+        "outage_duration_h": {"value": blackout_h if dark_mw > 0 else shed_h, "is_assumption": dark_mw <= 0},
+        "cost_breakdown": {
+            "dark_mw": round(dark_mw, 1),
+            "shed_mw": round(shed_mw, 1),
+            "dark_share": round(share, 4),
+            "total_blackout_factor": round(factor, 4),
+        },
+    }
+
+
 def consequence_card(
     islands: list[IslandResult],
     load_lost_mw: float,

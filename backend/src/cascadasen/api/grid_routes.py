@@ -10,7 +10,7 @@ from pydantic import BaseModel, model_validator
 
 from cascadasen.api.limits import client_ip
 from cascadasen.application.grid_dependency import GridDependency
-from cascadasen.application.grid_simulation import GridSimulator
+from cascadasen.application.grid_simulation import GridSimulator, cost_workflow
 from cascadasen.application.grids import GridComposer, GridError, catalog_workflow
 from cascadasen.application.theater_world import default_world
 from cascadasen.infrastructure.container import grid_store
@@ -105,3 +105,11 @@ def dependency(body: DependencyRequest, request: Request) -> dict:
     s = request.app.state.settings
     request.app.state.limiter.check("dependency", client_ip(request), s.rate_cuts_per_minute, 60.0)
     return _run(_dependency(request).dependency_workflow, body.point, body.open_lines, body.out_buses)
+
+
+@router.post("/cost")
+def cost(body: DependencyRequest, request: Request) -> dict:
+    """Failure cost of the changes: total and per hour of outage, telling a total blackout from load shedding."""
+    s = request.app.state.settings
+    request.app.state.limiter.check("simulate", client_ip(request), s.rate_cuts_per_minute, 60.0)
+    return _run(cost_workflow, _simulator(request), body.point, body.open_lines, body.out_buses)

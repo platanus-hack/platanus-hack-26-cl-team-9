@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from cascadasen.domain.simulation.consequence import outage_cost
+from cascadasen.domain.simulation.consequence import blackout_cost
 from cascadasen.domain.simulation.params import load_params, value
 
 from .flow import dc_flow, find_islands
@@ -434,16 +434,20 @@ def _frame(s: _State, islands: list[list[int]], flows: np.ndarray, t: float) -> 
     }
 
 
-def failure_cost(load_shed_mw: float) -> dict:
-    """Failure cost of `load_shed_mw` with the default outage duration (`physics.yaml`, an assumption)
-    and the CNE failure cost [19]; same formula as the theatre's consequence card."""
-    p = load_params("physics")
-    outage = p["default_outage_h"]
-    return outage_cost(
-        load_shed_mw,
-        float(value(outage)),
-        bool(outage.get("is_assumption", False)),
+def failure_cost(load_shed_mw: float, dark_mw: float | None = None, total_mw: float = 0.0) -> dict:
+    """Failure cost of a cascade: dark demand needs a black start, load shed in a surviving island is back soon
+    (`blackout_cost`, docs/engine.md "Cost"). Without `dark_mw` every lost MW counts as dark and no total-blackout
+    multiplier applies (callers that only know the MW lost, like the N-1 money at risk)."""
+    p, c = load_params("physics"), cascade_params()["cost"]
+    dark = load_shed_mw if dark_mw is None else min(dark_mw, load_shed_mw)
+    return blackout_cost(
+        dark,
+        max(load_shed_mw - dark, 0.0),
+        total_mw if dark_mw is not None else 0.0,
         float(value(p["voll_usd_per_kwh"])),
+        float(value(c["blackout_restoration_h"])),
+        float(value(c["shed_restoration_h"])),
+        float(value(c["total_blackout_multiplier"])),
     )
 
 
@@ -452,6 +456,7 @@ def _timeline(s: _State, cut_ids: list[str], truncated: bool) -> dict:
     served = np.divide(final, initial, out=np.ones_like(final), where=initial > 0)
     people = float((s.point.people * (1.0 - served)).sum())
     shed = round(float((initial - final).sum()))
+    dark = round(float(initial[sorted(s.dark)].sum()), 1)  # demand of the buses that went dark
     return {
         "scenario": s.point.id,
         "label": s.point.label,
@@ -464,7 +469,8 @@ def _timeline(s: _State, cut_ids: list[str], truncated: bool) -> dict:
         "summary": {
             "people_without_power": round(people),
             "load_shed_mw": shed,
-            **failure_cost(shed),
+            **failure_cost(shed, dark, float(initial.sum())),
+            "dark_load_mw": dark,
             "load_total_mw": round(float(initial.sum())),
             "stages": len(s.frames) - 1,
             "lines_opened": sorted(s.open_lines),
