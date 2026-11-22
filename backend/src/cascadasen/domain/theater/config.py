@@ -99,6 +99,9 @@ class TheaterConfig:
 
 @cache
 def theater_config() -> TheaterConfig:
+    """The theatre's parameters from `params/theater.yaml` and `params/templates.yaml`, loaded once and
+    shared. Why: `load_params` rejects any number without a source or `is_assumption`, so every run reads
+    the same checked values."""
     p = load_params("theater", THEATER_DIR)
     t = load_params("templates", THEATER_DIR)
     v = {k: value(p[k], k) for k in p if k != "version"}

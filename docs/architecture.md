@@ -81,7 +81,7 @@ Two engines exist on purpose: the 13-area engine holds the 25F validation cases;
 | Query the grid | `grid_queries.py` | `/api/v1/nodes`, `/edges`, `/graph/*`, ... |
 | Simulate a scenario (13 areas) | `simulate.py` | `POST /api/v1/simulate` |
 | Theatre world (network + operating points, cached); `SessionWorld` = one pinned point with a session overlay applied | `theater_world.py` | used by runs, campaigns and session runs |
-| Sessions: document CRUD with revisions and conditional writes, overlay edits, network view with baseline, sandbox cut/repair, nested runs on `RunManager` pinned to their overlay, revision/head for SSE | `sessions.py` | `/api/v1/sessions*` (API in a later change) |
+| Sessions: document CRUD with revisions and conditional writes, overlay edits, network view with baseline, sandbox cut/repair, nested runs on `RunManager` pinned to their overlay, revision/head for SSE | `sessions.py` | `/api/v1/sessions*` (`api/session_routes.py`) |
 | Runs: create, step, inject, external actions, replay; every command persists a run record in the `DocumentStore`, a bounded `RunCache` (LRU) keeps live simulations and rebuilds evicted ones | `run_experiment.py` | `/api/v1/sim/runs*` |
 | Campaigns with fragility and adaptation indices | `run_campaign.py` | `/api/v1/sim/campaigns*` |
 | Facade over simulation and theatre | `simulation_service.py` | `api/simulation_routes.py` |
@@ -147,8 +147,10 @@ Vite + React + TypeScript; deck.gl layers over an offline base map or Mapbox (to
 | Folder | Responsibility |
 |---|---|
 | `src/cascade/` | Mapa 3 (`CascadeApp.tsx`, Design v5 shell): Red and Simulación tabs (plus Datos in a session), Fuentes y supuestos and Ayuda views; line cut, cascade layers, network panel, timeline. Data from `web/public/cache/` (`api.ts`), or from the sessions API with `?sesion=` (`src/session/`) |
-| `src/session/` | Session mode of mapa 3: API client with SSE and polling (`sessionApi.ts`), `useSession`, session bar, Datos tab, nearest-bus geometry. Calls `/api`, proxied by the Vite dev server (`VITE_API_TARGET`) |
-| `src/map/` | Base map (offline or Mapbox), shared layers, node detail, regional context layer (`regional.ts`) |
+| `src/session/` | Session mode of mapa 3: API client with SSE and polling (`sessionApi.ts`), `useSession`, session bar, Datos tab, nearest-bus geometry. Calls `/api`, proxied by the Vite dev server (`VITE_API_TARGET`). Hidden from the web since #101: `?sesion=` is not read on load; only an incident run joins a session (`docs/mapa3.md` section 11) |
+| `src/incidents/` | **Incidentes** view: catalog of documented incidents, run launcher and result (`useIncident.ts`, `IncidentPanel.tsx`, `incidents.ts`); creates and joins a session at the incident's operating point (`docs/mapa3.md` section 4.2) |
+| `src/assistant/` | **Asistente** view: SSE chat client, chat state reducer, Spanish tool labels, `useAssistant` hook (`docs/assistant.md` section 2c) |
+| `src/map/` | Base map (offline or Mapbox), shared layers, node detail, regional context layer (`regional.ts`), uploaded networks (`upload.ts`, `uploadStore.ts`) |
 | `src/assets/icons/` | 2D icons |
 
 The operation tab, which draws the theatre on mapa 3, is not on `feat/strategic-sim-api`, a backend-only PR. It returns in a frontend PR (`agents.md` section 4). Visual rules: `design.md`.

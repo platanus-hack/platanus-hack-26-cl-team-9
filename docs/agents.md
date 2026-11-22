@@ -43,7 +43,7 @@ Between operational cycles, secondary control brings energized islands back to 5
 
 ### 1.3 Voltage: documented, not computed
 
-The DC model has no voltage. When a cut opens the 25F boundary and its pre-fault flow was above 1,600 MW N→S or 1,000 MW S→N ([4], `stack.md` 4.6), the engine returns `voltage_limited` for the islands at its ends. The theatre reads this as `uncertain`, supervision raises `voltage_limited`, and the UI says "limitado por tensión (incierto), evento documentado, no calculado". No agent claims a voltage value.
+The DC model has no voltage. When a cut opens the 25F boundary and its pre-fault flow was above 1,600 MW N→S or 1,000 MW S→N ([4], `stack.md` 4.6), the 188-bus engine collapses the islands at its ends by a rule: `island_blackout` with `reason: "voltage"` and `result: "blackout"` (`domain/cascade/engine.py` `_settle_island`, `docs/engine.md` item 6). It no longer returns a `voltage_limited` result, so the theatre paths that read one (`domain/theater/execution.py` `_islands`, which maps it to `uncertain`; `domain/theater/digital.py`, which raises the `voltage_limited` alarm for an `uncertain` island; the weight in `domain/agents/isr.py`; the branch in `domain/agents/stabilization.py`) are exercised only by tests that build such a view by hand (`tests/unit/test_physical_bots.py`). Whether to remove them or to map the voltage rule onto them is a pending product decision (`docs/for-reviewers.md`, "Pending product decisions"). No agent claims a voltage value.
 
 ### 1.4 Physical alarms
 
@@ -53,7 +53,7 @@ The DC model has no voltage. When a cut opens the 25F boundary and its pre-fault
 | `frequency_out_of_band` | Observed `freq_hz` outside 49.0–51.0 Hz | `digital.band_alarms` |
 | `high_rocof` | Observed \|`rocof_hz_s`\| ≥ 1.0 Hz/s | `digital.band_alarms` |
 | `low_inertia` | Island inertia below the floor after losing synchronous units; one alarm per island, only where supervision is visible and reliable | `digital.band_alarms` |
-| `voltage_limited` | The island's verdict was `uncertain` | `digital.physical_alarms` |
+| `voltage_limited` | The island's verdict was `uncertain` (the 188-bus engine does not return it today, section 1.3) | `digital.physical_alarms` |
 | `load_loss`, `blackout`, `breaker_open` | Unchanged | `digital.physical_alarms` |
 
 Physical alarms are never drawn as false alarms. Their thresholds live in `theater.yaml` → `physics_alarms` and are merged into `TheaterConfig.digital`.

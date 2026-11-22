@@ -166,7 +166,10 @@ def test_a_tool_that_needs_a_session_opens_it_without_the_user(make_app):
     assert sid and client.get(f"/api/v1/sessions/{sid}").status_code == 200
 
 
-def test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened(make_app):
+def test_an_event_before_start_run_opens_a_run_and_step_reports_what_happened(make_app, monkeypatch):
+    # The run opened by inject_event has no seed, so it draws a fresh one and a background event (E1, E2...) can
+    # land in the second step on about 1 run in 25. Pin the seed: the test is about the tool loop, not the dice.
+    monkeypatch.setattr("cascadasen.domain.theater.cycle.new_seed", lambda: 7)
     model = ScriptedModel(
         calls(
             ("inject_event", {"type": "C3_transmission_opening", "target": "T2-T3"}), ("step", {"cycles": 1})

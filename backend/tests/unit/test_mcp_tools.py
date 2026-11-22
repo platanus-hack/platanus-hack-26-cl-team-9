@@ -1,5 +1,7 @@
 """MCP client and digests against canned HTTP responses (docs/mcp.md)."""
 
+import json
+
 import httpx
 import pytest
 
@@ -220,3 +222,242 @@ def test_incident_tools_list_the_catalog_and_start_a_run_without_ids_in_the_answ
     run = tools.start_incident_run("huatacondo-2026", seed=6)
     assert tools.state.run_id == "r1" and run["scenario_notices"][0].startswith("Escenario hipotético")
     assert b'"seed":6' in seen[-1][2].replace(b" ", b"") and seen[-1][1].endswith("/s/attacks/runs")
+
+
+def test_focus_digest_accepts_a_bus_id_or_a_part_of_a_bus_name_and_names_the_valid_areas_on_a_miss():
+    by_id = digest.focus_digest(NET, "b001")
+    assert by_id["area"] is None and [b["id"] for b in by_id["buses"]] == ["B001"]
+    by_name = digest.focus_digest(NET, "beta")
+    assert [b["id"] for b in by_name["buses"]] == ["B001"] and by_name["lines"][0]["id"] == "R000"
+    with pytest.raises(ToolError, match=r"No encuentro 'nada'.*A01, A02"):
+        digest.focus_digest(NET, "nada")
+
+
+def test_events_applied_lists_the_events_and_warns_when_there_are_none():
+    snaps = [
+        {"cycle": 1, "events": [{"type": "C3_transmission_opening", "target": "A06-A07"}]},
+        {"cycle": 2, "events": [{"type": "D1_telemetry_loss", "area": "A02"}]},
+    ]
+    out = digest.events_applied(snaps)
+    assert out["events_applied"] == [
+        {"cycle": 1, "type": "C3_transmission_opening", "target": "A06-A07"},
+        {"cycle": 2, "type": "D1_telemetry_loss", "target": "A02"},
+    ]
+    assert "warning" not in out
+    empty = digest.events_applied([{"cycle": 1, "events": []}])
+    assert empty["events_applied"] == [] and "inject_event" in empty["warning"]
+
+
+def test_report_digest_adds_the_incident_section_only_when_the_run_has_one():
+    plain = digest.report_digest({"indicators": {}})
+    assert "incident" not in plain and plain["notice"] == digest.NOTICE
+    inc = {"id": "huatacondo-2026", "title": "Huatacondo", "mitigations": ["m"], "internal": "dropped"}
+    out = digest.report_digest({"indicators": {}, "incident": inc})
+    assert out["incident"] == {"id": "huatacondo-2026", "title": "Huatacondo", "mitigations": ["m"]}
+
+
+def test_prepare_digest_names_at_most_five_substations_and_drops_the_per_substation_rows():
+    digest_warning = digest.prepare_digest(
+        {
+            "changes": [{"matched": 0}],
+            "totals": {},
+            "overloaded_lines": [],
+            "should_feed": {"by_zone": {}},
+            "per_capita_w": 1,
+            "assumptions": [],
+        }
+    )["changes"][0]["warning"]
+    out = digest.prepare_digest(
+        {
+            "changes": [
+                {
+                    "target": "demand",
+                    "count": 2,
+                    "matched": 2,
+                    "elements": [{"id": "B000", "name": "S/E A"}, {"id": "B001", "name": "S/E B"}],
+                },
+                {
+                    "target": "generation",
+                    "matched": 9,
+                    "elements": [{"id": f"B{i:03d}", "name": "x"} for i in range(9)],
+                },
+                {"target": "generation", "matched": 0, "elements": []},
+            ],
+            "totals": {"load_mw": 15.0},
+            "overloaded_lines": ["R000", "R001"],
+            "should_feed": {"by_zone": {"NG": 30}},
+            "per_capita_w": 500,
+            "assumptions": [{"text": "a1"}, {"text": "a2"}],
+        }
+    )
+    assert out == {
+        "changes": [
+            {"target": "demand", "count": 2, "matched": 2, "at": ["B000 S/E A", "B001 S/E B"]},
+            {"target": "generation", "matched": 9},  # more than five: no list, no ranking of substations
+            {
+                "target": "generation",
+                "matched": 0,
+                "warning": digest_warning,
+            },  # touched nothing: never "applied"
+        ],
+        "totals": {"load_mw": 15.0},
+        "overloaded_lines": 2,
+        "should_feed_by_zone": {"NG": 30},
+        "per_capita_w": 500,
+        "assumptions": ["a1", "a2"],
+    }
+
+
+def _simulation(people, shed, dark, opened):
+    return {
+        "timeline": {
+            "summary": {"people_without_power": people, "load_shed_mw": shed, "dark_load_mw": dark},
+            "events": [{"type": "line_overload_open", "ids": ids} for ids in opened]
+            + [{"type": "island_formed", "ids": ["X9"]}],
+        },
+        "supply": {"by_zone": {"NG": {"should_feed": 10, "feeds": 8}}},
+    }
+
+
+def test_simulation_digest_compares_with_and_without_the_changes_and_lists_cascade_lines_sorted():
+    out = digest.simulation_digest(
+        _simulation(100, 50.0, 40.0, [["R2", "R1"], ["R1"]]), _simulation(10, 5.0, 4.0, [])
+    )
+    assert out["with_changes"] == {"people_without_power": 100, "load_shed_mw": 50.0, "dark_load_mw": 40.0}
+    assert out["without_changes"] == {"people_without_power": 10, "load_shed_mw": 5.0, "dark_load_mw": 4.0}
+    assert out["lines_opened_by_cascade"] == ["R1", "R2"]
+    assert out["supply_by_zone"] == {"NG": {"should_feed": 10, "feeds": 8}}
+
+
+def _recording(responses):
+    """A client whose handler answers by path suffix and records (method, path, JSON body)."""
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content) if request.content else None
+        seen.append((request.method, request.url.path.removeprefix("/api/v1"), body))
+        for suffix, payload in responses.items():
+            if request.url.path.endswith(suffix):
+                return httpx.Response(200, json=payload)
+        return httpx.Response(404, json={"detail": request.url.path})
+
+    return client_for(handler), seen
+
+
+EDIT = {"id": "X1", "warnings": ["w"], "balance": [{"redispatch_mw": 1, "rule": "r", "is_assumption": True}]}
+
+
+def test_edit_tools_send_the_documented_body_and_report_the_baseline_change():
+    net_over = {**NET, "baseline": {**NET["baseline"], "overloaded": ["R000"]}}
+    places = {"bus": "B001", "how": "comuna de Antofagasta, servida por S/E B"}
+    client, seen = _recording(
+        {"/network": net_over, "/places": places, "/generators": EDIT, "/lines": EDIT, "/buses": EDIT}
+    )
+    tools = Sub50Tools(client, McpState(session_id="s"))
+    gen = tools.add_generator("Antofagasta", 40, "solar")
+    assert gen["bus"] == "B001" and gen["area_name"] == "Antofagasta" and gen["id"] == "X1"
+    assert gen["placed"] == places["how"] and any(s[1].endswith("/grids/places") for s in seen)
+    assert gen["baseline"]["still_overloaded"] == ["R000"] and gen["baseline"]["newly_overloaded"] == []
+    assert seen[-2][2] == {"bus": "B001", "mw": 40, "tech": "solar"}  # no name key when it is None
+    line = tools.add_line("B000", "B001", 220, 300, name="L nueva")
+    assert seen[-2][2] == {"a": "B000", "b": "B001", "kv": 220, "capacity_mw": 300, "name": "L nueva"}
+    assert line["redispatch"][0]["is_assumption"] is True and line["notice"] == digest.NOTICE
+    tools.add_bus("S/E Nueva", -33.0, -70.0, 110)
+    assert seen[-2][1].endswith("/sessions/s/buses")
+    assert seen[-2][2] == {"name": "S/E Nueva", "lat": -33.0, "lon": -70.0, "kv": 110}
+
+
+def test_run_tools_send_the_adversary_the_share_and_report_the_status():
+    run = {"run_id": "r1", "status": "running", "cycle": 3, "horizon": 8, "seed": 5}
+    client, seen = _recording(
+        {
+            "/runs": run,
+            "/events": {"accepted": True, "applies_at_cycle": 4, "resolved_target": "A01"},
+            "/runs/r1": {"run": run, "latest": {"cycle": 3, "metrics": {}}, "resources": {"crews": 2}},
+        }
+    )
+    tools = Sub50Tools(client, McpState(session_id="s"))
+    started = tools.start_run(seed=5, adversary_objective="blackout", adversary_budget=3)
+    assert tools.state.run_id == "r1" and started["notice"] == digest.NOTICE
+    assert seen[-1][2] == {
+        "template": "open_field",
+        "policy": "C",
+        "horizon": 24,
+        "seed": 5,
+        "adversary": {"enabled": True, "objective": "blackout", "budget": 3, "adaptive": True},
+    }
+    ev = tools.inject_event("C3_transmission_opening", "A01", share=0.5)
+    assert seen[-1][2] == {"type": "C3_transmission_opening", "target": "A01", "params": {"share": 0.5}}
+    assert ev["resolved_target"] == "A01" and ev["applies_at_cycle"] == 4
+    status = tools.run_status()
+    assert status["run"]["cycle"] == 3 and status["latest"]["cycle"] == 3
+    assert status["resources"] == {"crews": 2}
+
+
+def test_run_status_without_a_snapshot_returns_none_for_latest():
+    client, _ = _recording({"/runs/r1": {"run": {"run_id": "r1"}, "latest": None}})
+    out = Sub50Tools(client, McpState(session_id="s", run_id="r1")).run_status()
+    assert out["latest"] is None and out["run"] == {"run_id": "r1"}
+
+
+def test_list_options_keeps_ids_and_roles_only():
+    catalog = {
+        "operating_points": ["nov2026-1300"],
+        "templates": [
+            {
+                "id": "open_field",
+                "scenario_events": [],
+                "adversary": {"enabled": False},
+                "horizon": 24,
+                "x": 1,
+            }
+        ],
+        "policies": [{"id": "A", "name": "reactiva"}, {"id": "C", "name": "adaptativa"}],
+        "events": [{"id": "C3_transmission_opening", "targets": ["corridor"], "defaults": {}, "extra": 1}],
+        "actions": [{"id": "restore_element", "proposers": ["operations"], "target": "line", "extra": 1}],
+        "objectives": ["blackout"],
+    }
+    client, _ = _recording({"/sim/catalog": catalog})
+    out = Sub50Tools(client, McpState()).list_options()
+    assert out["templates"] == [
+        {"id": "open_field", "scripted_events": [], "adversary": False, "horizon": 24}
+    ]
+    assert out["policies"] == ["A", "C"]
+    assert out["actions"] == [{"id": "restore_element", "roles": ["operations"], "target": "line"}]
+    assert out["events"][0] == {"id": "C3_transmission_opening", "targets": ["corridor"], "defaults": {}}
+    assert out["adversary_objectives"] == ["blackout"] and out["notice"] == digest.NOTICE
+
+
+def test_prepare_scenario_works_without_a_session_and_only_calls_what_the_input_needs():
+    prepared = {
+        "changes": [{"target": "demand", "matched": 1, "elements": [{"id": "B000", "name": "S/E A"}]}],
+        "totals": {},
+        "overloaded_lines": [],
+        "should_feed": {"by_zone": {}},
+        "per_capita_w": 1,
+        "assumptions": [],
+    }
+    client, seen = _recording(
+        {"/grids/prepare": prepared, "/grids/simulate": _simulation(10, 1.0, 1.0, [["R1"]])}
+    )
+    tools = Sub50Tools(client, McpState())
+    change = {"target": "demand", "factor": 2.0, "zones": ["NG"]}
+    empty = tools.prepare_scenario()
+    assert seen == [] and empty["scenario"]["point"] == "nov2026-1300" and "prepared" not in empty
+    only_changes = tools.prepare_scenario(changes=[change], point="feb2025-1500")
+    assert [s[1] for s in seen] == ["/grids/prepare"] and "simulation" not in only_changes
+    assert only_changes["prepared"]["changes"] == [{"target": "demand", "matched": 1, "at": ["B000 S/E A"]}]
+    seen.clear()
+    both = tools.prepare_scenario(changes=[change], open_lines=["R000"], out_buses=["B001"])
+    assert [s[1] for s in seen] == ["/grids/prepare", "/grids/simulate", "/grids/simulate"]
+    assert seen[1][2] == {
+        "point": "nov2026-1300",
+        "open_lines": ["R000"],
+        "out_buses": ["B001"],
+        "changes": [change],
+    }
+    assert "changes" not in seen[2][2]  # the base-grid run has the failures only
+    assert both["simulation"]["lines_opened_by_cascade"] == ["R1"] and both["notice"] == digest.NOTICE
+    seen.clear()
+    tools.prepare_scenario(open_lines=["R000"])
+    assert [s[1] for s in seen] == ["/grids/simulate"]  # no changes: one run serves as both sides

@@ -1,0 +1,163 @@
+# Code map
+
+Module-by-module map of the backend (`backend/src/cascadasen`) and the web app (`web/src`): what each part is for, where to start reading it, which tests cover it, and how data moves through it in the four main use cases. Read [`architecture.md`](architecture.md) first for the picture and [`adr/`](adr/README.md) for why it is built this way. When this file and the code disagree, the code wins.
+
+How to use it:
+- References are `path:line` of the definition, taken from the code at the commit that last edited this file. Lines move with every edit. For a current line, query the generated index: `jq -r '.files[] | select(.symbols) | . as $f | .symbols[] | select(.name == "SessionService") | "\($f.path):\(.line)"' docs/index/repo-index.json` ([`index/README.md`](index/README.md)). The index lists public symbols only; private helpers (`_cascade`, `_settle_island`) are found with `grep -n`.
+- Backend paths in sections 2 and 4 are relative to `backend/src/cascadasen/`. Web paths in section 3 are relative to `web/src/`. Test paths are relative to `backend/tests/` or `web/src/`.
+- The `tests` column holds the test files that import or name the module (the `tests` field of the index, a text match, not coverage) plus the ones that reach it through `create_app`. Route modules are exercised through the app in the integration tests.
+
+## 1. Layering rule
+
+```
+api/  mcp/  cli.py  sim_fixtures.py      delivery: HTTP routes, MCP server, commands
+   │
+application/                              use cases
+   │
+domain/   ◄── implements the ports of domain/ports.py ──  infrastructure/   adapters, settings, container.py
+```
+
+- `domain/` imports nothing from `api`, `application`, `infrastructure`, `mcp`, `cli` or `sim_fixtures`. `application/` and `infrastructure/` import neither `api` nor `mcp`. Ports are the Protocols in `GridDataSource` (`domain/ports.py:18`) to `GridStore` (`domain/ports.py:139`).
+- Enforced by `test_domain_imports_no_outer_layer` (`unit/test_architecture.py:136`), `test_application_does_not_import_the_delivery_layers` (`unit/test_architecture.py:141`), `test_infrastructure_does_not_import_the_delivery_layers` (`unit/test_architecture.py:145`) and `test_no_import_cycles_among_modules_with_top_level_imports` (`unit/test_architecture.py:153`). The test parses the imports with `ast`; it does not import the package.
+- Known exceptions: six `application` to `infrastructure` imports (CLI `main()` entry points and the default document store of `run_experiment`), listed in `KNOWN_EXCEPTIONS` (`unit/test_architecture.py:22`). A seventh fails `test_application_imports_infrastructure_only_in_the_known_modules` (`unit/test_architecture.py:149`).
+- Not asserted by the test: `api` imports `mcp` in `api/assistant_routes.py:29-32` (the assistant reuses the MCP tool classes), and `mcp/tools.py:15` imports `api/stress_schemas.py` (`StressChange`). The MCP and assistant tool layer is therefore not independent of the HTTP layer.
+- Why and consequences: [`adr/0005-hexagonal-layering.md`](adr/0005-hexagonal-layering.md).
+- Not built: moving the CLI entry points into the composition root (`infrastructure/container.py`), which would remove the six exceptions (ADR 0005, Consequences).
+
+## 2. Backend
+
+### 2.1 `domain/` (pure: no I/O, no clock in the simulation)
+
+| Module | Responsibility | Entry points | Tests |
+|---|---|---|---|
+| `domain/model.py` | Entities of the unified grid: raw source rows, `Node`, `Edge`, `Plant`, `Comuna` | `SourceBundle` (`domain/model.py:193`), `GridSnapshot` (`domain/model.py:387`) | `conftest.py`, `unit/test_unify.py` |
+| `domain/unify.py`, `domain/topology_inference.py`, `domain/naming.py`, `domain/geo.py` | Join the four sources into one snapshot: substations by CEN id, line ends from geometry, PyPSA-CL parameters, population. Inferred values carry `is_assumption`. It stamps `built_at` with the wall clock as snapshot metadata; no simulation reads it (`architecture.md` section 1) | `GridUnifier.unify` (`domain/unify.py:98`), `infer_line_topology` (`domain/topology_inference.py:53`) | `unit/test_unify.py`, `unit/test_naming_geo.py` |
+| `domain/validation.py` | The data checks that run on every build (coverage, connectivity, agreement between sources, reactance per km) | `validate_snapshot` (`domain/validation.py:95`) | `unit/test_unify.py`, `validation/test_real_snapshot.py`, `integration/test_api.py` |
+| `domain/ports.py` | The Protocols that infrastructure implements: sources, repositories, `Interpreter`, `CommanderAdvisor`, `ToolChatModel`, `ToolBox`, `DocumentStore`, `GridStore` | `DocumentStore` (`domain/ports.py:123`), `ToolBox` (`domain/ports.py:108`), `ConflictError` (`domain/ports.py:119`) | `unit/test_document_store.py`, `unit/test_assistant.py`, `unit/test_sessions.py` |
+| `domain/cascade/` | **188-bus cascade engine** (`engine.md`). `network.py` reduces the snapshot (one bus per substation, parallel lines merged); `scenario.py` loads an operating point; `flow.py` finds islands and solves DC flow; `frequency.py` is the per-island swing equation with reserve, batteries, EDAC; `engine.py` is the cascade loop; `params/cascade.yaml` holds every parameter with its source | `run_cascade_workflow` (`domain/cascade/engine.py:106`), `run_cascade_state` (`domain/cascade/engine.py:116`), `reduce_network` (`domain/cascade/network.py:61`), `load_network_and_point` (`domain/cascade/scenario.py:30`), `dc_flow` (`domain/cascade/flow.py:30`), `simulate_island` (`domain/cascade/frequency.py:126`) | `unit/test_cascade.py`, `validation/test_results_so_far.py`, `unit/test_grid_simulation.py` |
+| `domain/cascade/overlay.py` | Session overlay: validated edits of the network (added buses, lines, loads, generators, overrides, out of service) and per-island redispatch (an assumption) | `apply_overlay` (`domain/cascade/overlay.py:198`), `add` (`domain/cascade/overlay.py:119`), `patch` (`domain/cascade/overlay.py:140`), `remove` (`domain/cascade/overlay.py:171`) | `unit/test_overlay.py` |
+| `domain/cascade/health.py`, `criticality.py`, `tracing.py` | Margin-to-the-limit health index and failure cost (`health.md`); how much depends on a substation; who feeds whom by flow tracing (`dependency.md`) | `prefault_health` (`domain/cascade/health.py:244`), `with_event_health` (`domain/cascade/health.py:332`), `criticality_workflow` (`domain/cascade/criticality.py:52`), `dependency_workflow` (`domain/cascade/tracing.py:42`) | `unit/test_health.py`, `validation/test_health_25f.py`, `unit/test_criticality.py`, `unit/test_tracing.py` |
+| `domain/simulation/` | **13-area engine** for `POST /api/v1/simulate` and validation cases V1-V10. `grid.py` builds the state, `powerflow.py` solves DC flow, `engine.py` runs the transient, `frequency.py` the island model, `defenses.py` the EDAC sets, `consequence.py` the L0-L3 card, `timeline.py` the `timeline.json` contract, `params.py` loads YAML and rejects numbers without provenance | `run_transient` (`domain/simulation/engine.py:398`), `Physics` (`domain/simulation/grid.py:26`), `build_reduced_network` (`domain/simulation/network.py:223`), `consequence_card` (`domain/simulation/consequence.py:82`), `build_timeline` (`domain/simulation/timeline.py:61`), `check_provenance` (`domain/simulation/params.py:43`) | `unit/test_sim_engine.py`, `unit/test_sim_network.py`, `validation/test_engine_cases.py` |
+| `domain/theater/` | **Strategic theatre** (`strategy.md`): real state on the 188-bus network (`grid.py`), what supervision shows (`digital.py`, `state.py`), events and actions (`catalog.py`, `execution.py`), validator, resources and crews, seeded chance (`rng.py`, `stochastic.py`), evaluator, hash-chained audit log, the cycle (`cycle.py`), documented incidents (`incident.py`), Spanish narration (`narrative.py`). Parameters in `params/*.yaml` | `Simulation` (`domain/theater/cycle.py:134`), `RunConfig` (`domain/theater/cycle.py:90`), `TheaterGrid` (`domain/theater/grid.py:51`), `Executor` (`domain/theater/execution.py:117`), `validate` (`domain/theater/validator.py:72`), `AuditLog` (`domain/theater/audit.py:33`), `theater_config` (`domain/theater/config.py:100`), `incident_catalog` (`domain/theater/incident.py:81`), `rng_for` (`domain/theater/rng.py:16`) | `unit/test_theater.py`, `unit/test_theater_mapa3.py`, `unit/test_theater_stochastic.py`, `unit/test_incidents.py`, `unit/test_physical_bots.py`, `validation/test_flagship.py` |
+| `domain/agents/` | C2, ISR, Operations, Stabilisation, Logistics, Auditor and the adaptive adversary. They receive an `AgentView` and never the real state | `AgentView` (`domain/agents/base.py:14`), `CommanderAgent` (`domain/agents/commander.py:18`), `AdversaryAgent` (`domain/agents/adversary.py:41`) | `unit/test_theater.py` (`test_no_agent_view_reaches_the_real_state`), `unit/test_physical_bots.py` |
+| `domain/regional*.py`, `domain/grids.py` | Context layer of other countries (drawn, not simulated), Brazil's flow network, and the layout of the grid documents | `RegionalBundle` (`domain/regional.py:112`), `FlowNetwork` (`domain/regional_network.py:155`), `build_manifest` (`domain/grids.py:130`) | `unit/test_regional.py`, `unit/test_ons_brasil.py`, `unit/test_grids.py` |
+
+### 2.2 `application/` (use cases)
+
+| Module | Responsibility | Entry points | Tests |
+|---|---|---|---|
+| `application/build_grid.py`, `build_regional.py` | Fetch sources, unify, validate, persist (`cascadasen-build`); build the regional layer (`cascadasen-regional`) | `BuildGridSnapshot` (`application/build_grid.py:18`), `BuildRegionalGrid` (`application/build_regional.py:49`) | `unit/test_ons_brasil.py`, `unit/test_architecture.py` |
+| `application/grid_queries.py` | Read model over the snapshot: filters, details, graph queries, GeoJSON | `GridQueryService` (`application/grid_queries.py:27`) | `integration/test_api.py` |
+| `application/simulate.py`, `simulation_service.py` | One physical contingency on the 13-area network; the facade the API uses for the simulation, runs and campaigns | `PhysicsSimulator.simulate` (`application/simulate.py:128`), `SimulationService` (`application/simulation_service.py:22`) | `integration/test_simulate_api.py`, `unit/test_sim_engine.py` |
+| `application/theater_world.py` | The theatre's world: the 188-bus network and operating points from `data/processed`; `SessionWorld` pins one point with a session overlay applied | `ProcessedWorld` (`application/theater_world.py:19`), `SessionWorld` (`application/theater_world.py:53`) | `unit/test_grid_simulation.py`, `unit/test_incidents.py` |
+| `application/sessions.py` | Shared sessions: one JSON document per session with revisions and conditional writes, overlay edits, network view with baseline, sandbox cut and repair, nested runs | `SessionService` (`application/sessions.py:82`), `SessionService.mutate` (`application/sessions.py:180`), `SessionService.cut` (`application/sessions.py:366`), `SessionService.network_view` (`application/sessions.py:281`) | `unit/test_sessions.py`, `integration/test_sessions_api.py` |
+| `application/run_experiment.py` | Strategic runs: create, step, inject, act, replay. Every command persists a run record; a bounded LRU `RunCache` keeps live simulations and an evicted run is rebuilt from its recipe | `RunManager` (`application/run_experiment.py:90`), `RunCache` (`application/run_experiment.py:55`), `run_config` (`application/run_experiment.py:415`) | `unit/test_run_persistence.py`, `unit/test_run_actions.py`, `integration/test_runs_api.py` |
+| `application/run_campaign.py` | Campaigns of runs with fragility and adaptation indices; bounded by `MAX_RUNS` | `CampaignRunner` (`application/run_campaign.py:133`) | `integration/test_campaigns_api.py` |
+| `application/cache_builder.py` | Precompute every single-line cut and substation shutdown per operating point into `web/public/cache/` (`cascadasen-cache`) | `build_cache_workflow` (`application/cache_builder.py:26`) | `unit/test_grid_simulation.py` (cache against engine), `unit/test_cascade.py` |
+| `application/grid_simulation.py`, `grid_stress.py`, `grid_dependency.py`, `grid_health.py`, `grids.py` | Grid documents: simulate several changes at once, prepare a stressed scenario (`stress.md`), dependency and cost, health report, compose and publish documents (`grids.md`) | `GridSimulator.simulate_workflow` (`application/grid_simulation.py:28`), `prepare_workflow` (`application/grid_stress.py:54`), `GridDependency` (`application/grid_dependency.py:23`), `GridComposer` (`application/grids.py:101`) | `unit/test_grid_simulation.py`, `unit/test_grid_stress.py`, `unit/test_grid_dependency.py`, `unit/test_grids.py` |
+| `application/assistant.py` | The in-app assistant: one message runs a tool-use loop capped by steps and a deadline; conversations are documents in the `DocumentStore` | `Assistant.chat` (`application/assistant.py:160`), `Assistant.loop` (`application/assistant.py:223`) | `unit/test_assistant.py`, `integration/test_assistant_api.py` |
+
+### 2.3 `infrastructure/` (adapters and composition root)
+
+| Module | Responsibility | Entry points | Tests |
+|---|---|---|---|
+| `infrastructure/container.py`, `settings.py` | Composition root and `CASCADASEN_*` settings (no keys) | `document_store` (`infrastructure/container.py:46`), `Settings` (`infrastructure/settings.py:13`) | `unit/test_architecture.py`, most integration tests |
+| `infrastructure/document_store.py`, `grid_store.py` | `DocumentStore` (memory, file, S3 with conditional writes) and `GridStore` (local, S3) | `MemoryDocumentStore` (`infrastructure/document_store.py:40`), `FileDocumentStore` (`infrastructure/document_store.py:78`), `S3DocumentStore` (`infrastructure/document_store.py:128`) | `unit/test_document_store.py`, `unit/test_grids.py` |
+| `infrastructure/sources/*`, `http.py`, `arcgis.py` | One adapter per public source, with an on-disk cache of raw responses in `data/raw/` (git-ignored) | `PypsaClSource` (`infrastructure/sources/pypsa_cl.py:38`), `CachedHttp` (`infrastructure/http.py:26`) | `unit/test_regional.py` and `unit/test_ons_brasil.py` cover the regional adapters. The four Chilean adapters (`ide_energia`, `infotecnica`, `pypsa_cl`, `ine_censo`) have no test; `unit/test_unify.py` uses a synthetic `SourceBundle` |
+| `infrastructure/snapshot_repository.py`, `exporters.py` | Read and write the snapshot and the static exports | `JsonSnapshotRepository` (`infrastructure/snapshot_repository.py:94`), `StaticFilesExporter` (`infrastructure/exporters.py:21`) | `validation/test_real_snapshot.py` |
+| `infrastructure/llm.py`, `llm_tools.py`, `inprocess.py` | Optional LLM adapters (extra `llm`, off by default); the tool-calling Bedrock Converse model of the assistant; an `httpx` client that calls the FastAPI app in the same process | `ConverseToolChat.turn` (`infrastructure/llm_tools.py:81`), `tool_chat` (`infrastructure/llm_tools.py:118`), `in_process_client` (`infrastructure/inprocess.py:31`) | `unit/test_llm_commander.py`, `unit/test_llm_tools.py`, `unit/test_tool_specs.py` |
+
+### 2.4 `api/` (HTTP driving adapter)
+
+| Module | Responsibility | Entry points | Tests |
+|---|---|---|---|
+| `api/app.py` | Builds the FastAPI app, middleware (body limit, CORS, GZip), lazy services on `app.state`, the grid query routes, `/health`, admin reload | `create_app` (`api/app.py:46`), `run` (`api/app.py:320`) (`cascadasen-api`) | `integration/test_api.py` |
+| `api/simulation_routes.py` | `POST /simulate`, `/sim/*`: catalog, runs, snapshots, trace, report, after-action, campaigns | `simulate` (`api/simulation_routes.py:144`), `create_run` (`api/simulation_routes.py:224`), `create_campaign` (`api/simulation_routes.py:379`) | `integration/test_simulate_api.py`, `integration/test_runs_api.py`, `integration/test_campaigns_api.py` |
+| `api/session_routes.py` | `/sessions/*`: session documents, element edits, sandbox cut and repair, SSE revisions, session runs. Rate limits and a per-session lock wrap every write | `create_session` (`api/session_routes.py:214`), `_element_routes` (`api/session_routes.py:331`), `cut_lines` (`api/session_routes.py:495`), `session_events` (`api/session_routes.py:602`), `create_run` (`api/session_routes.py:642`) | `integration/test_sessions_api.py` |
+| `api/grid_routes.py`, `incident_routes.py` | `/grids/*` (catalogue, compose, simulate, dependency, cost, prepare); `/attacks/catalog` and `POST /sessions/{sid}/attacks/runs` | `simulate` (`api/grid_routes.py:121`), `attack_catalog` (`api/incident_routes.py:74`), `start_incident_run` (`api/incident_routes.py:94`) | `unit/test_grid_simulation.py`, `unit/test_grid_stress.py`, `unit/test_incidents.py` |
+| `api/assistant_routes.py` | `POST /assistant/chat` and `/chat/stream` (SSE), conversations | `chat` (`api/assistant_routes.py:131`), `chat_stream` (`api/assistant_routes.py:189`), `admit` (`api/assistant_routes.py:146`) | `integration/test_assistant_api.py` |
+| `api/limits.py` | Token buckets, SSE slots, per-session locks, the 64 KB body limit for session routes | `TokenBucket` (`api/limits.py:23`), `SessionLocks` (`api/limits.py:72`), `BodyLimitMiddleware` (`api/limits.py:128`) | `unit/test_session_locks.py`, `integration/test_sessions_api.py` |
+| `api/agent_openapi.py` | Builds the agent-only OpenAPI spec from the routes marked `AGENT`; the versioned copy is `docs/openapi/agents.openapi.json` | `agent_openapi` (`api/agent_openapi.py:102`), `mount` (`api/agent_openapi.py:123`) | `integration/test_agent_openapi.py` |
+| `api/*schemas.py` | Pydantic request and response models | `SessionCreate` (`api/session_schemas.py:26`), `CampaignIn` (`api/simulation_schemas.py:358`) | covered through the routes |
+
+### 2.5 `mcp/` (MCP server and the tool layer the assistant shares)
+
+| Module | Responsibility | Entry points | Tests |
+|---|---|---|---|
+| `mcp/tools.py` | The 26 tools (`OPERATIONS` maps each to agent-API operation ids). Guardrails: no tool ranks or searches, `cut_lines` takes 1 to 3 lines | `Sub50Tools` (`mcp/tools.py:73`), `OPERATIONS` (`mcp/tools.py:20`) | `unit/test_mcp_tools.py`, `unit/test_prepare_scenario_tool.py`, `integration/test_mcp_server.py` |
+| `mcp/client.py` | HTTP client of the agent API with the 409 retry rule and Spanish error texts | `Sub50Client.request` (`mcp/client.py:61`) | `unit/test_mcp_tools.py` |
+| `mcp/digest.py` | Compact summaries of API responses for the model | `cut_digest` (`mcp/digest.py:72`), `report_digest` (`mcp/digest.py:300`) | `unit/test_mcp_tools.py` |
+| `mcp/server.py` | stdio MCP server (`cascadasen-mcp`, extra `mcp`) | `build_server` (`mcp/server.py:18`), `main` (`mcp/server.py:26`) | `integration/test_mcp_server.py` |
+| `mcp/toolbox.py`, `specs.py`, `state.py` | `ToolBox` over the tools for the assistant (opens a session on first need, checks that MW come from the user, excludes `end_session`); JSON Schemas from the tool signatures; session and run ids between calls | `SessionTools.run` (`mcp/toolbox.py:76`), `tool_specs` (`mcp/specs.py:35`), `McpState` (`mcp/state.py:15`) | `unit/test_assistant.py`, `unit/test_tool_specs.py` |
+
+### 2.6 Entry commands
+
+`cascadasen-api` (`backend/pyproject.toml:20`) and the other lines under `[project.scripts]` define `cascadasen-api`, `-build`, `-mcp`, `-cache`, `-grids`, `-health`, `-regional` and `-sim-fixtures`. `cli.py` is `cascadasen-build`; `sim_fixtures.py` precomputes the offline theatre runs.
+
+## 3. Web (`web/src`, Vite + React + TypeScript + deck.gl)
+
+The web app draws what the backend computed. It holds no physics: it reads `web/public/cache/` for a single line cut and calls `/api` for several changes at once, composed grids, prepared scenarios, incidents and the assistant (`web/README.md`).
+
+| Folder | Responsibility | Entry points | Tests |
+|---|---|---|---|
+| `main.tsx`, `App.tsx` | Mount: `/` is mapa 3 inside an `ErrorBoundary`; `?mapa=1` and `?mapa=2` are deprecated maps | `mapa` (`main.tsx:15`) | none |
+| `cascade/` | Mapa 3 shell and playback. `CascadeApp.tsx` owns the state (point, edits, timeline, selection, view, tab); `api.ts` reads the cache; `clicks.ts` decides what a map click does; `simulation.ts` turns a timeline into what is on screen at second `t` (dark buses, people, island frequency, the warped time rail); `layers.ts` builds the deck.gl layers; `edits.ts` holds the user's changes; `gridsApi.ts` calls `/grids/*`; `url.ts` keeps the deep link | `CascadeApp` (`cascade/CascadeApp.tsx:72`), `loadTimeline` (`cascade/api.ts:21`), `interpretClick` (`cascade/clicks.ts:29`), `impactAt` (`cascade/simulation.ts:131`), `frameIndexAt` (`cascade/simulation.ts:11`), `timeWarp` (`cascade/simulation.ts:79`), `buildCascadeLayers` (`cascade/layers.ts:57`), `fromCache` (`cascade/edits.ts:21`), `simulateGrid` (`cascade/gridsApi.ts:46`), `syncedSearch` (`cascade/url.ts:22`) | `cascade/*.test.ts`, `SelectionCard.test.tsx`, `NetworkState.test.tsx` |
+| `cascade/` panels | `SelectionCard`, `NetworkState` (Estado de la red), `SimulationPanel`, `TimelineCard`, `NetworkPanel`, `Scenarios` (the Escenarios tree and `DISASTERS`), `GridSources`, `Legend` (Ayuda and Fuentes) | `SelectionCard` (`cascade/SelectionCard.tsx:69`), `NetworkState` (`cascade/NetworkState.tsx:14`), `SimulationPanel` (`cascade/SimulationPanel.tsx:22`), `TimelineCard` (`cascade/Timeline.tsx:26`), `ScenarioTree` (`cascade/Scenarios.tsx:50`) | `SelectionCard.test.tsx`, `NetworkState.test.tsx`, `scenarios.test.ts`; the other panels have no test |
+| `session/` | Session client and hook: typed calls for every session route, `subscribe` (SSE with a polling fallback), `useSession`, `loader.ts` (which overlapping refetch wins), the **Datos** tab. Hidden from the web since #101: `?sesion=` is not read on load; an incident run is the only way in (`mapa3.md` section 11) | `subscribe` (`session/sessionApi.ts:91`), `cutLines` (`session/sessionApi.ts:62`), `useSession` (`session/useSession.ts:19`), `createLoader` (`session/loader.ts:16`), `DataPanel` (`session/DataPanel.tsx:19`) | `sessionApi.test.ts`, `loader.test.ts`, `geo.test.ts`; `useSession` has no test |
+| `incidents/` | **Incidentes** view: catalog of documented incidents, a launcher that creates a session at the incident's hour, steps the run and reads the report and after-action, and plays each cycle's cascade on the map | `useIncident` (`incidents/useIncident.ts:24`), `IncidentPanel` (`incidents/IncidentPanel.tsx:16`), `sessionPlan` (`incidents/incidents.ts:60`) | `IncidentPanel.test.tsx`, `incidents.test.ts` |
+| `assistant/` | **Asistente** view: SSE chat client, a pure reducer for the chat state, Spanish labels for tools, the `useAssistant` hook, the panel | `streamChat` (`assistant/assistantApi.ts:28`), `reduce` (`assistant/steps.ts:58`), `useAssistant` (`assistant/useAssistant.ts:29`), `scenarioOf` (`assistant/useAssistant.ts:159`), `AssistantPanel` (`assistant/AssistantPanel.tsx:15`) | `assistantApi.test.ts`, `steps.test.ts`, `sse.test.ts`, `labels.test.ts`, `scenario.test.ts`; `useAssistant` and the panel have no test |
+| `map/` | Basemap (offline outline or Mapbox) with camera limits, the legacy grid layers of mapas 1 and 2, the regional context layer, uploaded networks (validation and IndexedDB storage), country bounds | `createBaseMap` (`map/baseMap.ts:49`), `loadCountryGrid` (`map/regional.ts:42`), `parseUpload` (`map/upload.ts:36`) | `map/*.test.ts` |
+
+## 4. Data flow of the main use cases
+
+### 4.1 A line cut
+
+Without a backend (the default for one line):
+1. Build time, committed: `cascadasen-cache` runs `build_cache_workflow` (`application/cache_builder.py:26`). For each operating point it loads the network and point (`load_network_and_point` (`domain/cascade/scenario.py:30`)), runs `run_cascade_workflow` (`domain/cascade/engine.py:106`) once per line and per substation, adds the health block (`with_event_health` (`domain/cascade/health.py:332`)) and writes `web/public/cache/<point>/<line>.json`.
+2. In the browser: a click on a line reaches `interpretClick` (`cascade/clicks.ts:29`). The first click selects, a second click on the selected line toggles it off. `cutLine` (`cutLine` (`cascade/CascadeApp.tsx:549`)) adds it to the edits. `fromCache` (`cascade/edits.ts:21`) is true for zero or one line, so `_loadTimeline` (`cascade/CascadeApp.tsx:338`) calls `loadTimeline` (`cascade/api.ts:21`), which fetches the committed JSON.
+3. Playback: `frameIndexAt` (`cascade/simulation.ts:11`) and `impactAt` (`cascade/simulation.ts:131`) read the timeline at second `t`; `buildCascadeLayers` (`cascade/layers.ts:57`) draws it.
+
+With several changes at once (two cuts, a substation, a prepared scenario) the browser asks the backend: `_simulateEdits` (`cascade/CascadeApp.tsx:377`) calls `simulateGrid` (`cascade/gridsApi.ts:46`) (`POST /api/v1/grids/simulate`), which reaches `simulate` (`api/grid_routes.py:121`), then `GridSimulator.simulate_workflow` (`application/grid_simulation.py:28`), which applies the edits and calls `run_cascade_state` (`domain/cascade/engine.py:116`).
+
+The engine loop (`engine.md` item 4): `_start` (`domain/cascade/engine.py:206`) opens the cut, then `_cascade` (`domain/cascade/engine.py:238`) repeats up to `max_stages` (20): `find_islands` and `_settle_islands` (per island `_settle_island` (`domain/cascade/engine.py:325`) calls the frequency model `simulate_island` (`domain/cascade/frequency.py:126`), or collapses the island by the 25F voltage rule), `dc_flow` (`domain/cascade/flow.py:30`), `_frame` (`domain/cascade/engine.py:480`) records the frame (status `overload` when loading is above 1.0), and `_most_overloaded` (`domain/cascade/engine.py:266`) opens the line with the highest loading when it exceeds `overload_factor` (1.2). A stage starts after the islands of the previous one finish shedding.
+
+### 4.2 A session edit (a datacenter added by an API client or the MCP server)
+
+1. `POST /api/v1/sessions/{sid}/loads` is the `add` route made by `_element_routes` (`api/session_routes.py:331`). It checks the rate limit (`limit`), takes the session lock (`serial`, one request at a time per session in this process) and calls `SessionService.add` through `session_call`, which maps domain errors to 404, 409, 412 and 422.
+2. `SessionService.add` (`application/sessions.py:246`) builds the change and calls `SessionService._edit` (`application/sessions.py:219`), which calls `SessionService.mutate` (`application/sessions.py:180`): it reads the document and its ETag, checks `If-Match` against `dataset_revision` (else `PreconditionFailedError`, 412), applies the edit with `add` (`domain/cascade/overlay.py:119`) on a copy, bumps `revision` and `dataset_revision`, and writes with `store.put(if_match=etag)`. A lost race raises `ConflictError` and `mutate` re-reads and retries up to `WRITE_RETRIES` (3), then 409.
+3. The response carries the ETag (`etag`), the new `id`, `warnings` and the redispatch `balance` (`apply_overlay` (`domain/cascade/overlay.py:198`) through `SessionWorld.applied`).
+4. Other clients: `session_events` (`api/session_routes.py:602`) streams `revision` events (every 1 s from the cached revision, every 5 s from the store head). The web `subscribe` (`session/sessionApi.ts:91`) receives them and `useSession` (`session/useSession.ts:19`) refetches through `createLoader` (`session/loader.ts:16`).
+5. A cut in the same session (`cut_lines` (`api/session_routes.py:495`)) goes through `SessionService.cut` (`application/sessions.py:366`) (1 to 3 lines) and answers with the sandbox state: the cascade of the session's open lines on the session's network, via `SessionService._timeline` and `run_cascade_workflow`.
+
+Sessions are documents in the `DocumentStore`, so with the S3 store any instance can serve any session (`adr/0004-sessions-on-s3-by-url-capability.md`); the default store is memory (`CASCADASEN_SESSION_STORE`). The id in the path is the only credential.
+
+### 4.3 An incident run
+
+1. The web lists the catalog: `useIncident` (`incidents/useIncident.ts:24`) calls `getIncidentCatalog` (`GET /api/v1/attacks/catalog`), served by `attack_catalog` (`api/incident_routes.py:74`) from `incident_catalog` (`domain/theater/incident.py:81`).
+2. `launch` (`launch` (`incidents/useIncident.ts:48`)) decides with `sessionPlan` (`incidents/incidents.ts:60`) whether to reuse the session or create one at the incident's operating point (`createSession`), joins it, then calls `startIncidentRun`.
+3. `POST /api/v1/sessions/{sid}/attacks/runs` is `start_incident_run` (`api/incident_routes.py:94`): only catalog ids are accepted (422 otherwise) and the session must be at the incident's point. It calls `SessionService.create_run` (`application/sessions.py:447`), which pins the session overlay and creates the run through `RunManager.create` (`application/run_experiment.py:227`).
+4. The web steps the run to its horizon: `stepRun` calls `step_run` (`api/session_routes.py:705`), then `SessionService.run_command` (`application/sessions.py:460`), `RunManager.step` (`application/run_experiment.py:258`) and `Simulation.step` (`domain/theater/cycle.py:384`). Each cycle `Simulation._cycle` (`domain/theater/cycle.py:515`) (its docstring lists the six steps) applies events through `Executor.transient` (`domain/theater/execution.py:256`), which runs the cascade on the real state (`TheaterGrid.run_cascade` (`domain/theater/grid.py:256`) calls `run_cascade_state`). The agents see only the observed state. Their proposals are validated on the real state, executed, evaluated and appended to the hash-chained log.
+5. The web reads `Simulation.report` (`domain/theater/cycle.py:921`) (with the `incident` block and its consequence card) and the after-action, and plays the cycles that had a cascade on the map (`cascadeCycles` in `incidents.ts`).
+6. Replay: the same `recipe` and seed give the same trace head (`test_a_replay_with_the_same_seed_is_identical` (`unit/test_incidents.py:115`)).
+
+### 4.4 The assistant tool loop
+
+1. The web `useAssistant` (`assistant/useAssistant.ts:29`) sends `{message, conversation_id}` through `streamChat` (`assistant/assistantApi.ts:28`) (`POST /api/v1/assistant/chat/stream`).
+2. `chat_stream` (`api/assistant_routes.py:189`) calls `admit` (`api/assistant_routes.py:146`): rate limit per client IP (`rate_assistant_per_minute`, 10) and `get_assistant`, which answers 503 unless `CASCADASEN_LLM_ENABLED=true` with `bedrock-converse` (`tool_chat` (`infrastructure/llm_tools.py:118`)). It runs `Assistant.chat` in a worker thread and turns each step into an SSE event: `start`, `assistant_text`, `tool_call`, `tool_result`, then `done` or `error`.
+3. `Assistant.chat` (`application/assistant.py:160`) loads or creates the conversation (document `assistant/<cid>.json`), builds the toolbox for this request (`toolbox_factory` (`api/assistant_routes.py:154`)) and calls `Assistant.loop` (`application/assistant.py:223`).
+4. `loop` calls the model (`ConverseToolChat.turn` (`infrastructure/llm_tools.py:81`)) for at most `max_steps` (8) and `deadline_s` (25 s, 90 s for a stream). If the reply promises an action and calls no tool, it adds one hidden nudge (`announces` (`application/assistant.py:52`)).
+5. Each tool call goes to `SessionTools.run` (`mcp/toolbox.py:76`). It refuses `add_datacenter` and `add_generator` when the MW were not written by the user (`stated`), opens a session on first need, and calls the method of `Sub50Tools` (`mcp/tools.py:73`), which calls the app's own routes through `in_process_client` (`infrastructure/inprocess.py:31`) and `Sub50Client.request` (`mcp/client.py:61`). The model sees only the compact digest (`mcp/digest.py`), trimmed to 8,000 characters (`trim_result`).
+6. The turn is saved with `Assistant.save` (`application/assistant.py:285`) (conditional write; a concurrent message gives `ConversationConflictError`, 409). A stream that closes early still finishes and saves the turn.
+
+The MCP server (`build_server` (`mcp/server.py:18`)) registers the same `Sub50Tools` methods for an external client that brings its own LLM.
+
+## 5. Where the tests are
+
+| Suite | Path | What it holds |
+|---|---|---|
+| Unit | `backend/tests/unit/` | Engines, overlay, sessions, theatre, MCP tools, assistant, architecture rule |
+| Integration | `backend/tests/integration/` | The app through `TestClient`: routes, agent OpenAPI drift, repo index drift, MCP server |
+| Validation | `backend/tests/validation/` | V1-V10 on the 13-area engine (`test_engine_cases.py`), the flagship experiment, health 25F, results pinned in `engine.md`, the real snapshot |
+| Web | `web/src/**/*.test.ts(x)` | Pure helpers, API clients, and three component tests on jsdom |
+
+Run them with the commands in [`for-reviewers.md`](for-reviewers.md), "Run the checks".

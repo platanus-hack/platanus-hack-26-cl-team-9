@@ -89,6 +89,9 @@ class OverlayError(ValueError):
 
 @dataclass
 class Applied:
+    """The 188-bus network and operating point after an overlay, with the warnings and the per-island
+    redispatch (`balance`) that `apply_overlay` produced. Why: the session shows them as assumptions."""
+
     net: ReducedNetwork
     point: OperatingPoint
     warnings: list[dict[str, Any]] = field(default_factory=list)
@@ -96,6 +99,7 @@ class Applied:
 
 
 def empty_overlay() -> dict[str, Any]:
+    """A session starts with this overlay: no edit, so the network equals the base case."""
     return {
         "buses": [],
         "lines": [],
@@ -108,6 +112,7 @@ def empty_overlay() -> dict[str, Any]:
 
 
 def is_empty(overlay: dict[str, Any]) -> bool:
+    """True when the overlay holds no edit (the sequence counters do not count)."""
     keys = ("buses", "lines", "loads", "generators", "bus_overrides", "line_overrides")
     return not any(overlay.get(k) for k in keys)
 

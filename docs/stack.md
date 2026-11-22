@@ -71,7 +71,7 @@ web/                  Vite + React + TypeScript app (deck.gl map, Mapbox option,
 infrastructure/       Terraform and deploy script for AWS (`infrastructure.md`)
 scripts/              lint.sh and git hooks
 docker-compose.yml    backend and web services (`docs/docker.md`)
-.github/workflows/    lint.yml (ruff and changelog check)
+.github/workflows/    lint.yml (ruff and changelog check), checks.yml (pytest with coverage floor, mypy, web tsc/vitest/build), deploy.yml (needs checks)
 ```
 
 ## 4. Simulation model

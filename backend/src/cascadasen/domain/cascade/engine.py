@@ -50,6 +50,10 @@ VOLTAGE_LIMIT: dict = dict(value(cascade_params()["voltage_limit"]))
 
 @dataclass(frozen=True)
 class CascadeParams:
+    """The cascade's tunable rules from `params/cascade.yaml` (each with its source or `is_assumption`): the
+    loading above which a line opens, the stage cap and spacing, and the island frequency model. Why: a caller
+    varies one rule by passing `CascadeParams(...)` (for example `resplit_memory=False`), not by editing the engine."""
+
     overload_factor: float = float(value(_C["overload_factor"]))
     max_stages: int = int(value(_C["max_stages"]))
     stage_spacing_s: float = float(value(_C["stage_spacing_s"]))
@@ -373,6 +377,7 @@ def _island_input(
 
 
 def zone_load(net: ReducedNetwork, load: np.ndarray, buses: list[int]) -> dict[str, float]:
+    """Load of `buses` split by EDAC zone (`norte_grande`, `centro_sur`): each zone sheds by its own table."""
     out = {"norte_grande": 0.0, "centro_sur": 0.0}
     for b in buses:
         out[net.zone(b)] += float(load[b])

@@ -70,6 +70,9 @@ SE_CODE_RE = re.compile(r"(SE\d{3}[A-Z]\d{4})")
 
 @dataclass(frozen=True)
 class UnifyConfig:
+    """Matching distances (metres) and thresholds of the unifier: how close two points are the same site, how
+    far a plant may sit from its substation, the minimum name similarity. Heuristics, not source data."""
+
     site_m: float = 250.0
     simplify_m: float = 60.0
     plant_name_m: float = 25000.0
@@ -81,6 +84,9 @@ class UnifyConfig:
 
 
 class GridUnifier:
+    """Joins the `SourceBundle` into one `GridSnapshot` (`unify`). Why: a pure function of its input, so a build
+    is reproducible from the cached raw downloads; inferred values carry `is_assumption`."""
+
     def __init__(self, cfg: UnifyConfig | None = None, inference: InferenceConfig | None = None) -> None:
         self.cfg = cfg or UnifyConfig()
         self.inference = inference or InferenceConfig()
