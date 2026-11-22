@@ -23,9 +23,6 @@ class COA:
     def key(self) -> str:
         return f"{self.action}:{self.target}"
 
-    def param(self, name: str, default: Any = None) -> Any:
-        return dict(self.params).get(name, default)
-
     def as_dict(self) -> dict[str, Any]:
         return {
             "action": self.action,
@@ -81,9 +78,6 @@ class ISRReport:
 
     def suspicion_of(self, area: str) -> float:
         return dict(self.suspicion).get(area, 0.0)
-
-    def trust_of(self, area: str) -> float:
-        return dict(self.data_trust).get(area, 1.0)
 
     def as_dict(self) -> dict[str, Any]:
         return {

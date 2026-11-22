@@ -15,7 +15,7 @@ import json
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -207,7 +207,7 @@ def _plant_bus(plant: dict, plant_bus: dict, net, node_bus: dict[str, int]) -> i
     model_bus = plant_bus.get(plant["id"])
     if model_bus in net.bus_of_model_bus:
         return net.bus_of_model_bus[model_bus]
-    return node_bus.get(plant.get("node"))
+    return node_bus.get(cast(str, plant.get("node")))
 
 
 # ---- changes ----------------------------------------------------------------------------------
@@ -468,9 +468,14 @@ def _floored(values: np.ndarray, delta: np.ndarray) -> np.ndarray:
 
 
 def _bus_row(
-    ctx: _Context, i: int, before: float, after: float, key: str = "load_mw", people: float | None = None
+    ctx: _Context,
+    i: int | np.integer,
+    before: float,
+    after: float,
+    key: str = "load_mw",
+    people: float | None = None,
 ) -> dict:
-    row = {
+    row: dict[str, Any] = {
         "id": f"B{i:03d}",
         "name": ctx.names[i],
         "zone": ctx.zone[i],

@@ -127,7 +127,7 @@ With `VITE_MAPBOX_TOKEN` in `web/.env.local` (git-ignored) the basemap is Mapbox
 
 ## 3. 2D and 3D views
 
-The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The map controls also have **Ver toda la red**, which returns the camera to the frame of the network on the map. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D. There is also a layer for flat icons that is empty for now (`web/src/cascade/icons.ts`).
+The layers button (top right, above zoom) opens a small panel with **Vista 2D | 3D** and two layer switches. Both views use the same Mapbox Standard map (night, monochrome theme). 2D is the default and matches Design v5: the camera looks straight down and cannot be tilted or rotated. 3D tilts the camera 45 degrees. Open directly in 3D with `?vista=3d`. The map controls also have **Ver toda la red**, which returns the camera to the frame of the network on the map. Escape or a click outside closes the layers panel. To the left of the layers button, on the same row, is **Prender todo** (section 4, item 9); the open layers panel covers it. The layer switches are **Flujo de potencia** (moving dots, on by default) and **Demanda por subestación** (off by default): cream discs whose area grows with MW in 2D, rectangular columns in 3D.
 
 ## 4. How to use it
 
@@ -297,6 +297,16 @@ web/src/cascade/*  reads cache/*.json and draws it
 | `web/src/cascade/layers.ts` | deck.gl layers and colour constants |
 | `web/src/cascade/NetworkPanel.tsx`, `SimulationPanel.tsx` | Tabs Red and Simulación |
 | `web/src/cascade/Timeline.tsx`, `MapLegend.tsx`, `MapOverlays.tsx` | Timeline card, map legend, event pins and callout |
+| `web/src/cascade/api.ts`, `types.ts` | Loads the cache files (`/cache/...`, memoised) and the types of their JSON |
+| `web/src/cascade/gridsApi.ts` | Client of the backend grid documents (catalogue, compose, simulate, dependency, outage cost; `docs/grids.md`) |
+| `web/src/cascade/GridSources.tsx` | "Fuentes de la grilla" in the rail: choose which stored network is on the map |
+| `web/src/cascade/NetworkState.tsx` | Tab "Estado de la red": every change made to the grid, restorable one by one or all at once |
+| `web/src/cascade/edits.ts` | Pure list of the user's edits (lines cut, substations out) and the rule for when the cache can answer |
+| `web/src/cascade/heat.ts` | Heat map layers (population, dependency, criticality) |
+| `web/src/cascade/networkSummary.ts` | Figures of the Red tab by voltage band, from the network on the map |
+| `web/src/cascade/url.ts` | Reads and writes the deep link (`point`, `cut`, `vista`, `sesion`, `pais`) |
+| `web/src/cascade/ui.tsx` | Shared pieces: info tooltip and icons |
+| `web/src/cascade/cities.ts` | Reference city list (metadata, not drawn) |
 | `web/src/cascade/Legend.tsx` | "Ayuda" and "Fuentes y supuestos" views |
 | `web/src/cascade/text.ts` | Spanish narration of events, place names, number and clock formats |
 | `web/src/cascade/cascade.css` | Styles of the shell (Design v5 tokens) |
@@ -310,7 +320,7 @@ web/src/cascade/*  reads cache/*.json and draws it
 
 The frontend only reads files. All physics is in `backend/src/cascadasen/domain/cascade/`.
 
-Regenerate data, in order (needs `openpyxl` and `scipy`, not in the repo dependencies; `build_operating_points.py` downloads PyPSA-CL files into git-ignored `data/raw/pypsa_cl/`):
+Regenerate data, in order (needs `scipy`: `cd backend && uv sync --group data`, and run the scripts with `uv run`; `build_operating_points.py` downloads PyPSA-CL files into git-ignored `data/raw/pypsa_cl/`):
 
 ```bash
 python data/scripts/build_node_index.py
@@ -328,19 +338,7 @@ cd backend && PYTHONPATH=src python -m cascadasen.application.cache_builder
 | Blank map, console shows `deck: ... Assertion failed` | A `ColumnLayer` with custom `vertices` needs `diskResolution` equal to the vertex count (4). Fixed in `layers.ts`. |
 | Click does nothing | You clicked off a line (the cursor turns into a pointer over anything clickable). Zoom in. Lines are thin. The first click only selects: the card opens at the top of the panel. To cut, click the selected line again (slowly: a fast double click does nothing) or use "Sacar de servicio" in its card. A substation works the same way ("Apagar subestación"). After a cut, the event pin can cover a short cut line so it cannot be clicked; reconnect it with **Volver a conectar** in the impact card. |
 | Double click does not cut | By design: a double click never switches anything off (a double click on empty map zooms on Mapbox with a mouse). Click once to select, then click again. |
-| Never commit | `web/public/cache`, `.env*`, `data/raw` |
-
-## 10. Glossary
-
-- **SEN**: Sistema Eléctrico Nacional, Chile's main grid.
-- **CEN**: Coordinador Eléctrico Nacional, the system operator.
-- **EDAC**: Esquema de Desconexión Automática de Carga, automatic load shedding by frequency steps.
-- **N-1**: the grid survives the loss of any single element. Not imposed here.
-- **Island**: part of the grid that is electrically separated and has its own frequency.
-- **Inertia**: energy in rotating machines (MW·s). More inertia, slower frequency change.
-- **Primary reserve**: capacity that synchronous machines add automatically when frequency falls.
-- **Ride-through**: ability of a plant to stay connected during a short disturbance. Not modelled.
-- **25F**: the 25 February 2025 national blackout.
+| Never commit | `web/public/cache/theater/` (generated, git-ignored), `.env*`, `data/raw` |
 
 ## 10. Operation mode: the strategic theatre on this map (backend contract)
 
@@ -348,7 +346,7 @@ The strategic theatre (`docs/strategy.md`) now runs on the same network and engi
 
 **Sources.**
 - Live: the API under `/api/v1/sim/*` (`docs/stack.md` 7.1). Every run without `seed` is a different random run.
-- Offline fallback: `web/public/cache/theater/`, written by `uv run cascadasen-sim-fixtures` (git-ignored, like the cut cache).
+- Offline fallback: `web/public/cache/theater/`, written by `uv run cascadasen-sim-fixtures` (git-ignored; the cut cache in `web/public/cache/<point>/` is committed).
 
 **Areas.** The 13 operating areas `A01`-`A13` are groups of the 188 buses by latitude band. Corridors (`A06-A07`) are the `R###` lines that cross between two areas. Defence functions are `edac:norte_grande` and `edac:centro_sur`. The adversary acts only on areas, zones or defence functions, never on a single bus or line (`cyber.md` 8.7).
 
@@ -406,3 +404,14 @@ Without a session, mapa 3 reads only the static cache (`web/public/cache/`) and 
 - Edits send `If-Match` with the `dataset_revision` on screen. If another client changed the dataset first (412), the page reloads and asks you to retry. Run activity by other clients does not cause a 412. Every session request that gets the busy 409 (`sessions-api.md` section 7) waits `Retry-After` and is retried up to 2 times. Once the write is accepted the edit counts as done (the form closes) even if the reload after it still fails; the page then shows that reload error and keeps the network on screen until the next revision event reloads it. A busy 409 on the first load keeps the session and retries the load every 3 s; network errors and 5xx fall back to the base case. Overlay warnings in **Datos** use a neutral note, because red is reserved for faults.
 
 **Files.** `web/src/session/sessionApi.ts` (typed calls for every session route, `ApiError`, `sessionIdFrom`, `subscribe`), `useSession.ts` (state and refetch), `loader.ts` (which refetch result is applied), `SessionBar.tsx` (the view card and the compact strip), `SessionCut.tsx` (open lines in Simulación), `DataPanel.tsx`, `geo.ts`, and `session.css` (session styles under `.shell`: radius 0, cascade.css tokens, `.tag` for labels because `.shell .badge` is the event marker). `CascadeApp.tsx` wires them into the shell.
+## 12. Glossary
+
+- **SEN**: Sistema Eléctrico Nacional, Chile's main grid.
+- **CEN**: Coordinador Eléctrico Nacional, the system operator.
+- **EDAC**: Esquema de Desconexión Automática de Carga, automatic load shedding by frequency steps.
+- **N-1**: the grid survives the loss of any single element. Not imposed here.
+- **Island**: part of the grid that is electrically separated and has its own frequency.
+- **Inertia**: energy in rotating machines (MW·s). More inertia, slower frequency change.
+- **Primary reserve**: capacity that synchronous machines add automatically when frequency falls.
+- **Ride-through**: ability of a plant to stay connected during a short disturbance. Not modelled.
+- **25F**: the 25 February 2025 national blackout.

@@ -68,7 +68,7 @@ export function useSession(): Session {
     } catch (e) {
       if (e instanceof ApiError && e.status === 412) {
         setError("Otro cliente cambió la sesión antes que tú. Se recargó: revisa y vuelve a intentarlo.");
-        await load(sid).catch(() => undefined);
+        await load(sid).catch((e) => { console.warn("session reload after a 412 failed", e); });
       } else setError((e as Error).message);
       return false;
     }

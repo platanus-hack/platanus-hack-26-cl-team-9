@@ -126,30 +126,55 @@ def client_ip(request: Request) -> str:
 
 
 class BodyLimitMiddleware:
-    """ASGI middleware: 413 when a sessions or global runs request declares a body over MAX_BODY_BYTES."""
+    """ASGI middleware: 413 when a sessions or global runs request body (declared or chunked) exceeds MAX_BODY_BYTES."""
 
     def __init__(
         self, app: Any, max_bytes: int = MAX_BODY_BYTES, prefixes: tuple[str, ...] = BODY_LIMIT_PREFIXES
     ) -> None:
         self.app, self.max_bytes, self.prefixes = app, max_bytes, prefixes
 
+    async def _too_large(self, send: Any) -> None:
+        body = json.dumps(
+            {"detail": f"Cuerpo demasiado grande (máximo {self.max_bytes // 1024} KB)."}
+        ).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "http" and scope["path"].startswith(self.prefixes):
             length = dict(scope.get("headers") or []).get(b"content-length")
             if length is not None and (not length.isdigit() or int(length) > self.max_bytes):
-                body = json.dumps(
-                    {"detail": f"Cuerpo demasiado grande (máximo {self.max_bytes // 1024} KB)."}
-                ).encode()
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": 413,
-                        "headers": [
-                            (b"content-type", b"application/json"),
-                            (b"content-length", str(len(body)).encode()),
-                        ],
-                    }
-                )
-                await send({"type": "http.response.body", "body": body})
+                await self._too_large(send)
                 return
+            if length is None:
+                # No declared length (chunked): count the body as it arrives, then replay it to the app.
+                upstream = receive
+                messages: list[dict[str, Any]] = []
+                total = 0
+                while True:
+                    message = await upstream()
+                    messages.append(message)
+                    if message["type"] != "http.request":
+                        break
+                    total += len(message.get("body", b""))
+                    if total > self.max_bytes:
+                        await self._too_large(send)
+                        return
+                    if not message.get("more_body", False):
+                        break
+                replay = iter(messages)
+
+                async def buffered() -> dict[str, Any]:
+                    return next(replay, None) or await upstream()
+
+                receive = buffered
         await self.app(scope, receive, send)

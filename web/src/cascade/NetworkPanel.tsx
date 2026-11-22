@@ -21,7 +21,7 @@ export interface Origin { source: string; km: string; substations: string; mw: s
 export function NetworkPanel(p: { source: string; summary?: NetworkSummary | null; origin?: Origin; viewOnly?: string }) {
   const [chile, setChile] = useState<NetworkSummary | null>(null);
   const own = p.summary !== undefined;
-  useEffect(() => { if (!own) loadNetworkSummary().then(setChile).catch(() => setChile(null)); }, [own]);
+  useEffect(() => { if (!own) loadNetworkSummary().then(setChile).catch((e) => { console.warn("network summary failed to load", e); setChile(null); }); }, [own]);
   const summary = own ? p.summary : chile;
   const origin = p.origin ?? CHILE;
   return (

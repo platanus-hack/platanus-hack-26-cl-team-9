@@ -50,6 +50,15 @@ def create_app(
     store: DocumentStore | None = None,
     sessions: SessionService | None = None,
 ) -> FastAPI:
+    """Build the FastAPI app. Every dependency can be injected for tests; otherwise it is built from settings.
+
+    Middleware, from innermost to outermost: the body limit (so its 413 still gets CORS headers), CORS (any
+    origin, GET / POST / PATCH / DELETE) and GZip. `app.state` holds the settings, the document store (shared
+    with an injected simulation service, so runs and sessions use one store) and the grid query service, which
+    is `None` when there is no snapshot (`/api/v1/health` then reports "sin snapshot"). The simulation,
+    sessions, grids and assistant services are built lazily on the first request to their routes. The grid
+    query routes are defined below. The simulation, session and assistant routers are included above, and the
+    agent-only OpenAPI spec is mounted at `/api/v1/agents/openapi.json`."""
     app = FastAPI(
         title="CascadaSEN · Red eléctrica de Chile",
         version="0.1.0",

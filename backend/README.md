@@ -65,9 +65,15 @@ infrastructure/ (sources/*, http cache, arcgis, snapshot repository, exporters, 
 - `domain/unify.py` is a pure function of the `SourceBundle`. It joins substations by CEN id, infers line ends from geometry, reconciles them with the official CEN sections, attaches PyPSA-CL parameters and assigns population.
 - `domain/validation.py` runs on every build. It checks national coverage, end-to-end connectivity, agreement between sources and plausible reactance per km. Results are at `GET /api/v1/validation` and in the map panel.
 
+## Type checking
+Run `cd backend && uv run mypy src`. The configuration is `[tool.mypy]` in `pyproject.toml`. It is a CI gate (`.github/workflows/checks.yml`, job `backend-mypy`): 179 errors before the config, 0 now (review R-03/B-10).
+- `ignore_missing_imports = true` because networkx, yaml, boto3, openpyxl, anthropic and mcp have no stubs, or are optional extras that the `dev` group does not install.
+- `plugins = ["pydantic.mypy"]` so `Field(...)` keyword arguments and model methods type-check.
+- Two kinds of cases are typed with a documented `cast`, with no change at run time: the `float | None` coordinates that a `located` check guards without narrowing (`domain/unify.py`, `domain/validation.py`, `domain/simulation/network.py`, `application/grid_queries.py`), and the `TheaterWorld | None` of `SimulationService`, which the API always builds with a world (`application/simulation_service.py`).
+- Layering is enforced by `tests/unit/test_architecture.py` (see `docs/adr/0005-hexagonal-layering.md`).
 ## Main endpoints
 
-`/api/v1/nodes`, `/nodes/{id}` (connections, plants, storage, served comunas), `/edges`, `/edges/{id}`, `/plants`, `/storage`, `/comunas`, `/zones` (macro zones and links between them with known capacity), `/graph/path`, `POST /graph/islands` (connectivity after removing lines or nodes), `/model/buses`, `/model/branches`, `/geo/{layer}.geojson`, `/sources`, `/validation`, `/assumptions`.
+`/api/v1/nodes`, `/nodes/{id}` (connections, plants, storage, served comunas), `/edges`, `/edges/{id}`, `/plants`, `/storage`, `/comunas`, `/zones` (macro zones and links between them with known capacity), `/graph/path`, `POST /graph/islands` (connectivity after removing lines or nodes), `/model/buses`, `/model/branches`, `/geo/{layer}.geojson`, `/sources`, `/validation`, `/assumptions`, `/health`, `/stats`, `POST /simulate` and `GET /simulate/network` (the 13-area engine), `POST /admin/reload` (development only), and the grid documents under `/grids/*` (`/sources`, `/scenarios`, `/compose`, `/documents/{key}`, `POST /simulate`, `POST /dependency`). The strategic theatre is under `/sim/*`, sessions under `/sessions`, the assistant under `/assistant` (sections below and `docs/stack.md` section 7).
 
 ## Simulation
 

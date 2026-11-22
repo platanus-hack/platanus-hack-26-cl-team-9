@@ -129,18 +129,14 @@ def _add_storage(nodes: dict, snapshot: dict) -> None:
             c[0] += 1
             c[1] += s["mw"] or 0
         else:
-            nodes[s["node"]]["storage"].append(
-                [s["name"], s["mw"], s["hours"], s["equipment"], s["source"]]
-            )
+            nodes[s["node"]]["storage"].append([s["name"], s["mw"], s["hours"], s["equipment"], s["source"]])
 
 
 def _add_population(nodes: dict, snapshot: dict) -> None:
     for c in snapshot["comunas"]:
         for s in c["served_by"]:
             if s["node"] in nodes:
-                nodes[s["node"]]["comunas"].append(
-                    [c["name"], round(s["population"]), s["share"]]
-                )
+                nodes[s["node"]]["comunas"].append([c["name"], round(s["population"]), s["share"]])
 
 
 def _add_electrical_model(nodes: dict, snapshot: dict) -> None:
@@ -189,7 +185,5 @@ if __name__ == "__main__":
     index = build_node_index_workflow()
     _self_check(index)
     out = PROCESSED / "node_index.json"
-    out.write_text(
-        json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-    )
+    out.write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"{len(index)} nodes -> {out} ({out.stat().st_size / 1e6:.2f} MB)")

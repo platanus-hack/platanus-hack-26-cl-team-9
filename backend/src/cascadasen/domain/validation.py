@@ -7,7 +7,7 @@ end, do the sources agree with each other, and are electrical values physically 
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 
@@ -93,6 +93,18 @@ def comuna_of_point(lon: float, lat: float, shapes: list[tuple[str, tuple, dict]
 
 
 def validate_snapshot(s: GridSnapshot) -> dict[str, Any]:
+    """Run every data check on a built snapshot. Returns `{"summary": {status: count}, "checks": [...]}`.
+
+    Checks are appended in four blocks that follow the module docstring: coverage, connectivity, agreement
+    between sources and physical plausibility. The thresholds (90 % of substations located, 95 % of power
+    connected, 85 % of line names matching their ends, 60 % of CEN sections confirmed, and so on) are warning
+    levels. Only `regions_covered` and `north_south_path` can return `fail`; every other check returns `ok`
+    or `warn`, and nothing here raises on bad data. Some checks are skipped when their input is missing
+    (`latitude_span` without located SEN substations, `comuna_consistency` without comuna polygons).
+
+    "Main network" is the largest connected component of the multigraph of all edges. "Located" means the
+    node has coordinates. The reactance check multiplies each line's x by the number of parallel edges that
+    share the PyPSA-CL branch, because `ElectricalParams` carries the value of the whole corridor."""
     checks: list[dict] = []
     nodes = {n.id: n for n in s.nodes}
     subs = [n for n in s.nodes if n.kind == NodeKind.SUBSTATION]
@@ -113,7 +125,9 @@ def validate_snapshot(s: GridSnapshot) -> dict[str, Any]:
         )
     )
     lon0, lat0, lon1, lat1 = CHILE_BBOX
-    outside = [n for n in located if not (lon0 <= n.lon <= lon1 and lat0 <= n.lat <= lat1)]
+    outside = [
+        n for n in located if not (lon0 <= cast(float, n.lon) <= lon1 and lat0 <= cast(float, n.lat) <= lat1)
+    ]
     checks.append(
         _check(
             "inside_chile",
@@ -139,7 +153,7 @@ def validate_snapshot(s: GridSnapshot) -> dict[str, Any]:
             missing,
         )
     )
-    lats = [n.lat for n in sen_subs if n.located]
+    lats = [cast(float, n.lat) for n in sen_subs if n.located]
     if lats:
         checks.append(
             _check(
@@ -160,7 +174,7 @@ def validate_snapshot(s: GridSnapshot) -> dict[str, Any]:
             if not n.comuna_code:
                 continue
             total += 1
-            found = comuna_of_point(n.lon, n.lat, shapes)
+            found = comuna_of_point(cast(float, n.lon), cast(float, n.lat), shapes)
             if found == str(int(n.comuna_code)):
                 agree += 1
             else:
@@ -199,10 +213,10 @@ def validate_snapshot(s: GridSnapshot) -> dict[str, Any]:
     )
     main_lats = [nodes[i].lat for i in main if nodes[i].located]
     if main_lats:
-        north = max((nodes[i] for i in main if nodes[i].located), key=lambda n: n.lat)
+        north = max((nodes[i] for i in main if nodes[i].located), key=lambda n: cast(float, n.lat))
         south = min(
             (nodes[i] for i in main if nodes[i].located and (nodes[i].system or "SEN") == "SEN"),
-            key=lambda n: n.lat,
+            key=lambda n: cast(float, n.lat),
         )
         try:
             km = nx.shortest_path_length(nx.Graph(g), north.id, south.id, weight="km")
@@ -294,10 +308,10 @@ def validate_snapshot(s: GridSnapshot) -> dict[str, Any]:
     ]
     agree = 0
     for e in named:
-        a, b = nodes[e.source_node], nodes[e.target_node]
-        if a.kind == NodeKind.SUBSTATION and b.kind == NodeKind.SUBSTATION:
+        src, dst = nodes[e.source_node], nodes[e.target_node]
+        if src.kind == NodeKind.SUBSTATION and dst.kind == NodeKind.SUBSTATION:
             toks = line_ends(e.name)
-            agree += name_score(a.name, toks) >= 0.82 and name_score(b.name, toks) >= 0.82
+            agree += name_score(src.name, toks) >= 0.82 and name_score(dst.name, toks) >= 0.82
     both = sum(
         1
         for e in named

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 
@@ -231,7 +231,7 @@ def build_reduced_network(snapshot: GridSnapshot, spec: NetworkSpec | None = Non
     gen: dict[str, Counter] = defaultdict(Counter)
     for p in snapshot.plants:
         if p.operating and p.mw and p.node in node_area:
-            gen[p.node][p.tech] += p.mw
+            gen[p.node][p.tech] += p.mw  # type: ignore[assignment]  # a Counter that holds MW (floats)
     node_lines: dict[str, list[str]] = defaultdict(list)
     for e in snapshot.edges:
         if e.id in edge_corridor:
@@ -296,7 +296,7 @@ def _assign_areas(snapshot: GridSnapshot, spec: NetworkSpec, nodes: dict[str, No
 def _main_node(ns: list[Node], corridors: dict[str, Corridor], snapshot_edges: dict[str, Edge]) -> str | None:
     """Backbone substation of an area: highest voltage, then most corridor lines."""
     ids = {n.id for n in ns}
-    lines = Counter()
+    lines: Counter[str] = Counter()
     for c in corridors.values():
         for m in c.members:
             e = snapshot_edges[m]
@@ -322,7 +322,7 @@ def _build_areas(
     plants: dict[str, Counter] = defaultdict(Counter)
     for p in snapshot.plants:
         if p.operating and p.node in node_area and p.mw:
-            plants[node_area[p.node]][p.tech] += p.mw
+            plants[node_area[p.node]][p.tech] += p.mw  # type: ignore[assignment]  # a Counter that holds MW (floats)
     edges = {e.id: e for e in snapshot.edges}
     areas: dict[str, Area] = {}
     for idx, s in enumerate(spec.areas):
@@ -336,8 +336,8 @@ def _build_areas(
             name=s.name,
             zone=s.zone,
             index=idx,
-            lon=round(sum(n.lon for n in pts) / len(pts), 5) if pts else None,
-            lat=round(sum(n.lat for n in pts) / len(pts), 5) if pts else None,
+            lon=round(sum(cast(float, n.lon) for n in pts) / len(pts), 5) if pts else None,
+            lat=round(sum(cast(float, n.lat) for n in pts) / len(pts), 5) if pts else None,
             population=round(sum(n.served_population for n in ns)),
             installed_mw={k: round(v, 1) for k, v in sorted(plants[s.id].items())},
             storage_mw=round(sum(n.storage_mw for n in ns), 1),
@@ -357,7 +357,11 @@ def _line_part(e: Edge, kv: float, spec: NetworkSpec, nodes: dict[str, Node]) ->
     km = e.length_km
     if not km:
         sa, sb = nodes[e.source_node], nodes[e.target_node]
-        km = haversine_km(sa.lon, sa.lat, sb.lon, sb.lat) if sa.located and sb.located else None
+        km = (
+            haversine_km(cast(float, sa.lon), cast(float, sa.lat), cast(float, sb.lon), cast(float, sb.lat))
+            if sa.located and sb.located
+            else None
+        )
     if not km:
         return None
     lo, hi = X_PER_KM[min(X_PER_KM, key=lambda k: abs(k - kv))]

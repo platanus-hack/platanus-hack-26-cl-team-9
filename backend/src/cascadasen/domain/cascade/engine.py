@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass, field
+from typing import cast
 
 import numpy as np
 
@@ -195,7 +196,7 @@ def _end_buses(net: ReducedNetwork) -> tuple[int, int] | None:
         next((i for k, i in by_name.items() if k.endswith(_plain(VOLTAGE_LIMIT[side]))), None)
         for side in ("north", "south")
     ]
-    return (found[0], found[1]) if None not in found else None
+    return cast(tuple[int, int], (found[0], found[1])) if None not in found else None
 
 
 def _start(net, point, params, cut_ids, already_open: set[str] | None = None) -> _State:
@@ -354,6 +355,7 @@ def _island_input(
         for z, steps in edac_tables(system_zone, float(s.point.load.sum())).items()
         if z not in s.edac_off
     }
+    assert s.reserve_used is not None  # set by `_start`
     used = float(s.reserve_used[island].sum()) if memory else 0.0
     extra = float(s.extra_reserve[island].sum()) if s.extra_reserve is not None else 0.0
     battery = float(s.battery[island].sum()) if s.battery is not None else 0.0
@@ -463,6 +465,7 @@ def _share_reserve(s: _State, island: list[int], sim: IslandResult) -> None:
         share = sim.reserve_mw * sync / sync.sum()
         s.gen[island] += share
         s.sync[island] += share
+        assert s.reserve_used is not None  # set by `_start`
         s.reserve_used[island] += share
     nonsync = np.maximum(s.gen[island] - s.sync[island], 0.0)
     if nonsync.sum() > 0 and sim.curtailed_mw > 0:

@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 import numpy as np
+from numpy.typing import ArrayLike
 
 from cascadasen.domain.regional import RegionalBundle, RegionalSource
 
@@ -103,7 +104,7 @@ class _Union:
         self.parent[self.find(i)] = self.find(j)
 
 
-def km_xy(lon: np.ndarray, lat: np.ndarray, lat0: float) -> np.ndarray:
+def km_xy(lon: ArrayLike, lat: ArrayLike, lat0: float) -> np.ndarray:
     return np.c_[np.asarray(lon) * 111.32 * math.cos(math.radians(lat0)), np.asarray(lat) * 110.57]
 
 
@@ -131,7 +132,9 @@ def _clusters(bundle: RegionalBundle, lat0: float) -> list[dict[str, Any]]:
     out = []
     for members in groups.values():
         top = max(members, key=lambda i: (subs[i].kv or 0, bool(subs[i].name)))
-        levels = sorted({k for i in members for k in (subs[i].kv_levels or [subs[i].kv]) if k}, reverse=True)
+        levels = sorted(
+            {k for i in members for k in (subs[i].kv_levels or [cast(float, subs[i].kv)]) if k}, reverse=True
+        )
         names = [subs[i].name for i in members if subs[i].name]
         out.append(
             {

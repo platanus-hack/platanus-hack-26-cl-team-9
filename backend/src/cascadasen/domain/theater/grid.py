@@ -160,14 +160,6 @@ class TheaterGrid:
             + self.battery.get(area, 0.0)
         )
 
-    def island_inertia_mws(self, area: str) -> float:
-        """Kinetic energy of the synchronous units online in the area's island (solar and wind add none)."""
-        mine = set(self.net.areas[area].buses)
-        for isl in self.islands():
-            if mine & set(isl):
-                return float(self.inertia[isl].sum())
-        return 0.0
-
     def settle_frequency(self) -> None:
         """Between operational cycles secondary control brings energized islands back to f0 (assumption,
         docs/agents.md 1.2); dark areas have no frequency."""
@@ -428,9 +420,6 @@ class TheaterGrid:
         self.open_lines -= set(back)
         self.held_open -= set(back)
         return back
-
-    def release_hold(self, lines: list[str]) -> None:
-        self.held_open -= set(lines)
 
     def restore_step(self, area: str, share: float, gen_share: float | None = None) -> tuple[float, bool]:
         """One cycle of operational restoration: energize the area's buses, bring generation back toward

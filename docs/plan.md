@@ -5,7 +5,7 @@ Last updated: 2026-11-21. Read `idea.md`, `cyber.md`, `stack.md`, `design.md` an
 ## 0. Situation when this plan was written
 
 - Hackathon in progress: Platanus Hack 26 Chile, 20-22 Nov 2026. Earlier research puts the close of hacking on Sunday 22 Nov around 08:30-09:00, when repos are locked. Verify with https://hack.platan.us/26-cl and the rules page, and check the clock before planning.
-- Repo state when this plan was written: only the Platanus template files and `docs/`. Repo state on 2026-11-21 evening: grid data pipeline and read-only API in `backend/`; web map in `web/` (offline deck.gl map, optional Mapbox basemap, node popup); PyPSA-CL operating points and a secure DC-OPF base case in `data/scripts/`; Docker Compose; lint CI and agent hooks. No cascade engine, player or fixtures yet (`stack.md` header). Git remote: `origin` -> `github.com/platanus-hack/platanus-hack-26-cl-team-9`, branch `main`.
+- Repo state when this plan was written: only the Platanus template files and `docs/`. Repo state on 2026-11-21 evening: grid data pipeline and read-only API in `backend/`; web map in `web/` (offline deck.gl map, optional Mapbox basemap, node popup); PyPSA-CL operating points and a secure DC-OPF base case in `data/scripts/`; Docker Compose; lint CI and agent hooks. The cascade engines, the timeline player, the cache and the strategic theatre were built afterwards (`stack.md` header, `architecture.md`). Git remote: `origin` -> `github.com/platanus-hack/platanus-hack-26-cl-team-9`, branch `main`.
 - Done before this repo existed (outside it): idea research and evaluation; power-plant dataset downloaded (see `datasets.md`); static mock-ups of the UI, which the team did not like. The visual direction chosen on 2026-11-21 (Electricity Maps style, zoom levels, palette) and the Paper mockups are in `design.md`.
 - Judging weights: Technical 25%, Ambition 20%, Execution 20%, Impact 20%, Originality 15%. Code may be reviewed automatically. Keep the repo clean with real commits made during the event.
 
@@ -13,7 +13,7 @@ Last updated: 2026-11-21. Read `idea.md`, `cyber.md`, `stack.md`, `design.md` an
 
 A working browser demo, offline-capable, that for the 25F scenario shows: click on the 25F line -> animated cascade on the map of Chile -> islands and people without power -> narration -> validation table, plus at least one question no PDF answers, preferably a cyber consequence scenario (`cyber.md`). A 2-minute and a 4-minute demo, rehearsed.
 
-Done means: P0 complete, validation tests running in CI, README with the validation table, deploy URL working, fallback video recorded, Platanus metadata filled (section 8).
+Done means: P0 complete, validation tests running in CI (backend pytest runs in CI; see the root `README.md` section "Checks (CI)"), README with the validation table, deploy URL working, fallback video recorded, Platanus metadata filled (section 8).
 
 ## 2. Workstreams and roles
 
@@ -35,7 +35,7 @@ Each task has an acceptance check.
 
 ### Phase 0: contract and skeleton (about 1 h, everyone)
 - Freeze `network.json` and `timeline.json` schemas and node list (10-14 nodes). Check: both files validate against a JSON schema committed in the repo.
-- Create repo skeleton from `stack.md` section 3 with CI that runs pytest and Vitest. Check: CI green on an empty test.
+- Create repo skeleton from `stack.md` section 3 with CI. Original plan: CI runs pytest and Vitest. Today CI runs ruff and the changelog check, plus the checks in the root `README.md` section "Checks (CI)".
 - Write a fake `timeline.json` for the 25F. Check: it validates.
 - Send organisers the written question about outside help (Plan A) if anyone wants Plan A. Check: answer stored in the README.
 
@@ -59,7 +59,7 @@ Event chain from templates in Spanish, frequency chart synchronised with `t`, pe
 - 6.2 DC flow and island detection on a toy graph. Check: unit tests.
 - 6.3 Island frequency model with 25F defences. Check: cases V3a, V3b pass.
 - 6.4 Cascade loop and the 25F replica in both behaviour modes. Check: V2, V4, V5 pass.
-- 6.5 Timeline writer and cache builder (`scripts/build_cache.py`). Check: all single-element failures for all scenarios built in under 10 minutes.
+- 6.5 Timeline writer and cache builder (`uv run cascadasen-cache`). Check: all single-element failures for all scenarios built in under 10 minutes.
 - 6.6 API `/simulate` for combinations, with the validation table in `stack.md` section 7.
 
 ### Phase 7: integration and demo mode (D + E, about 4 h)
@@ -94,7 +94,7 @@ Calibration cases fit parameters; test cases must pass without re-tuning. Do not
 | V3b | CEN theoretical model, no defence scheme, everything per code | Test | maintains; load shed 2,040.7 MW +/- 20% | [4]; **verified** |
 | V4 | 25F as it happened | Test | blackout; 47.5 Hz at 4.6 +/- 1 s | [4]; **verified** (4.6 s on the Polpaico PMU) |
 | V5 | North after separation | Test | stabilises near 51.3 +/- 0.3 Hz | [4]; **verified** |
-| V6 | The seven 500 kV segments of the north corridor without the defence scheme | **Independent test, must pass before demo** | five "total blackout risk", two "partial", as classified by the CEN | [5] Table 4-11; classification **verified**. Run at the edge of the validity range and at the scenario maximum; report mismatches, do not tune |
+| V6 | The seven 500 kV segments of the north corridor without the defence scheme | **Independent test, must pass before demo** | five "total blackout risk", two "partial", as classified by the CEN | [5] Table 4-11; classification **verified**. Currently skipped: CEN classification not available (`backend/tests/validation/test_engine_cases.py`). Run at the edge of the validity range and at the scenario maximum; report mismatches, do not tune |
 | V7 | United system, low-demand 2026 (7,532.1 MW load, 44.3 GVAs), loss of 3,000 MW synchronous | **Independent test, must pass before demo** | maintains; never below 48.1 Hz; about -2 Hz/s in 500 ms | [14]; the 3,000 MW case is **verified**, details from earlier research |
 | V8 | As V7 with step 3 inactive (4% degradation) | Test | blackout | [14]; earlier research |
 | V9 | Recorded Polpaico frequency curve digitised | P1 | RMSE over 0-5 s reported | [4]; digitise with WebPlotDigitizer |
@@ -104,7 +104,7 @@ Reasons to keep V6 and V7 in the must-pass set: V1-V5 all come from the same eve
 
 Cyber scenarios have no case of their own to validate against. They reuse the physics checked by V1-V8. V7 is their anchor: in that operating point, a simultaneous loss of 3,000 MW or less must not end in a blackout (`cyber.md` section 7).
 
-CI renders "ours / published / source / pass" into the README. A failing case is shown with its deviation.
+CI rendering "ours / published / source / pass" into the README is not built yet; the cases run as pytest tests (`backend/tests/validation`). A failing case is shown with its deviation.
 
 ## 6. Priorities
 
@@ -148,7 +148,7 @@ CI renders "ours / published / source / pass" into the README. A failing case is
 13. Demo map: Mapbox basemap (needs internet and a token, matches the zoom-level designs) or the offline deck.gl map. The offline map stays as the fallback either way.
 14. Shared sessions (decided by the user, 2026-11-21): each user or agent works on a session, an overlay over the 188-bus network stored as one JSON document (memory, file or S3), pinned to one of the four operating points when created. The session id is the capability: no API key and no cookie (the browser shares `?sesion=<sid>`). Sessions and run records expire 24 h after their last change. Changes reach other clients through SSE with a polling fallback. Runs are nested under the session and persisted. `/protect` and `/suggestions` are out of scope. `POST /api/v1/admin/reload` is off in production (`CASCADASEN_ADMIN_ENABLED`). Agent guide: `sessions-api.md`.
 
-14. Regional context layer (decided 2026-11-21 with Ricardo): other Latin American grids are drawn, not simulated, in a common schema. First delivery: Brazil, Peru, Argentina, Bolivia (`regional.md`). Open: Argentina is built from OSM because its official source was unreachable (retry `cascadasen-regional --countries ARG`); whether to add Colombia, Dominican Republic and Costa Rica next (sources already verified in `regional.md` section 4). Brazil also has a flow network from ONS (decided 2026-11-21: HVDC apart as `dc_links`, thermal limit = long duration with limiting factor; `regional.md` section 6, `network-format.md`). Open: wiring it into the engine needs load, dispatch and people per bus and a 60 Hz frequency model (separate issue). Issue #49 (decided 2026-11-22 with the user): one network on the map at a time, picked in a selector only (no click on the outline); `?pais=<ISO3>`; camera frame and limits from the data; every element has `country` (Chile regenerated with `CHL`); uploads accept the regional GeoJSON v2 and the v1 JSON, are view only and stay in the browser (IndexedDB); the Red tab figures follow the network (`mapa3.md` section 4.1). Open: simulating an uploaded network (phase 2, inputs of `minimum-dataset.md`); sharing uploads through #34/#44.
+15. Regional context layer (decided 2026-11-21 with Ricardo): other Latin American grids are drawn, not simulated, in a common schema. First delivery: Brazil, Peru, Argentina, Bolivia (`regional.md`). Open: Argentina is built from OSM because its official source was unreachable (retry `cascadasen-regional --countries ARG`); whether to add Colombia, Dominican Republic and Costa Rica next (sources already verified in `regional.md` section 4). Brazil also has a flow network from ONS (decided 2026-11-21: HVDC apart as `dc_links`, thermal limit = long duration with limiting factor; `regional.md` section 6, `network-format.md`). Open: wiring it into the engine needs load, dispatch and people per bus and a 60 Hz frequency model (separate issue). Issue #49 (decided 2026-11-22 with the user): one network on the map at a time, picked in a selector only (no click on the outline); `?pais=<ISO3>`; camera frame and limits from the data; every element has `country` (Chile regenerated with `CHL`); uploads accept the regional GeoJSON v2 and the v1 JSON, are view only and stay in the browser (IndexedDB); the Red tab figures follow the network (`mapa3.md` section 4.1). Open: simulating an uploaded network (phase 2, inputs of `minimum-dataset.md`); sharing uploads through #34/#44.
 
 15. People in dark buses with zero or negative net load (issue #90): **decided 2026-11-22 by the user, as realistic as possible**. A dark bus counts all its people, whatever its net load (engine, theatre, criticality and web). The 25F whole-system blackout gives 18.2 M people (was 16.8 M; the model assigns 18.16 M in total).
 

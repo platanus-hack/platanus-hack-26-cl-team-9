@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from cascadasen.application.build_grid import BuildGridSnapshot
 from cascadasen.application.build_regional import BuildFlowNetwork, BuildRegionalGrid
-from cascadasen.domain.ports import DocumentStore, GridStore, RegionalGridSource
+from cascadasen.domain.ports import DocumentStore, GridDataSource, GridStore, RegionalGridSource
 from cascadasen.domain.unify import GridUnifier
 from cascadasen.infrastructure.document_store import FileDocumentStore, MemoryDocumentStore, S3DocumentStore
 from cascadasen.infrastructure.exporters import StaticFilesExporter
@@ -29,7 +29,7 @@ def repository(settings: Settings) -> JsonSnapshotRepository:
 
 def build_use_case(settings: Settings) -> BuildGridSnapshot:
     http = CachedHttp(settings.raw_dir, settings.http_timeout_s, settings.user_agent)
-    sources = [
+    sources: list[GridDataSource] = [
         IdeEnergiaSource(http, settings.ide_energia_url),
         InfotecnicaSource(http, settings.infotecnica_url),
         PypsaClSource(http, settings.pypsa_share_url, settings.pypsa_file_url),

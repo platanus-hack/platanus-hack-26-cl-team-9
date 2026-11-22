@@ -102,6 +102,21 @@ def steady_trace(island: IslandInput, physics: Physics, full: bool) -> IslandTra
 def simulate_island(
     island: IslandInput, defenses: DefenseSet, physics: Physics, full: bool = True
 ) -> IslandTrace:
+    """Integrate the swing equation of one island and return its `IslandTrace`.
+
+    Early exits: a load under 1 MW is `no_load`. An island with no synchronous kinetic energy is `local_cut`
+    when its load is at most `local_cut_mw`, else `blackout` at t = 0. Otherwise it uses explicit Euler steps
+    of `physics.dt` over the horizon, with df/dt = f0 * imbalance / (2 * E). E is the kinetic energy minus the
+    inertia that the lost generation takes with it, never below 5 %. The imbalance adds generation, coupling
+    inflow until each coupling trips, primary reserve and batteries, and subtracts load, lost ramps,
+    curtailment (LFSM) and the frequency damping of the load that is left.
+
+    Defences act on the current frequency. EDAC steps and the extreme-gradient shedding are queued with
+    `edac_delay_s` and applied when due, capped by the island's load. LFSM curtails non-synchronous output
+    above `lfsm_start_hz`. The reserve follows the frequency deviation with time constant `reserve_tau`. A
+    frequency outside `blackout_hz` and `overfrequency_hz` ends the run as `blackout`, with no final
+    frequency. With `full=False` the loop also stops once the events are over, |df/dt| is under 0.002 Hz/s
+    and nothing is pending."""
     f0 = physics.f0
     if island.load_mw < 1.0:
         return IslandTrace(island.id, "no_load", f0, f0, 0.0, None, 0.0)

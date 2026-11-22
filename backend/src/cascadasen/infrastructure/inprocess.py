@@ -7,7 +7,7 @@ Call it from a worker thread (a `def` route): it hands each request to the event
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import anyio.from_thread
 import httpx
@@ -22,8 +22,9 @@ class InProcessTransport(httpx.BaseTransport):
 
     async def _call(self, request: httpx.Request) -> httpx.Response:
         response = await self.asgi.handle_async_request(request)
-        body = b"".join([chunk async for chunk in response.stream])
-        await response.stream.aclose()
+        stream = cast("httpx.AsyncByteStream", response.stream)
+        body = b"".join([chunk async for chunk in stream])
+        await stream.aclose()
         return httpx.Response(response.status_code, headers=response.headers, content=body, request=request)
 
 
