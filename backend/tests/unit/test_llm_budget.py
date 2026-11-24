@@ -109,7 +109,9 @@ def test_the_interpreter_keeps_the_template_when_refused(toy_world):
     assert out["interpreter"] == "template" and out["summary"] and client.calls == 0
 
 
-def test_the_adapters_share_one_budget():
+def test_the_adapters_share_one_budget(monkeypatch):
+    # boto3 needs a region to build the client; CI has none configured.
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     interpreter, advisor = llm_adapters(Settings(**CONVERSE), CallBudget(1, 10))
     assert interpreter.budget is advisor.budget
     interpreter, advisor = llm_adapters(Settings(**CONVERSE))
