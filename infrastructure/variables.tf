@@ -26,7 +26,7 @@ variable "session_ttl_days" {
   default     = 1
 }
 variable "llm_model" {
-  description = "Bedrock model id used by the backend (CASCADASEN_LLM_MODEL). The task role may invoke only this model, and the token alarm watches it."
+  description = "Bedrock model id used by the backend (CASCADASEN_LLM_MODEL). The token alarm watches it (the task role's Bedrock policy is not tied to it)."
   type        = string
   default     = "deepseek.v3.2"
 }

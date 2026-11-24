@@ -20,7 +20,7 @@ resource "aws_cloudwatch_metric_alarm" "bedrock_tokens" {
   alarm_actions       = [aws_sns_topic.bedrock_alerts.arn]
   metric_query {
     id          = "tokens"
-    expression  = "input + output"
+    expression  = "FILL(input, 0) + FILL(output, 0)"
     label       = "Input + output tokens"
     return_data = true
   }

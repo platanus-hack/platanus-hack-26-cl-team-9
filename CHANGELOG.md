@@ -2,6 +2,12 @@
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
 
+## 2026-11-24 · fix(infra): keep the task Bedrock policy as live, fill missing alarm series
+
+- **Changed:** `data.aws_iam_policy_document.task_bedrock` now equals the live inline policy (allow on every foundation model and inference profile, deny Anthropic), so the plan shows no change on it. The token alarm expression is `FILL(input, 0) + FILL(output, 0)`.
+- **Why:** The task is to make state match AWS, not to change behaviour; the narrowed policy was never simulated and could deny Converse calls. FILL keeps the sum working when only one of the two token series has data in a period.
+- **Agents:** The entry below that says `task-bedrock` allows only `var.llm_model` is superseded. Narrowing to `var.llm_model` is a documented follow-up in `docs/infrastructure.md`. Expected plan: 5 add, 0 change, 1 destroy (task definition revision 29).
+- **Files:** `infrastructure/iam.tf`, `infrastructure/monitoring.tf`, `infrastructure/variables.tf`, `docs/infrastructure.md`.
 ## 2026-11-23 · infra(terraform): reconcile with AWS, 1 vCPU / 2 GB task, Bedrock alarm and budget
 
 - **Changed:** Terraform now matches what runs: inline policies `cascadasen-task-bedrock` (only `var.llm_model`) and `cascadasen-task-grids`, `assistant/*` in `cascadasen-task-sessions`, backend env `CASCADASEN_LLM_ENABLED/PROVIDER/MODEL` and `CASCADASEN_GRIDS_STORE`; the `www` Route 53 records were imported. Task size goes from 4 vCPU / 8 GB to 1 vCPU / 2 GB. New `monitoring.tf`: SNS topic with email subscription, a CloudWatch alarm on Bedrock input + output tokens, and an AWS Budget on Amazon Bedrock.

@@ -77,12 +77,25 @@ resource "aws_iam_role_policy" "task_grids" {
   role   = aws_iam_role.task.id
   policy = data.aws_iam_policy_document.task_grids.json
 }
-# Bedrock Converse for the assistant, the C2 commander and the after-action narrative. Only the model in
-# use (var.llm_model, in this region); the live policy allowed every foundation model and denied Anthropic.
+# Bedrock Converse for the assistant, the C2 commander and the after-action narrative. Kept exactly as live
+# (every foundation model and inference profile, Anthropic denied). Narrowing it to var.llm_model alone is a
+# follow-up (docs/infrastructure.md): it changes behaviour and has not been simulated against real Converse calls.
 data "aws_iam_policy_document" "task_bedrock" {
   statement {
-    actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-    resources = ["arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${var.llm_model}"]
+    effect  = "Allow"
+    actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/*",
+      "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+    ]
+  }
+  statement {
+    effect  = "Deny"
+    actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/anthropic.*",
+      "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*anthropic*",
+    ]
   }
 }
 resource "aws_iam_role_policy" "task_bedrock" {
