@@ -1,6 +1,14 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+
+## 2026-11-23 · infra(terraform): reconcile with AWS, 1 vCPU / 2 GB task, Bedrock alarm and budget
+
+- **Changed:** Terraform now matches what runs: inline policies `cascadasen-task-bedrock` (only `var.llm_model`) and `cascadasen-task-grids`, `assistant/*` in `cascadasen-task-sessions`, backend env `CASCADASEN_LLM_ENABLED/PROVIDER/MODEL` and `CASCADASEN_GRIDS_STORE`; the `www` Route 53 records were imported. Task size goes from 4 vCPU / 8 GB to 1 vCPU / 2 GB. New `monitoring.tf`: SNS topic with email subscription, a CloudWatch alarm on Bedrock input + output tokens, and an AWS Budget on Amazon Bedrock.
+- **Why:** a plain apply would have dropped `assistant/*` and Bedrock access was granted by hand; the Bedrock cost limits need a backstop; peak memory was about 340 MB.
+- **Agents:** `alert_email` is a required variable without default: use `TF_VAR_alert_email` or a git-ignored tfvars file. Thresholds (`bedrock_alarm_tokens` 4,000,000 per 3600 s, `bedrock_budget_usd` 30, alerts 50/80/100% plus forecast) are to confirm. The apply registers a new task definition revision that the service ignores: run `aws ecs update-service --task-definition cascadasen:<revision>` once; CI then copies it. `docs/infrastructure.md` has the details. The live Bedrock allow on all models and the Anthropic deny were replaced by one allow on `var.llm_model`.
+- **Files:** `infrastructure/{ecs,iam,variables,monitoring}.tf`, `docs/infrastructure.md`, `docs/index/repo-index.json`.
+
 ## 2026-11-22 · feat(web): Iniciar ciberataque sits in the panel header, next to Cerrar
 
 - **Changed:** the start button leaves the bottom of the Ciberataque form (`CyberPanel` `Form`) and goes to the view header in `CascadeApp`, shown while the catalog is loaded and no run is on. `.cy-go` is removed.

@@ -6,3 +6,5 @@
 # HTTPS between CloudFront and the ALB. Needs an ACM certificate for the ALB.
 # origin_https        = true
 # alb_certificate_arn = "arn:aws:acm:us-east-1:402909940511:certificate/..."
+# Required, no default (personal data stays out of the repo). Prefer the environment: export TF_VAR_alert_email=...
+# alert_email = "someone@example.com"

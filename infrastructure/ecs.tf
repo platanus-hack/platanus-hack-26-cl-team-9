@@ -11,13 +11,14 @@ resource "aws_ecs_cluster" "main" {
   name = "cascadasen"
 }
 
-# One task, 4 vCPU / 8 GB shared by both containers (no per-container limits).
+# One task, 1 vCPU / 2 GB shared by both containers (no per-container limits). Peak memory seen in
+# CloudWatch was about 340 MB (docs/infrastructure.md).
 resource "aws_ecs_task_definition" "app" {
   family                   = "cascadasen"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 4096
-  memory                   = 8192
+  cpu                      = 1024
+  memory                   = 2048
   execution_role_arn       = aws_iam_role.task_execution.arn
   task_role_arn            = aws_iam_role.task.arn
 
@@ -32,7 +33,8 @@ resource "aws_ecs_task_definition" "app" {
       image        = "${c.repository_url}:${var.image_tag}"
       essential    = true
       portMappings = [{ containerPort = c.port, protocol = "tcp" }]
-      # Shared sessions in S3 (docs/infrastructure.md). Only the backend gets settings.
+      # Shared sessions in S3, the Bedrock assistant and the grids store (docs/infrastructure.md).
+      # Only the backend gets settings.
       environment = name == "backend" ? [
         { name = "CASCADASEN_SESSION_STORE", value = "s3" },
         { name = "CASCADASEN_SESSION_BUCKET", value = aws_s3_bucket.sessions.bucket },
@@ -42,6 +44,12 @@ resource "aws_ecs_task_definition" "app" {
         { name = "CASCADASEN_VERSION", value = var.image_tag },
         # CloudFront and the ALB each append to X-Forwarded-For; the client is the 2nd from the right.
         { name = "CASCADASEN_TRUSTED_PROXY_HOPS", value = "2" },
+        # Assistant, commander and after-action narrative call Bedrock with the task role (iam.tf).
+        { name = "CASCADASEN_LLM_ENABLED", value = "true" },
+        { name = "CASCADASEN_LLM_PROVIDER", value = "bedrock-converse" },
+        { name = "CASCADASEN_LLM_MODEL", value = var.llm_model },
+        # Grids are read from s3://<sessions bucket>/grids/ (loaded by hand, not written by the app).
+        { name = "CASCADASEN_GRIDS_STORE", value = "s3" },
       ] : []
       logConfiguration = {
         logDriver = "awslogs"
