@@ -38,7 +38,8 @@ resource "aws_iam_role_policy_attachment" "ecs_infrastructure" {
   role       = aws_iam_role.ecs_infrastructure.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForLoadBalancers"
 }
-# Role of the running containers. The backend reads and writes sessions and runs in the sessions bucket.
+# Role of the running containers. The backend reads and writes sessions, runs and assistant conversations
+# in the sessions bucket, reads grids from it and calls Bedrock.
 resource "aws_iam_role" "task" {
   name               = "cascadasen-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
@@ -47,8 +48,9 @@ data "aws_iam_policy_document" "task_sessions" {
   statement {
     actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = [
-      "${aws_s3_bucket.sessions.arn}/sessions/*",
+      "${aws_s3_bucket.sessions.arn}/assistant/*",
       "${aws_s3_bucket.sessions.arn}/runs/*",
+      "${aws_s3_bucket.sessions.arn}/sessions/*",
     ]
   }
   # No prefix condition: without ListBucket on the bucket, S3 answers 403 instead of 404 for a missing key.
@@ -61,4 +63,43 @@ resource "aws_iam_role_policy" "task_sessions" {
   name   = "cascadasen-task-sessions"
   role   = aws_iam_role.task.id
   policy = data.aws_iam_policy_document.task_sessions.json
+}
+
+# Grids (docs/regional.md) are uploaded by hand under grids/; the app only reads them.
+data "aws_iam_policy_document" "task_grids" {
+  statement {
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.sessions.arn}/grids/*"]
+  }
+}
+resource "aws_iam_role_policy" "task_grids" {
+  name   = "cascadasen-task-grids"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.task_grids.json
+}
+# Bedrock Converse for the assistant, the C2 commander and the after-action narrative. Kept exactly as live
+# (every foundation model and inference profile, Anthropic denied). Narrowing it to var.llm_model alone is a
+# follow-up (docs/infrastructure.md): it changes behaviour and has not been simulated against real Converse calls.
+data "aws_iam_policy_document" "task_bedrock" {
+  statement {
+    effect  = "Allow"
+    actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/*",
+      "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+    ]
+  }
+  statement {
+    effect  = "Deny"
+    actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/anthropic.*",
+      "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*anthropic*",
+    ]
+  }
+}
+resource "aws_iam_role_policy" "task_bedrock" {
+  name   = "cascadasen-task-bedrock"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.task_bedrock.json
 }
