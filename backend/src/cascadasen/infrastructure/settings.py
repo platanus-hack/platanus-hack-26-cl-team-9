@@ -34,7 +34,15 @@ class Settings(BaseSettings):
     assistant_deadline_s: float = 25.0  # CloudFront cuts a request at 30 s
     assistant_call_timeout_s: float = 20.0  # one Bedrock call
     assistant_history_messages: int = 30
-    rate_assistant_per_minute: int = 10
+    rate_assistant_per_minute: int = 10  # messages per client IP
+    # Bedrock cost caps, per process (docs/assistant.md, Limits): messages of every IP together, open
+    # conversations, and Bedrock calls from the three call sites (assistant turn, C2 commander, after-action)
+    rate_assistant_global_per_minute: int = 30
+    rate_assistant_global_per_day: int = 500
+    rate_assistant_concurrent_per_ip: int = 2
+    rate_assistant_concurrent_global: int = 6
+    rate_llm_calls_per_minute: int = 120  # one message is up to assistant_max_steps calls
+    rate_llm_calls_per_day: int = 2000
     assistant_stream_deadline_s: float = 90.0  # /chat/stream sends events and pings, so CloudFront waits
     assistant_stream_ping_s: float = 10.0  # comment line sent when no event happened for this long
 

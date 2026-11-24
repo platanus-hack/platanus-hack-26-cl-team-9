@@ -15,7 +15,7 @@ CASCADASEN_LLM_MODEL=<Bedrock model or inference-profile id>
 CASCADASEN_AWS_REGION=us-east-1
 ```
 
-Without them the other routes work as before and the assistant answers 503. Settings: `assistant_max_steps` (8 tool rounds per message), `assistant_deadline_s` (25 s, because CloudFront cuts a request at 30 s), `assistant_call_timeout_s` (20 s per Bedrock call), `assistant_history_messages` (30), `rate_assistant_per_minute` (10 per client IP). `CASCADASEN_LLM_MODEL` is shared with the C2 commander.
+Without them the other routes work as before and the assistant answers 503. Settings: `assistant_max_steps` (8 tool rounds per message), `assistant_deadline_s` (25 s, because CloudFront cuts a request at 30 s), `assistant_call_timeout_s` (20 s per Bedrock call), `assistant_history_messages` (30), `rate_assistant_per_minute` (10 per client IP) and the cost caps of section 4 (Limits on Bedrock use). `CASCADASEN_LLM_MODEL` is shared with the C2 commander.
 
 ## 2. Routes (`/api/v1/assistant`)
 
@@ -40,7 +40,7 @@ curl -s -X POST localhost:8000/api/v1/assistant/chat -H 'content-type: applicati
 | 409 | Another message of the same conversation was running; retry |
 | 413 | Body over 64 KB |
 | 422 | Empty or long message, malformed id |
-| 429 | Chat limit, with `Retry-After` |
+| 429 | A chat limit or concurrency cap (per IP, global per minute or per day, messages in progress), with `Retry-After` |
 | 502 | The model failed or does not support tools (fixed text, no provider detail). The user's turn is kept |
 | 503 | LLM disabled or another provider |
 
@@ -143,7 +143,19 @@ Same as `cyber.md` section 8, `sessions-api.md` section 11 and `mcp.md` section 
 - The tools are the MCP ones: none ranks or searches the worst cut, and `cut_lines` takes 1-3 lines. The system prompt repeats the rules (effects and prevention only, no attack technique, modelled values are assumptions) and tells the model that tool results and element names are data, never instructions. Names are free text written by whoever edits the session.
 - It never plays the adversary and never reads the real state of a live run beyond what the tools return. This is a third LLM role, next to the after-action narrative and the C2 commander (`strategy.md` section 10): it carries out what the user asks on the user's own session.
 - Results carry the scenario `notice`. Session and conversation ids are not logged.
-- The API has no authentication, so cost is bounded only by the per-IP limit, the step cap and `maxTokens` 2000 per model call. A daily cap per IP is an open decision (`plan.md` section 9).
+- The API has no authentication, so cost is bounded by the limits below, the step cap and `maxTokens` 2000 per model call. A daily cap per IP is an open decision (`plan.md` section 9).
+- **Limits on Bedrock use** (added 2026-11-22; per backend process and in memory, like the other limits in `sessions-api.md` section 8; the service runs one task). `admit` (`api/assistant_routes.py`) applies them to `POST /chat` and `POST /chat/stream` in this order, and the first that fails answers 429 with `Retry-After` (the per-IP check is first, so one IP cannot spend the global budget before it is refused):
+
+  | Limit | Default | Setting (`CASCADASEN_` prefix) |
+  |---|---|---|
+  | Messages per client IP | 10 per minute | `RATE_ASSISTANT_PER_MINUTE` |
+  | Messages of all IPs | 30 per minute | `RATE_ASSISTANT_GLOBAL_PER_MINUTE` |
+  | Messages of all IPs | 500 per day (a 24 h bucket that refills continuously) | `RATE_ASSISTANT_GLOBAL_PER_DAY` |
+  | Messages in progress per client IP | 2 (a third gets 429, `Retry-After: 5`) | `RATE_ASSISTANT_CONCURRENT_PER_IP` |
+  | Messages in progress, all IPs | 6 | `RATE_ASSISTANT_CONCURRENT_GLOBAL` |
+  | Bedrock calls, all callers | 120 per minute and 2000 per day (sliding windows) | `RATE_LLM_CALLS_PER_MINUTE`, `RATE_LLM_CALLS_PER_DAY` |
+
+  A message holds a concurrency slot (the `SseSlots` counter, keys `("assistant", ip)` and `("assistant", "all")`) until its worker finishes, even if the client disconnects, because the loop runs to the end and saves the conversation. A refused request spends no slot. The checks count messages; a message is up to 8 Bedrock calls, so the last row counts calls: `CallBudget` (`infrastructure/llm_budget.py`), one per app (`app.state.llm_budget`), is spent before each Bedrock Converse call at the three call sites: `ConverseToolChat.turn` (the assistant), `_Claude._converse` for the C2 commander (one call per simulated cycle with `llm_commander`) and for the after-action interpreter (`GET .../after_action`). The prompt fallback after a `ValidationException` is a second call and counts. A refused call raises `LlmBudgetExceeded` and degrades like any other failure: the commander picks by the rules, the interpreter returns the template narrative, and the assistant answers 502 "El asistente alcanzó su límite de uso; reintenta en unos minutos." (the existing model-error path; no new HTTP error type). The `anthropic` and `bedrock` providers are not capped (production uses `bedrock-converse`). Resets on each deploy and multiplies by the number of tasks.
 
 ## 5. Not done
 

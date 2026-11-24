@@ -149,7 +149,7 @@ def get_assistant(request: Request) -> Assistant:
     app = request.app
     if getattr(app.state, "assistant", None) is None:
         s: Settings = app.state.settings
-        model = tool_chat(s)
+        model = tool_chat(s, budget=app.state.llm_budget)
         if model is None:
             raise HTTPException(
                 503,
@@ -187,7 +187,7 @@ def conversation_error(exc: Exception) -> HTTPException:
         404: {"description": "The conversation does not exist or expired."},
         409: {"description": "Another message of the same conversation was running; retry."},
         422: {"description": "Empty or too long message, or a malformed id."},
-        429: {"description": "Rate limit reached; wait Retry-After seconds."},
+        429: {"description": "Rate limit or concurrency cap reached; wait Retry-After seconds."},
         502: {"description": "The language model failed or does not support tools."},
         503: {"description": "The assistant is not configured (LLM disabled or another provider)."},
     },
@@ -209,14 +209,38 @@ def chat(request: Request, body: ChatIn) -> dict[str, Any]:
     except Exception as exc:  # JSON like the other errors, and the traceback in the log (it carries no ids)
         log.exception("assistant chat failed (%s)", type(exc).__name__)
         raise HTTPException(500, "El asistente falló; reintenta.") from exc
+    finally:
+        release(request.app, ip)
 
 
 def admit(request: Request) -> tuple[Assistant, str]:
-    """Rate limit per client IP, then the assistant (503 when the LLM is not configured)."""
+    """Rate limits, then the assistant (503 when the LLM is not configured), then the concurrency slots.
+    Per client IP first, so one IP cannot spend the global budget before it is refused. The caller must
+    call `release` when the message is done."""
     settings: Settings = request.app.state.settings
     ip = client_ip(request)
-    request.app.state.limiter.check("assistant", ip, settings.rate_assistant_per_minute, 60.0)
-    return get_assistant(request), ip
+    limiter = request.app.state.limiter
+    limiter.check("assistant", ip, settings.rate_assistant_per_minute, 60.0)
+    limiter.check("assistant_all", "all", settings.rate_assistant_global_per_minute, 60.0)
+    limiter.check("assistant_all_day", "all", settings.rate_assistant_global_per_day, 86400.0)
+    assistant = get_assistant(request)
+    slots = request.app.state.sse_slots
+    if not slots.acquire(("assistant", ip), settings.rate_assistant_concurrent_per_ip):
+        raise busy("Ya tienes mensajes en curso; espera a que terminen.")
+    if not slots.acquire(("assistant", "all"), settings.rate_assistant_concurrent_global):
+        slots.release(("assistant", ip))
+        raise busy("El asistente está ocupado con otras conversaciones; reintenta en unos segundos.")
+    return assistant, ip
+
+
+def release(app: Any, ip: str) -> None:
+    """Free the concurrency slots `admit` took."""
+    app.state.sse_slots.release(("assistant", ip))
+    app.state.sse_slots.release(("assistant", "all"))
+
+
+def busy(detail: str) -> HTTPException:
+    return HTTPException(429, detail, headers={"Retry-After": "5"})
 
 
 def toolbox_factory(app: Any, ip: str) -> Callable[[str | None, str | None], ToolBox]:
@@ -250,7 +274,7 @@ DONE_KEYS = ("conversation_id", "session_id", "run_id", "reply", "steps", "trunc
         200: {"content": {"text/event-stream": {}}, "description": "The event stream."},
         404: {"description": "The conversation does not exist or expired."},
         422: {"description": "Empty or too long message, or a malformed id."},
-        429: {"description": "Rate limit reached; wait Retry-After seconds."},
+        429: {"description": "Rate limit or concurrency cap reached; wait Retry-After seconds."},
         503: {"description": "The assistant is not configured (LLM disabled or another provider)."},
     },
 )
@@ -260,7 +284,11 @@ async def chat_stream(request: Request, body: ChatIn) -> StreamingResponse:
         try:
             await run_in_threadpool(assistant.load, body.conversation_id)
         except ConversationNotFoundError as exc:
+            release(request.app, ip)
             raise conversation_error(exc) from exc
+        except BaseException:
+            release(request.app, ip)
+            raise
     settings: Settings = request.app.state.settings
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue()
@@ -289,6 +317,7 @@ async def chat_stream(request: Request, body: ChatIn) -> StreamingResponse:
             log.exception("assistant stream failed (%s)", type(exc).__name__)
             emit("error", {"status": 500, "detail": "El asistente falló; reintenta."})
         finally:
+            release(request.app, ip)
             emit("", {})  # end of stream
 
     # the loop runs to the end and saves the conversation even if the client disconnects
