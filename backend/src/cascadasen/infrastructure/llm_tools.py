@@ -12,6 +12,7 @@ from typing import Any
 
 from cascadasen.domain.ports import AssistantTurn, ToolCall, ToolChatError, ToolSpec
 from cascadasen.infrastructure.llm import CONVERSE, make_client
+from cascadasen.infrastructure.llm_budget import CallBudget, LlmBudgetExceeded
 from cascadasen.infrastructure.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -79,14 +80,20 @@ def describe(exc: Exception) -> str:
 
 
 class ConverseToolChat:
-    def __init__(self, model: str, client: Any) -> None:
-        self.model, self.client = model, client
+    def __init__(self, model: str, client: Any, budget: CallBudget | None = None) -> None:
+        self.model, self.client, self.budget = model, client, budget
 
     def turn(self, system: str, messages: list[dict[str, Any]], tools: list[ToolSpec]) -> AssistantTurn:
         specs = [
             {"toolSpec": {"name": t.name, "description": t.description, "inputSchema": {"json": t.schema}}}
             for t in tools
         ]
+        try:
+            if self.budget is not None:
+                self.budget.spend()
+        except LlmBudgetExceeded as exc:
+            log.warning("assistant LLM call refused: global Bedrock call cap reached")
+            raise ToolChatError("El asistente alcanzó su límite de uso; reintenta en unos minutos.") from exc
         try:
             out = self.client.converse(
                 modelId=self.model,
@@ -115,13 +122,18 @@ class ConverseToolChat:
         return AssistantTurn(text, calls)
 
 
-def tool_chat(settings: Settings, client: Any = None) -> ConverseToolChat | None:
+def tool_chat(
+    settings: Settings, client: Any = None, budget: CallBudget | None = None
+) -> ConverseToolChat | None:
     """The assistant's model when the LLM is enabled with `bedrock-converse` and boto3 is available."""
     if not settings.llm_enabled or settings.llm_provider != CONVERSE:
         return None
     try:
         tuned = settings.model_copy(update={"llm_timeout_s": settings.assistant_call_timeout_s})
-        return ConverseToolChat(settings.llm_model, client if client is not None else make_client(tuned))
+        budget = budget if budget is not None else CallBudget.from_settings(settings)
+        return ConverseToolChat(
+            settings.llm_model, client if client is not None else make_client(tuned), budget
+        )
     except ImportError:
         log.warning("The assistant needs boto3 (uv sync --extra llm)")
         return None

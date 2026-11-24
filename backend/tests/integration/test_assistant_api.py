@@ -1,5 +1,7 @@
 """The assistant over HTTP on the toy world: a scripted model drives the real session routes."""
 
+import threading
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -306,3 +308,94 @@ def test_the_grid_on_the_map_goes_to_the_prompt_of_that_message_only(make_app):
     assert "Grilla actual" not in model.systems[2]  # a client that sends none gets the plain prompt
     bad = client.post(CHAT, json={"message": "x", "grid": {**grid, "changes": [{"target": "nope"}]}})
     assert bad.status_code == 422
+
+
+class HeldModel(ScriptedModel):
+    """Blocks inside `turn` until `go` is set, so a test can hold a message open."""
+
+    def __init__(self, *turns):
+        super().__init__(*turns)
+        self.inside, self.go = threading.Event(), threading.Event()
+
+    def turn(self, system, messages, tools):
+        self.inside.set()
+        assert self.go.wait(10)
+        return super().turn(system, messages, tools)
+
+
+def hold_open(client, model, path, headers=None):
+    """Start one message that stays open until `model.go` is set; returns the thread."""
+    t = threading.Thread(target=lambda: client.post(path, json={"message": "x"}, headers=headers or {}))
+    t.start()
+    assert model.inside.wait(10)
+    return t
+
+
+def from_ip(n):
+    return {"x-forwarded-for": f"10.0.0.{n}"}
+
+
+@pytest.mark.parametrize("path", [CHAT, STREAM])
+def test_the_global_per_minute_cap_counts_every_ip(make_app, path):
+    model = ScriptedModel(*[AssistantTurn("ok") for _ in range(10)])
+    client = TestClient(
+        make_app(model, trusted_proxy_hops=1, rate_assistant_global_per_minute=2, rate_assistant_per_minute=5)
+    )
+    codes = [client.post(path, json={"message": "x"}, headers=from_ip(n)).status_code for n in (1, 2, 3)]
+    assert codes == [200, 200, 429]
+    refused = client.post(path, json={"message": "x"}, headers=from_ip(4))
+    assert refused.status_code == 429 and "Retry-After" in refused.headers
+
+
+def test_the_global_per_day_cap(make_app):
+    model = ScriptedModel(*[AssistantTurn("ok") for _ in range(10)])
+    client = TestClient(
+        make_app(model, trusted_proxy_hops=1, rate_assistant_global_per_day=2, rate_assistant_per_minute=5)
+    )
+    codes = [client.post(CHAT, json={"message": "x"}, headers=from_ip(n)).status_code for n in (1, 2, 3)]
+    assert codes == [200, 200, 429]
+
+
+def test_a_refused_ip_does_not_spend_the_global_budget(make_app):
+    model = ScriptedModel(*[AssistantTurn("ok") for _ in range(10)])
+    client = TestClient(
+        make_app(model, trusted_proxy_hops=1, rate_assistant_per_minute=1, rate_assistant_global_per_minute=2)
+    )
+    codes = [client.post(CHAT, json={"message": "x"}, headers=from_ip(n)).status_code for n in (1, 1, 1, 2)]
+    assert codes == [200, 429, 429, 200]  # the two refusals of IP 1 left a token for IP 2
+
+
+@pytest.mark.parametrize("path", [CHAT, STREAM])
+def test_one_ip_has_at_most_its_concurrent_messages_and_the_slot_is_freed(make_app, path):
+    model = HeldModel(AssistantTurn("a"), AssistantTurn("b"))
+    client = TestClient(make_app(model, rate_assistant_concurrent_per_ip=1))
+    first = hold_open(client, model, path)
+    refused = client.post(path, json={"message": "x"})
+    assert refused.status_code == 429 and refused.headers["Retry-After"] == "5"
+    model.go.set()
+    first.join(10)
+    assert client.post(path, json={"message": "x"}).status_code == 200
+
+
+def test_the_global_concurrency_cap_counts_every_ip_and_keeps_the_ip_slot_free(make_app):
+    model = HeldModel(AssistantTurn("a"), AssistantTurn("b"))
+    app = make_app(model, trusted_proxy_hops=1, rate_assistant_concurrent_global=1)
+    client = TestClient(app)
+    first = hold_open(client, model, CHAT, from_ip(1))
+    assert client.post(CHAT, json={"message": "x"}, headers=from_ip(2)).status_code == 429
+    assert app.state.sse_slots._open == {("assistant", "10.0.0.1"): 1, ("assistant", "all"): 1}
+    model.go.set()
+    first.join(10)
+    assert client.post(CHAT, json={"message": "x"}, headers=from_ip(2)).status_code == 200
+    assert app.state.sse_slots._open == {}
+
+
+def test_a_failed_message_frees_its_slots(make_app):
+    app = make_app(
+        ScriptedModel(ToolChatError("caído"), AssistantTurn("ok")), rate_assistant_concurrent_per_ip=1
+    )
+    client = TestClient(app)
+    assert client.post(CHAT, json={"message": "x"}).status_code == 502
+    assert client.post(STREAM, json={"message": "x", "conversation_id": "A" * 22}).status_code == 404
+    assert client.post(CHAT, json={"message": "x"}).status_code == 200
+    assert app.state.sse_slots._open == {}

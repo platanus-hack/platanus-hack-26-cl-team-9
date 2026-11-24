@@ -1,6 +1,18 @@
 # Changelog
 Written for agents. Newest entry first. Each commit adds one entry at the top, using the format in `AGENTS.md` section 3. Read the newest entries before planning or changing anything. They record what changed after the docs were written.
 
+## 2026-11-24 · fix(tests): set a region in the shared-budget test
+
+- **Changed:** `test_the_adapters_share_one_budget` sets `AWS_DEFAULT_REGION` with `monkeypatch`.
+- **Why:** CI has no AWS region, so `make_client` raised `NoRegionError`, `llm_adapters` returned `None` and the test failed with `AttributeError`. It passed locally because `~/.aws/config` sets a region.
+- **Agents:** tests that build a real Bedrock client must set a region themselves; do not rely on the developer's AWS config.
+- **Files:** `backend/tests/unit/test_llm_budget.py`.
+
+## 2026-11-22 · feat(api): global, daily and concurrency caps on the assistant and on every Bedrock call
+- **Changed:** `admit()` (`api/assistant_routes.py`) adds, after the per-IP check, a global 30/min and 500/day message cap (`TokenBucket`) and a concurrency cap of 2 per IP and 6 global (`SseSlots`, released when the worker ends). New `infrastructure/llm_budget.py` (`CallBudget`, `LlmBudgetExceeded`): a global count of Bedrock calls (120/min, 2000/day) spent in `ConverseToolChat.turn` and `_Claude._converse` (commander and after-action interpreter, including the prompt-fallback retry). One instance per app in `app.state.llm_budget`, passed to `tool_chat` and `llm_adapters`.
+- **Why:** user decision after the Bedrock cost review: the per-IP limit alone allowed unbounded total spend and `after_action` and the C2 commander had no limit.
+- **Agents:** new settings `CASCADASEN_RATE_ASSISTANT_GLOBAL_PER_MINUTE` (30), `..._GLOBAL_PER_DAY` (500), `..._CONCURRENT_PER_IP` (2), `..._CONCURRENT_GLOBAL` (6), `CASCADASEN_RATE_LLM_CALLS_PER_MINUTE` (120), `..._PER_DAY` (2000). The call counter counts Bedrock calls (a message is up to 8), so its defaults are higher than the message caps. A refused call degrades like any failure: rules for the commander, template for the interpreter, 502 "límite de uso" for the assistant; no new HTTP error type. 429 on the assistant now also means "messages in progress". In memory, per process. `docs/assistant.md` section 4 and `docs/sessions-api.md` section 8 list the limits. The agent OpenAPI file is unchanged (no marked agent route changed).
+- **Files:** `backend/src/cascadasen/{api/assistant_routes.py,api/app.py,api/simulation_routes.py,infrastructure/llm_budget.py,infrastructure/llm.py,infrastructure/llm_tools.py,infrastructure/settings.py}`, `backend/tests/{unit/test_llm_budget.py,integration/test_assistant_api.py}`, `docs/{assistant,sessions-api,code-map,for-reviewers}.md`, `docs/index/repo-index.json`.
 ## 2026-11-22 · feat(web): Iniciar ciberataque sits in the panel header, next to Cerrar
 
 - **Changed:** the start button leaves the bottom of the Ciberataque form (`CyberPanel` `Form`) and goes to the view header in `CascadeApp`, shown while the catalog is loaded and no run is on. `.cy-go` is removed.

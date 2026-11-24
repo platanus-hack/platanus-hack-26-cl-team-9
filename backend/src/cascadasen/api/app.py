@@ -34,6 +34,7 @@ from cascadasen.application.simulation_service import SimulationService
 from cascadasen.domain.model import LAYERS
 from cascadasen.domain.ports import DocumentStore
 from cascadasen.infrastructure.container import document_store, repository
+from cascadasen.infrastructure.llm_budget import CallBudget
 from cascadasen.infrastructure.settings import Settings, get_settings
 
 STATIC = Path(__file__).parent / "static"
@@ -128,6 +129,7 @@ def create_app(
     app.state.simulation = simulation  # built lazily from the snapshot on the first /sim request
     app.state.sessions = sessions  # built lazily from the simulation on the first /sessions request
     app.state.limiter, app.state.sse_slots = TokenBucket(), SseSlots()
+    app.state.llm_budget = CallBudget.from_settings(settings)  # Bedrock calls of all callers, one cap
     app.state.session_locks = SessionLocks(  # one request at a time per session
         settings.session_lock_timeout_s, settings.session_lock_max_waiters
     )

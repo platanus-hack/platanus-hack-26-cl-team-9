@@ -48,7 +48,7 @@ def get_simulation(request: Request) -> SimulationService:
         if service is None:
             raise HTTPException(503, "No hay snapshot de la red. Ejecuta `cascadasen-build` primero.")
         settings = request.app.state.settings
-        interpreter, advisor = llm_adapters(settings)
+        interpreter, advisor = llm_adapters(settings, request.app.state.llm_budget)
         world = default_world(str(settings.processed_dir))
         sim = SimulationService.from_snapshot(
             service.s,

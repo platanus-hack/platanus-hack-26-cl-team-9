@@ -28,6 +28,7 @@ from typing import Any
 
 from cascadasen.domain.ports import CommanderAdvisor, Interpreter
 from cascadasen.domain.theater.narrative import TemplateInterpreter
+from cascadasen.infrastructure.llm_budget import CallBudget
 from cascadasen.infrastructure.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -105,7 +106,8 @@ def make_client(settings: Settings) -> Any:
 
 
 class _Claude:
-    def __init__(self, settings: Settings, client: Any = None) -> None:
+    def __init__(self, settings: Settings, client: Any = None, budget: CallBudget | None = None) -> None:
+        self.budget = budget if budget is not None else CallBudget.from_settings(settings)
         self.model, self.effort = model_id(settings), settings.llm_effort
         self.bedrock = settings.llm_provider == "bedrock"
         self.converse = settings.llm_provider == CONVERSE
@@ -136,6 +138,7 @@ class _Claude:
                 "inputSchema": {"json": schema},
             }
         }
+        self.budget.spend()  # over the cap: raises, and _json falls back to the rules
         try:
             out = self.client.converse(
                 system=[{"text": system}],
@@ -148,6 +151,7 @@ class _Claude:
             prompt = (
                 f"{system}\nResponde solo con un objeto JSON que cumpla este esquema: {json.dumps(schema)}"
             )
+            self.budget.spend()
             out = self.client.converse(system=[{"text": prompt}], **request)
         for block in out["output"]["message"]["content"]:
             if "toolUse" in block and isinstance(block["toolUse"].get("input"), dict):
@@ -189,8 +193,8 @@ class ClaudeCommander(_Claude):
 
 
 class ClaudeInterpreter(_Claude):
-    def __init__(self, settings: Settings, client: Any = None) -> None:
-        super().__init__(settings, client)
+    def __init__(self, settings: Settings, client: Any = None, budget: CallBudget | None = None) -> None:
+        super().__init__(settings, client, budget)
         self.base = TemplateInterpreter()
 
     def after_action(self, report: dict, snapshots: list[dict]) -> dict:
@@ -205,12 +209,15 @@ class ClaudeInterpreter(_Claude):
         return {**out, "interpreter": "template"}
 
 
-def llm_adapters(settings: Settings) -> tuple[Interpreter | None, CommanderAdvisor | None]:
-    """(interpreter, advisor) when enabled and the SDK is installed, else (None, None)."""
+def llm_adapters(
+    settings: Settings, budget: CallBudget | None = None
+) -> tuple[Interpreter | None, CommanderAdvisor | None]:
+    """(interpreter, advisor) when enabled and the SDK is installed, else (None, None). They share `budget`."""
     if not settings.llm_enabled:
         return None, None
+    budget = budget if budget is not None else CallBudget.from_settings(settings)
     try:
-        return ClaudeInterpreter(settings), ClaudeCommander(settings)
+        return ClaudeInterpreter(settings, budget=budget), ClaudeCommander(settings, budget=budget)
     except ImportError:
         log.warning("CASCADASEN_LLM_ENABLED is set but `anthropic` is not installed (uv sync --extra llm)")
         return None, None
